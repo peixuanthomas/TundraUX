@@ -7,7 +7,55 @@ fn command_completions(line: &str, pos: usize) -> (usize, Vec<String>) {
 }
 
 fn command_hint(line: &str, pos: usize) -> Option<CommandHint> {
-    completion::command_hint(line, pos, &completion::system_candidates(Vec::new()))
+    completion::command_hint(line, pos, &completion::system_candidates(Vec::new()), None)
+}
+
+#[test]
+fn editing_or_moving_the_cursor_resets_the_selected_completion() {
+    let helper = PromptDisplay::new(None);
+    let history = MemHistory::new();
+    let context = rustyline::Context::new(&history);
+    let line = "/config set border-";
+    helper.hint(line, line.len(), &context).unwrap();
+    helper.selection.lock().unwrap().index = Some(1);
+    assert_eq!(
+        helper
+            .hint(line, line.len(), &context)
+            .unwrap()
+            .completion(),
+        Some("shape")
+    );
+    assert_eq!(
+        helper
+            .hint(line, line.len(), &context)
+            .unwrap()
+            .completion(),
+        Some("shape")
+    );
+    assert!(helper.hint(line, line.len() - 1, &context).is_none());
+    assert_eq!(
+        helper
+            .hint(line, line.len(), &context)
+            .unwrap()
+            .completion(),
+        None
+    );
+    helper.selection.lock().unwrap().index = Some(1);
+    let edited = "/config set border-c";
+    assert_eq!(
+        helper
+            .hint(edited, edited.len(), &context)
+            .unwrap()
+            .completion(),
+        Some("olor")
+    );
+    assert_eq!(
+        helper
+            .hint(line, line.len(), &context)
+            .unwrap()
+            .completion(),
+        None
+    );
 }
 
 #[test]
@@ -22,7 +70,7 @@ fn path_commands_join_prefix_completion_and_typo_correction_without_entering_ux_
         ["tundra-path-tool"]
     );
     let typo = "tundra-path-tolo";
-    let hint = completion::command_hint(typo, typo.len(), &names).unwrap();
+    let hint = completion::command_hint(typo, typo.len(), &names, None).unwrap();
     assert_eq!(hint.display(), "\nDid you mean: tundra-path-tool");
     assert!(hint.completion().is_none());
     assert_eq!(
@@ -36,14 +84,14 @@ fn path_commands_join_prefix_completion_and_typo_correction_without_entering_ux_
     );
     let typo = "中文工县";
     assert!(
-        completion::command_hint(typo, typo.len(), &names)
+        completion::command_hint(typo, typo.len(), &names, None)
             .unwrap()
             .display()
             .contains("中文工具")
     );
     #[cfg(windows)]
     assert_eq!(
-        completion::command_hint("TUNDRA-PATH-T", 13, &names)
+        completion::command_hint("TUNDRA-PATH-T", 13, &names, None)
             .unwrap()
             .completion(),
         Some("ool")

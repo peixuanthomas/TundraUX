@@ -83,7 +83,7 @@ ls -la
 
 Normal input is still executed as a system command even if its name matches a UX command. After failure, a suitable `/` prefix may be suggested, but execution does not automatically switch to another command. Unix absolute paths can be entered directly; a path to an executable directly under the root directory can be quoted.
 
-Tab shows or accepts completions; Right accepts the suggestion after the cursor. Typo correction only shows suggestions and does not change the input. System suggestions come from common commands, Git/Cargo subcommands, and background PATH scans, which read only file names and metadata.
+Tab accepts only the gray completion at the end of the input. Right cycles through the candidates listed below the input and previews the selected candidate in gray without changing the input; the first press selects the first candidate, and cycling past the last returns to the first. The selected candidate stays visible when there are more than five choices. Editing the input resets the selection. Right still moves the cursor within existing text; Tab does nothing there, and Shift+Tab does not complete commands. Typo correction only shows suggestions, and neither Tab nor Right changes misspelled input. System suggestions come from common commands, Git/Cargo subcommands, and background PATH scans, which read only file names and metadata.
 
 Lookup locations are refreshed after `export PATH`, `set PATH`, `set PATHEXT`, or `cd`; old scan results cannot overwrite the new locations. PATH scans run in the background, and the input thread only reads the cache.
 

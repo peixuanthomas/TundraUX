@@ -1,11 +1,16 @@
-use std::{borrow::Cow, io::Write};
+use std::{
+    borrow::Cow,
+    io::Write,
+    sync::{Arc, Mutex},
+};
 
 use platform::SystemCommandSession;
 use rustyline::error::ReadlineError;
 use rustyline::history::MemHistory;
 use rustyline::{
-    Config, Editor, Helper, completion::Completer, highlight::Highlighter, hint::Hinter,
-    validate::Validator,
+    Cmd, ConditionalEventHandler, Config, Editor, Event, EventContext, EventHandler, Helper,
+    KeyCode, KeyEvent, Modifiers, Movement, RepeatCount, completion::Completer,
+    highlight::Highlighter, hint::Hinter, validate::Validator,
 };
 
 mod completion;
@@ -16,6 +21,53 @@ use path_commands::PathCommands;
 struct PromptDisplay {
     accent: String,
     path_commands: PathCommands,
+    selection: Arc<Mutex<CompletionSelection>>,
+}
+
+#[derive(Default)]
+struct CompletionSelection {
+    line: String,
+    pos: usize,
+    index: Option<usize>,
+}
+
+impl CompletionSelection {
+    fn update_context(&mut self, line: &str, pos: usize) {
+        if self.line != line || self.pos != pos {
+            self.line = line.to_string();
+            self.pos = pos;
+            self.index = None;
+        }
+    }
+}
+
+struct CompletionKeys(Arc<Mutex<CompletionSelection>>);
+
+impl ConditionalEventHandler for CompletionKeys {
+    fn handle(
+        &self,
+        event: &Event,
+        count: RepeatCount,
+        _positive: bool,
+        context: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        if event.get(0) == Some(&KeyEvent::from('\t')) {
+            return Some(
+                if context.pos() == context.line().len() && context.hint_text().is_some() {
+                    Cmd::CompleteHint
+                } else {
+                    Cmd::Noop
+                },
+            );
+        }
+        if context.pos() < context.line().len() {
+            return Some(Cmd::Move(Movement::ForwardChar(count)));
+        }
+        let mut selection = self.0.lock().unwrap();
+        selection.update_context(context.line(), context.pos());
+        selection.index = Some(selection.index.map_or(0, |index| index + 1));
+        Some(Cmd::Repaint)
+    }
 }
 
 impl PromptDisplay {
@@ -26,6 +78,7 @@ impl PromptDisplay {
                 .and_then(|value| validated_foreground(&value))
                 .unwrap_or_else(|| "\x1b[38;2;99;211;229m".to_string()),
             path_commands: PathCommands::new(watchdog),
+            selection: Arc::default(),
         }
     }
 }
@@ -67,7 +120,9 @@ impl Hinter for PromptDisplay {
         pos: usize,
         _context: &rustyline::Context<'_>,
     ) -> Option<CommandHint> {
-        command_hint(line, pos, &self.path_commands.commands())
+        let mut selection = self.selection.lock().unwrap();
+        selection.update_context(line, pos);
+        command_hint(line, pos, &self.path_commands.commands(), selection.index)
     }
 }
 impl Validator for PromptDisplay {}
@@ -146,7 +201,18 @@ where
                 return 1;
             }
         };
-    editor.set_helper(Some(PromptDisplay::new(watchdog)));
+    let helper = PromptDisplay::new(watchdog);
+    editor.bind_sequence(KeyEvent(KeyCode::BackTab, Modifiers::NONE), Cmd::Noop);
+    for key in [
+        KeyEvent::from('\t'),
+        KeyEvent(KeyCode::Right, Modifiers::NONE),
+    ] {
+        editor.bind_sequence(
+            key,
+            EventHandler::Conditional(Box::new(CompletionKeys(Arc::clone(&helper.selection)))),
+        );
+    }
+    editor.set_helper(Some(helper));
     let mut system_session = None;
     #[cfg(target_os = "linux")]
     println!(

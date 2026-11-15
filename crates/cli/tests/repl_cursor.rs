@@ -211,9 +211,33 @@ fn embedded_prompt_cursor_tracks_visible_text_and_editing() {
             );
         }
         drop(parser);
+        send(b"\x1b[C!");
+        wait_for(&format!(">> {input}!"), 0);
+        send(b"\x7f");
+        wait_for(&format!(">> {rendered}"), suffix_length);
+        send(b"\x1b[Z!");
+        wait_for(&format!(">> {input}!"), 0);
+        send(b"\x7f");
+        wait_for(&format!(">> {rendered}"), suffix_length);
+        send(b"\t");
+        wait_for(&format!(">> {rendered}"), 0);
         send(b"\x15");
         wait_for(">>", 0);
     }
+    send(b"/config set border-");
+    wait_for(">> /config set border-", 0);
+    send(b"\t!");
+    wait_for(">> /config set border-!", 0);
+    send(b"\x7f");
+    wait_for(">> /config set border-", 0);
+    for candidate in ["color", "shape", "color"] {
+        send(b"\x1b[C");
+        wait_for(&format!(">> /config set border-{candidate}"), 5);
+    }
+    send(b"\t");
+    wait_for(">> /config set border-color", 0);
+    send(b"\x15");
+    wait_for(">>", 0);
     // Corrections and multiple choices occupy the following row while the
     // cursor stays in the input. Editing must clear that row on both platforms.
     let wait_for_hint_row = |expected: &str| {
@@ -262,8 +286,8 @@ fn embedded_prompt_cursor_tracks_visible_text_and_editing() {
     send(b"\x15tundra-path-afetr");
     wait_for(">> tundra-path-afetr", 0);
     wait_for_hint_row("Did you mean: tundra-path-after");
-    send(b"\t");
-    wait_for(">> tundra-path-after", 0);
+    send(b"\t!");
+    wait_for(">> tundra-path-afetr!", 0);
     send(b"\x15tundra-path-start");
     wait_for(">> tundra-path-start", 0);
     wait_for_hint_row("");
@@ -274,21 +298,64 @@ fn embedded_prompt_cursor_tracks_visible_text_and_editing() {
         ("hell", "Did you mean: help"),
         ("/hell", "Did you mean: /help"),
         ("git statsu", "Did you mean: git status"),
-        ("/debug", "Suggestions: asset | clear-logs | paths"),
     ] {
         send(input.as_bytes());
         wait_for(&format!(">> {input}"), 0);
         wait_for_hint_row(hint);
-        send(b"\x1b[C"); // Information is never appended by Right.
-        wait_for(&format!(">> {input}"), 0);
+        send(b"\x1b[C\t!");
+        wait_for(&format!(">> {input}!"), 0);
         send(b"\x15");
         wait_for(">>", 0);
         wait_for_hint_row("");
     }
+    send(b"/debug");
+    wait_for(">> /debug", 0);
+    wait_for_hint_row("Suggestions: asset | clear-logs | paths");
+    for (index, candidate) in [
+        "asset",
+        "clear-logs",
+        "paths",
+        "explain",
+        "test-frost",
+        "test-aa-style1",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        send(b"\x1b[C");
+        let suffix_length = u16::try_from(candidate.len() + 1).unwrap();
+        wait_for(&format!(">> /debug {candidate}"), suffix_length);
+        if index % 5 == 0 {
+            wait_for_hint_row(&format!("Suggestions: [{candidate}]"));
+        }
+        let parser = parser.lock().unwrap();
+        let screen = parser.screen();
+        let (row, col) = screen.cursor_position();
+        for column in col..col + suffix_length {
+            assert_eq!(
+                screen.cell(row, column).unwrap().fgcolor(),
+                vt100::Color::Idx(8)
+            );
+        }
+    }
+    send(b"\t");
+    wait_for(">> /debug test-aa-style1", 0);
+    send(b"\x15/config set border-\x1b[C");
+    wait_for(">> /config set border-color", 5);
+    send(b"\x1b[D");
+    wait_for(">> /config set border-color", 6);
+    send(b"\t!");
+    wait_for(">> /config set border!-", 1);
+    send(b"\x7f\x1b[C");
+    wait_for(">> /config set border-", 0);
+    send(b"\x1b[C");
+    wait_for(">> /config set border-color", 5);
+    send(b"s");
+    wait_for(">> /config set border-shape", 4);
+    send(b"\x15");
+    wait_for(">>", 0);
     send(b"/debug scr");
     wait_for(">> /debug screen-keyboard", 12);
-    send(b"\x15/hell\t");
-    wait_for(">> /help", 0);
     send(b"\x15");
     wait_for(">>", 0);
     wait_for_hint_row("");

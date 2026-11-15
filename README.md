@@ -77,6 +77,8 @@ tundra-cli doctor
 tundra-cli watchdog list
 ```
 
+In Command Line or `tundra-cli repl`, press Right to cycle through suggested commands and Tab to accept the gray completion.
+
 To control the interface from another terminal, enable **Settings → System → External CLI control**, then use commands such as:
 
 ```sh

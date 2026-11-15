@@ -134,6 +134,7 @@ pub(super) fn command_hint(
     line: &str,
     pos: usize,
     path_commands: &[String],
+    selected: Option<usize>,
 ) -> Option<CommandHint> {
     if pos != line.len()
         || line.is_empty()
@@ -145,7 +146,7 @@ pub(super) fn command_hint(
     let (start, partial, candidates) = completion_context(line, pos, path_commands)?;
     let partial = matching_word(line, partial);
     let choices = prefix_choices(&partial, &candidates);
-    if choices
+    let (choices, partial, separator) = if choices
         .first()
         .is_some_and(|choice| choice == partial.as_ref())
     {
@@ -156,9 +157,11 @@ pub(super) fn command_hint(
         } else {
             system_words(std::env::consts::OS, &words)
         };
-        return information("Suggestions", &next);
-    }
-    if choices.len() == 1 {
+        (Cow::Owned(next), "", " ")
+    } else {
+        (Cow::Borrowed(choices), partial.as_ref(), "")
+    };
+    if choices.len() == 1 && separator.is_empty() {
         let suffix = choices[0].get(partial.len()..)?.to_string();
         return Some(CommandHint {
             display: suffix.clone(),
@@ -166,13 +169,27 @@ pub(super) fn command_hint(
         });
     }
     if !choices.is_empty() {
-        return information("Suggestions", choices);
+        let selected = selected.map(|index| index % choices.len());
+        let suffix =
+            selected.map(|index| format!("{separator}{}", &choices[index][partial.len()..]));
+        return information(
+            &i18n::tr!("shell-command-line-suggestions"),
+            &choices,
+            selected,
+            suffix,
+        );
     }
     let corrected = nearby_words(&partial, &candidates)
         .into_iter()
+        .take(5)
         .map(|word| format!("{}{word}", &line[..start]))
         .collect::<Vec<_>>();
-    information("Did you mean", &corrected)
+    information(
+        &i18n::tr!("shell-command-line-did-you-mean"),
+        &corrected,
+        None,
+        None,
+    )
 }
 
 fn matching_word<'a>(line: &str, word: &'a str) -> std::borrow::Cow<'a, str> {
@@ -183,27 +200,39 @@ fn matching_word<'a>(line: &str, word: &'a str) -> std::borrow::Cow<'a, str> {
     }
 }
 
-fn information(label: &str, choices: &[String]) -> Option<CommandHint> {
+fn information(
+    label: &str,
+    choices: &[String],
+    selected: Option<usize>,
+    suffix: Option<String>,
+) -> Option<CommandHint> {
     if choices.is_empty() {
         return None;
     }
     // Bound the hint height even for groups with many operations.
+    let page = selected.unwrap_or_default() / 5 * 5;
     let mut display = format!(
-        "\n{label}: {}",
+        "{}\n{label}: {}",
+        suffix.as_deref().unwrap_or_default(),
         choices
             .iter()
+            .enumerate()
+            .skip(page)
             .take(5)
-            .cloned()
+            .map(|(index, choice)| {
+                if selected == Some(index) {
+                    format!("[{choice}]")
+                } else {
+                    choice.clone()
+                }
+            })
             .collect::<Vec<_>>()
             .join(" | ")
     );
     if choices.len() > 5 {
-        display.push_str(" | ... (Tab for more)");
+        display.push_str(&i18n::tr!("shell-command-line-cycle-more"));
     }
-    Some(CommandHint {
-        display,
-        suffix: None,
-    })
+    Some(CommandHint { display, suffix })
 }
 
 fn strings(values: &[&str]) -> Vec<String> {

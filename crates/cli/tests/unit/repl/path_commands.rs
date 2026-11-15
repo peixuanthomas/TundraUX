@@ -51,7 +51,8 @@ fn blocked_scan_never_delays_input_or_publishes_an_old_paths_result() {
     for _ in 0..100 {
         cache.refresh(session.executable_search_path());
         let commands = cache.commands();
-        let hint = super::super::completion::command_hint("/debug scr", 10, &commands).unwrap();
+        let hint =
+            super::super::completion::command_hint("/debug scr", 10, &commands, None).unwrap();
         assert_eq!(hint.completion(), Some("een-keyboard"));
         assert_eq!(
             super::super::completion::command_completions("hel", 3, &commands).1,

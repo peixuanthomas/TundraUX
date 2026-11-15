@@ -1,6 +1,53 @@
 use super::*;
 
 #[test]
+fn selected_candidates_preview_only_the_suffix_and_wrap() {
+    let line = "/config set border-";
+    assert_eq!(
+        command_hint(line, line.len(), &[], None)
+            .unwrap()
+            .completion(),
+        None
+    );
+    for (index, suffix) in [(0, "color"), (1, "shape"), (2, "color")] {
+        let hint = command_hint(line, line.len(), &[], Some(index)).unwrap();
+        assert_eq!(hint.completion(), Some(suffix));
+        assert!(
+            hint.display()
+                .starts_with(&format!("{suffix}\nSuggestions: "))
+        );
+        assert!(hint.display().contains(&format!("[border-{suffix}]")));
+    }
+    let hint = command_hint("/debug", 6, &[], Some(0)).unwrap();
+    assert_eq!(hint.completion(), Some(" asset"));
+    assert!(hint.display().contains("[asset]"));
+}
+
+#[test]
+fn cycling_keeps_candidates_beyond_the_first_page_visible() {
+    let commands = system_candidates((0..7).map(|index| format!("tundra-tool-{index}")).collect());
+    for index in [0, 5, 6, 7] {
+        let hint = command_hint("tundra-tool-", 12, &commands, Some(index)).unwrap();
+        let expected = format!("{}", index % 7);
+        assert_eq!(hint.completion(), Some(expected.as_str()));
+        assert!(
+            hint.display()
+                .contains(&format!("[tundra-tool-{expected}]"))
+        );
+        assert!(hint.display().contains("Right to cycle"));
+    }
+    let typo = "tundra-tool-x";
+    let hint = command_hint(typo, typo.len(), &commands, Some(0)).unwrap();
+    assert!(hint.completion().is_none());
+    assert!(!hint.display().contains("Right to cycle"));
+    let commands = system_candidates(vec!["中文工具一".into(), "中文工具二".into()]);
+    for index in 0..2 {
+        let hint = command_hint("中文工", "中文工".len(), &commands, Some(index)).unwrap();
+        assert!(hint.completion().unwrap().starts_with('具'));
+    }
+}
+
+#[test]
 fn ui_commands_complete_only_their_options_and_known_values() {
     for (line, expected) in [
         ("/ui ", "snapshot"),
@@ -67,10 +114,10 @@ fn large_candidate_lists_do_not_delay_each_typed_character() {
     let pasted = "x".repeat(100_000);
     let start = Instant::now();
     for _ in 0..20 {
-        let hint = command_hint("command-", 8, &commands).unwrap();
-        assert!(hint.display().contains("Tab for more"));
-        assert!(command_hint(&typo, typo.len(), &commands).is_none());
-        assert!(command_hint(&pasted, pasted.len(), &commands).is_none());
+        let hint = command_hint("command-", 8, &commands, None).unwrap();
+        assert!(hint.display().contains("Right to cycle"));
+        assert!(command_hint(&typo, typo.len(), &commands, None).is_none());
+        assert!(command_hint(&pasted, pasted.len(), &commands, None).is_none());
     }
     assert!(
         start.elapsed() < Duration::from_secs(2),

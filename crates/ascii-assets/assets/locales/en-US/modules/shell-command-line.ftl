@@ -4,3 +4,6 @@ shell-command-line-close-message = Terminate this terminal and all processes it 
 shell-command-line-close-continue = Continue using
 shell-command-line-close-confirm = Terminate and return
 shell-command-line-close-failed = Could not terminate Command Line: { $reason }
+shell-command-line-suggestions = Suggestions
+shell-command-line-did-you-mean = Did you mean
+shell-command-line-cycle-more = { " | ... (Right to cycle)" }
