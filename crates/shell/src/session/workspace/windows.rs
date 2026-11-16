@@ -12,6 +12,8 @@ impl Workspace {
                     worker,
                     pid,
                     endpoint,
+                    process_spawn_us,
+                    guardian_ready_wait_us,
                 } => {
                     let WorkerRole::App(id) = worker.role else {
                         continue;
@@ -20,6 +22,11 @@ impl Workspace {
                         && window.worker.is_none_or(|current| current == worker)
                     {
                         window.worker = Some(worker);
+                        if let Some(startup) = &mut window.startup {
+                            startup.app_started = Some(Instant::now());
+                            startup.process_spawn_us = process_spawn_us;
+                            startup.guardian_ready_wait_us = guardian_ready_wait_us;
+                        }
                         match connection.connect_app(worker, pid, &endpoint) {
                             Ok(stream) => window.stream = Some(stream),
                             Err(error) => {
@@ -97,6 +104,11 @@ impl Workspace {
             while let Some(message) = window.queued.front() {
                 match stream.queue(message) {
                     Ok(()) => {
+                        if matches!(message, ShellToApp::Init(_))
+                            && let Some(startup) = &mut window.startup
+                        {
+                            startup.init_queued = Some(Instant::now());
+                        }
                         window.queued.pop_front();
                     }
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
@@ -294,6 +306,7 @@ impl Workspace {
             image_cell_size: self.image_cell_size,
             text_sizing: self.text_sizing,
         };
+        let requested = Instant::now();
         WorkerConnection::current()
             .expect("managed workspace")
             .send(WorkerToSupervisor::SpawnApp {
@@ -323,6 +336,14 @@ impl Workspace {
                 force_when_started: false,
                 view_requested: None,
                 launch_error: false,
+                startup: Some(WindowStartup {
+                    requested,
+                    app_started: None,
+                    init_queued: None,
+                    process_spawn_us: 0,
+                    guardian_ready_wait_us: 0,
+                    app_timings: None,
+                }),
             },
         );
         Ok(id)
@@ -483,6 +504,12 @@ impl Workspace {
                     self.force(id)?;
                     return Ok(true);
                 }
+                let timings = frame.startup_timings.take();
+                if let Some(startup) = &mut window.startup
+                    && let Some(timings) = timings
+                {
+                    startup.app_timings = Some(timings);
+                }
                 let mut assets = BTreeMap::<u64, Arc<[u8]>>::new();
                 let mut asset_bytes = 0;
                 frame.images.retain_mut(|image| {
@@ -526,6 +553,9 @@ impl Workspace {
                     .as_ref()
                     .is_some_and(|old| old.modal != frame.modal);
                 window.frame = Some(frame);
+                if let Some(startup) = window.startup.take() {
+                    startup.record(id, window.launch.id(), window.worker, state.auth_session());
+                }
                 if self.split_launch.is_some_and(|(_, launch)| launch == id) {
                     self.split_launch = None;
                 }
@@ -804,4 +834,68 @@ fn same_mouse_motion(previous: &serde_json::Value, next: &serde_json::Value) -> 
     kind == next_kind
         && (kind.as_str() == Some("Moved") || kind.get("Drag").is_some())
         && previous.get("modifiers") == next.get("modifiers")
+}
+
+impl WindowStartup {
+    fn record(
+        self,
+        session: SessionId,
+        application: &str,
+        worker: Option<WorkerId>,
+        auth: Option<&AuthSession>,
+    ) {
+        let accepted = Instant::now();
+        let (Some(app_started), Some(init_queued), Some(app), Some(worker)) =
+            (self.app_started, self.init_queued, self.app_timings, worker)
+        else {
+            return;
+        };
+        let total_us = accepted.duration_since(self.requested).as_micros() as u64;
+        let spawn_app_us = app_started.duration_since(self.requested).as_micros() as u64;
+        let handshake_us = init_queued.duration_since(app_started).as_micros() as u64;
+        // The IPC legs use different monotonic clocks; subtract only measured durations.
+        let app_work_us = app
+            .services_setup_us
+            .saturating_add(app.resources_us)
+            .saturating_add(app.session_init_us)
+            .saturating_add(app.first_frame_ready_us);
+        let window_ipc_us =
+            (accepted.duration_since(init_queued).as_micros() as u64).saturating_sub(app_work_us);
+        let mut event = runtime_log::RuntimeLogEvent::new(
+            runtime_log::LogContext {
+                run_id: Some(worker.run.to_string()),
+                app: application.into(),
+                module: "ux.workspace".into(),
+                operation: "app-startup".into(),
+                operation_id: Some(session.to_string()),
+                owner_id: auth.map(|auth| auth.user_id.clone()),
+                ..Default::default()
+            },
+            runtime_log::LogLevel::Info,
+            runtime_log::LogPhase::Succeeded,
+            format!(
+                "First window frame accepted in {:.2} ms",
+                total_us as f64 / 1_000.0
+            ),
+        );
+        event.message_args = [
+            ("total_us", total_us),
+            ("spawn_app_us", spawn_app_us),
+            ("process_spawn_us", self.process_spawn_us),
+            ("guardian_ready_wait_us", self.guardian_ready_wait_us),
+            ("handshake_us", handshake_us),
+            ("services_setup_us", app.services_setup_us),
+            ("resources_us", app.resources_us),
+            ("session_init_us", app.session_init_us),
+            ("session_sync_us", app.session_sync_us),
+            ("first_frame_ready_us", app.first_frame_ready_us),
+            ("first_poll_us", app.first_poll_us),
+            ("first_draw_us", app.first_draw_us),
+            ("window_ipc_us", window_ipc_us),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.into(), value.into()))
+        .collect();
+        runtime_log::record(event);
+    }
 }

@@ -11,9 +11,9 @@ use ui::{
     WorkspaceWindowViewModel,
 };
 use workspace_protocol::{
-    AppToShell, CursorShape, LayoutGeneration, ProcessState, SessionId, ShellAction as HostAction,
-    ShellToApp, Size, SupervisorToWorker, WindowFrame, WindowInit, WindowStatus, WorkerId,
-    WorkerRole, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, CursorShape, LayoutGeneration, ProcessState, SessionId,
+    ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame, WindowInit,
+    WindowStatus, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 mod chooser;
@@ -40,6 +40,16 @@ struct Window {
     force_when_started: bool,
     view_requested: Option<ShellToApp>,
     launch_error: bool,
+    startup: Option<WindowStartup>,
+}
+
+struct WindowStartup {
+    requested: Instant,
+    app_started: Option<Instant>,
+    init_queued: Option<Instant>,
+    process_spawn_us: u64,
+    guardian_ready_wait_us: u64,
+    app_timings: Option<AppStartupTimings>,
 }
 
 impl Window {

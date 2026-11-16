@@ -119,6 +119,23 @@ After external CLI control is enabled in Settings → System, the same operating
 
 Already-due wheel steps from one external scroll request share a frame without dropping steps or advancing future events. Clicks and drags retain separate press and release frames.
 
+## App startup timings
+
+`tundra-cli logs query --module ux.workspace --format jsonl` shows one `app-startup` event per new AppHost whose first usable frame the Shell accepts. The application ID, workspace run ID, and window session ID identify the sample. Durations in `message_args` are monotonic microseconds.
+
+| Field | Measurement |
+| --- | --- |
+| `total_us` | From sending `SpawnApp` to accepting the first frame for the current viewport |
+| `spawn_app_us` | From sending `SpawnApp` to receiving `AppStarted`. Includes the OS process launch (`process_spawn_us`) and the guardian's subsequent wait for worker readiness and shared-service registration (`guardian_ready_wait_us`) |
+| `handshake_us` | From receiving `AppStarted` through connecting to AppHost, exchanging Hello/Welcome, and queuing Init |
+| `services_setup_us` | From AppHost receiving Init through connecting to SessionServices, reading configuration, and registering its local watchdog |
+| `resources_us` | Loading the default ASCII artwork, icon catalogs, and clock font |
+| `session_init_us` | Building and activating the AppHost session, excluding `resources_us`. Includes its first profile/config synchronization (`session_sync_us`) |
+| `first_frame_ready_us` | From session initialization to preparation of AppHost's first frame. Includes its first event-loop poll (`first_poll_us`), any wait to render, and the actual draw and capture (`first_draw_us`) |
+| `window_ipc_us` | Remaining time after the Init enqueue. Includes Init delivery, frame serialization and delivery, Shell polling and validation, and any wait for a subsequent frame if the first viewport is stale |
+
+Restoring an existing window creates no startup sample. Page-specific background work can continue after the first frame.
+
 ## Build and validation
 
 ```sh

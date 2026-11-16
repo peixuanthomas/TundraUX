@@ -28,7 +28,7 @@ The window bar uses the full bottom row. Each entry has separate title and minus
 
 All live windows contribute to the minimum content size, including those in the background. If the workspace cannot fit, the focused window keeps its controls and shows a resize notice. The advanced window panel opens with Ctrl+W then W and can close or force-kill windows while the workspace is too small. F1 help lists the keyboard controls.
 
-App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane.
+App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane. AppHost attaches first-frame startup timings after UI capture.
 
 ## Shared controls
 

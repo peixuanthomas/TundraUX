@@ -5,9 +5,9 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use workspace_protocol::transport::Framed;
 use workspace_protocol::{
-    AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image, LayoutGeneration,
-    MIN_CONTENT_SIZE, ProcessGeneration, Rect, RunId, ServiceError, ServiceReply, SessionId, Size,
-    WindowFrame, WorkerId, WorkerRole, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image,
+    LayoutGeneration, MIN_CONTENT_SIZE, ProcessGeneration, Rect, RunId, ServiceError, ServiceReply,
+    SessionId, Size, WindowFrame, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 #[test]
@@ -81,6 +81,32 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
     let bytes = serde_json::to_vec(&message).unwrap();
     assert_eq!(
         serde_json::from_slice::<AppToShell>(&bytes).unwrap(),
+        message
+    );
+}
+
+#[test]
+fn startup_timings_round_trip_and_are_omitted_from_normal_frames() {
+    let mut frame = WindowFrame::new(LayoutGeneration(1), Size::new(1, 1));
+    let normal = serde_json::to_value(&frame).unwrap();
+    assert!(normal.get("startup_timings").is_none());
+    assert_eq!(
+        serde_json::from_value::<WindowFrame>(normal).unwrap(),
+        frame
+    );
+
+    frame.startup_timings = Some(AppStartupTimings {
+        services_setup_us: 1,
+        resources_us: 2,
+        session_init_us: 3,
+        session_sync_us: 4,
+        first_frame_ready_us: 5,
+        first_poll_us: 6,
+        first_draw_us: 7,
+    });
+    let message = AppToShell::Frame(frame);
+    assert_eq!(
+        serde_json::from_value::<AppToShell>(serde_json::to_value(&message).unwrap()).unwrap(),
         message
     );
 }

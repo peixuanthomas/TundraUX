@@ -73,6 +73,7 @@ pub fn capture_workspace_frame(
         native_escape: Vec::new(),
         ctrl_w_passthrough: false,
         modal: false,
+        startup_timings: None,
         page: String::new(),
         animation_running: false,
         keyboard_available: false,

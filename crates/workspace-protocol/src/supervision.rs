@@ -86,6 +86,10 @@ pub enum SupervisorToWorker {
         worker: WorkerId,
         pid: u32,
         endpoint: String,
+        #[serde(default)]
+        process_spawn_us: u64,
+        #[serde(default)]
+        guardian_ready_wait_us: u64,
     },
     AppState {
         worker: WorkerId,

@@ -164,6 +164,18 @@ impl Default for WindowStatus {
     }
 }
 
+/// AppHost-local monotonic durations, attached only to its first frame.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppStartupTimings {
+    pub services_setup_us: u64,
+    pub resources_us: u64,
+    pub session_init_us: u64,
+    pub session_sync_us: u64,
+    pub first_frame_ready_us: u64,
+    pub first_poll_us: u64,
+    pub first_draw_us: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowFrame {
     pub layout: LayoutGeneration,
@@ -189,6 +201,8 @@ pub struct WindowFrame {
     #[serde(default)]
     pub ctrl_w_passthrough: bool,
     pub modal: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_timings: Option<AppStartupTimings>,
 }
 
 impl WindowFrame {
@@ -209,6 +223,7 @@ impl WindowFrame {
             native_escape: Vec::new(),
             ctrl_w_passthrough: false,
             modal: false,
+            startup_timings: None,
         }
     }
 

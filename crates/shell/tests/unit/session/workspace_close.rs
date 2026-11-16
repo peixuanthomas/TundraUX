@@ -19,6 +19,7 @@ fn window(minimum: Size) -> Window {
         force_when_started: false,
         view_requested: None,
         launch_error: false,
+        startup: None,
     }
 }
 

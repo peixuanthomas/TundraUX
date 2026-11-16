@@ -6,9 +6,9 @@ use ratatui::{Terminal, backend::TestBackend};
 use std::thread;
 use watchdog::{AppCriticality, AppDescriptor, AppId};
 use workspace_protocol::{
-    AppToShell, Cursor, CursorShape, LayoutGeneration, MAX_IMAGE_BYTES, MIN_CONTENT_SIZE,
-    ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame, WindowInit,
-    WindowStatus, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, Cursor, CursorShape, LayoutGeneration, MAX_IMAGE_BYTES,
+    MIN_CONTENT_SIZE, ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame,
+    WindowInit, WindowStatus, WorkerToSupervisor,
 };
 
 const HOST_TICK: Duration = Duration::from_millis(16);
@@ -59,6 +59,7 @@ impl AppHostSession {
         process: ProcessWatchdog,
         watchdog: AppWatchdog,
         services: Arc<SessionServicesClient>,
+        timings: &mut AppStartupTimings,
     ) -> io::Result<Self> {
         let launch: WindowLaunch = serde_json::from_value(init.launch)?;
         let application = launch.application();
@@ -86,7 +87,9 @@ impl AppHostSession {
             )
         });
         let settings_config = system_services_config_for_startup(&startup);
+        let resources_started = Instant::now();
         let ascii_assets = ui::RuntimeAsciiAssets::load_default().map_err(asset_io_error)?;
+        timings.resources_us = resources_started.elapsed().as_micros() as u64;
         let size = Size::new(
             init.size.width.max(MIN_CONTENT_SIZE.width),
             init.size
@@ -123,7 +126,9 @@ impl AppHostSession {
                 watchdog.clone(),
             ));
         }
+        let sync_started = Instant::now();
         services.sync_session(&mut state);
+        timings.session_sync_us = sync_started.elapsed().as_micros() as u64;
         let _language = i18n::enter_snapshot(state.language.clone());
         let select = match &launch {
             WindowLaunch::ExplorerPath { select, .. } => select.clone().map(PathBuf::from),
@@ -874,6 +879,7 @@ pub fn run_app_host(
         }
         thread::sleep(HOST_TICK);
     };
+    let services_started = Instant::now();
     let services = SessionServicesClient::connect(connection)?;
     services.install();
     let watchdog = process
@@ -884,13 +890,23 @@ pub fn run_app_host(
             AppCriticality::ProcessCritical,
         ))
         .map_err(io::Error::other)?;
-    let mut host = match AppHostSession::new(init, process, watchdog, services) {
+    let session_started = Instant::now();
+    let mut timings = AppStartupTimings {
+        services_setup_us: session_started.duration_since(services_started).as_micros() as u64,
+        ..Default::default()
+    };
+    let mut host = match AppHostSession::new(init, process, watchdog, services, &mut timings) {
         Ok(host) => host,
         Err(error) => {
             stream.queue(&AppToShell::LaunchFailed(error.to_string()))?;
             return flush_app_messages(&mut stream);
         }
     };
+    let session_ready = Instant::now();
+    timings.session_init_us = (session_ready.duration_since(session_started).as_micros() as u64)
+        .saturating_sub(timings.resources_us);
+    let mut startup = Some(timings);
+    let mut first_poll_done = false;
     for message in pending {
         host.receive(message)?;
     }
@@ -911,6 +927,12 @@ pub fn run_app_host(
         }
         let now = Instant::now();
         host.poll(now)?;
+        if let Some(timings) = &mut startup
+            && !first_poll_done
+        {
+            timings.first_poll_us = now.elapsed().as_micros() as u64;
+            first_poll_done = true;
+        }
         while let Some(message) = host.output.pop_front() {
             if let Err(error) = stream.queue(&message) {
                 if error.kind() == io::ErrorKind::WouldBlock {
@@ -932,9 +954,18 @@ pub fn run_app_host(
             return flush_app_messages(&mut stream);
         }
         if host.output.is_empty() && !stream.pending_write() {
+            let draw_started = startup.as_ref().map(|_| Instant::now());
             let frame = host.frame(now)?;
             let rendered = frame.is_some();
-            if let Some(frame) = frame {
+            if let Some(mut frame) = frame {
+                if let (Some(mut timings), Some(draw_started)) = (startup.take(), draw_started) {
+                    let frame_ready = Instant::now();
+                    timings.first_frame_ready_us =
+                        frame_ready.duration_since(session_ready).as_micros() as u64;
+                    timings.first_draw_us =
+                        frame_ready.duration_since(draw_started).as_micros() as u64;
+                    frame.startup_timings = Some(timings);
+                }
                 stream.queue(&AppToShell::Frame(frame))?;
             }
             if rendered || host.frozen || !host.visible {

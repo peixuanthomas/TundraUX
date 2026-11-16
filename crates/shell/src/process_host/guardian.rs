@@ -54,6 +54,7 @@ struct Worker {
     authenticated: bool,
     ready: bool,
     ready_since: Instant,
+    process_spawn_us: u64,
     register_sent: bool,
     registered: bool,
     service_available_sent: bool,
@@ -234,7 +235,9 @@ impl Guardian<'_> {
                 .stderr(Stdio::null());
             command.env_remove(app::update::UPDATE_READY_FILE_ENV);
         }
+        let spawn_started = Instant::now();
         let pid = self.supervisor.spawn_worker(worker, &mut command)?;
+        let ready_since = Instant::now();
         self.workers.insert(
             worker,
             Worker {
@@ -244,7 +247,8 @@ impl Guardian<'_> {
                 channel: None,
                 authenticated: false,
                 ready: false,
-                ready_since: Instant::now(),
+                ready_since,
+                process_spawn_us: ready_since.duration_since(spawn_started).as_micros() as u64,
                 register_sent: false,
                 registered: false,
                 service_available_sent: false,
@@ -462,6 +466,9 @@ impl Guardian<'_> {
                             worker,
                             pid: metadata.pid,
                             endpoint: metadata.endpoint.clone(),
+                            process_spawn_us: metadata.process_spawn_us,
+                            guardian_ready_wait_us: metadata.ready_since.elapsed().as_micros()
+                                as u64,
                         },
                     ));
                 }
