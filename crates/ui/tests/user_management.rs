@@ -299,7 +299,6 @@ fn render(
     model: &UserManagementViewModel,
 ) -> (Terminal<TestBackend>, Rect) {
     let chrome = ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (width, height),
@@ -311,7 +310,6 @@ fn render(
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["UserManagement".to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,

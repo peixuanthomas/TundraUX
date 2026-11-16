@@ -12,7 +12,7 @@ TundraUX3 brings system tools, files, editors, and everyday utilities into one t
 - **Cross-platform packages:** search, install, remove, and upgrade software using native Linux package tools, Homebrew on macOS, or WinGet on Windows.
 - **Files and editing:** browse directories, share copied or cut files between pages, undo same-filesystem moves and renames, and manage permissions. Edit text with syntax highlighting, search and replace, soft wrap, and JSON formatting. Press F8 to switch between the built-in editor and Vim.
 - **Development tools:** run programs in an embedded terminal and debug Bash scripts with breakpoints, stepping, variables, and call stacks.
-- **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output.
+- **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output. The top bar shows status messages and the clock.
 - **Personal workspace:** search Launcher by name or command, organize custom entries, choose themes and languages, and use the built-in clock and weather apps.
 - **Independent app windows:** use each window's frame to minimize, split, or close it; full screen is in the Split menu. Restore background apps from the bottom window bar and split the current pane incrementally into at most a 2×2 grid. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
 - **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, using TundraUX3's Glacier Night blue palette.

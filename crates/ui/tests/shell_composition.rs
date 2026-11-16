@@ -3,7 +3,6 @@ use ui::*;
 
 fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "debug".into(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (width, height),
@@ -15,7 +14,6 @@ fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["中文页面路径很长需要正确截断".repeat(8)],
         status: StatusViewModel {
             status: "系统状态消息很长但不应覆盖时钟".repeat(8),
             toast: None,
@@ -171,7 +169,7 @@ fn editor_screen_content_uses_the_shared_main_without_erasing_shell_chrome() {
         })
         .unwrap();
     assert!(row(&terminal, 0).contains("TundraUX 3"));
-    assert!(row(&terminal, 23).contains("09:30"));
+    assert!(row(&terminal, 0).contains("09:30"));
     assert!(
         (layout.main.y..layout.main.bottom())
             .any(|y| row(&terminal, y).contains("editor content marker"))
@@ -495,13 +493,13 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                 }
             }
             assert!(row(&terminal, 0).contains("Esc"));
-            assert!(row(&terminal, height - 1).contains("09:30"));
+            assert!(row(&terminal, 0).contains("09:30"));
         }
     }
 }
 
 #[test]
-fn keyboard_entry_shares_status_row_and_sliding_keyboard_does_not_reserve_old_chrome() {
+fn keyboard_entry_uses_the_header_and_the_panel_uses_the_bottom_row() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
         let bounds = Rect::new(0, 0, width, height);
         let context = RenderContext::default();
@@ -509,8 +507,8 @@ fn keyboard_entry_shares_status_row_and_sliding_keyboard_does_not_reserve_old_ch
             .with_help_button(true)
             .with_keyboard_launcher(true);
         let launcher = layout.keyboard_launcher.unwrap();
-        assert_eq!(launcher.y, height - 1);
-        assert_eq!(launcher.right(), layout.time_button.unwrap().x);
+        assert_eq!(launcher.y, 0);
+        assert_eq!(launcher.right() + 1, layout.help_button.unwrap().x);
         assert_eq!(layout.status_message.unwrap().right(), launcher.x);
         assert_eq!(layout.main, Rect::new(0, 1, width, height - 2));
         assert_eq!(layout.with_keyboard_launcher(true), layout);
@@ -527,8 +525,11 @@ fn keyboard_entry_shares_status_row_and_sliding_keyboard_does_not_reserve_old_ch
             let shown = layout.with_input_keyboard(keyboard.keyboard, visibility);
             assert_eq!(shown.main.y, 1);
             assert_eq!(shown.main.bottom(), keyboard.keyboard.y);
-            assert!(shown.status_message.is_none());
-            assert!(shown.time_button.is_none());
+            assert_eq!(
+                shown.status_message.unwrap().right(),
+                layout.help_button.unwrap().x
+            );
+            assert_eq!(shown.time_button, layout.time_button);
             assert!(shown.keyboard_launcher.is_none());
             for button in [shown.back_button, shown.help_button].into_iter().flatten() {
                 assert_eq!(button.height, 1);
@@ -540,47 +541,54 @@ fn keyboard_entry_shares_status_row_and_sliding_keyboard_does_not_reserve_old_ch
 }
 
 #[test]
-fn running_windows_reuse_the_status_row_without_hiding_errors_or_global_controls() {
+fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
         for error in [false, true] {
-            let model = chrome(width, height);
-            let theme = TundraTheme::default();
-            let buttons = components::ButtonFrame::new(None, None, &theme);
-            let mut context = RenderContext::default();
-            context.buttons = Some(buttons.clone());
+            let mut model = chrome(width, height);
+            model.tasks_label = Some("任务".into());
+            model.status.status = "就绪 e\u{301}".into();
+            model.status.error = error.then(|| "出错 e\u{301}".into());
+            let context = RenderContext::default();
             let original = ShellFrameLayout::new(
                 Rect::new(0, 0, width, height),
                 model.status.time_button_label.as_deref(),
                 &context,
             )
+            .with_help_button(true)
+            .with_tasks_button(model.tasks_label.as_deref())
             .with_keyboard_launcher(true);
-            let layout = original.with_workspace_taskbar(true, error);
-            let taskbar = layout.workspace_taskbar.unwrap();
+            let layout = original.with_workspace_taskbar(true);
             assert_eq!(layout.main, original.main);
-            assert_eq!(taskbar.y, height - 1);
-            assert_eq!(taskbar.height, 1);
-            assert_eq!(taskbar.right(), layout.keyboard_launcher.unwrap().x);
-            assert_eq!(layout.keyboard_launcher, original.keyboard_launcher);
-            assert_eq!(layout.time_button, original.time_button);
-            assert_eq!(layout.modal_area(), layout.bounds);
-            assert_eq!(layout.with_workspace_taskbar(true, error), layout);
+            assert_eq!(
+                layout.workspace_taskbar,
+                Some(Rect::new(0, height - 1, width, 1))
+            );
+            assert_eq!(layout.status_message, original.status_message);
+            let message = layout.status_message.unwrap();
+            let keyboard = layout.keyboard_launcher.unwrap();
+            let tasks = layout.tasks_button.unwrap();
+            let help = layout.help_button.unwrap();
+            let time = layout.time_button.unwrap();
+            let back = layout.back_button.unwrap();
+            let controls = [layout.title, message, keyboard, tasks, help, time, back];
+            assert!(controls.iter().all(|area| area.y == 0 && area.height == 1));
+            assert!(controls.windows(2).all(|pair| pair[0].right() <= pair[1].x));
+            assert_eq!(message.right(), keyboard.x);
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
                 .draw(|frame| render_shell_chrome(frame, &layout, &model, &context))
                 .unwrap();
-            let regions = buttons.regions();
-            assert_eq!(
-                regions.iter().any(|r| r.id.as_str() == "shell.status"),
-                error
-            );
-            for region in &regions {
-                assert!(region.area.intersection(taskbar).is_empty());
-            }
-            assert!(row(&terminal, height - 1).contains("09:30"));
-            let shown = layout.with_input_keyboard(Rect::new(0, 10, width, height - 10), 1000);
+            let status: String = message
+                .positions()
+                .map(|point| terminal.backend().buffer()[point].symbol())
+                .collect();
+            let expected = model.status.full_message();
+            assert!(status.starts_with(expected.chars().next().unwrap()));
+            assert_eq!(status.replace(' ', ""), expected.replace(' ', ""));
+            assert!(row(&terminal, 0).starts_with("TundraUX 3"));
+            assert!(row(&terminal, 0).contains("09:30"));
+            let shown = layout.with_input_keyboard(Rect::new(0, 10, width, height - 10), 1_000);
             assert!(shown.workspace_taskbar.is_none());
-            assert!(shown.status_message.is_none());
-            assert!(shown.time_button.is_none());
         }
     }
 }

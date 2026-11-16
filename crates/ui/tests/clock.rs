@@ -237,7 +237,6 @@ fn render(width: u16, height: u16, model: &ClockViewModel) -> (Terminal<TestBack
 
 fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::User,
         terminal_size: (width, height),
@@ -249,7 +248,6 @@ fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Clock".to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,

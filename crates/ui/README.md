@@ -16,13 +16,13 @@
 | `src/workspace/` | Split geometry, window controls, and composition of app-host frames |
 | `assets/` | Icons and timezone maps; see [Asset notes](assets/README.md) for sources |
 
-Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the global title bar, status bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
+Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The global title bar exposes Tasks for logged-in non-guest users, including running and awaiting-approval status. Title and status bars each use one row; Tasks, Help, Back, the clock, and the screen-keyboard entry share their actual render and hit-test geometry.
+The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. Tasks is available to logged-in non-guest users and shows running or awaiting-approval status.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
-The bottom window bar uses the left side of the status row. Each entry has separate title and minus targets for restoring and closing the window. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
+The window bar uses the full bottom row. Each entry has separate title and minus targets for restoring and closing the window. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
 
 `WorkspaceTree` stores incremental splits, allowing each axis once per path and at most four panes in a 2×2 grid. T layouts preserve the untouched pane. Size-driven hiding projects this topology without discarding it; growing the terminal restores the hidden panes. At the 108×20 minimum, a single app has 106×16 content cells. Complete frames and one-cell gaps require 217×20 for left/right, 108×39 for top/bottom, and 217×39 for four panes.
 

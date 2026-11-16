@@ -81,13 +81,7 @@ fn save_picker_shows_browsable_rows_filename_and_actions_together() {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
-                render_explorer(
-                    frame,
-                    bounds,
-                    &chrome_for("Save"),
-                    &model,
-                    &TundraTheme::default(),
-                )
+                render_explorer(frame, bounds, &chrome(), &model, &TundraTheme::default())
             })
             .unwrap();
         let screen = terminal_output(&terminal);
@@ -140,9 +134,7 @@ fn explorer_address_editor_shows_selection_and_scrolls_to_the_cursor() {
             model.address_selection_anchor = Some(if cursor_at_end { end - 4 } else { end });
             let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
             terminal
-                .draw(|frame| {
-                    render_explorer(frame, frame.area(), &chrome_for("Explorer"), &model, &theme)
-                })
+                .draw(|frame| render_explorer(frame, frame.area(), &chrome(), &model, &theme))
                 .unwrap();
             let ShellLayout::Full { main, .. } = compute_shell_layout(Rect::new(0, 0, width, 24))
             else {
@@ -711,9 +703,8 @@ fn sample_model() -> ExplorerViewModel {
     )
 }
 
-fn chrome_for(screen: &str) -> ShellChromeViewModel {
+fn chrome() -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::User,
         terminal_size: (110, 32),
@@ -725,7 +716,6 @@ fn chrome_for(screen: &str) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec![screen.to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,
@@ -742,7 +732,7 @@ fn render_output(model: &ExplorerViewModel) -> String {
 }
 
 fn render_terminal(model: &ExplorerViewModel) -> Terminal<TestBackend> {
-    let chrome = chrome_for("Explorer");
+    let chrome = chrome();
     let mut terminal = Terminal::new(TestBackend::new(110, 32)).expect("test terminal");
     terminal
         .draw(|frame| {

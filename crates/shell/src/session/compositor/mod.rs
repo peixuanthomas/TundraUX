@@ -361,10 +361,7 @@ impl ScreenCompositor {
         let layout = state
             .input_keyboard_content_layout(layout)
             .with_keyboard_launcher(workspace_keyboard)
-            .with_workspace_taskbar(
-                workspace.as_ref().is_some_and(|windows| windows.active()),
-                chrome.status.error.is_some(),
-            );
+            .with_workspace_taskbar(workspace.as_ref().is_some_and(|windows| windows.active()));
         if let Some(windows) = workspace.as_deref_mut() {
             windows.relayout(bounds, layout.main, !overlays.is_empty());
         }
@@ -398,12 +395,8 @@ impl ScreenCompositor {
                 overlays.is_empty() && !workspace_overlay && toast.is_visible(frame_context.motion)
             })
             .filter(|_| prepared.notification.is_none() && prepared.chrome.status.error.is_none())
-            .and_then(|toast| {
-                layout
-                    .status_message
-                    .or(layout.workspace_taskbar)
-                    .map(|_| toast.layout(layout.main))
-            })
+            .filter(|_| matches!(layout.shell, ui::ShellLayout::Full { bottom, .. } if !bottom.is_empty()))
+            .map(|toast| toast.layout(layout.main))
             .filter(|area| !area.is_empty());
         self.toast_area = toast_area;
         let hover_position = state

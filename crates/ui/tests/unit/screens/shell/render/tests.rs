@@ -25,11 +25,9 @@ fn status_message_uses_shared_hover_pressed_and_keyboard_colors() {
         disabled: false,
     };
     let chrome = ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "debug".into(),
         display_mode: HomeDisplayMode::User,
         terminal_size: (80, 24),
-        screen_stack: vec![],
         back_button_hovered: false,
         help_available: false,
         tasks_label: None,
@@ -91,14 +89,14 @@ fn status_message_uses_shared_hover_pressed_and_keyboard_colors() {
         terminal
             .draw(|frame| super::render_shell_chrome(frame, &layout, &chrome, &context))
             .unwrap();
-        assert!(layout.status_message.is_none());
-        assert!(layout.time_button.is_none());
+        assert_eq!(layout.status_message, Some(message));
+        assert!(layout.time_button.is_some());
         assert_eq!(layout.main.bottom(), 24);
     }
 }
 
 #[test]
-fn help_button_sits_left_of_back_and_hides_in_compact() {
+fn clock_sits_between_help_and_back_and_help_hides_in_compact() {
     use crate::{RenderContext, ShellFrameLayout};
     use ratatui::layout::Rect;
     let context = RenderContext::default();
@@ -107,8 +105,11 @@ fn help_button_sits_left_of_back_and_hides_in_compact() {
         .with_help_button(true);
     let back = layout.back_button.unwrap();
     let help = layout.help_button.unwrap();
-    assert_eq!(help.right() + 1, back.x);
-    assert_eq!(help.y, back.y);
+    let time = layout.time_button.unwrap();
+    assert_eq!(help.right() + 1, time.x);
+    assert_eq!(time.right() + 1, back.x);
+    assert_eq!(help.y, time.y);
+    assert_eq!(time.y, back.y);
     let compact =
         ShellFrameLayout::new(Rect::new(0, 0, 40, 10), None, &context).with_help_button(true);
     assert!(compact.help_button.is_none());

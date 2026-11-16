@@ -53,7 +53,7 @@ Opening a managed application restores a running window or creates an AppHost if
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-Logged-in non-guest users can open Tasks from the global title bar. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9 after required account validation.
+The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Logged-in non-guest users can open Tasks. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9 after required account validation.
 
 ## Windows
 
@@ -61,7 +61,7 @@ Every app has **Minimize**, **Split**, and **Close** controls. Split offers **Le
 
 Split the focused pane incrementally: three-window T layouts are supported, with a maximum of four panes in a 2×2 grid. Each path can split once in each direction. Full screen keeps only the chosen window, minimizes the other panes, and clears the previous split. Closing or minimizing merges the empty region; restoring a window uses its previous place when possible, otherwise it replaces the focused pane.
 
-Click a title in the bottom bar to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
+The bottom row is dedicated to the window bar. Click a title to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
 
 | After Ctrl+W | Action |
 | --- | --- |

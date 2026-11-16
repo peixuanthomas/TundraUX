@@ -12,7 +12,6 @@ use ui::{
 
 fn chrome(size: (u16, u16)) -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "test".into(),
         display_mode: HomeDisplayMode::User,
         terminal_size: size,
@@ -24,7 +23,6 @@ fn chrome(size: (u16, u16)) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Home".into(), "Launcher".into(), "Command Line".into()],
         status: StatusViewModel {
             status: "Ready".into(),
             toast: None,
@@ -147,7 +145,6 @@ fn command_line_renders_snapshot_inside_the_standard_shell_chrome() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(output.contains("TundraUX 3"));
-    assert!(output.contains("Command Line"));
     assert!(output.contains("Ready"));
     assert!(output.contains("2026-07-27 10:15"));
 }
@@ -332,7 +329,6 @@ fn undersized_command_line_is_blocked() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(output.contains("TundraUX 3"));
-    assert!(output.contains("Command Line"));
     assert!(output.contains("Ready"));
     assert!(output.contains("Resize to continue"));
 }

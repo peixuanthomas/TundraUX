@@ -87,10 +87,10 @@ pub(in crate::session) fn build_shell_hit_map(
                 },
             });
         }
-        ui::ShellLayout::Full { top, main, .. } => {
+        ui::ShellLayout::Full { main, .. } => {
             regions.push(ShellHitRegion {
                 component: ShellComponent::TopBar,
-                area: top,
+                area: frame_layout.title,
                 layer: ShellHitLayer::ShellChrome,
             });
             match content_screen {

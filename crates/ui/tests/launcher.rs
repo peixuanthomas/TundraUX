@@ -219,7 +219,6 @@ fn item(index: usize, status: LauncherItemStatus) -> LauncherItemViewModel {
 
 fn chrome(size: (u16, u16)) -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "test".into(),
         display_mode: HomeDisplayMode::User,
         terminal_size: size,
@@ -231,7 +230,6 @@ fn chrome(size: (u16, u16)) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Home".into(), "Launcher".into()],
         status: StatusViewModel {
             status: "Ready".into(),
             toast: None,

@@ -2307,44 +2307,9 @@ impl ShellSession {
             help_button_hovered: self.hovered_component == Some(ShellComponent::HelpButton),
             help_button_focused: self.pages.common.focused_component == ShellComponent::HelpButton,
             back_shortcut: self.shell_back_shortcut(),
-            app_name: "TundraUX 3".to_string(),
             build_mode: build_mode_label().to_string(),
             display_mode: self.home_display_mode(),
             terminal_size: self.terminal_size,
-            screen_stack: self
-                .screen_stack()
-                .iter()
-                .zip(self.live_page_ids())
-                .map(|(screen, id)| match screen {
-                    ShellScreen::FirstRunSetup => i18n::tr!("ui-auth-first-run-setup"),
-                    ShellScreen::BootstrapAdmin => i18n::tr!("ui-auth-create-admin"),
-                    ShellScreen::Login => i18n::tr!("ui-auth-login"),
-                    ShellScreen::Home => i18n::tr!("shell-component-home"),
-                    ShellScreen::Clock => i18n::tr!("shell-clock"),
-                    ShellScreen::Diagnostics => i18n::tr!("shell-diagnostics"),
-                    ShellScreen::Logs => i18n::tr!("shell-logs"),
-                    ShellScreen::Management => self.pages.management.get(id).map_or_else(
-                        || i18n::tr!("management-title"),
-                        |page| page.management_state.title(),
-                    ),
-                    ShellScreen::SystemStatus => i18n::tr!("shell-system-status"),
-                    ShellScreen::Explorer => i18n::tr!("shell-explorer"),
-                    ShellScreen::Launcher => i18n::tr!("shell-launcher"),
-                    ShellScreen::CommandLine => self
-                        .pages
-                        .command_line
-                        .get(id)
-                        .and_then(|page| page.command_line_external.as_ref())
-                        .map_or_else(
-                            || i18n::tr!("app-catalog-command-line-name"),
-                            ExternalTerminalLaunch::title,
-                        ),
-                    ShellScreen::Editor => i18n::tr!("shell-editor"),
-                    ShellScreen::Settings => i18n::tr!("shell-settings"),
-                    ShellScreen::UserManagement => i18n::tr!("shell-user-management"),
-                    ShellScreen::ExitConfirm => i18n::tr!("shell-exit-power"),
-                })
-                .collect(),
             status: ui::StatusViewModel {
                 status,
                 toast: self

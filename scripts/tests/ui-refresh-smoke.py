@@ -95,6 +95,17 @@ def run_case(binary, language, color, motion, sizes, samples):
         def has_modal(frame):
             return any(item["id"].startswith("modal/") for item in frame["nodes"])
 
+        def assert_header(frame, keyboard_id=None):
+            ids = ["chrome/shell.status", "chrome/shell.tasks", "chrome/shell.help",
+                   "chrome/shell.status.time", "chrome/shell.back"]
+            if keyboard_id is not None:
+                ids.insert(1, keyboard_id)
+            right = 0
+            for identifier in ids:
+                rect = node(frame, identifier)["rect"]
+                assert rect["height"] == 1 and rect["y"] == 0 and rect["x"] >= right, (identifier, rect)
+                right = rect["x"] + rect["width"]
+
         measurements = []
         try:
             if os.geteuid() == 0:
@@ -150,13 +161,8 @@ def run_case(binary, language, color, motion, sizes, samples):
                 for item in visible_home:
                     rect = item["rect"]
                     assert item["actionable"] and rect["y"] >= 1
-                    assert rect["y"] + rect["height"] <= rows - 1, "Home entry overlaps status"
-                for identifier in ("chrome/shell.back", "chrome/shell.help", "chrome/shell.tasks"):
-                    rect = node(current, identifier)["rect"]
-                    assert rect["height"] == 1 and rect["y"] == 0, (identifier, rect)
-                for identifier in ("chrome/shell.status", "chrome/shell.status.time"):
-                    rect = node(current, identifier)["rect"]
-                    assert rect["height"] == 1 and rect["y"] == rows - 1, (identifier, rect)
+                    assert rect["y"] + rect["height"] <= rows - 1, "Home entry overlaps window bar"
+                assert_header(current)
                 tap(current, home_entry(current, settings_label))
                 send(b"\x1bOP")
                 current = until(lambda frame: frame["page"] == "Settings" and has_modal(frame))
@@ -175,20 +181,18 @@ def run_case(binary, language, color, motion, sizes, samples):
                 tap(current, "page/launcher.search")
                 current = until(lambda frame: node(frame, "page/launcher.search")["focused"])
                 keyboard = next(item for item in current["nodes"] if item["id"].endswith("/input.keyboard"))
-                assert keyboard["rect"]["y"] == rows - 1
-                assert keyboard["rect"]["x"] < node(current, "chrome/shell.status.time")["rect"]["x"]
+                assert_header(current, keyboard["id"])
                 tap(current, keyboard["id"])
                 current = until(lambda frame: not frame["animation_running"] and
                                 any(item["id"] == "keyboard/screen-keyboard.letter.a"
                                     for item in frame["nodes"]))
-                assert node(current, "chrome/shell.back")["rect"]["y"] == 0
-                assert not any(item["id"].startswith("chrome/shell.status") for item in current["nodes"])
+                assert_header(current)
                 assert node(current, "page/launcher.search")["actionable"]
                 toggle = next(item for item in current["nodes"] if item["id"].endswith("/screen-keyboard.toggle"))
                 tap(current, toggle["id"])
                 current = until(lambda frame: not frame["animation_running"] and
                                 any(item["id"].endswith("/input.keyboard") for item in frame["nodes"]))
-                assert node(current, "chrome/shell.status")["rect"]["y"] == rows - 1
+                assert_header(current, keyboard["id"])
                 wide = "中文e\u0301😀"
                 send(b"\x1b[200~" + wide.encode() + b"\x1b[201~")
                 current = until(lambda frame: wide in node(frame, "page/launcher.search")["text"])

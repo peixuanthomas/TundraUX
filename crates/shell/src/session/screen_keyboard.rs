@@ -129,10 +129,10 @@ impl ShellSession {
 
     pub(super) fn input_keyboard_layout(&self) -> ScreenKeyboardLayout {
         let mut bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        if let ui::ShellLayout::Full { status, .. } = ui::compute_shell_layout(bounds) {
-            let slide = (u32::from(status.height) * u32::from(self.input_keyboard_visibility()))
+        if let ui::ShellLayout::Full { bottom, .. } = ui::compute_shell_layout(bounds) {
+            let slide = (u32::from(bottom.height) * u32::from(self.input_keyboard_visibility()))
                 .div_ceil(1_000) as u16;
-            bounds.height = status.y + slide;
+            bounds.height = bottom.y + slide;
         }
         ui::screen_keyboard_input_layout_with_visibility(
             bounds,
@@ -160,6 +160,7 @@ impl ShellSession {
         if self.auto_admin_visible() {
             let bottom = self.input_keyboard_layout().keyboard.y.min(
                 self.keyboard_launcher_area()
+                    .filter(|area| area.y >= main.y)
                     .map_or(bounds.bottom(), |area| area.y),
             );
             main.height = main.height.min(bottom.saturating_sub(main.y));
@@ -219,11 +220,21 @@ impl ShellSession {
         }
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
         if self.input_keyboard_visibility() == 0 {
+            if let Some(area) = self
+                .frame_layout
+                .filter(|layout| layout.bounds == bounds)
+                .and_then(|layout| layout.keyboard_launcher)
+            {
+                return Some(area);
+            }
             return ui::ShellFrameLayout::new(
                 bounds,
                 self.status_time_button_label().as_deref(),
                 &ui::RenderContext::default(),
             )
+            .with_back_shortcut(self.shell_back_shortcut())
+            .with_help_button(self.help_button_available())
+            .with_tasks_button(self.tasks_button_label().as_deref())
             .with_keyboard_launcher(true)
             .keyboard_launcher;
         }

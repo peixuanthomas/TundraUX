@@ -241,7 +241,7 @@ fn storage_free_debug_home_does_not_expose_logout_hit_area() {
 fn minimum_supported_login_shows_password_and_submit_without_scrolling() {
     let model = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
     let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
-    let chrome = chrome_for("Login");
+    let chrome = chrome();
     terminal
         .draw(|frame| {
             render_login(
@@ -318,7 +318,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     let mut outputs = Vec::new();
 
     let home = HomeViewModel::user("Strix", "now", Vec::new());
-    let chrome = compact_alert_chrome("Home");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
     terminal
         .draw(|frame| render_home(frame, frame.area(), &chrome, &home, &theme))
@@ -326,7 +326,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     outputs.push(terminal_output(&terminal));
 
     let clock = ClockViewModel::new("now");
-    let chrome = compact_alert_chrome("Clock");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
     terminal
         .draw(|frame| render_clock(frame, frame.area(), &chrome, &clock, &theme))
@@ -334,7 +334,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     outputs.push(terminal_output(&terminal));
 
     let login = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
-    let chrome = compact_alert_chrome("Login");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
     terminal
         .draw(|frame| render_login(frame, frame.area(), &chrome, &login, &theme))
@@ -342,7 +342,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     outputs.push(terminal_output(&terminal));
 
     let bootstrap = BootstrapAdminViewModel::new("", 0, AuthField::Username, None);
-    let chrome = compact_alert_chrome("BootstrapAdmin");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
     terminal
         .draw(|frame| {
@@ -352,7 +352,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     outputs.push(terminal_output(&terminal));
 
     let management = UserManagementViewModel::new("AdminUser", Vec::new(), 0, None, true, None);
-    let chrome = compact_alert_chrome("UserManagement");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
     terminal
         .draw(|frame| {
@@ -371,7 +371,7 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
 #[test]
 fn extremely_small_compact_layout_keeps_escape_above_borderless_notification() {
     let home = HomeViewModel::user("User", "Now", Vec::new());
-    let chrome = compact_alert_chrome("Home");
+    let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(2, 2)).expect("test terminal");
 
     terminal
@@ -631,7 +631,7 @@ fn notification_layout_and_renderer_share_wrapped_message_and_stacked_action_rec
 
 #[test]
 fn login_renderer_masks_password_length() {
-    let chrome = chrome_for("Login");
+    let chrome = chrome();
     let model = LoginViewModel::new(
         vec![
             login_user("AdminUser", "Admin User", "Admin"),
@@ -696,7 +696,7 @@ fn login_renderer_masks_password_length() {
 fn login_password_blinks_an_underscore_for_empty_masked_and_revealed_text() {
     use ratatui::style::Modifier;
 
-    let chrome = chrome_for("Login");
+    let chrome = chrome();
     let theme = TundraTheme::default_dark();
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal");
     let long_password = "中文🙂".repeat(30);
@@ -747,7 +747,7 @@ fn login_password_blinks_an_underscore_for_empty_masked_and_revealed_text() {
 
 #[test]
 fn login_renderer_reveals_only_explicit_plaintext_and_focuses_visibility_control() {
-    let chrome = chrome_for("Login");
+    let chrome = chrome();
     let visible = "密碼🙂";
     let model = LoginViewModel::new(
         vec![login_user("Strix", "Local User", "User")],
@@ -786,9 +786,8 @@ fn login_renderer_reveals_only_explicit_plaintext_and_focuses_visibility_control
     ));
 }
 
-fn chrome_for(screen: &str) -> ShellChromeViewModel {
+fn chrome() -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (80, 24),
@@ -800,7 +799,6 @@ fn chrome_for(screen: &str) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec![screen.to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,
@@ -812,8 +810,8 @@ fn chrome_for(screen: &str) -> ShellChromeViewModel {
     }
 }
 
-fn compact_alert_chrome(screen: &str) -> ShellChromeViewModel {
-    let mut chrome = chrome_for(screen);
+fn compact_alert_chrome() -> ShellChromeViewModel {
+    let mut chrome = chrome();
     chrome.terminal_size = (49, 11);
     chrome.status = StatusViewModel {
         status: "Compact status".to_string(),
@@ -882,7 +880,7 @@ fn region_has_bg(terminal: &Terminal<TestBackend>, area: Rect, bg: Color) -> boo
 
 #[test]
 fn linux_login_labels_system_identity_and_keeps_errors_visible() {
-    let chrome = chrome_for("Login");
+    let chrome = chrome();
     let mut model = LoginViewModel::new(
         vec![login_user("alice", "Alice", "Admin")],
         0,

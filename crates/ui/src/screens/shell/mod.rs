@@ -4,6 +4,8 @@ mod layout;
 mod model;
 mod render;
 
+const SHELL_TITLE: &str = "TundraUX 3";
+
 pub use layout::{
     MIN_SHELL_TERMINAL_HEIGHT, MIN_SHELL_TERMINAL_WIDTH, ShellFrameLayout, ShellLayout,
     command_line_terminal_area, command_line_terminal_area_in, compute_shell_layout,
@@ -16,5 +18,5 @@ pub(crate) use render::fit_cell;
 pub use render::{render_compact_home, render_shell_chrome, render_shell_chrome_with_status_focus};
 pub use render::{
     render_exit_confirmation, render_exit_confirmation_contextual, render_time_sync_failure_dialog,
-    render_time_sync_failure_dialog_contextual, status_time_button_area,
+    render_time_sync_failure_dialog_contextual,
 };

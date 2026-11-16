@@ -98,9 +98,9 @@ Run the semantic matrix after building Shell and CLI:
 python3 scripts/tests/ui-refresh-smoke.py target/debug/tundra-shell
 ```
 
-The script checks 108 × 20, 120 × 36, and 180 × 50 in English and Chinese, with truecolor and ANSI terminal capabilities, and full and reduced motion. It checks one-row global controls, the keyboard entry before the clock, tap activation without hover, modal interception, resize during a dialog, wide and combining characters, and return navigation using current control rectangles. For a focused run, select `--language en-US --color truecolor --motion full`.
+The script checks 108 × 20, 120 × 36, and 180 × 50 in English and Chinese, with truecolor and ANSI terminal capabilities, and full and reduced motion. It checks header control order, status visibility with the keyboard open, tap activation without hover, modal interception, resize during a dialog, wide and combining characters, and return navigation using current control rectangles. For a focused run, select `--language en-US --color truecolor --motion full`.
 
-Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the title and status rows leave 18 content rows. Check that text remains readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
+Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the header and window bar leave 18 content rows. Check that text remains readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
 
 For performance measurements, use a Release build at 120 × 36:
 

@@ -90,13 +90,13 @@ A floating Toast leaves keyboard focus with the current page. The compositor blo
 
 presentation assembles ViewModels from `AppSnapshot` and the necessary session state. `ScreenCompositor` handles final rendering; it does not decide application state or return targets during rendering.
 
-The global `ShellFrameLayout` defines the title bar, central `main`, bottom window bar, and time button. Each app window adds a frame around its content. Rendering, mouse hit testing, PTY sizing, and effects use the same content rectangle. Window buttons and the bottom entries act on release inside their original target. Dragging outside, resizing, losing focus, or opening a new overlay cancels a pending press. Input batching preserves the drag path so leaving a button and returning cannot accidentally activate it.
+The global `ShellFrameLayout` defines the header, central `main`, and bottom window bar. The header places the left-aligned title and status message before the screen keyboard, Tasks, Help, clock, and Back controls. Each app window adds a frame around its content. Rendering, mouse hit testing, PTY sizing, and effects use the same content rectangle. Window buttons and the bottom entries act on release inside their original target. Dragging outside, resizing, losing focus, or opening a new overlay cancels a pending press. Input batching preserves the drag path so leaving a button and returning cannot accidentally activate it.
 
 Compositing order:
 
 1. Page content;
 2. Page overlays;
-3. Shell title bar and status bar;
+3. Shell header and bottom window bar;
 4. Shell modal dialogs;
 5. Animations and effects for the current frame;
 6. Floating Toast and the on-screen keyboard.
@@ -107,7 +107,7 @@ The window's Split button offers left/right, top/bottom, and full screen. A spli
 
 The requested topology is a binary split tree with each axis once per path and at most four panes. Splits add one cell of space between adjacent frames. Windows hidden by a resize return when room permits. Minimized windows wait in the bottom bar until restored. The workspace compares the minimum of every running app before routing application input. If that minimum does not fit, the selected frame and window controls stay available. A close that needs an app confirmation displays a Shell prompt until there is room for the original confirmation.
 
-Clicking the status message area, when shown, opens the full text. The dialog retains the content from the moment of the click and supports scrolling. The clock button remains separate from the bottom window bar.
+Clicking the status area in the header opens the full text. The dialog retains the content from the moment of the click and supports scrolling.
 
 ## Exit, suspend, and failures
 

@@ -365,7 +365,6 @@ fn incident(restricted: bool) -> DiagnosticsIncidentViewModel {
 
 fn render(width: u16, height: u16, model: &DiagnosticsViewModel) -> Terminal<TestBackend> {
     let chrome = ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (width, height),
@@ -377,7 +376,6 @@ fn render(width: u16, height: u16, model: &DiagnosticsViewModel) -> Terminal<Tes
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Diagnostics".to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,

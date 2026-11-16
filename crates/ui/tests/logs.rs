@@ -132,7 +132,6 @@ fn render(
     theme: &TundraTheme,
 ) -> Terminal<TestBackend> {
     let chrome = ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "debug".into(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (width, height),
@@ -144,7 +143,6 @@ fn render(
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Logs".into()],
         status: StatusViewModel {
             status: "Ready".into(),
             toast: None,

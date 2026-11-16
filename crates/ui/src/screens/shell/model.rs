@@ -39,11 +39,9 @@ impl TimeSyncDialogViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellChromeViewModel {
-    pub app_name: String,
     pub build_mode: String,
     pub display_mode: HomeDisplayMode,
     pub terminal_size: (u16, u16),
-    pub screen_stack: Vec<String>,
     pub back_button_hovered: bool,
     pub help_available: bool,
     pub tasks_label: Option<String>,

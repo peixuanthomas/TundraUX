@@ -15,9 +15,6 @@ use crate::components::{
 use crate::screens::notifications::notification_tone_style;
 use crate::{RenderContext, TundraTheme};
 
-const STATUS_TIME_BUTTON_HORIZONTAL_CHROME: u16 = 2;
-const STATUS_TIME_BUTTON_MIN_WIDTH: u16 = 3;
-const STATUS_TIME_BUTTON_RESERVED_LEFT_WIDTH: u16 = 12;
 fn compact_terminal_message() -> String {
     i18n::tr!(
         "ui-shell-minimum-terminal-size",
@@ -117,7 +114,7 @@ pub fn render_compact_home(
     }
 
     let context = RenderContext::from_theme(theme, Default::default(), Default::default());
-    let surface = Surface::new().titled("TundraUX 3").bordered(true);
+    let surface = Surface::new().titled(super::SHELL_TITLE).bordered(true);
     let inner = surface.inner(area);
     surface.render_frame(frame, area, &context);
     if inner.width == 0 || inner.height == 0 {
@@ -170,27 +167,21 @@ pub fn render_shell_chrome_with_status_focus(
         }
     };
     Surface::new().render_frame(frame, top, context);
-    let title_area = Rect::new(
-        top.x,
-        top.y,
-        layout
-            .tasks_button
-            .or(layout.help_button)
-            .or(layout.back_button)
-            .map_or(top.width, |button| button.x.saturating_sub(top.x)),
-        top.height,
-    );
-    if layout.is_compact() && (chrome.status.error.is_some() || chrome.status.toast.is_some()) {
-        let (message, style) = status_presentation(&chrome.status, &theme);
+    if !layout.title.is_empty() {
+        let (title, style) = if layout.is_compact()
+            && (chrome.status.error.is_some() || chrome.status.toast.is_some())
+        {
+            status_presentation(&chrome.status, &theme)
+        } else {
+            (super::SHELL_TITLE.to_owned(), theme.title_style())
+        };
         frame.render_widget(
             Paragraph::new(Line::styled(
-                truncate_status_text(&message, title_area.width),
+                truncate_status_text(&title, layout.title.width),
                 style,
             )),
-            title_area,
+            layout.title,
         );
-    } else {
-        render_top(frame, title_area, chrome, context);
     }
     if let Some(area) = layout.back_button {
         let mut button = Button::new(
@@ -222,69 +213,11 @@ pub fn render_shell_chrome_with_status_focus(
         button.state.hovered = chrome.tasks_button_hovered;
         button.render_borderless_frame(frame, area, &theme);
     }
-    if let ShellLayout::Full { status, .. } = layout.shell {
-        render_status(frame, status, layout, chrome, context, status_focused);
-    }
-}
-
-fn render_top(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    chrome: &ShellChromeViewModel,
-    context: &RenderContext,
-) {
-    if area.is_empty() {
-        return;
-    }
-    let theme = context.compatibility_theme();
-    let title = truncate_status_text(&chrome.app_name, area.width);
-    let title_width = u16::try_from(terminal_width(&title))
-        .unwrap_or(area.width)
-        .min(area.width);
-    frame.render_widget(
-        Paragraph::new(Line::styled(title, theme.title_style())),
-        Rect::new(area.x, area.y, title_width, 1),
-    );
-    let info_width = area.width.saturating_sub(title_width.saturating_add(2));
-    if info_width == 0 || chrome.screen_stack.is_empty() {
-        return;
-    }
-    let mut path = truncate_status_text(chrome.screen_stack.last().unwrap(), info_width);
-    for parent in chrome.screen_stack[..chrome.screen_stack.len() - 1]
-        .iter()
-        .rev()
+    if let ShellLayout::Full { bottom, .. } = layout.shell
+        && !bottom.is_empty()
     {
-        let candidate = format!("{parent} > {path}");
-        if terminal_width(&candidate) > usize::from(info_width) {
-            break;
-        }
-        path = candidate;
+        Surface::new().render_frame(frame, bottom, context);
     }
-    frame.render_widget(
-        Paragraph::new(Line::styled(path, theme.muted_style()))
-            .alignment(HorizontalAlignment::Right),
-        Rect::new(
-            area.right().saturating_sub(info_width),
-            area.y,
-            info_width,
-            1,
-        ),
-    );
-}
-
-fn render_status(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    layout: &ShellFrameLayout,
-    chrome: &ShellChromeViewModel,
-    context: &RenderContext,
-    status_focused: bool,
-) {
-    if area.is_empty() {
-        return;
-    }
-    Surface::new().render_frame(frame, area, context);
-    let theme = context.compatibility_theme();
     if let Some(message) = layout.status_message {
         let (text, style) = status_presentation(&chrome.status, &theme);
         let mut message_theme = theme.clone();
@@ -302,32 +235,6 @@ fn render_status(
         button.state.selected = chrome.status.time_button_selected;
         button.render_borderless_frame(frame, area, &theme);
     }
-}
-
-pub fn status_time_button_area(status: Rect, label: &str) -> Rect {
-    if status.width == 0 || status.height == 0 || label.is_empty() {
-        return Rect::new(status.right(), status.y, 0, status.height);
-    }
-    let label_width = u16::try_from(terminal_width(label)).unwrap_or(u16::MAX);
-    let desired_width = label_width.saturating_add(STATUS_TIME_BUTTON_HORIZONTAL_CHROME);
-    let max_width = if status.width
-        > STATUS_TIME_BUTTON_RESERVED_LEFT_WIDTH.saturating_add(STATUS_TIME_BUTTON_MIN_WIDTH)
-    {
-        status
-            .width
-            .saturating_sub(STATUS_TIME_BUTTON_RESERVED_LEFT_WIDTH)
-    } else {
-        status.width
-    };
-    let width = desired_width
-        .min(max_width)
-        .max(STATUS_TIME_BUTTON_MIN_WIDTH.min(max_width));
-    Rect::new(
-        status.right().saturating_sub(width),
-        status.y,
-        width,
-        status.height,
-    )
 }
 
 fn status_presentation(status: &crate::StatusViewModel, theme: &TundraTheme) -> (String, Style) {

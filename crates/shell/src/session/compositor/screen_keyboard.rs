@@ -89,11 +89,9 @@ impl ScreenCompositor {
             return;
         }
         let chrome = ui::ShellChromeViewModel {
-            app_name: "TundraUX 3".into(),
             build_mode: i18n::tr!("screen-keyboard-test-aa"),
             display_mode: ui::HomeDisplayMode::Debug,
             terminal_size: (bounds.width, bounds.height),
-            screen_stack: vec![i18n::tr!("screen-keyboard-test-aa")],
             back_button_hovered: false,
             help_available: false,
             tasks_label: None,
@@ -126,8 +124,7 @@ impl ScreenCompositor {
         background.buttons = None;
         ui::render_shell_chrome(frame, &shell, &chrome, &background);
         ui::render_screen_keyboard_aa_test(frame, layout, model, context);
-        // Paint last, over bottom status/time chrome. Layout has already moved
-        // and bounded the dialog, so this panel cannot cover any part of it.
+        // Paint last so the keyboard owns the bottom rows.
         ui::render_screen_keyboard_panel(frame, layout, model, context);
     }
 }

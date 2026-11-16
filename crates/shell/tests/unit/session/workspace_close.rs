@@ -47,6 +47,78 @@ fn pointer(
 }
 
 #[test]
+fn minimized_window_and_status_details_use_separate_click_targets() {
+    use crate::session::compositor::ScreenCompositor;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    let mut state = shell_state();
+    state.set_navigation_path(vec![ShellScreen::Home]);
+    state.notify_status("Workspace status");
+    let mut workspace = Workspace::new(None, false);
+    let id = SessionId(1);
+    workspace.windows.insert(id, window(Size::new(106, 16)));
+    workspace.taskbar_order.push(id);
+    show(&mut workspace, id);
+    workspace.selection.minimize(id);
+
+    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+    let mut compositor = ScreenCompositor::default();
+    let host = CommandLineHost::new(default_editor_watchdog().unwrap());
+    let prepared = compositor.prepare(
+        &state,
+        &host,
+        Instant::now(),
+        Default::default(),
+        ui::RenderContext::default(),
+        None,
+    );
+    terminal
+        .draw(|frame| {
+            compositor.render(frame, &mut state, &prepared, None, Some(&mut workspace));
+        })
+        .unwrap();
+
+    let status = state.frame_layout.unwrap().status_message.unwrap();
+    assert_eq!(status.y, 0);
+    let point = (status.x, status.y);
+    let down = InputEvent::mouse_down(PointerButton::Left, point);
+    let up = InputEvent::mouse_up(PointerButton::Left, point);
+    assert!(!workspace.input(&down, &mut state).unwrap());
+    state.apply_input(down);
+    assert!(!state.status_details_visible());
+    assert!(!workspace.input(&up, &mut state).unwrap());
+    state.apply_input(up);
+    assert!(state.status_details_visible());
+    assert_eq!(
+        state.to_notification_view_model().unwrap().message,
+        "Workspace status"
+    );
+    state.notification_dismiss_active_modal_without_response();
+
+    let taskbar = workspace.taskbar.as_ref().unwrap();
+    assert_eq!(taskbar.area, Rect::new(0, 19, 108, 1));
+    let (_, entry) = taskbar
+        .hits
+        .iter()
+        .find(|(action, _)| *action == WorkspaceTaskbarAction::Activate(id))
+        .unwrap();
+    let point = (entry.x, entry.y);
+    assert!(pointer(
+        &mut workspace,
+        &mut state,
+        point,
+        ui::MouseEventKind::Down(PointerButton::Left)
+    ));
+    assert!(pointer(
+        &mut workspace,
+        &mut state,
+        point,
+        ui::MouseEventKind::Up(PointerButton::Left)
+    ));
+    assert_eq!(workspace.selection.focused(), Some(id));
+}
+
+#[test]
 fn closing_window_keeps_reported_minimum_until_guardian_removal() {
     let id = SessionId(1);
     let minimum = Size::new(130, 25);

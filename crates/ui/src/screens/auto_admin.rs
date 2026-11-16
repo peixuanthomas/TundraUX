@@ -49,7 +49,7 @@ pub struct AutoAdminLayout {
 }
 
 /// Receives the full Shell bounds so drawing, hit testing and PTY sizing all
-/// reserve the same fixed title/status bars, even immediately after a resize.
+/// reserve the header and window bar, even immediately after a resize.
 pub fn auto_admin_layout(bounds: Rect, model: &AutoAdminViewModel) -> AutoAdminLayout {
     auto_admin_layout_in(
         crate::ShellFrameLayout::new(bounds, None, &RenderContext::default()).main,

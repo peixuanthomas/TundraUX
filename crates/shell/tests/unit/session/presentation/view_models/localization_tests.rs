@@ -115,74 +115,14 @@ fn selected_file_menu_keeps_the_actions_moved_from_the_toolbar() {
 }
 
 #[test]
-fn chrome_paths_localize_page_names_without_changing_navigation_or_page_ids() {
+fn localized_status_stays_above_the_command_line_viewport() {
     use ratatui::{Terminal, backend::TestBackend};
 
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for (code, home) in [("en-US", "Home"), ("zh-CN", "主页")] {
-        let mut state = ShellSession::new_for_home_mode(
-            ShellLaunchConfig::default(),
-            (108, 20),
-            ShellHomeMode::User,
-        );
-        state.language = std::sync::Arc::new(
-            i18n::LanguageSnapshot::load(&assets, code, 1)
-                .unwrap()
-                .snapshot,
-        );
-        let _language = i18n::enter_snapshot(state.language.clone());
-        for (screen, english, chinese) in [
-            (
-                ShellScreen::FirstRunSetup,
-                "First Run Setup",
-                "首次运行设置",
-            ),
-            (ShellScreen::BootstrapAdmin, "Create Admin", "创建管理员"),
-            (ShellScreen::CommandLine, "Command Line", "命令行"),
-            (ShellScreen::Management, "Linux Management", "Linux 运维"),
-            (ShellScreen::SystemStatus, "System Status", "系统状态"),
-            (ShellScreen::UserManagement, "User Management", "用户管理"),
-        ] {
-            state.set_navigation_path(vec![ShellScreen::Home, screen]);
-            let ids = state.live_page_ids();
-            let chrome = state.to_shell_chrome_view_model();
-            let title = if code == "en-US" { english } else { chinese };
-            assert_eq!(chrome.screen_stack, [home, title]);
-            assert_eq!(state.screen_stack(), [ShellScreen::Home, screen]);
-            assert_eq!(state.live_page_ids(), ids);
-            let context = ui::RenderContext::default();
-            let layout = ui::ShellFrameLayout::new(Rect::new(0, 0, 108, 20), None, &context)
-                .with_back_shortcut(chrome.back_shortcut);
-            let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
-            terminal
-                .draw(|frame| ui::render_shell_chrome(frame, &layout, &chrome, &context))
-                .unwrap();
-            let header: String = (0..108)
-                .map(|x| terminal.backend().buffer()[(x, 0)].symbol())
-                .collect();
-            assert!(
-                header.replace(' ', "").contains(&title.replace(' ', "")),
-                "{code}: {header}"
-            );
-            for internal in [
-                "FirstRunSetup",
-                "BootstrapAdmin",
-                "CommandLine",
-                "SystemStatus",
-                "UserManagement",
-            ] {
-                assert!(!header.contains(internal), "{code}: {header}");
-            }
-        }
-    }
-}
-
-#[test]
-fn running_external_terminal_names_stay_in_chrome_and_leave_the_full_pty_visible() {
-    use ratatui::{Terminal, backend::TestBackend};
-
-    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for code in ["en-US", "zh-CN"] {
+    for (code, expected) in [
+        ("en-US", "Saving sample.txt"),
+        ("zh-CN", "正在保存 sample.txt"),
+    ] {
         let mut state = ShellSession::new_for_home_mode(
             ShellLaunchConfig::default(),
             (108, 20),
@@ -195,42 +135,25 @@ fn running_external_terminal_names_stay_in_chrome_and_leave_the_full_pty_visible
         );
         let _language = i18n::enter_snapshot(state.language.clone());
         state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::CommandLine]);
-        state.pages.command_line.command_line_external = Some(ExternalTerminalLaunch {
-            program: PathBuf::from("/opt/tools/previous-app"),
-            args: Vec::new(),
-            wait_for_enter: None,
-        });
-        state.enter_new_page(ShellScreen::CommandLine);
-        state.pages.command_line.command_line_external = Some(ExternalTerminalLaunch {
-            program: PathBuf::from("/opt/tools/external-app"),
-            args: Vec::new(),
-            wait_for_enter: None,
-        });
+        state.notify_status(i18n::msg!("shell-saving-arg1", arg1 = "sample.txt"));
         let chrome = state.to_shell_chrome_view_model();
-        assert_eq!(&chrome.screen_stack[1..], ["previous-app", "external-app"]);
         let context = ui::RenderContext::default();
-        let layout = ui::ShellFrameLayout::new(Rect::new(0, 0, 108, 20), None, &context)
-            .with_back_shortcut(chrome.back_shortcut);
-        assert_eq!(layout.main, Rect::new(0, 1, 108, 18));
+        let layout = ui::ShellFrameLayout::new(
+            Rect::new(0, 0, 108, 20),
+            chrome.status.time_button_label.as_deref(),
+            &context,
+        )
+        .with_back_shortcut(chrome.back_shortcut);
         assert_eq!(
             ui::command_line_terminal_area_in(&layout),
-            Some(layout.main)
+            Some(Rect::new(0, 1, 108, 18))
         );
+
         let mut snapshot = ui::CommandLineTerminalSnapshot::blank(108, 18);
         for (index, character) in "PTY LAST ROW".chars().enumerate() {
             snapshot.cells[17 * 108 + index].symbol = character.to_string();
         }
-        let mut command_line = ui::CommandLineViewModel::new(snapshot);
-        command_line.title = state
-            .pages
-            .command_line
-            .command_line_external
-            .as_ref()
-            .map(ExternalTerminalLaunch::title);
-        assert_eq!(
-            command_line.process_state,
-            ui::CommandLineProcessState::Running
-        );
+        let command_line = ui::CommandLineViewModel::new(snapshot);
         let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
         terminal
             .draw(|frame| {
@@ -239,53 +162,20 @@ fn running_external_terminal_names_stay_in_chrome_and_leave_the_full_pty_visible
                 ui::render_shell_chrome(frame, &layout, &chrome, &context);
             })
             .unwrap();
-        let header: String = (0..108)
-            .map(|x| terminal.backend().buffer()[(x, 0)].symbol())
+        let buffer = terminal.backend().buffer();
+        let message = layout.status_message.unwrap();
+        assert_eq!(message.y, 0);
+        let status: String = message
+            .positions()
+            .map(|point| buffer[point].symbol())
             .collect();
         assert!(
-            header.contains("previous-app > external-app"),
-            "{code}: {header}"
+            status
+                .replace(' ', "")
+                .starts_with(&expected.replace(' ', "")),
+            "{code}: {status}"
         );
-        assert!(!header.contains("CommandLine"));
-        let last_row: String = (0..108)
-            .map(|x| terminal.backend().buffer()[(x, 18)].symbol())
-            .collect();
+        let last_row: String = (0..108).map(|x| buffer[(x, 18)].symbol()).collect();
         assert!(last_row.starts_with("PTY LAST ROW"), "{code}: {last_row}");
-        let content: String = layout
-            .main
-            .positions()
-            .map(|point| terminal.backend().buffer()[point].symbol())
-            .collect();
-        assert!(!content.contains("external-app"));
-
-        let previous = state.live_page_ids()[1];
-        state
-            .pages
-            .command_line
-            .get_mut(previous)
-            .unwrap()
-            .command_line_external
-            .as_mut()
-            .unwrap()
-            .program = PathBuf::from(format!(
-            "/opt/tools/{}",
-            "之前的外部应用名称很长".repeat(12)
-        ));
-        let chrome = state.to_shell_chrome_view_model();
-        terminal
-            .draw(|frame| {
-                ui::ScreenContent::CommandLine(&command_line)
-                    .render_content(frame, &layout, &context, None, None);
-                ui::render_shell_chrome(frame, &layout, &chrome, &context);
-            })
-            .unwrap();
-        let header: String = (0..108)
-            .map(|x| terminal.backend().buffer()[(x, 0)].symbol())
-            .collect();
-        assert!(header.contains("external-app"), "{code}: {header}");
-        assert_eq!(
-            ui::command_line_terminal_area_in(&layout),
-            Some(layout.main)
-        );
     }
 }

@@ -176,9 +176,8 @@ fn sample_model_with_timezone(
     }
 }
 
-fn chrome_for(screen: &str, width: u16, height: u16) -> ShellChromeViewModel {
+fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".to_string(),
         build_mode: "debug".to_string(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (width, height),
@@ -190,7 +189,6 @@ fn chrome_for(screen: &str, width: u16, height: u16) -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec![screen.to_string()],
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,
@@ -208,7 +206,7 @@ fn render_terminal(
     height: u16,
     theme: TundraTheme,
 ) -> Terminal<TestBackend> {
-    let chrome = chrome_for("Setup", width, height);
+    let chrome = chrome(width, height);
     let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
     terminal
         .draw(|frame| {

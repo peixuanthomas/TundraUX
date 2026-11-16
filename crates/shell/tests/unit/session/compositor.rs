@@ -559,11 +559,12 @@ fn aa_keyboard_keeps_background_layout_and_places_one_global_launcher_on_every_p
                 .keyboard_launcher_area()
                 .expect("AA shares the global launcher");
             assert_eq!(original.keyboard_launcher, Some(launcher));
-            assert_eq!(
-                launcher.right(),
-                original.time_button.map_or(width, |time| time.x)
-            );
-            assert_eq!(launcher.bottom(), height);
+            if original.is_compact() {
+                assert_eq!(launcher.bottom(), height);
+            } else {
+                assert_eq!(launcher.x, original.status_message.unwrap().right());
+                assert_eq!(launcher.y, 0);
+            }
             assert!(launcher.intersection(original.main).is_empty());
             assert!(
                 !state
@@ -603,17 +604,17 @@ fn page_keyboard_animates_chrome_and_content_together_and_restores_them() {
         let original = state.frame_layout.unwrap();
         let original_launcher = state.keyboard_launcher_area().unwrap();
         assert_eq!(
-            original_launcher.right(),
-            original.time_button.map_or(120, |clock| clock.x)
+            original_launcher.x,
+            original.status_message.unwrap().right()
         );
         assert_eq!(original.keyboard_launcher, Some(original_launcher));
-        assert_eq!(original_launcher.y, original.status_message.unwrap().y);
+        assert_eq!(original_launcher.y, 0);
         state.toggle_input_keyboard();
         for millis in [0, 55, 110, 165, 220] {
             let prepared = home_frame(&state, millis, false);
             draw(&mut compositor, &mut terminal, &mut state, &prepared);
             let layout = state.frame_layout.unwrap();
-            let ui::ShellLayout::Full { top, status, main } = layout.shell else {
+            let ui::ShellLayout::Full { top, main, bottom } = layout.shell else {
                 panic!("full layout");
             };
             assert_eq!(main, layout.main);
@@ -630,16 +631,17 @@ fn page_keyboard_animates_chrome_and_content_together_and_restores_them() {
                 assert_eq!(launcher.height, 1);
             }
             assert!(main.bottom() <= state.input_keyboard_layout().keyboard.y);
-            assert!(launcher.bottom() <= status.bottom());
+            assert!(launcher.bottom() <= layout.bounds.bottom());
             assert!(launcher.intersection(main).is_empty());
             if state.screen_keyboard.visibility > 0 {
-                assert_eq!(status.height, 0);
+                assert_eq!(bottom.height, 0);
                 assert_eq!(main.bottom(), state.input_keyboard_layout().keyboard.y);
             }
         }
         let layout = state.frame_layout.unwrap();
         assert_eq!(layout.back_button.unwrap().height, 1);
-        assert!(layout.status_message.is_none() && layout.time_button.is_none());
+        assert!(layout.status_message.unwrap().width > original.status_message.unwrap().width);
+        assert_eq!(layout.time_button, original.time_button);
         assert_eq!(layout.main.y, 1);
         assert_eq!(state.keyboard_launcher_area().unwrap().bottom(), 40);
         assert!(text(terminal.backend().buffer(), Rect::new(0, 0, 120, 1)).contains("TundraUX"));
@@ -809,13 +811,13 @@ fn auto_admin_keeps_shell_title_and_status_visible_after_resize() {
         let mut compositor = ScreenCompositor::default();
         let prepared = home_frame(&state, 0, true);
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
-        let ui::ShellLayout::Full { top, main, status } =
+        let ui::ShellLayout::Full { top, main, .. } =
             ui::compute_shell_layout(Rect::new(0, 0, width, height))
         else {
             panic!("full shell layout expected");
         };
-        let title_before = text(terminal.backend().buffer(), top);
         let original = state.frame_layout.unwrap();
+        let title_before = text(terminal.backend().buffer(), original.title);
         let status_before = text(
             terminal.backend().buffer(),
             original.status_message.unwrap(),
@@ -827,8 +829,11 @@ fn auto_admin_keeps_shell_title_and_status_visible_after_resize() {
             .begin_auto_admin("Remove neofetch".into(), false, responses)
             .unwrap();
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
-        assert_eq!(text(terminal.backend().buffer(), top), title_before);
         let layout = state.frame_layout.unwrap();
+        assert_eq!(
+            text(terminal.backend().buffer(), layout.title),
+            title_before
+        );
         let message = layout.status_message.unwrap();
         assert_eq!(
             text(terminal.backend().buffer(), message).trim(),
@@ -840,7 +845,7 @@ fn auto_admin_keeps_shell_title_and_status_visible_after_resize() {
         assert!(message.intersection(keyboard).is_empty());
         assert!(keyboard.intersection(clock).is_empty());
         assert!(text(terminal.backend().buffer(), keyboard).contains("Show keyboard"));
-        assert_eq!(keyboard.intersection(status), keyboard);
+        assert_eq!(keyboard.intersection(top), keyboard);
         assert!(text(terminal.backend().buffer(), main).contains("AutoAdmin (AA)"));
     }
 }

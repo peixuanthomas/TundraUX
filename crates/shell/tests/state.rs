@@ -46,7 +46,7 @@ fn debug_override_selects_debug_home() {
     assert_eq!(state.hovered_component(), None);
     assert_eq!(state.active_popup(), None);
     let (width, height) = state.terminal_size();
-    let ui::ShellLayout::Full { top, main, status } =
+    let ui::ShellLayout::Full { top, main, bottom } =
         ui::compute_shell_layout(Rect::new(0, 0, width, height))
     else {
         panic!("full shell layout expected");
@@ -59,10 +59,19 @@ fn debug_override_selects_debug_home() {
         state.hit_target_at((main.x + 1, main.y)),
         Some(ShellComponent::Home)
     );
+    let status = state
+        .hit_map()
+        .regions()
+        .iter()
+        .find(|region| region.component == ShellComponent::StatusBar)
+        .unwrap()
+        .area;
+    assert_eq!(status.y, top.y);
     assert_eq!(
-        state.hit_target_at((status.x + 1, status.y)),
+        state.hit_target_at((status.x, status.y)),
         Some(ShellComponent::StatusBar)
     );
+    assert_eq!(state.hit_target_at((bottom.x + 1, bottom.y)), None);
     assert!(!state.shutdown_requested());
 
     let terminal_flags = state.terminal_flags();

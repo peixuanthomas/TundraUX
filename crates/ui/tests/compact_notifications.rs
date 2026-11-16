@@ -3,7 +3,6 @@ use ui::*;
 
 fn chrome() -> ShellChromeViewModel {
     ShellChromeViewModel {
-        app_name: "TundraUX 3".into(),
         build_mode: "test".into(),
         display_mode: HomeDisplayMode::Auth,
         terminal_size: (49, 11),
@@ -15,7 +14,6 @@ fn chrome() -> ShellChromeViewModel {
         help_button_hovered: false,
         help_button_focused: false,
         back_shortcut: "Esc",
-        screen_stack: vec!["Compact".into()],
         status: StatusViewModel {
             status: "Compact status".into(),
             toast: Some("Compact toast".into()),
@@ -131,7 +129,7 @@ fn compact_notification_respects_empty_and_tiny_terminal_bounds() {
 }
 
 #[test]
-fn minimum_full_chrome_keeps_alert_in_status_row_and_preserves_title_and_controls() {
+fn minimum_full_chrome_keeps_alert_in_the_header_with_title_and_controls() {
     let context = RenderContext::default();
     let mut chrome = chrome();
     chrome.terminal_size = (108, 20);
@@ -145,15 +143,16 @@ fn minimum_full_chrome_keeps_alert_in_status_row_and_preserves_title_and_control
         .draw(|frame| render_shell_chrome(frame, &layout, &chrome, &context))
         .unwrap();
     let header = first_line(&terminal, 108);
-    for text in ["TundraUX 3", "Tasks", "F1 Help", "◀ Esc"] {
+    for text in ["TundraUX 3", "Tasks", "F1 Help", "09:30", "◀ Esc"] {
         assert!(header.contains(text), "{header}");
     }
-    assert!(!header.contains("Compact alert"));
-    let status: String = (0..108)
-        .map(|x| terminal.backend().buffer()[(x, 19)].symbol())
+    let status: String = layout
+        .status_message
+        .unwrap()
+        .positions()
+        .map(|point| terminal.backend().buffer()[point].symbol())
         .collect();
     assert!(status.starts_with("[ERROR] Compact alert"), "{status}");
-    assert!(status.contains("09:30"));
     assert!(!status.contains("Compact toast"));
     assert_eq!(layout.main, Rect::new(0, 1, 108, 18));
 }

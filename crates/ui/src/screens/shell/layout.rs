@@ -1,16 +1,19 @@
 use ratatui::layout::Rect;
 
+use crate::components::terminal_width;
+
 pub const MIN_SHELL_TERMINAL_WIDTH: u16 = 108;
 pub const MIN_SHELL_TERMINAL_HEIGHT: u16 = 20;
 
 // Compact chrome is a rendering fallback; Shell enforces the terminal minimum.
 const COMPACT_CHROME_WIDTH: u16 = 50;
 const COMPACT_CHROME_HEIGHT: u16 = 12;
+const MIN_STATUS_MESSAGE_WIDTH: u16 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellLayout {
     Compact(Rect),
-    Full { top: Rect, main: Rect, status: Rect },
+    Full { top: Rect, main: Rect, bottom: Rect },
 }
 
 pub fn compute_shell_layout(area: Rect) -> ShellLayout {
@@ -31,14 +34,14 @@ pub fn compute_shell_layout(area: Rect) -> ShellLayout {
         area.width,
         area.height.saturating_sub(2),
     );
-    let status = Rect::new(
+    let bottom = Rect::new(
         area.x,
         area.y.saturating_add(area.height.saturating_sub(1)),
         area.width,
         1,
     );
 
-    ShellLayout::Full { top, main, status }
+    ShellLayout::Full { top, main, bottom }
 }
 pub(crate) fn rect_contains(area: Rect, x: u16, y: u16) -> bool {
     area.width > 0
@@ -88,6 +91,7 @@ pub struct ShellFrameLayout {
     pub bounds: Rect,
     pub shell: ShellLayout,
     pub main: Rect,
+    pub title: Rect,
     pub back_button: Option<Rect>,
     pub help_button: Option<Rect>,
     pub tasks_button: Option<Rect>,
@@ -95,81 +99,70 @@ pub struct ShellFrameLayout {
     pub workspace_taskbar: Option<Rect>,
     pub time_button: Option<Rect>,
     pub keyboard_launcher: Option<Rect>,
+    help_width: u16,
+    tasks_width: u16,
+    time_width: u16,
+    keyboard_width: u16,
 }
 
 impl ShellFrameLayout {
     pub fn new(bounds: Rect, time_label: Option<&str>, context: &crate::RenderContext) -> Self {
-        let shell = compute_shell_layout(bounds);
-        let back_button = match shell {
-            ShellLayout::Full { top, .. } => Some(Rect::new(
-                top.right().saturating_sub(7),
-                top.y,
-                7,
-                top.height,
-            )),
-            ShellLayout::Compact(_) => (!bounds.is_empty()).then(|| {
-                let width = bounds.width.min(7);
-                Rect::new(bounds.right().saturating_sub(width), bounds.y, width, 1)
-            }),
-        };
-        let (main, status_message, time_button) = match shell {
-            ShellLayout::Compact(main) => (main, None, None),
-            ShellLayout::Full { main, status, .. } => {
-                let time = time_label
-                    .map(|label| super::status_time_button_area(status, label))
-                    .filter(|area| !area.is_empty());
-                let width = time.map_or(status.width, |button| button.x.saturating_sub(status.x));
-                (
-                    context.page_area(main),
-                    Some(Rect::new(status.x, status.y, width, status.height)),
-                    time,
-                )
+        let mut shell = compute_shell_layout(bounds);
+        let main = match &mut shell {
+            ShellLayout::Full { main, .. } => {
+                *main = context.page_area(*main);
+                *main
             }
-        };
-        let shell = match shell {
-            ShellLayout::Full { top, status, .. } => ShellLayout::Full { top, main, status },
-            compact => compact,
+            ShellLayout::Compact(main) => *main,
         };
         Self {
             bounds,
             shell,
             main,
-            back_button,
+            title: Rect::default(),
+            back_button: None,
             help_button: None,
             tasks_button: None,
-            status_message,
+            status_message: None,
             workspace_taskbar: None,
-            time_button,
+            time_button: None,
             keyboard_launcher: None,
+            help_width: 0,
+            tasks_width: 0,
+            time_width: time_label
+                .filter(|label| !label.is_empty())
+                .map_or(0, |label| {
+                    usize_to_u16(terminal_width(label).saturating_add(2))
+                }),
+            keyboard_width: 0,
         }
+        .with_back_shortcut("Esc")
     }
 
     pub fn is_compact(self) -> bool {
         matches!(self.shell, ShellLayout::Compact(_))
     }
 
-    /// Chrome and page geometry follow the same progress as the visible keys.
+    /// The keyboard takes over the bottom row and clips the page above it.
     pub fn with_input_keyboard(mut self, keyboard: Rect, visibility: u16) -> Self {
         if visibility == 0 {
             return self;
         }
         match self.shell {
             ShellLayout::Full {
-                top, mut status, ..
+                top, mut bottom, ..
             } => {
-                status.y = self.bounds.bottom();
-                status.height = 0;
-                let bottom = keyboard.y.min(self.bounds.bottom());
-                self.main.height = bottom.saturating_sub(self.main.y);
+                bottom.y = self.bounds.bottom();
+                bottom.height = 0;
+                let page_bottom = keyboard.y.min(self.bounds.bottom());
+                self.main.height = page_bottom.saturating_sub(self.main.y);
                 self.shell = ShellLayout::Full {
                     top,
                     main: self.main,
-                    status,
+                    bottom,
                 };
-                self.status_message = None;
                 self.workspace_taskbar = None;
-                self.time_button = None;
-                self.keyboard_launcher = None;
+                self.layout_header();
             }
             ShellLayout::Compact(_) => {
                 self.main.height = keyboard
@@ -183,100 +176,115 @@ impl ShellFrameLayout {
         self
     }
 
-    /// The keyboard entry shares the status row, immediately before the clock.
+    /// The keyboard entry follows the status message in the header.
     pub fn with_keyboard_launcher(mut self, available: bool) -> Self {
         if !available || self.keyboard_launcher.is_some() {
             return self;
         }
-        let Some(mut message) = self.status_message else {
-            if self.is_compact() && !self.main.is_empty() {
+        if self.is_compact() {
+            if !self.main.is_empty() {
                 self.keyboard_launcher = Some(crate::screen_keyboard_launcher_area(self.main));
                 self.main.height = self.main.height.saturating_sub(1);
                 self.shell = ShellLayout::Compact(self.main);
             }
-            return self;
-        };
-        let launcher = crate::screen_keyboard_launcher_area(message);
-        message.width = launcher.x.saturating_sub(message.x);
-        self.status_message = (!message.is_empty()).then_some(message);
-        self.keyboard_launcher = (!launcher.is_empty()).then_some(launcher);
+        } else {
+            self.keyboard_width = crate::screen_keyboard_launcher_area(self.bounds).width;
+            self.layout_header();
+        }
         self
     }
 
     /// Size the button from the same shortcut that the compositor paints.
     pub fn with_back_shortcut(mut self, shortcut: &str) -> Self {
-        if let Some(button) = self.back_button.as_mut() {
-            let width = crate::components::terminal_width(shortcut).saturating_add(4);
-            button.width = usize_to_u16(width).min(self.bounds.width);
-            button.x = self.bounds.right().saturating_sub(button.width);
-        }
-        if let Some(help) = self.help_button.as_mut() {
-            let right = self.back_button.map_or(self.bounds.right(), |back| back.x);
-            help.width = help.width.min(right.saturating_sub(self.bounds.x + 1));
-            help.x = right.saturating_sub(help.width.saturating_add(1));
-        }
-        if let Some(tasks) = self.tasks_button.as_mut() {
-            let right = self
-                .help_button
-                .or(self.back_button)
-                .map_or(self.bounds.right(), |button| button.x);
-            tasks.width = tasks.width.min(right.saturating_sub(self.bounds.x + 1));
-            tasks.x = right.saturating_sub(tasks.width.saturating_add(1));
-        }
+        self.back_button = (!self.bounds.is_empty()).then(|| {
+            let width =
+                usize_to_u16(terminal_width(shortcut).saturating_add(4)).min(self.bounds.width);
+            Rect::new(self.bounds.right() - width, self.bounds.y, width, 1)
+        });
+        self.layout_header();
         self
     }
 
     pub fn with_help_button(mut self, available: bool) -> Self {
-        if !available || self.is_compact() {
-            self.help_button = None;
-            return self;
-        }
-        let Some(back) = self.back_button else {
-            self.help_button = None;
-            return self;
+        self.help_width = if available && !self.is_compact() {
+            usize_to_u16(terminal_width(&i18n::tr!("ui-shell-help-button")).saturating_add(2))
+        } else {
+            0
         };
-        let label = i18n::tr!("ui-shell-help-button");
-        let width = usize_to_u16(crate::components::terminal_width(&label).saturating_add(2))
-            .min(back.x.saturating_sub(self.bounds.x + 1));
-        let x = back.x.saturating_sub(width.saturating_add(1));
-        self.help_button =
-            (width > 0 && x >= self.bounds.x).then(|| Rect::new(x, back.y, width, back.height));
+        self.layout_header();
         self
     }
 
     pub fn with_tasks_button(mut self, label: Option<&str>) -> Self {
-        self.tasks_button = label.and_then(|label| {
-            let next = self.help_button.or(self.back_button)?;
-            let width = usize_to_u16(crate::components::terminal_width(label).saturating_add(2))
-                .min(next.x.saturating_sub(self.bounds.x + 1));
-            let x = next.x.checked_sub(width.saturating_add(1))?;
-            (width > 0 && x >= self.bounds.x).then_some(Rect::new(x, next.y, width, next.height))
+        self.tasks_width = label.map_or(0, |label| {
+            usize_to_u16(terminal_width(label).saturating_add(2))
         });
+        self.layout_header();
         self
     }
 
-    /// Running windows share the status row, keeping errors and global controls reachable.
-    pub fn with_workspace_taskbar(mut self, available: bool, status_visible: bool) -> Self {
-        if available && self.workspace_taskbar.is_none() {
-            self.workspace_taskbar = self.status_message.take();
-            if status_visible && let Some(taskbar) = self.workspace_taskbar.as_mut() {
-                let width = taskbar.width / 3;
-                self.status_message = Some(Rect::new(taskbar.x, taskbar.y, width, 1));
-                taskbar.x += width;
-                taskbar.width -= width;
-            }
-        }
+    pub fn with_workspace_taskbar(mut self, available: bool) -> Self {
+        self.workspace_taskbar = match self.shell {
+            ShellLayout::Full { bottom, .. } if available && !bottom.is_empty() => Some(bottom),
+            _ => None,
+        };
         self
     }
 
-    /// Keep the compact Escape button available even while a shell dialog is open.
+    /// Leave chrome and the expanded keyboard accessible when the page is clipped.
     pub fn modal_area(self) -> Rect {
-        if self.is_compact() || self.status_message.or(self.workspace_taskbar).is_none() {
-            self.main
-        } else {
-            self.bounds
+        match self.shell {
+            ShellLayout::Full { bottom, .. } if !bottom.is_empty() => self.bounds,
+            _ => self.main,
         }
     }
+
+    fn layout_header(&mut self) {
+        let right = self.back_button.map_or(self.bounds.right(), |back| back.x);
+        let mut area = Rect::new(
+            self.bounds.x,
+            self.bounds.y,
+            right - self.bounds.x,
+            self.bounds.height.min(1),
+        );
+        let ShellLayout::Full { bottom, .. } = self.shell else {
+            self.tasks_button = take_header_button(&mut area, self.tasks_width);
+            self.title = area;
+            return;
+        };
+        let title_width = usize_to_u16(terminal_width(super::SHELL_TITLE)).min(area.width);
+        self.title = Rect::new(area.x, area.y, title_width, area.height);
+        let title_space = title_width.saturating_add(1).min(area.width);
+        area.x += title_space;
+        area.width -= title_space;
+
+        let time_width = self
+            .time_width
+            .min(area.width.saturating_sub(MIN_STATUS_MESSAGE_WIDTH + 1));
+        self.time_button = take_header_button(&mut area, time_width);
+        self.help_button = take_header_button(&mut area, self.help_width);
+        let reserved = MIN_STATUS_MESSAGE_WIDTH
+            .saturating_add(self.keyboard_width)
+            .saturating_add(u16::from(self.keyboard_width > 0) + 1);
+        let tasks_width = self.tasks_width.min(area.width.saturating_sub(reserved));
+        self.tasks_button = take_header_button(&mut area, tasks_width);
+        self.keyboard_launcher = if bottom.is_empty() {
+            None
+        } else {
+            let width = self.keyboard_width.min(area.width.saturating_sub(2));
+            take_header_button(&mut area, width)
+        };
+        self.status_message = (!area.is_empty()).then_some(area);
+    }
+}
+
+fn take_header_button(area: &mut Rect, width: u16) -> Option<Rect> {
+    let width = width.min(area.width.saturating_sub(1));
+    if width == 0 || area.is_empty() {
+        return None;
+    }
+    area.width -= width + 1;
+    Some(Rect::new(area.right(), area.y, width, area.height))
 }
 
 /// PTY viewport on a standalone terminal, with the physical size limit.
