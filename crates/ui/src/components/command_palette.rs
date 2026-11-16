@@ -16,6 +16,7 @@ pub struct CommandPaletteCommand {
     pub id: ComponentId,
     pub title: String,
     pub hint: Option<String>,
+    pub group: Option<String>,
     pub keywords: Vec<String>,
     pub disabled: bool,
 }
@@ -26,9 +27,15 @@ impl CommandPaletteCommand {
             id: id.into(),
             title: title.into(),
             hint: None,
+            group: None,
             keywords: Vec::new(),
             disabled: false,
         }
+    }
+
+    pub fn with_group(mut self, group: impl Into<String>) -> Self {
+        self.group = Some(group.into());
+        self
     }
 
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
@@ -55,6 +62,7 @@ impl CommandPaletteCommand {
 pub struct CommandPalette {
     pub id: ComponentId,
     pub commands: Vec<CommandPaletteCommand>,
+    pub title: String,
     pub state: ComponentState,
     pub open: bool,
     query_input: TextInput,
@@ -68,7 +76,7 @@ impl CommandPalette {
         if !self.open {
             return;
         }
-        let title = i18n::tr!("ui-components-command-palette");
+        let title = &self.title;
         let _scope = crate::automation::scope(self.id.as_str(), "dialog", &title, area);
         let layout = self.layout(area);
         let theme = DialogLayout::body_theme(context);
@@ -119,12 +127,32 @@ impl CommandPalette {
                 .with_bracketed_label(false),
             id,
             commands,
+            title: i18n::tr!("ui-components-command-palette"),
             state: ComponentState::default(),
             open: false,
             query_input,
             results,
             pressed: None,
         }
+    }
+
+    pub fn titled(mut self, title: impl Into<String>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    pub fn with_placeholder(mut self, placeholder: impl Into<String>) -> Self {
+        self.query_input = self.query_input.with_placeholder(placeholder);
+        self
+    }
+
+    pub fn input_area(&self, area: Rect) -> Rect {
+        Self::query_edit_area(self.layout(area))
+    }
+
+    pub fn cancel_pointer(&mut self) {
+        self.pressed = None;
+        self.results.set_hovered(None);
     }
 
     pub fn open(&mut self) {
@@ -165,10 +193,10 @@ impl CommandPalette {
     }
 
     pub fn selected_command(&self) -> Option<&CommandPaletteCommand> {
-        self.results
-            .selected_index()
-            .and_then(|visible| self.visible_indices().get(visible).copied())
-            .and_then(|index| self.commands.get(index))
+        let selected = self.results.selected_item()?;
+        self.commands
+            .iter()
+            .find(|command| command.id == selected.id)
     }
 
     pub fn visible_commands(&self) -> Vec<&CommandPaletteCommand> {
@@ -343,25 +371,14 @@ impl CommandPalette {
     }
 
     fn visible_indices_for(query: &str, commands: &[CommandPaletteCommand]) -> Vec<usize> {
-        if query.is_empty() {
-            return (0..commands.len()).collect();
-        }
-
-        let query = query.to_lowercase();
         commands
             .iter()
             .enumerate()
             .filter_map(|(index, command)| {
-                let title_matches = command.title.to_lowercase().contains(&query);
-                let hint_matches = command
-                    .hint
-                    .as_ref()
-                    .is_some_and(|hint| hint.to_lowercase().contains(&query));
-                let keyword_matches = command
-                    .keywords
-                    .iter()
-                    .any(|keyword| keyword.to_lowercase().contains(&query));
-                (title_matches || hint_matches || keyword_matches).then_some(index)
+                let values = std::iter::once(command.title.as_str())
+                    .chain(command.hint.iter().map(String::as_str))
+                    .chain(command.keywords.iter().map(String::as_str));
+                super::selection_matches(query, values).then_some(index)
             })
             .collect()
     }
@@ -428,18 +445,26 @@ impl CommandPalette {
     }
 
     fn make_results(id: &ComponentId, commands: &[CommandPaletteCommand], query: &str) -> List {
-        let items = Self::visible_indices_for(query, commands)
-            .into_iter()
-            .filter_map(|index| commands.get(index))
-            .map(|command| {
-                let item = ListItem::new(command.id.clone(), command.title.clone())
-                    .disabled(command.disabled);
-                match &command.hint {
-                    Some(hint) => item.with_description(hint.clone()),
-                    None => item,
+        let mut previous_group = None;
+        let mut items = Vec::new();
+        for index in Self::visible_indices_for(query, commands) {
+            let command = &commands[index];
+            if command.group != previous_group {
+                if let Some(group) = &command.group {
+                    items.push(
+                        ListItem::new(format!("{}.group.{}", id.as_str(), index), group)
+                            .disabled(true),
+                    );
                 }
-            })
-            .collect();
+                previous_group = command.group.clone();
+            }
+            let mut item =
+                ListItem::new(command.id.clone(), command.title.clone()).disabled(command.disabled);
+            if let Some(hint) = &command.hint {
+                item = item.with_description(hint);
+            }
+            items.push(item);
+        }
         List::new(format!("{}.results", id.as_str()), items).with_highlight_symbol(Some("▌   "))
     }
 

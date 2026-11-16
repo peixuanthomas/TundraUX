@@ -14,6 +14,15 @@ impl ShellSession {
         let Some(index) = self.pages.management.management_state.choice_field else {
             return false;
         };
+        if self
+            .to_management_view_model()
+            .form
+            .as_ref()
+            .and_then(|form| form.choice.as_ref())
+            .is_some_and(|choice| !choice.hide_search)
+        {
+            return self.edit_management_choice(InputEvent::Key(key.clone()));
+        }
         if key.has_non_shift_modifier() {
             return true;
         }
@@ -235,37 +244,63 @@ impl ShellSession {
             .unwrap_or(0);
         self.pages.management.management_state.choice_field = Some(index);
         self.pages.management.management_state.choice_search.clear();
+        self.pages.management.management_state.choice_editing = Default::default();
         self.pages.management.management_state.choice_selected = selected;
         self.pages.management.management_state.choice_scroll = 0;
         self.pages.management.management_state.choice_columns = 0;
         self.keep_management_choice_visible();
     }
     pub(super) fn search_management_choices(&mut self, value: &str, backspace: bool) {
-        let state = &mut self.pages.management.management_state;
-        let Some(field) = state
-            .choice_field
-            .and_then(|index| state.form.as_ref().and_then(|form| form.fields.get(index)))
-        else {
-            return;
-        };
-        if field.control != FieldControl::SearchableChoice {
-            return;
-        }
         if backspace {
-            state.choice_search.pop();
-        } else if state.choice_search.len() + value.len() <= 256 {
-            state
-                .choice_search
-                .extend(value.chars().filter(|c| !c.is_control()));
+            self.edit_management_choice(InputEvent::key(InputKey::Backspace));
+        } else {
+            self.edit_management_choice(InputEvent::Paste(value.to_owned()));
         }
-        if let Some(index) = field.choices.iter().position(|choice| {
-            choice
-                .to_lowercase()
-                .contains(&state.choice_search.to_lowercase())
-        }) {
-            state.choice_selected = index;
+    }
+
+    fn edit_management_choice(&mut self, event: InputEvent) -> bool {
+        let Some(mut form) = self.to_management_view_model().form else {
+            return false;
+        };
+        let Some(choice) = &form.choice else {
+            return false;
+        };
+        if choice.hide_search {
+            return true;
         }
-        self.keep_management_choice_visible();
+        let field_index = choice.field;
+        let selected = choice.original_index(choice.selected);
+        let activate = matches!(&event, InputEvent::Key(key) if key.key == InputKey::Enter && key.phase == InputPhase::Press)
+            && !choice.values.is_empty()
+            && !choice.is_disabled(choice.selected);
+        form.handle_event(event, self.management_main());
+        let state = &mut self.pages.management.management_state;
+        if activate {
+            if let Some(field) = state
+                .form
+                .as_mut()
+                .and_then(|form| form.fields.get_mut(field_index))
+            {
+                if let Some(value) = field.choices.get(selected) {
+                    field.value = value.clone();
+                }
+            }
+            state.choice_field = None;
+            if state.form.as_ref().is_some_and(management_form_is_menu) {
+                self.submit_management_form();
+            }
+        } else if let Some(choice) = form.choice {
+            state.choice_search = choice.search;
+            state.choice_editing = choice.editing;
+            state.choice_selected = choice.selected;
+            state.choice_scroll = choice.scroll;
+        } else {
+            state.choice_field = None;
+            if state.form.as_ref().is_some_and(management_form_is_menu) {
+                state.form = None;
+            }
+        }
+        true
     }
     pub(in crate::session) fn cancel_management_pointer_gesture(&mut self) {
         self.pages.management.management_state.scrollbar_grab = None;
@@ -770,20 +805,23 @@ impl ShellSession {
                     .form
                     .as_ref()
                     .and_then(|form| form.choice.as_ref())
-                    .and_then(|choice| choice.disabled.get(*index))
-                    .copied()
-                    .unwrap_or(false)
+                    .is_some_and(|choice| choice.is_disabled(*index))
                 {
                     return;
                 }
+                let index = model
+                    .form
+                    .as_ref()
+                    .and_then(|form| form.choice.as_ref())
+                    .map_or(*index, |choice| choice.original_index(*index));
                 let field_index = self.pages.management.management_state.choice_field;
                 if let Some(form) = &mut self.pages.management.management_state.form {
                     if let Some(field) = field_index.and_then(|field| form.fields.get_mut(field)) {
-                        field.value = field.choices[*index].clone();
+                        field.value = field.choices[index].clone();
                     }
                 }
                 self.pages.management.management_state.choice_field = None;
-                self.pages.management.management_state.choice_selected = *index;
+                self.pages.management.management_state.choice_selected = index;
                 if self
                     .pages
                     .management

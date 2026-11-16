@@ -41,10 +41,7 @@ impl ShellSession {
                 query: picker.query.clone(),
                 selected_index: picker.selected_index.min(options.len().saturating_sub(1)),
                 window_start: picker.window_start,
-                searchable: matches!(
-                    picker.kind,
-                    ui::SettingsPickerKind::Language | ui::SettingsPickerKind::Timezone
-                ),
+                searchable: true,
                 options,
             }
         });
@@ -973,8 +970,7 @@ pub(in crate::session) fn settings_picker_options(
     picker: &SettingsPickerState,
     languages: &[app::SetupLanguageOption],
 ) -> Vec<ui::SettingsPickerOptionViewModel> {
-    let query = picker.query.trim().to_ascii_lowercase();
-    match picker.kind {
+    let options: Vec<ui::SettingsPickerOptionViewModel> = match picker.kind {
         ui::SettingsPickerKind::AutoAdmin => AUTO_ADMIN_POLICIES
             .into_iter()
             .map(|policy| {
@@ -1022,36 +1018,16 @@ pub(in crate::session) fn settings_picker_options(
         ui::SettingsPickerKind::Language => languages
             .iter()
             .cloned()
-            .filter(|option| {
-                query.is_empty()
-                    || option.code.to_ascii_lowercase().contains(&query)
-                    || option.label.to_ascii_lowercase().contains(&query)
-            })
             .map(|option| ui::SettingsPickerOptionViewModel::new(option.label, option.code))
             .collect(),
         ui::SettingsPickerKind::Timezone => app::setup_timezone_options()
             .into_iter()
-            .filter(|option| {
-                query.is_empty()
-                    || option.id.to_ascii_lowercase().contains(&query)
-                    || option.label.to_ascii_lowercase().contains(&query)
-                    || option.description.to_ascii_lowercase().contains(&query)
-                    || option
-                        .localized_label()
-                        .render_current()
-                        .to_ascii_lowercase()
-                        .contains(&query)
-                    || option
-                        .localized_description()
-                        .render_current()
-                        .to_ascii_lowercase()
-                        .contains(&query)
-            })
             .map(|option| {
                 ui::SettingsPickerOptionViewModel::new(
                     option.localized_label().render_current(),
                     option.localized_description().render_current(),
                 )
+                .with_keywords([option.label.clone(), option.description.clone()])
                 .timezone(option.id, option.longitude, option.latitude)
             })
             .collect(),
@@ -1068,7 +1044,25 @@ pub(in crate::session) fn settings_picker_options(
             ));
             options
         }
-    }
+    };
+    options
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, mut option)| {
+            option.source_index = Some(index);
+            ui::components::selection_matches(
+                &picker.query,
+                [
+                    option.label.as_str(),
+                    option.detail.as_str(),
+                    option.timezone_id.as_deref().unwrap_or(""),
+                ]
+                .into_iter()
+                .chain(option.keywords.iter().map(String::as_str)),
+            )
+            .then_some(option)
+        })
+        .collect()
 }
 
 pub(in crate::session) fn color_picker_initial_index(color: storage::BorderColor) -> usize {
@@ -1277,3 +1271,7 @@ pub(in crate::session) fn sort_direction_label(value: storage::ExplorerSortDirec
         storage::ExplorerSortDirection::Descending => i18n::tr!("settings-descending"),
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/session/controller/settings/picker_tests.rs"]
+mod picker_tests;

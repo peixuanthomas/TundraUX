@@ -6,6 +6,26 @@ impl ShellSession {
         key: &KeyInput,
     ) -> (RoutedTarget, ShellCommand) {
         let target = RoutedTarget::Component(ShellComponent::SystemStatus);
+        if (self.pages.system_status.system_status_add_picker.is_some()
+            || self.pages.system_status.system_status_size_picker.is_some())
+            && key.phase.is_press_like()
+            && matches!(
+                key.key,
+                InputKey::Char(_)
+                    | InputKey::Space
+                    | InputKey::Backspace
+                    | InputKey::Delete
+                    | InputKey::Left
+                    | InputKey::Right
+                    | InputKey::Home
+                    | InputKey::End
+            )
+        {
+            return (
+                RoutedTarget::Modal(ShellComponent::SystemStatus),
+                ShellCommand::SystemStatusPickerInput(InputEvent::Key(key.clone())),
+            );
+        }
         let save_shortcut = self
             .pages
             .system_status

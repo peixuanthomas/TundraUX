@@ -407,7 +407,14 @@ fn searchable_account_choices_keep_the_keyboard_bound_to_the_same_form() {
     session.open_management_choice_field(0);
     assert!(session.management_keyboard_identity().is_some());
     session.handle_management_choice_key(&KeyInput::new(InputKey::Char('b')));
-    assert_eq!(session.pages.management.management_state.choice_selected, 1);
+    let choice = session
+        .to_management_view_model()
+        .form
+        .unwrap()
+        .choice
+        .unwrap();
+    assert_eq!(choice.values, ["bob (1001)"]);
+    assert_eq!(choice.original_index(choice.selected), 1);
     session.handle_management_choice_key(&KeyInput::new(InputKey::Enter));
     assert_eq!(
         session
@@ -789,4 +796,58 @@ fn editor_configuration_text_form_uses_the_same_keyboard_and_bounded_layout() {
     );
     assert!(!layout.submit.is_empty());
     assert!(layout.form.bottom() <= session.input_keyboard_layout().keyboard.y);
+}
+
+#[test]
+fn ordinary_choice_search_filters_and_commits_the_original_value() {
+    let mut state = session((108, 30));
+    state.pages.management.management_state.form = Some(ManagementEditor {
+        instance: next_management_form_instance(),
+        input_states: Default::default(),
+        title: "Pick".into(),
+        message: String::new(),
+        message_scroll: 0,
+        fields: vec![ManagementField {
+            id: "kind".into(),
+            value: "Alpha".into(),
+            choices: vec!["Alpha".into(), "Beta".into(), "Gamma".into()],
+            ..Default::default()
+        }],
+        selected: 0,
+        purpose: FormPurpose::Action(ManagementAction::default(), None),
+    });
+    state.open_management_choice_field(0);
+    state.search_management_choices("Gamma", false);
+    let choice = state
+        .to_management_view_model()
+        .form
+        .unwrap()
+        .choice
+        .unwrap();
+    assert_eq!(choice.values, vec!["Gamma"]);
+    assert_eq!(choice.original_index(0), 2);
+    let InputEvent::Key(key) = InputEvent::key(InputKey::Enter) else {
+        unreachable!()
+    };
+    state.handle_management_choice_key(&key);
+    assert_eq!(
+        state
+            .pages
+            .management
+            .management_state
+            .form
+            .as_ref()
+            .unwrap()
+            .fields[0]
+            .value,
+        "Gamma"
+    );
+    assert!(
+        state
+            .pages
+            .management
+            .management_state
+            .choice_field
+            .is_none()
+    );
 }

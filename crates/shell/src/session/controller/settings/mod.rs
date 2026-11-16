@@ -200,12 +200,7 @@ impl ShellSession {
                     || state.file_extensions_editor.is_some()
                     || state.weather_location_editor.is_some()
                     || state.color_editor.is_some()
-                    || state.picker.as_ref().is_some_and(|picker| {
-                        matches!(
-                            picker.kind,
-                            ui::SettingsPickerKind::Language | ui::SettingsPickerKind::Timezone
-                        )
-                    })
+                    || state.picker.is_some()
             });
         if key.phase == InputPhase::Repeat
             && (matches!(key.key, InputKey::Enter | InputKey::Escape)

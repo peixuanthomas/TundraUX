@@ -103,6 +103,9 @@ impl ShellSession {
             .component()
             .filter(|_| self.overlay_interaction_ready)
         {
+            Some(ShellComponent::SystemStatus) => {
+                ShellCommand::SystemStatusPickerInput(InputEvent::Paste(value.to_owned()))
+            }
             Some(ShellComponent::Management) => ShellCommand::ManagementPaste(value.to_owned()),
             Some(ShellComponent::Settings) => {
                 ShellCommand::SettingsFormInput(InputEvent::Paste(value.to_owned()))

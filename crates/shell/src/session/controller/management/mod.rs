@@ -166,6 +166,7 @@ pub(in crate::session) struct ManagementState {
     form_field_scroll: Option<usize>,
     choice_field: Option<usize>,
     choice_search: String,
+    choice_editing: ui::components::TextEditState,
     choice_scroll: usize,
     choice_selected: usize,
     choice_columns: usize,
@@ -1550,11 +1551,7 @@ impl ShellSession {
             return state
                 .form
                 .as_ref()
-                .filter(|form| {
-                    form.fields
-                        .get(index)
-                        .is_some_and(|field| field.control == FieldControl::SearchableChoice)
-                })
+                .filter(|form| !matches!(&form.purpose, FormPurpose::Menu(_)))
                 .map(|form| format!("choice:{}:{index}", form.instance));
         }
         if let Some(form) = &state.form {
@@ -1888,14 +1885,25 @@ impl ShellSession {
                     field_scroll: s.form_field_scroll,
                     cancel_disabled: matches!(&f.purpose, FormPurpose::Answer(id) if id.starts_with("package-config-")),
                     choice: s.choice_field.and_then(|index| {
-                        f.fields.get(index).map(|field| ui::ManagementChoices {
-                            search: s.choice_search.clone(),
-                            disabled: match &f.purpose { FormPurpose::Menu(items)=>items.iter().map(|(a,_)|a.disabled_reason.is_some() || (s.operation_job.is_some() && a.id!="cancel_operation" && !management_view_action(a))).collect(),_=>vec![] },
-                            field: index,
-                            values: field.choices.iter().map(|value| form_value_text(&f.purpose, field, value)).collect(),
-                            selected: s.choice_selected,
-                            scroll: s.choice_scroll,
-                            columns: s.choice_columns,
+                        f.fields.get(index).map(|field| {
+                            let menu = matches!(&f.purpose, FormPurpose::Menu(_))
+                                || matches!(&f.purpose, FormPurpose::Configuration(action) if matches!(action.as_str(), "menu" | "edit-file"));
+                            let options = field.choices.iter().enumerate()
+                                .map(|(index, value)| (index, form_value_text(&f.purpose, field, value)))
+                                .filter(|(_, value)| menu || ui::components::selection_matches(&s.choice_search, [value.as_str()]))
+                                .collect::<Vec<_>>();
+                            ui::ManagementChoices {
+                                search: s.choice_search.clone(),
+                                editing: s.choice_editing.clone(),
+                                source_indices: options.iter().map(|(index, _)| *index).collect(),
+                                hide_search: menu,
+                                disabled: match &f.purpose { FormPurpose::Menu(items)=>items.iter().map(|(a,_)|a.disabled_reason.is_some() || (s.operation_job.is_some() && a.id!="cancel_operation" && !management_view_action(a))).collect(),_=>vec![] },
+                                field: index,
+                                values: options.into_iter().map(|(_, value)| value).collect(),
+                                selected: s.choice_selected,
+                                scroll: s.choice_scroll,
+                                columns: s.choice_columns,
+                            }
                         })
                     }),
                     message_scroll: f.message_scroll,

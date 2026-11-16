@@ -174,13 +174,42 @@ pub struct SystemStatusPickerItemViewModel {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SystemStatusPickerViewModel {
+    pub query: String,
+    pub editing: crate::components::TextEditState,
     pub title: String,
     pub items: Vec<SystemStatusPickerItemViewModel>,
     pub selected: usize,
 }
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SystemStatusSizePickerViewModel {
+    pub query: String,
+    pub editing: crate::components::TextEditState,
     pub selected: usize,
+}
+impl SystemStatusPickerViewModel {
+    pub fn visible_indices(&self) -> Vec<usize> {
+        self.items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                crate::components::selection_matches(
+                    &self.query,
+                    [item.label.as_str(), item.detail.as_str()],
+                )
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+}
+impl SystemStatusSizePickerViewModel {
+    pub fn visible_indices(&self) -> Vec<usize> {
+        ["2x2", "2x4", "4x4"]
+            .iter()
+            .enumerate()
+            .filter(|(_, label)| crate::components::selection_matches(&self.query, [**label]))
+            .map(|(index, _)| index)
+            .collect()
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SystemStatusDialogViewModel {

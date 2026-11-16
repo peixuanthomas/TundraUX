@@ -760,6 +760,7 @@ fn system_status_disabled_add_and_picker_rows_are_inert() {
         .pages
         .system_status
         .system_status_add_picker
+        .as_ref()
         .unwrap()
         .selected;
     let before = state
@@ -794,6 +795,7 @@ fn system_status_disabled_add_and_picker_rows_are_inert() {
             .pages
             .system_status
             .system_status_add_picker
+            .as_ref()
             .unwrap()
             .selected,
         selected
@@ -813,6 +815,7 @@ fn system_status_disabled_add_and_picker_rows_are_inert() {
             .pages
             .system_status
             .system_status_add_picker
+            .as_ref()
             .unwrap()
             .selected,
         selected
@@ -1338,6 +1341,7 @@ fn system_status_right_click_opens_contextual_edit_pickers() {
             .pages
             .system_status
             .system_status_size_picker
+            .as_ref()
             .unwrap()
             .anchor,
         Some(widget_point)
@@ -1447,6 +1451,7 @@ fn system_status_right_click_opens_contextual_edit_pickers() {
             .pages
             .system_status
             .system_status_add_picker
+            .as_ref()
             .unwrap()
             .anchor,
         Some(blank_point)
@@ -1731,6 +1736,7 @@ fn system_status_size_shortcut_cycles_and_picker_applies_active_profile_only() {
             .pages
             .system_status
             .system_status_size_picker
+            .as_ref()
             .unwrap()
             .selected,
         expected
@@ -6870,6 +6876,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
         .pages
         .system_status
         .system_status_add_picker
+        .as_ref()
         .unwrap()
         .selected;
     let (_, layout) = state.system_status_layout().unwrap();
@@ -6882,6 +6889,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
         .pages
         .system_status
         .system_status_add_picker
+        .as_ref()
         .unwrap()
         .selected;
     assert_ne!(next, selected);
@@ -6906,6 +6914,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
                 .pages
                 .system_status
                 .system_status_add_picker
+                .as_ref()
                 .unwrap()
                 .selected,
             next
@@ -6920,6 +6929,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
             .pages
             .system_status
             .system_status_add_picker
+            .as_ref()
             .unwrap()
             .selected,
         selected
@@ -6939,6 +6949,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
         .pages
         .system_status
         .system_status_size_picker
+        .as_ref()
         .unwrap()
         .selected;
     let (_, layout) = state.system_status_layout().unwrap();
@@ -6952,6 +6963,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
             .pages
             .system_status
             .system_status_size_picker
+            .as_ref()
             .unwrap()
             .selected,
         (selected + 1) % 3
@@ -6965,6 +6977,7 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
             .pages
             .system_status
             .system_status_size_picker
+            .as_ref()
             .unwrap()
             .selected,
         selected

@@ -65,3 +65,5 @@ watchdog-cli-target-missing = The selected managed process is no longer availabl
 watchdog-cli-protocol = The watchdog returned an incompatible reply.
 watchdog-cli-request-refused = The watchdog could not complete the request.
 watchdog-cli-output-error = Could not write the watchdog result. { $reason }
+
+ui-workspace-search = Search…

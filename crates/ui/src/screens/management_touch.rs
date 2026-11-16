@@ -287,7 +287,7 @@ fn choice_form(main: Rect, form: &ManagementForm, choice: &ManagementChoices) ->
     let height = choice
         .values
         .len()
-        .saturating_add(4 + usize::from(horizontal))
+        .saturating_add(4 + usize::from(horizontal) + if choice.hide_search { 0 } else { 2 })
         .min(usize::from(
             main.height.saturating_sub(u16::from(main.height > 8) * 2),
         )) as u16;
@@ -544,7 +544,7 @@ pub struct ManagementLayout {
     pub content: Rect,
     pub output_text: Rect,
     pub form: Rect,
-    dialog: DialogLayout,
+    pub(crate) dialog: DialogLayout,
     pub message: Rect,
     pub fields_area: Rect,
     pub fields: Vec<(usize, Rect)>,
@@ -1123,7 +1123,18 @@ fn management_content_layout(
         form,
         footer_height,
         close_label.as_deref(),
-        if is_choice { 2 } else { body_minimum },
+        if is_choice {
+            if form_model
+                .and_then(|form| form.choice.as_ref())
+                .is_some_and(|choice| !choice.hide_search)
+            {
+                4
+            } else {
+                2
+            }
+        } else {
+            body_minimum
+        },
     );
     let form_inner = dialog.body;
     let message_len = form_model.map_or(0, |form| {
@@ -1277,7 +1288,7 @@ fn management_content_layout(
     let mut choice_cancel = Rect::default();
     if let Some(choice) = form_model.and_then(|form| form.choice.as_ref()) {
         choice_panel = Some(form);
-        let choice_inner = dialog.body;
+        let choice_inner = choice.areas(dialog.body).1;
         let content_width = management_choice_width(choice);
         let available = choice_inner.height;
         let mut vertical = choice.values.len() > usize::from(available);
@@ -1409,9 +1420,10 @@ pub fn management_field_id(form: &ManagementForm, index: usize) -> String {
 pub fn management_choice_id(form: &ManagementForm, index: usize) -> String {
     let choice = form.choice.as_ref();
     format!(
-        "management.choice.{}.{}.{index}.{}",
+        "management.choice.{}.{}.{}.{}",
         form.identity,
         choice.map_or(0, |choice| choice.field),
+        choice.map_or(index, |choice| choice.original_index(index)),
         choice
             .and_then(|choice| choice.values.get(index))
             .map_or("", String::as_str)
@@ -1451,9 +1463,7 @@ pub fn management_button_regions(
                     *area,
                     form.choice
                         .as_ref()
-                        .and_then(|choice| choice.disabled.get(*index))
-                        .copied()
-                        .unwrap_or(false),
+                        .is_some_and(|choice| choice.is_disabled(*index)),
                 );
             }
         } else {
@@ -2030,16 +2040,24 @@ pub fn render_management_overlay(
         &form.title,
         layout.form,
     );
-    let title = form
-        .choice
-        .as_ref()
-        .filter(|choice| !choice.search.is_empty())
-        .map_or_else(
-            || form.title.clone(),
-            |choice| format!("{} · {}", form.title, choice.search),
-        );
+    let title = form.title.clone();
     layout.dialog.render_frame(frame, &title, context);
     if let Some(choice) = &form.choice {
+        let search = choice.areas(layout.dialog.body).0;
+        choice
+            .editing
+            .input(
+                management_form_control_id(form, "choice-search"),
+                &choice.search,
+            )
+            .with_placeholder(i18n::tr!("ui-workspace-search"))
+            .render_borderless_frame(frame, search, &theme);
+        if choice.values.is_empty() {
+            frame.render_widget(
+                ratatui::widgets::Paragraph::new(i18n::tr!("management-empty")),
+                choice.areas(layout.dialog.body).1,
+            );
+        }
         let inset = layout.dialog.body.x - layout.form.x;
         let left = " ".repeat(usize::from(inset));
         let width = layout.dialog.body.width.saturating_sub(u16::from(
@@ -2057,7 +2075,7 @@ pub fn render_management_overlay(
             } else {
                 format!("{left}{text}")
             };
-            let disabled = choice.disabled.get(*index).copied().unwrap_or(false);
+            let disabled = choice.is_disabled(*index);
             let mut button = Button::new(management_choice_id(form, *index), text)
                 .with_bracketed_label(false)
                 .with_capture_name(value)

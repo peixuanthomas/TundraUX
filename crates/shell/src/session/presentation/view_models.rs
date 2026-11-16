@@ -283,6 +283,8 @@ impl ShellSession {
                     })
                     .collect();
                 ui::SystemStatusPickerViewModel {
+                    query: picker.query.clone(),
+                    editing: picker.editing.clone(),
                     title: i18n::tr!("shell-add-widget"),
                     items,
                     selected: picker.selected,
@@ -359,7 +361,10 @@ impl ShellSession {
                 .pages
                 .system_status
                 .system_status_size_picker
+                .as_ref()
                 .map(|picker| ui::SystemStatusSizePickerViewModel {
+                    query: picker.query.clone(),
+                    editing: picker.editing.clone(),
                     selected: picker.selected,
                 }),
             picker_anchor: self

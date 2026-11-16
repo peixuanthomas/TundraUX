@@ -569,8 +569,11 @@ impl ShellSession {
             .iter()
             .position(|kind| self.system_status_picker_kind_enabled(*kind))
             .expect("addable widget checked");
-        self.pages.system_status.system_status_add_picker =
-            Some(SystemStatusAddPickerState { selected, anchor });
+        self.pages.system_status.system_status_add_picker = Some(SystemStatusAddPickerState {
+            selected,
+            anchor,
+            ..Default::default()
+        });
     }
 
     pub(in crate::session) fn open_system_status_add_quick_menu(&mut self, anchor: CellPosition) {
@@ -589,6 +592,43 @@ impl ShellSession {
         self.pages.system_status.system_status_size_picker = None;
     }
 
+    pub(in crate::session) fn edit_system_status_picker(&mut self, input: InputEvent) {
+        if let Some(picker) = self.pages.system_status.system_status_add_picker.as_mut() {
+            picker
+                .editing
+                .handle_event(&mut picker.query, input, Rect::default());
+            let next = self
+                .to_system_status_view_model()
+                .and_then(|model| model.dashboard.picker)
+                .and_then(|picker| {
+                    picker
+                        .visible_indices()
+                        .into_iter()
+                        .find(|index| picker.items[*index].enabled)
+                });
+            if let Some(next) = next {
+                self.pages
+                    .system_status
+                    .system_status_add_picker
+                    .as_mut()
+                    .unwrap()
+                    .selected = next;
+            }
+        } else if let Some(picker) = self.pages.system_status.system_status_size_picker.as_mut() {
+            picker
+                .editing
+                .handle_event(&mut picker.query, input, Rect::default());
+            let model = ui::SystemStatusSizePickerViewModel {
+                selected: picker.selected,
+                query: picker.query.clone(),
+                editing: picker.editing.clone(),
+            };
+            if let Some(next) = model.visible_indices().first() {
+                picker.selected = *next;
+            }
+        }
+    }
+
     pub(in crate::session) fn move_system_status_add_picker(&mut self, delta: isize) {
         let Some(current) = self
             .pages
@@ -603,7 +643,12 @@ impl ShellSession {
         for step in 1..=count {
             let next =
                 (current as isize + delta * step as isize).rem_euclid(count as isize) as usize;
-            if self.system_status_picker_kind_enabled(SYSTEM_STATUS_WIDGET_KINDS[next]) {
+            if self.system_status_picker_kind_enabled(SYSTEM_STATUS_WIDGET_KINDS[next])
+                && self
+                    .to_system_status_view_model()
+                    .and_then(|model| model.dashboard.picker)
+                    .is_some_and(|picker| picker.visible_indices().contains(&next))
+            {
                 if let Some(picker) = self.pages.system_status.system_status_add_picker.as_mut() {
                     picker.selected = next;
                 }
@@ -649,7 +694,12 @@ impl ShellSession {
         let Some(kind) = SYSTEM_STATUS_WIDGET_KINDS.get(index).copied() else {
             return;
         };
-        if !self.system_status_picker_kind_enabled(kind) {
+        if !self.system_status_picker_kind_enabled(kind)
+            || !self
+                .to_system_status_view_model()
+                .and_then(|model| model.dashboard.picker)
+                .is_some_and(|picker| picker.visible_indices().contains(&index))
+        {
             return;
         }
         if self
@@ -790,8 +840,11 @@ impl ShellSession {
         self.pages.system_status.system_status_dashboard_focus =
             ui::SystemStatusDashboardFocus::Size;
         self.pages.system_status.system_status_add_picker = None;
-        self.pages.system_status.system_status_size_picker =
-            Some(SystemStatusSizePickerState { selected, anchor });
+        self.pages.system_status.system_status_size_picker = Some(SystemStatusSizePickerState {
+            selected,
+            anchor,
+            ..Default::default()
+        });
     }
 
     pub(in crate::session) fn open_system_status_widget_quick_menu(
@@ -825,7 +878,21 @@ impl ShellSession {
 
     pub(in crate::session) fn move_system_status_size_picker(&mut self, delta: isize) {
         if let Some(picker) = self.pages.system_status.system_status_size_picker.as_mut() {
-            picker.selected = (picker.selected as isize + delta).rem_euclid(3) as usize;
+            let model = ui::SystemStatusSizePickerViewModel {
+                selected: picker.selected,
+                query: picker.query.clone(),
+                editing: picker.editing.clone(),
+            };
+            let indices = model.visible_indices();
+            if indices.is_empty() {
+                return;
+            }
+            let index = indices
+                .iter()
+                .position(|index| *index == picker.selected)
+                .unwrap_or(0);
+            picker.selected =
+                indices[(index as isize + delta).rem_euclid(indices.len() as isize) as usize];
         }
     }
 
@@ -847,6 +914,13 @@ impl ShellSession {
         else {
             return;
         };
+        if !self
+            .to_system_status_view_model()
+            .and_then(|model| model.dashboard.size_picker)
+            .is_some_and(|picker| picker.visible_indices().contains(&index))
+        {
+            return;
+        }
         let (Some(kind), Some((_, layout))) = (
             self.pages.system_status.system_status_selected_widget,
             self.system_status_layout(),

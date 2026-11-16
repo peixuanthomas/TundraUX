@@ -177,18 +177,41 @@ fn render_overlays(
     model: &SystemStatusViewModel,
     context: &RenderContext,
 ) {
-    if let (Some(p), Some(chrome)) = (model.dashboard.size_picker, l.size_picker_chrome) {
+    if let (Some(p), Some(chrome)) = (&model.dashboard.size_picker, l.size_picker_chrome) {
         chrome.render_frame(frame, &i18n::tr!("ui-system-status-widget-size"), context);
-        let items = ["2x2", "2x4", "4x4"]
-            .into_iter()
-            .enumerate()
-            .map(|(index, label)| ListItem::new(format!("system-status.size.{index}"), label))
+        let (search, rows) = crate::components::selection_search_areas(chrome.body);
+        p.editing
+            .input("system-status.size-search", &p.query)
+            .with_placeholder(i18n::tr!("ui-workspace-search"))
+            .render_borderless_frame(
+                frame,
+                search,
+                &crate::components::DialogLayout::body_theme(context),
+            );
+        let indices = p.visible_indices();
+        let items = indices
+            .iter()
+            .map(|&index| {
+                ListItem::new(
+                    format!("system-status.size.{index}"),
+                    ["2x2", "2x4", "4x4"][index],
+                )
+            })
             .collect();
-        let mut list = List::new("system-status.size-list", items)
-            .with_viewport_start(l.size_picker_items.first().map_or(0, |row| row.index));
-        list.set_selected(Some(p.selected));
+        let selected = indices.iter().position(|index| *index == p.selected);
+        let start = selected.map_or(0, |selected| {
+            List::automatic_viewport_start(selected, usize::from(rows.height))
+        });
+        let mut list = List::new("system-status.size-list", items).with_viewport_start(start);
+        list.set_selected(selected);
         list.set_focused(true);
-        list.render_borderless_with_context(chrome.body, frame.buffer_mut(), context);
+        list.render_borderless_with_context(rows, frame.buffer_mut(), context);
+        if indices.is_empty() {
+            frame.render_widget(
+                ratatui::widgets::Paragraph::new(i18n::tr!("management-empty")),
+                rows,
+            );
+        }
         return;
     }
     if let (Some(p), Some(chrome)) = (&model.dashboard.picker, l.picker_chrome) {
@@ -197,20 +220,36 @@ fn render_overlays(
             &i18n::tr!("ui-system-status-picker-title", title = p.title.clone()),
             context,
         );
-        let items = p
-            .items
+        let (search, rows) = crate::components::selection_search_areas(chrome.body);
+        p.editing
+            .input("system-status.add-search", &p.query)
+            .with_placeholder(i18n::tr!("ui-workspace-search"))
+            .render_borderless_frame(
+                frame,
+                search,
+                &crate::components::DialogLayout::body_theme(context),
+            );
+        let indices = p.visible_indices();
+        let items = indices
             .iter()
-            .map(|i| {
-                ListItem::new(format!("system-status.add.{:?}", i.kind), &i.label)
-                    .with_description(&i.detail)
-                    .disabled(!i.enabled)
+            .map(|&index| {
+                let item = &p.items[index];
+                ListItem::new(format!("system-status.add.{:?}", item.kind), &item.label)
+                    .with_description(&item.detail)
+                    .disabled(!item.enabled)
             })
             .collect();
         let mut list =
             List::new("system-status.add-list", items).with_viewport_start(l.picker_viewport_start);
-        list.set_selected(Some(p.selected));
+        list.set_selected(indices.iter().position(|index| *index == p.selected));
         list.set_focused(true);
-        list.render_borderless_with_context(chrome.body, frame.buffer_mut(), context)
+        list.render_borderless_with_context(rows, frame.buffer_mut(), context);
+        if indices.is_empty() {
+            frame.render_widget(
+                ratatui::widgets::Paragraph::new(i18n::tr!("management-empty")),
+                rows,
+            );
+        }
     }
     if let Some(d) = &model.dashboard.dialog {
         let w = l.panel.width.min(48);

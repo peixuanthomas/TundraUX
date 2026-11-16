@@ -277,6 +277,8 @@ pub enum SettingsPickerKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SettingsPickerOptionViewModel {
+    pub source_index: Option<usize>,
+    pub keywords: Vec<String>,
     pub label: String,
     pub detail: String,
     pub enabled: bool,
@@ -288,6 +290,8 @@ pub struct SettingsPickerOptionViewModel {
 impl SettingsPickerOptionViewModel {
     pub fn new(label: impl Into<String>, detail: impl Into<String>) -> Self {
         Self {
+            source_index: None,
+            keywords: Vec::new(),
             label: label.into(),
             detail: detail.into(),
             enabled: true,
@@ -299,6 +303,11 @@ impl SettingsPickerOptionViewModel {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    pub fn with_keywords(mut self, keywords: impl IntoIterator<Item = String>) -> Self {
+        self.keywords = keywords.into_iter().collect();
         self
     }
 
@@ -1396,7 +1405,7 @@ fn render_picker(
                 format!("  {}", option.detail)
             };
             ComponentListItem::new(
-                format!("settings.picker.{index}"),
+                format!("settings.picker.{}", option.source_index.unwrap_or(index)),
                 truncate(
                     &format!("{}{detail}", option.label),
                     usize::from(rows.width.saturating_sub(2)),
@@ -1416,6 +1425,12 @@ fn render_picker(
     component_list.set_focused(true);
     component_list.set_selected(Some(picker.selected_index));
     component_list.render_borderless_frame(frame, rows, theme);
+    if picker.options.is_empty() {
+        frame.render_widget(
+            Paragraph::new(i18n::tr!("management-empty")).style(theme.muted_style()),
+            rows,
+        );
+    }
     if picker.options.len() > visible && list.width > 0 && list.height > 0 {
         Scrollbar::new(picker.options.len(), visible, start).render_frame(
             frame,

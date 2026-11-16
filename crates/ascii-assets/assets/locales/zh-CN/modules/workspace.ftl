@@ -65,3 +65,5 @@ watchdog-cli-target-missing = 指定的受管进程已不可用。请重新运�
 watchdog-cli-protocol = watchdog 返回了不兼容的回复。
 watchdog-cli-request-refused = watchdog 无法完成请求。
 watchdog-cli-output-error = 无法输出 watchdog 结果。{ $reason }
+
+ui-workspace-search = 搜索…

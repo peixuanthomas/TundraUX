@@ -1732,6 +1732,10 @@ impl ShellSession {
                 self.close_system_status_add_picker();
                 ShellAction::Redraw
             }
+            ShellCommand::SystemStatusPickerInput(input) => {
+                self.edit_system_status_picker(input);
+                ShellAction::Redraw
+            }
             ShellCommand::SystemStatusPickerPrevious => {
                 self.move_system_status_add_picker(-1);
                 ShellAction::Redraw

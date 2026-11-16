@@ -385,27 +385,28 @@ pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> System
             let w = panel.width.min(42);
             let h = panel
                 .height
-                .min((p.items.len() as u16).saturating_add(5).max(7));
+                .min((p.items.len() as u16).saturating_add(7).max(9));
             let area = system_status_picker_area(panel, w, h, model.dashboard.picker_anchor);
             let chrome = DialogLayout::new(area, 0, None);
             picker_chrome = Some(chrome);
-            let visible_height = usize::from(chrome.body.height);
-            picker_viewport_start =
-                crate::components::List::automatic_viewport_start(p.selected, visible_height);
-            p.items
+            let rows = crate::components::selection_search_areas(chrome.body).1;
+            let indices = p.visible_indices();
+            let selected = indices
                 .iter()
-                .enumerate()
+                .position(|index| *index == p.selected)
+                .unwrap_or(0);
+            picker_viewport_start = crate::components::List::automatic_viewport_start(
+                selected,
+                usize::from(rows.height),
+            );
+            indices
+                .into_iter()
                 .skip(picker_viewport_start)
-                .take(visible_height)
+                .take(usize::from(rows.height))
                 .enumerate()
-                .map(|(visible_index, (index, _))| SystemStatusRowLayout {
+                .map(|(row, index)| SystemStatusRowLayout {
                     index,
-                    area: Rect::new(
-                        chrome.body.x,
-                        chrome.body.y.saturating_add(visible_index as u16),
-                        chrome.body.width,
-                        1,
-                    ),
+                    area: Rect::new(rows.x, rows.y + row as u16, rows.width, 1),
                 })
                 .collect()
         })
@@ -414,26 +415,31 @@ pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> System
     let size_picker_items = model
         .dashboard
         .size_picker
+        .as_ref()
         .map(|picker| {
             let w = panel.width.min(42);
-            let h = panel.height.min(8);
+            let h = panel.height.min(10);
             let area = system_status_picker_area(panel, w, h, model.dashboard.picker_anchor);
             let chrome = DialogLayout::new(area, 0, None);
             size_picker_chrome = Some(chrome);
-            let capacity = usize::from(chrome.body.height);
-            let start =
-                crate::components::List::automatic_viewport_start(picker.selected, capacity);
-            (start..3)
-                .take(capacity)
+            let rows = crate::components::selection_search_areas(chrome.body).1;
+            let indices = picker.visible_indices();
+            let selected = indices
+                .iter()
+                .position(|index| *index == picker.selected)
+                .unwrap_or(0);
+            let start = crate::components::List::automatic_viewport_start(
+                selected,
+                usize::from(rows.height),
+            );
+            indices
+                .into_iter()
+                .skip(start)
+                .take(usize::from(rows.height))
                 .enumerate()
                 .map(|(row, index)| SystemStatusRowLayout {
                     index,
-                    area: Rect::new(
-                        chrome.body.x,
-                        chrome.body.y.saturating_add(row as u16),
-                        chrome.body.width,
-                        1,
-                    ),
+                    area: Rect::new(rows.x, rows.y + row as u16, rows.width, 1),
                 })
                 .collect()
         })
@@ -560,14 +566,14 @@ pub fn system_status_hit_test(
                 _ => None,
             });
     }
-    if !l.picker_items.is_empty() {
+    if l.picker_chrome.is_some() {
         return l
             .picker_items
             .iter()
             .find(|r| rect_contains(r.area, x, y))
             .map(|r| SystemStatusHitTarget::PickerItem(r.index));
     }
-    if !l.size_picker_items.is_empty() {
+    if l.size_picker_chrome.is_some() {
         return l
             .size_picker_items
             .iter()

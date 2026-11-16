@@ -97,12 +97,34 @@ impl FormField {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FormChoices {
     pub search: String,
+    pub editing: super::TextEditState,
+    pub source_indices: Vec<usize>,
+    pub hide_search: bool,
     pub field: usize,
     pub values: Vec<String>,
     pub selected: usize,
     pub scroll: usize,
     pub columns: usize,
     pub disabled: Vec<bool>,
+}
+
+impl FormChoices {
+    pub fn areas(&self, body: Rect) -> (Rect, Rect) {
+        if self.hide_search {
+            (Rect::default(), body)
+        } else {
+            super::selection_search_areas(body)
+        }
+    }
+    pub fn original_index(&self, index: usize) -> usize {
+        self.source_indices.get(index).copied().unwrap_or(index)
+    }
+    pub fn is_disabled(&self, index: usize) -> bool {
+        self.disabled
+            .get(self.original_index(index))
+            .copied()
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -566,7 +588,11 @@ impl FormDialog {
     pub fn activate_pointer(&mut self, main: Rect, mouse: super::MouseInput) -> FormEvent {
         let point = mouse.coordinates();
         let layout = self.layout(main);
-        if self.choice.is_some() {
+        if let Some(choice) = &mut self.choice {
+            let search = choice.areas(layout.dialog.body).0;
+            if contains_point(search, point.0, point.1) {
+                return FormEvent::None;
+            }
             return self.activate_choice_at(&layout, point);
         }
         for (index, _) in &layout.fields {
@@ -643,7 +669,7 @@ impl FormDialog {
             .iter()
             .find(|(_, area)| contains_point(*area, point.0, point.1))
         {
-            if choice.disabled.get(*index).copied().unwrap_or(false) {
+            if choice.is_disabled(*index) {
                 return FormEvent::None;
             }
             self.fields[choice.field].value = choice.values[*index].clone();
@@ -775,7 +801,8 @@ impl FormDialog {
     fn handle_choice(&mut self, event: InputEvent, layout: &ManagementLayout) -> FormEvent {
         let choice = self.choice.as_mut().unwrap();
         match event {
-            InputEvent::Key(key) if key.phase.is_press_like() && !key.has_non_shift_modifier() => {
+            InputEvent::Key(key) if !key.phase.is_press_like() => return FormEvent::None,
+            InputEvent::Key(key) if !key.has_non_shift_modifier() => {
                 if key.phase != InputPhase::Press
                     && matches!(key.key, Key::Enter | Key::Space | Key::Escape)
                 {
@@ -785,13 +812,8 @@ impl FormDialog {
                     Key::Escape => {
                         self.choice = None;
                     }
-                    Key::Enter | Key::Space => {
-                        if !choice
-                            .disabled
-                            .get(choice.selected)
-                            .copied()
-                            .unwrap_or(false)
-                        {
+                    Key::Enter => {
+                        if !choice.values.is_empty() && !choice.is_disabled(choice.selected) {
                             if let Some(value) = choice.values.get(choice.selected) {
                                 self.fields[choice.field].value = value.clone();
                             }
@@ -817,20 +839,25 @@ impl FormDialog {
                         choice.selected = (choice.selected + layout.choice_rows.len().max(1))
                             .min(choice.values.len().saturating_sub(1))
                     }
-                    Key::Char(c) => {
-                        choice.search.push(c);
-                        self.filter_choices();
+                    _ => {
+                        let area = choice.areas(layout.dialog.body).0;
+                        let previous = choice.search.clone();
+                        choice
+                            .editing
+                            .handle_event(&mut choice.search, InputEvent::Key(key), area);
+                        if choice.search != previous {
+                            self.filter_choices();
+                        }
                     }
-                    Key::Backspace => {
-                        choice.search.pop();
-                        self.filter_choices();
-                    }
-                    _ => return FormEvent::None,
                 }
             }
-            InputEvent::Paste(value) => {
-                choice.search.push_str(&value);
-                self.filter_choices();
+            event @ (InputEvent::Paste(_) | InputEvent::Key(_)) => {
+                let area = choice.areas(layout.dialog.body).0;
+                let previous = choice.search.clone();
+                choice.editing.handle_event(&mut choice.search, event, area);
+                if choice.search != previous {
+                    self.filter_choices();
+                }
             }
             _ => return FormEvent::None,
         }
@@ -847,13 +874,15 @@ impl FormDialog {
 
     fn filter_choices(&mut self) {
         let choice = self.choice.as_mut().unwrap();
-        let query = choice.search.to_lowercase();
-        choice.values = self.fields[choice.field]
+        let matches = self.fields[choice.field]
             .choices
             .iter()
-            .filter(|value| value.to_lowercase().contains(&query))
-            .cloned()
-            .collect();
+            .enumerate()
+            .filter(|(_, value)| super::selection_matches(&choice.search, [value.as_str()]))
+            .map(|(index, value)| (index, value.clone()))
+            .collect::<Vec<_>>();
+        choice.source_indices = matches.iter().map(|(index, _)| *index).collect();
+        choice.values = matches.into_iter().map(|(_, value)| value).collect();
         choice.selected = 0;
         choice.scroll = 0;
     }

@@ -100,112 +100,89 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn handle_settings_picker_key(&mut self, key: &KeyInput) {
-        if key.has_non_shift_modifier() {
+        if !key.phase.is_press_like() {
             return;
         }
-        if matches!(key.key, InputKey::Left | InputKey::Right | InputKey::Delete) {
-            if let Some(picker) = self
-                .pages
-                .settings
-                .settings_state
-                .as_mut()
-                .and_then(|state| state.picker.as_mut())
-                && matches!(
-                    picker.kind,
-                    ui::SettingsPickerKind::Language | ui::SettingsPickerKind::Timezone
-                )
-            {
-                picker.editing.handle_event(
-                    &mut picker.query,
-                    InputEvent::Key(key.clone()),
-                    Rect::default(),
-                );
-                if key.key == InputKey::Delete {
-                    picker.selected_index = 0;
-                    picker.window_start = 0;
-                }
-            }
-            return;
-        }
-        match &key.key {
-            InputKey::Escape => {
-                let return_to_theme = self
-                    .pages
-                    .settings
-                    .settings_state
-                    .as_ref()
-                    .and_then(|state| state.picker.as_ref())
-                    .is_some_and(|picker| picker.kind == ui::SettingsPickerKind::DefaultThemeIcons);
-                if return_to_theme {
-                    self.open_settings_picker(ui::SettingsPickerKind::Theme);
-                } else if let Some(state) = self.pages.settings.settings_state.as_mut() {
-                    state.picker = None;
-                    state.status = i18n::msg!("settings-ready").into();
-                }
-            }
-            InputKey::Up => self.select_settings_picker_delta(-1),
-            InputKey::Down => self.select_settings_picker_delta(1),
-            InputKey::PageUp => self.select_settings_picker_delta(-8),
-            InputKey::PageDown => self.select_settings_picker_delta(8),
-            InputKey::Home => self.select_settings_picker_at(0),
-            InputKey::End => {
-                let last = self
-                    .pages
-                    .settings
-                    .settings_state
-                    .as_ref()
-                    .and_then(|state| state.picker.as_ref())
-                    .map(|picker| settings_picker_options(picker, &self.language_options()))
-                    .map(|options| options.len().saturating_sub(1))
-                    .unwrap_or(0);
-                self.select_settings_picker_at(last);
-            }
-            InputKey::Enter => self.apply_settings_picker_selection(),
-            InputKey::Backspace => {
-                if let Some(state) = self.pages.settings.settings_state.as_mut()
-                    && let Some(picker) = state.picker.as_mut()
-                    && matches!(
-                        picker.kind,
-                        ui::SettingsPickerKind::Language | ui::SettingsPickerKind::Timezone
-                    )
-                {
-                    picker.editing.handle_event(
-                        &mut picker.query,
-                        InputEvent::Key(key.clone()),
-                        Rect::default(),
-                    );
-                    picker.selected_index = 0;
-                    picker.window_start = 0;
-                }
-            }
-            InputKey::Char(character)
-                if !character.is_control()
-                    && self
+        if !key.has_non_shift_modifier() {
+            match key.key {
+                InputKey::Escape => {
+                    let return_to_theme = self
                         .pages
                         .settings
                         .settings_state
                         .as_ref()
                         .and_then(|state| state.picker.as_ref())
                         .is_some_and(|picker| {
-                            matches!(
-                                picker.kind,
-                                ui::SettingsPickerKind::Language | ui::SettingsPickerKind::Timezone
-                            )
-                        }) =>
-            {
-                if let Some(state) = self.pages.settings.settings_state.as_mut()
-                    && let Some(picker) = state.picker.as_mut()
-                {
-                    picker.editing.handle_event(
-                        &mut picker.query,
-                        InputEvent::Key(key.clone()),
-                        Rect::default(),
-                    );
-                    picker.selected_index = 0;
-                    picker.window_start = 0;
+                            picker.kind == ui::SettingsPickerKind::DefaultThemeIcons
+                        });
+                    if return_to_theme {
+                        self.open_settings_picker(ui::SettingsPickerKind::Theme);
+                    } else if let Some(state) = self.pages.settings.settings_state.as_mut() {
+                        state.picker = None;
+                        state.status = i18n::msg!("settings-ready").into();
+                    }
+                    return;
                 }
+                InputKey::Up | InputKey::BackTab => {
+                    self.select_settings_picker_delta(-1);
+                    return;
+                }
+                InputKey::Down | InputKey::Tab => {
+                    self.select_settings_picker_delta(1);
+                    return;
+                }
+                InputKey::Home => {
+                    self.select_settings_picker_at(0);
+                    return;
+                }
+                InputKey::End => {
+                    let last = self
+                        .pages
+                        .settings
+                        .settings_state
+                        .as_ref()
+                        .and_then(|state| state.picker.as_ref())
+                        .map(|picker| {
+                            settings_picker_options(picker, &self.language_options())
+                                .len()
+                                .saturating_sub(1)
+                        })
+                        .unwrap_or(0);
+                    self.select_settings_picker_at(last);
+                    return;
+                }
+                InputKey::PageUp => {
+                    self.select_settings_picker_delta(-8);
+                    return;
+                }
+                InputKey::PageDown => {
+                    self.select_settings_picker_delta(8);
+                    return;
+                }
+                InputKey::Enter if key.phase == InputPhase::Press => {
+                    self.apply_settings_picker_selection();
+                    return;
+                }
+                _ => {}
             }
-            _ => {}
+        }
+        if let Some(picker) = self
+            .pages
+            .settings
+            .settings_state
+            .as_mut()
+            .and_then(|state| state.picker.as_mut())
+        {
+            let before = picker.query.clone();
+            picker.editing.handle_event(
+                &mut picker.query,
+                InputEvent::Key(key.clone()),
+                Rect::default(),
+            );
+            if before != picker.query {
+                picker.selected_index = 0;
+                picker.window_start = 0;
+            }
         }
     }
 
@@ -298,10 +275,12 @@ impl ShellSession {
                     }
                 };
                 let field = if picker.kind == ui::SettingsPickerKind::AutoAdmin {
-                    config.auto_admin = AUTO_ADMIN_POLICIES[picker.selected_index];
+                    config.auto_admin =
+                        AUTO_ADMIN_POLICIES[option.source_index.unwrap_or(picker.selected_index)];
                     ui::SettingsField::AutoAdmin
                 } else {
-                    config.screen_timeout_seconds = SCREEN_TIMEOUT_OPTIONS[picker.selected_index];
+                    config.screen_timeout_seconds = SCREEN_TIMEOUT_OPTIONS
+                        [option.source_index.unwrap_or(picker.selected_index)];
                     ui::SettingsField::ScreenTimeout
                 };
                 if self.save_settings_global_config(config, field) {
@@ -309,7 +288,7 @@ impl ShellSession {
                 }
             }
             ui::SettingsPickerKind::SystemTimeServers => {
-                self.edit_system_time_server(picker.selected_index);
+                self.edit_system_time_server(option.source_index.unwrap_or(picker.selected_index));
             }
             ui::SettingsPickerKind::Theme => {
                 if self.ascii_assets.theme_id() != ui::DEFAULT_THEME_ID {
@@ -322,7 +301,7 @@ impl ShellSession {
                 let Some(mut appearance) = self.app.active_appearance().cloned() else {
                     return;
                 };
-                let icon_display_mode = if picker.selected_index == 0 {
+                let icon_display_mode = if option.source_index == Some(0) {
                     storage::IconDisplayMode::Ascii
                 } else {
                     storage::IconDisplayMode::Image

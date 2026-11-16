@@ -200,8 +200,10 @@ pub(super) struct SystemStatusHistoryPoint {
     pub(super) value: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(super) struct SystemStatusAddPickerState {
+    pub(super) query: String,
+    pub(super) editing: ui::components::TextEditState,
     pub(super) selected: usize,
     pub(super) anchor: Option<CellPosition>,
 }
@@ -343,8 +345,10 @@ impl SettingsUpdateState {
 #[cfg(test)]
 #[path = "../../tests/unit/session/ui_state/update_progress_tests.rs"]
 mod update_progress_tests;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(super) struct SystemStatusSizePickerState {
+    pub(super) query: String,
+    pub(super) editing: ui::components::TextEditState,
     pub(super) selected: usize,
     pub(super) anchor: Option<CellPosition>,
 }

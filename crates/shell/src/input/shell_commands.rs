@@ -257,6 +257,7 @@ pub enum ShellCommand {
     SystemStatusSaveDashboard,
     SystemStatusOpenAddPicker,
     SystemStatusCloseAddPicker,
+    SystemStatusPickerInput(InputEvent),
     SystemStatusPickerPrevious,
     SystemStatusPickerNext,
     SystemStatusPickerSelect(usize),

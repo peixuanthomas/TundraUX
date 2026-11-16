@@ -48,13 +48,11 @@ impl ShellSession {
                             .settings_state
                             .as_ref()
                             .and_then(|state| state.picker.as_ref())
-                            .is_some_and(|picker| {
-                                matches!(
-                                    picker.kind,
-                                    ui::SettingsPickerKind::Language
-                                        | ui::SettingsPickerKind::Timezone
-                                )
-                            })
+                            .is_some()
+                }
+                Some(ShellComponent::SystemStatus) => {
+                    self.pages.system_status.system_status_add_picker.is_some()
+                        || self.pages.system_status.system_status_size_picker.is_some()
                 }
                 Some(ShellComponent::UserManagement) => !matches!(
                     self.pages.user_management.user_management_mode,

@@ -26,6 +26,10 @@ mod picker;
 mod progress_gauge;
 mod rainbow_text;
 mod scrollbar;
+mod selection_list;
+pub use selection_list::{
+    SelectionList, SelectionListItem, selection_matches, selection_search_areas,
+};
 mod sidebar_workspace;
 mod skeleton;
 mod surface;

@@ -259,15 +259,18 @@ fn clipped_metric_card_keeps_its_name_and_value_visible() {
 fn size_picker_renders_exact_rows_and_captures_dashboard_hits() {
     let mut m = model();
     m.dashboard.editing = true;
-    m.dashboard.size_picker = Some(SystemStatusSizePickerViewModel { selected: 1 });
+    m.dashboard.size_picker = Some(SystemStatusSizePickerViewModel {
+        selected: 1,
+        ..Default::default()
+    });
     let main = full_main(100, 24);
     let anchor = (main.x + 10, main.y + 4);
     m.dashboard.picker_anchor = Some(anchor);
     let l = system_status_layout(main, &m);
     assert_eq!(l.size_picker_items.len(), 3);
-    let chrome = ui::components::DialogLayout::new(Rect::new(anchor.0, anchor.1, 42, 8), 0, None);
+    let chrome = ui::components::DialogLayout::new(Rect::new(anchor.0, anchor.1, 42, 10), 0, None);
     assert_eq!(l.size_picker_items[0].area.x, chrome.body.x);
-    assert_eq!(l.size_picker_items[0].area.y, chrome.body.y);
+    assert_eq!(l.size_picker_items[0].area.y, chrome.body.y + 2);
     for (index, row) in l.size_picker_items.iter().enumerate() {
         assert_eq!(
             system_status_hit_test(&l, (row.area.x, row.area.y)),
@@ -301,13 +304,15 @@ fn add_picker_viewport_hit_rows_match_absolute_rendered_items() {
             })
             .collect(),
         selected: 9,
+        ..Default::default()
     });
     let main = full_main(100, 12);
     let l = system_status_layout(main, &m);
     let capacity = usize::from(
         ui::components::DialogLayout::new(Rect::new(0, 0, 42, main.height), 0, None)
             .body
-            .height,
+            .height
+            .saturating_sub(2),
     );
     let start = 10usize.saturating_sub(capacity);
     assert_eq!(l.picker_viewport_start, start);
@@ -323,7 +328,7 @@ fn add_picker_viewport_hit_rows_match_absolute_rendered_items() {
         system_status_hit_test(&l, (selected.area.x, selected.area.y)),
         Some(SystemStatusHitTarget::PickerItem(9))
     );
-    assert!(render(100, 12, &m).contains("Temperature"));
+    assert!(render(100, 12, &m).contains(&m.dashboard.picker.as_ref().unwrap().items[9].label));
 }
 fn widget(
     kind: SystemStatusWidgetKind,
@@ -580,5 +585,31 @@ fn dashboard_exposes_diagnostics_and_cancel_with_matching_hits() {
             .actions
             .iter()
             .any(|action| action.emphasis == ui::components::ButtonEmphasis::Danger)
+    );
+}
+
+#[test]
+fn picker_search_preserves_original_row_ids_and_empty_results_block_the_dashboard() {
+    let mut model = model();
+    model.dashboard.size_picker = Some(SystemStatusSizePickerViewModel {
+        query: "4x4".into(),
+        selected: 2,
+        ..Default::default()
+    });
+    let main = full_main(108, 24);
+    let layout = system_status_layout(main, &model);
+    assert_eq!(layout.size_picker_items.len(), 1);
+    let row = &layout.size_picker_items[0];
+    assert_eq!(row.index, 2);
+    assert_eq!(
+        system_status_hit_test(&layout, (row.area.x, row.area.y)),
+        Some(SystemStatusHitTarget::SizePickerItem(2))
+    );
+    model.dashboard.size_picker.as_mut().unwrap().query = "missing".into();
+    let layout = system_status_layout(main, &model);
+    assert!(layout.size_picker_items.is_empty());
+    assert_eq!(
+        system_status_hit_test(&layout, (layout.add_button.x, layout.add_button.y)),
+        None
     );
 }
