@@ -175,6 +175,7 @@ Shell's built-in command line uses `tundra-cli` from the same directory, so buil
 ```sh
 python3 scripts/tests/shell-control.py target/debug/tundra-shell
 python3 scripts/tests/shell-watchdog.py target/debug/tundra-shell
+python3 scripts/tests/workspace-clipboard.py target/debug/tundra-shell --output /tmp/tundra-clipboard
 python3 scripts/linux-shell-smoke.py target/debug/tundra-shell
 ```
 
