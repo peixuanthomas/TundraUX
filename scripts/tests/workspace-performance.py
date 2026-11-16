@@ -223,29 +223,33 @@ class Session:
         self.child = subprocess.Popen([str(binary)], env=self.env, cwd=root / "home",
                                       stdin=self.slave, stdout=self.slave, stderr=self.slave,
                                       start_new_session=True)
-        if os.geteuid() == 0:
-            deadline = time.monotonic() + 5
-            seen = b""
-            while b"any other key cancels: " not in seen and time.monotonic() < deadline:
-                seen += self.drain(.05)
-            assert b"any other key cancels: " in seen
-            self.send(b"y")
-        deadline = time.monotonic() + 30
-        while self.info is None and time.monotonic() < deadline:
-            files = list(Path(self.env["XDG_CACHE_HOME"]).rglob("shell-control/*.json"))
-            if files:
-                self.info = json.loads(files[0].read_text())
-            else:
-                self.drain(.02)
-        assert self.info is not None, "Shell control registration timed out"
-        for _ in range(20):
-            current = self.snapshot()
-            if current["page"] == "Home" and not self.has_modal(current):
-                break
-            self.send(b"\x1b[21~" if current["page"] == "FirstRunSetup" else b"\r")
-            self.drain(.08)
-        self.until(lambda frame: frame["page"] == "Home" and not self.has_modal(frame))
-        assert self.screen.saw_rgb, "Truecolor output is required for comparable focus measurements"
+        try:
+            if os.geteuid() == 0:
+                deadline = time.monotonic() + 5
+                seen = b""
+                while b"any other key cancels: " not in seen and time.monotonic() < deadline:
+                    seen += self.drain(.05)
+                assert b"any other key cancels: " in seen
+                self.send(b"y")
+            deadline = time.monotonic() + 30
+            while self.info is None and time.monotonic() < deadline:
+                files = list(Path(self.env["XDG_CACHE_HOME"]).rglob("shell-control/*.json"))
+                if files:
+                    self.info = json.loads(files[0].read_text())
+                else:
+                    self.drain(.02)
+            assert self.info is not None, "Shell control registration timed out"
+            for _ in range(20):
+                current = self.snapshot()
+                if current["page"] == "Home" and not self.has_modal(current):
+                    break
+                self.send(b"\x1b[21~" if current["page"] == "FirstRunSetup" else b"\r")
+                self.drain(.08)
+            self.until(lambda frame: frame["page"] == "Home" and not self.has_modal(frame))
+            assert self.screen.saw_rgb, "Truecolor output is required for comparable focus measurements"
+        except BaseException:
+            self.close()
+            raise
 
     def drain(self, timeout=0):
         if not select.select([self.master], [], [], timeout)[0]:
