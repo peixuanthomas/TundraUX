@@ -592,11 +592,22 @@ def check_keyboard_paste(master, output, child, start, cli, env):
         raise SystemExit("rapid keyboard clicks lost letters:\n" + output_diagnostic(output[offset:]))
     if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("rapid keyboard command did not complete")
+    current = control_snapshot(master, output, child, cli, env)
+    columns, rows = os.get_terminal_size(master)
+    if any("Clipboard unavailable:" in line for line in
+           current["lines"] + painted_screen_lines(output, columns, rows)):
+        raise SystemExit(f"Clipboard error was already visible before Paste: {current}\n"
+                         + output_diagnostic(output[start:]))
     for _ in range(3):
         click("screen-keyboard.paste")
     click("input.keyboard", "screen-keyboard.toggle")
-    if not wait_for_output(master, output, b"Clipboard unavailable", child, 5.0, start, ignore_spaces=True):
-        raise SystemExit("failed paste did not show a clipboard message:\n" + output_diagnostic(output[start:]))
+    # Ratatui can retain the first letter from the previous status message.
+    if not wait_for_painted_text(master, output,
+                                 "Clipboard unavailable: access Linux clipboard failed:", child):
+        frame = control_snapshot(master, output, child, cli, env)
+        painted = "\n".join(painted_screen_lines(output, columns, rows))
+        raise SystemExit(f"failed paste did not show a clipboard message: {json.dumps(frame, ensure_ascii=False)}\n"
+                         f"Painted:\n{painted}\nPTY:\n" + output_diagnostic(output[start:]))
     offset = len(output)
     os.write(master, b"printf 'PASTE_%s\\n' ALIVE\r")
     if not wait_for_output(master, output, b"PASTE_ALIVE", child, 5.0, offset):
