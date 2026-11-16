@@ -7,6 +7,8 @@ mod error;
 mod journal;
 mod log_error;
 mod model;
+#[cfg(feature = "tokio")]
+mod owned_task;
 mod report;
 mod report_catalog;
 mod resource;
@@ -40,6 +42,8 @@ pub use supervisor::{
 };
 pub use task::{ManagedTaskGroup, ManagedThreadHandle, ThreadCancellation};
 
+#[cfg(feature = "tokio")]
+pub use owned_task::OwnedTask;
 #[cfg(feature = "tokio")]
 pub use task::{ManagedLocalTaskHandle, ManagedTaskHandle};
 

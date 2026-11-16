@@ -45,6 +45,10 @@ The process host handles incident display and deduplication. Shell uses a dedica
 - Closing a task group cancels and waits for managed work; merely dropping a handle does not stop a thread.
 - Long waits must respond to cancellation; cancellation itself is not reported as a panic.
 
+Guardian bootstrap and low-level socket adapters can use `OwnedTask` before an `AppWatchdog` exists. It retains the Tokio handle, cancels on Drop (including early errors), and remains the owner while awaited. Server listener tasks own their bounded peer `JoinSet`, so cancelling a listener also cancels its peers. These adapters do not report worker progress; only the actual business loop does. Application background work continues to use `ManagedTaskGroup`.
+
+The blocking adapter requires bounded admission and shares Tokio's rule that already running blocking work finishes before its resources are released. Window codecs enforce their process-wide concurrency limit before spawning it.
+
 Internal commands use `platform::ManagedCommand`; their owner stops and reaps child processes on errors and Drop. `ManagedResource` also covers PTY child processes. Resources are unregistered after successful cleanup; failed cleanup retains the registration for retry.
 
 External desktop programs use a separate launch path and may continue running after Tundra exits. Update replacement retains an explicit launch owner. A supervised Linux management helper keeps its existing authorized process and watches the originating worker by pidfd. It closes its own process tree when that worker exits. Disconnecting the listening interface preserves an operation while its owner is alive.

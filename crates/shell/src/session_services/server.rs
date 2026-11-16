@@ -36,14 +36,17 @@ pub(crate) fn run_session_services(
     };
     let allowed = Allowed::default();
     let (changes, _) = tokio::sync::watch::channel(0u64);
-    let accept = runtime.spawn(accept_peers(
-        listener,
-        allowed.clone(),
-        state.clone(),
-        platform,
-        connection.worker(),
-        changes.clone(),
-    ));
+    let accept = watchdog::OwnedTask::spawn_on(
+        runtime.handle(),
+        accept_peers(
+            listener,
+            allowed.clone(),
+            state.clone(),
+            platform,
+            connection.worker(),
+            changes.clone(),
+        ),
+    );
     connection.send(WorkerToSupervisor::Ready)?;
     let result = 'service: loop {
         let generation = event_loop::generation();
@@ -105,7 +108,9 @@ async fn accept_peers(
     changes: tokio::sync::watch::Sender<u64>,
 ) -> io::Result<()> {
     let permits = Arc::new(tokio::sync::Semaphore::new(64));
+    let mut peers = tokio::task::JoinSet::new();
     loop {
+        while peers.try_join_next().is_some() {}
         let stream = match listener.accept().await {
             Ok(stream) => stream,
             Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
@@ -127,19 +132,22 @@ async fn accept_peers(
         let state = state.clone();
         let platform = platform.clone();
         let changes = changes.subscribe();
-        tokio::spawn(async move {
-            let _permit = permit;
-            let _ = serve_peer(
-                stream,
-                pid,
-                allowed,
-                state,
-                platform,
-                services_worker,
-                changes,
-            )
-            .await;
-        });
+        peers.spawn_on(
+            async move {
+                let _permit = permit;
+                let _ = serve_peer(
+                    stream,
+                    pid,
+                    allowed,
+                    state,
+                    platform,
+                    services_worker,
+                    changes,
+                )
+                .await;
+            },
+            &tokio::runtime::Handle::current(),
+        );
     }
 }
 

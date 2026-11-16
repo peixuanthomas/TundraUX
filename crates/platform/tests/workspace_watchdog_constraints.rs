@@ -100,19 +100,7 @@ fn production_code_uses_the_workspace_watchdog_for_hooks_and_tasks() {
         ]
         .iter()
         .any(|relative| path == crates.join(relative));
-        if !process_adapter
-            && [
-                ".spawn(",
-                ".spawn_command(",
-                ".output()",
-                "libc::fork(",
-                "command.status(",
-                "process.status(",
-                "child.status(",
-            ]
-            .iter()
-            .any(|needle| compact.contains(needle))
-        {
+        if !process_adapter && raw_process_creation(&compact) {
             violations.push(format!(
                 "{}: child processes must use an owned process adapter",
                 path.strip_prefix(&workspace).unwrap_or(&path).display()
@@ -125,6 +113,20 @@ fn production_code_uses_the_workspace_watchdog_for_hooks_and_tasks() {
         "workspace watchdog constraints were violated:\n{}",
         violations.join("\n")
     );
+}
+
+fn raw_process_creation(compact: &str) -> bool {
+    [
+        ".spawn(",
+        ".spawn_command(",
+        ".output()",
+        "libc::fork(",
+        "command.status(",
+        "process.status(",
+        "child.status(",
+    ]
+    .iter()
+    .any(|needle| compact.contains(needle))
 }
 
 fn collect_production_rust_sources(root: &Path, sources: &mut Vec<PathBuf>) {
@@ -443,6 +445,51 @@ fn child_output_check_distinguishes_recorders_from_process_execution() {
             .filter(|c| !c.is_whitespace())
             .collect::<String>()
     };
-    assert!(!compact(recorder).contains(".output()"));
-    assert!(compact(process).contains(".output()"));
+    assert!(!raw_process_creation(&compact(recorder)));
+    assert!(raw_process_creation(&compact(process)));
+}
+
+#[test]
+fn owned_bootstrap_adapters_do_not_relax_raw_spawn_constraints() {
+    let compact = |source: &str| {
+        rust_code_without_comments_or_strings(source)
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect::<String>()
+    };
+    let owned = compact(
+        r#"
+        fn owned(runtime: &Handle) {
+            let listener = watchdog::OwnedTask::spawn_on(runtime, async {});
+            let codec = watchdog::OwnedTask::spawn_blocking_on(runtime, || 7);
+            let mut peers = tokio::task::JoinSet::new();
+            peers.spawn_on(async {}, runtime);
+        }
+    "#,
+    );
+    assert!(!raw_process_creation(&owned));
+    assert!(
+        !FORBIDDEN_APIS
+            .iter()
+            .any(|api| api.needles.iter().any(|needle| owned.contains(needle)))
+    );
+    for raw in [
+        "tokio::spawn(async {});",
+        "tokio::task::spawn_blocking(|| 7);",
+        "std::thread::spawn(|| {});",
+    ] {
+        let raw = compact(raw);
+        assert!(
+            FORBIDDEN_APIS
+                .iter()
+                .any(|api| api.needles.iter().any(|needle| raw.contains(needle)))
+        );
+    }
+    for process in [
+        "command.spawn();",
+        "std::process::Command::new(\"sh\").spawn();",
+        "command.output();",
+    ] {
+        assert!(raw_process_creation(&compact(process)));
+    }
 }

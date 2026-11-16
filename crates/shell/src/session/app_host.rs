@@ -131,12 +131,15 @@ impl AppHostSession {
         }
         let language_ready = init.language.map(|data| {
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            crate::process_host::event_loop::runtime().spawn_blocking(move || {
-                let started = Instant::now();
-                let language = PreparedLanguage::restore_from_shell(data, &config.language);
-                let _ = sender.send((language, started.elapsed().as_micros() as u64));
-            });
-            receiver
+            let task = watchdog::OwnedTask::spawn_blocking_on(
+                crate::process_host::event_loop::runtime().handle(),
+                move || {
+                    let started = Instant::now();
+                    let language = PreparedLanguage::restore_from_shell(data, &config.language);
+                    let _ = sender.send((language, started.elapsed().as_micros() as u64));
+                },
+            );
+            (receiver, task)
         });
         let platform: Arc<dyn Platform> = Arc::from(platform::native_platform());
         let mut startup = ShellStartupState::clean(platform.kind(), platform.capabilities());
@@ -165,7 +168,7 @@ impl AppHostSession {
         let ascii_assets = ui::RuntimeAsciiAssets::load_default().map_err(asset_io_error)?;
         timings.resources_us = resources_started.elapsed().as_micros() as u64;
         let (language, language_restore_us) = language_ready
-            .map(|receiver| receiver.recv())
+            .map(|(receiver, _task)| receiver.recv())
             .transpose()
             .map_err(io::Error::other)?
             .unwrap_or((None, 0));

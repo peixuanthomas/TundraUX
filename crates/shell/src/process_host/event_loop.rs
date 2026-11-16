@@ -75,7 +75,7 @@ pub(crate) async fn codec<T: Send + 'static>(
         .acquire_owned()
         .await
         .map_err(std::io::Error::other)?;
-    tokio::task::spawn_blocking(move || {
+    watchdog::OwnedTask::spawn_blocking_on(runtime().handle(), move || {
         let _permit = permit;
         work()
     })

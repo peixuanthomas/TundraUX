@@ -32,7 +32,7 @@ struct Guardian<'a> {
     terminal: Option<TerminalState>,
     workers: BTreeMap<WorkerId, Worker>,
     worker_control: tokio::sync::mpsc::Receiver<AsyncLocalConnection>,
-    accept_task: tokio::task::JoinHandle<()>,
+    accept_task: watchdog::OwnedTask<()>,
     #[cfg(target_os = "linux")]
     delegated_resources: super::delegated::DelegatedResources,
     watchdog_control: Server,
@@ -93,7 +93,7 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
         AsyncLocalListener::bind(&addresses.endpoint("control"))?
     };
     let (accepted, worker_control) = tokio::sync::mpsc::channel(16);
-    let accept_task = event_loop::runtime().spawn(async move {
+    let accept_task = watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
         loop {
             match listener.accept().await {
                 Ok(stream) => {

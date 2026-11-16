@@ -89,3 +89,5 @@ cargo test --locked -p platform --test shell_control
 ```
 
 Run Linux management tests on Linux or WSL. Use the corresponding isolated environment or test host for real authorization, service writes, wireless devices, mounts, and physical-disk operations; see each topic's document for specific entry points.
+
+`workspace_watchdog_constraints` checks raw task and process spawning separately from explicit owned bootstrap adapters; its regression fixtures keep unowned spawns forbidden.

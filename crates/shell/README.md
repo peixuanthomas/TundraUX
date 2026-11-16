@@ -140,6 +140,8 @@ Already-due wheel steps from one external scroll request share a frame without d
 
 Managed IPC shares an event wake with the UI loop. A small Tokio I/O runtime receives local-socket readiness, and a process-wide bounded worker pool handles frame encoding and decoding outside Ratatui's main thread.
 
+Guardian listeners and connection readers and writers retain watchdog-owned cancellation handles, including on early startup errors. The shared service listener owns its peer task set; closing it cancels every accepted peer without joining on a UI thread.
+
 Shell moves queued messages into background writers without cloning their payloads; rejected enqueue attempts return the original message for an ordered retry.
 
 Per-window input queues stop admitting new application input when their bounded capacity is full. Shell reports that condition while keeping window management and other windows available; external CLI input receives a retryable `busy` response. Pointer cancellation, input fences, and close messages retain reserved queue capacity.

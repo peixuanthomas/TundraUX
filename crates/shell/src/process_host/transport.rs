@@ -275,7 +275,7 @@ impl<M: Message> Queue<M> {
 pub struct Connection<Send: Message, Receive: Message> {
     outgoing: Arc<Queue<Send>>,
     incoming: Arc<Queue<Receive>>,
-    tasks: Vec<tokio::task::JoinHandle<()>>,
+    tasks: Vec<watchdog::OwnedTask<()>>,
 }
 
 impl<Send: Message, Receive: Message> Connection<Send, Receive> {
@@ -285,43 +285,45 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
         let (mut reader, mut writer) = stream.split();
         let send = outgoing.clone();
         let receive = incoming.clone();
-        let write_task = event_loop::runtime().spawn(async move {
-            let result = async {
-                let mut images = HashSet::new();
-                loop {
-                    let message = send.next().await?;
-                    let (bytes, next_images) = event_loop::codec(move || {
-                        let mut message = message;
-                        let next_images = message.frame_mut().map(|frame| {
-                            let mut next = HashSet::new();
-                            for image in &mut frame.images {
-                                if !next.insert(image.image_id) || images.contains(&image.image_id)
-                                {
-                                    image.rgba = Arc::default();
+        let write_task =
+            watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
+                let result = async {
+                    let mut images = HashSet::new();
+                    loop {
+                        let message = send.next().await?;
+                        let (bytes, next_images) = event_loop::codec(move || {
+                            let mut message = message;
+                            let next_images = message.frame_mut().map(|frame| {
+                                let mut next = HashSet::new();
+                                for image in &mut frame.images {
+                                    if !next.insert(image.image_id)
+                                        || images.contains(&image.image_id)
+                                    {
+                                        image.rgba = Arc::default();
+                                    }
                                 }
-                            }
-                            next
-                        });
-                        let bytes = encode_message(&message, limit)?;
-                        Ok((bytes, next_images.unwrap_or(images)))
-                    })
-                    .await?;
-                    writer.write_all(&bytes).await?;
-                    images = next_images;
-                    send.complete();
+                                next
+                            });
+                            let bytes = encode_message(&message, limit)?;
+                            Ok((bytes, next_images.unwrap_or(images)))
+                        })
+                        .await?;
+                        writer.write_all(&bytes).await?;
+                        images = next_images;
+                        send.complete();
+                    }
+                    #[allow(unreachable_code)]
+                    Ok::<(), io::Error>(())
                 }
-                #[allow(unreachable_code)]
-                Ok::<(), io::Error>(())
-            }
-            .await;
-            if let Err(error) = result {
-                send.fail(&error);
-                receive.fail(&error);
-            }
-        });
+                .await;
+                if let Err(error) = result {
+                    send.fail(&error);
+                    receive.fail(&error);
+                }
+            });
         let send = outgoing.clone();
         let receive = incoming.clone();
-        let read_task = event_loop::runtime().spawn(async move {
+        let read_task = watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
             let result = async {
                 let mut assets = BTreeMap::<u64, Arc<[u8]>>::new();
                 let mut sequence = 0;
