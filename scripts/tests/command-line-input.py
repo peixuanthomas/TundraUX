@@ -71,7 +71,8 @@ try:
     run_command("cd /tundra-path-that-does-not-exist || false", code=1)
     output.clear()
     os.write(master, b"/help\r")
-    wait_for(b"/config set motion reduced")
+    wait_for(b"Usage: tundra-cli <command> [options]")
+    wait_for(b"Use <command> --help for subcommands and options.")
     wait_for_prompt()
     wait_for(b"\x1b[777;1;0z")
     for invalid in ("invalid-command", "/help '", "/repl", "/", "/echo MUST_NOT_RUN"):
@@ -80,13 +81,18 @@ try:
         wait_for_prompt()
         wait_for(b"\x1b[777;1;1z")
     assert b"Remove the '/' prefix: echo MUST_NOT_RUN" in output, bytes(output)
-    # A system executable can have the same name as a UX command. Only /help
-    # should show UX help; help must run the executable on the session's PATH.
-    system_help = folder / "help"
-    system_help.write_text("#!/bin/sh\nprintf 'SYSTEM_HELP_RAN\\n'\n")
-    system_help.chmod(0o700)
+    # doctor tests the shared name without Bash's built-in help shadowing PATH.
+    system_doctor = folder / "doctor"
+    system_doctor.write_text("#!/bin/sh\nprintf 'SYSTEM_DOCTOR_RAN\\n'\n")
+    system_doctor.chmod(0o700)
     run_command("export PATH=" + shlex.quote(str(folder)) + ':"$PATH"')
-    run_command("help", b"SYSTEM_HELP_RAN")
+    output.clear()
+    os.write(master, b"/doctor --help\r")
+    wait_for(b"Usage: tundra-cli doctor")
+    wait_for_prompt()
+    wait_for(b"\x1b[777;1;0z")
+    assert b"SYSTEM_DOCTOR_RAN" not in output, bytes(output)
+    run_command("doctor", b"SYSTEM_DOCTOR_RAN")
     assert b"Usage: tundra-cli" not in output, bytes(output)
     run_command("/usr/bin/printf 'absolute:%s\\n' ok", b"absolute:ok")
     run_command("printf 'state:%s:%s\\n' \"$PERSISTED\" \"$PWD\"",
