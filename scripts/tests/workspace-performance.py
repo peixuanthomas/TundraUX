@@ -188,7 +188,7 @@ def statistics(values):
 
 
 class Session:
-    def __init__(self, binary, output, label, width=120, height=36, motion="full"):
+    def __init__(self, binary, output, label, width=120, height=36, motion="full", detailed_trace=False):
         self.binary, self.cli = binary, binary.with_name("tundra-cli")
         self.output, self.label = output, label
         self.temporary = tempfile.TemporaryDirectory(prefix="tundra-perf-")
@@ -205,7 +205,9 @@ class Session:
             folder.mkdir(mode=0o700)
             self.env[f"XDG_{name}_HOME" if name != "RUNTIME" else "XDG_RUNTIME_DIR"] = str(folder)
         self.trace_path = output / f"{label}.trace.jsonl"
-        self.env["TUNDRA_PERF_TRACE"] = str(self.trace_path)
+        self.env.pop("TUNDRA_PERF_TRACE", None)
+        if detailed_trace:
+            self.env["TUNDRA_PERF_TRACE"] = str(self.trace_path)
         for field, value in (("automation.enabled", "true"), ("language", "en-US"),
                              ("motion", motion), ("icon-mode", "ascii")):
             result = subprocess.run([str(self.cli), "config", "set", field, value],
@@ -453,9 +455,9 @@ class Session:
             assert after == self.before, "Shell failed to restore terminal attributes"
 
 
-def launches(binary, output, samples, motion, write, applications=APPLICATIONS):
+def launches(binary, output, samples, motion, write, applications=APPLICATIONS, detailed_trace=False):
     for app in applications:
-        session = Session(binary, output, f"launch-{app}", motion=motion)
+        session = Session(binary, output, f"launch-{app}", motion=motion, detailed_trace=detailed_trace)
         seen = set()
         try:
             for index in range(samples):
@@ -496,9 +498,9 @@ def choose(session, query, suffix):
     return session.until(lambda frame: not any(item["id"].endswith("workspace.choose.query") for item in frame["nodes"]))
 
 
-def children(binary, output, samples, motion, write):
+def children(binary, output, samples, motion, write, detailed_trace=False):
     for app in ("CommandLine", "Vim"):
-        session = Session(binary, output, f"child-{app}", motion=motion)
+        session = Session(binary, output, f"child-{app}", motion=motion, detailed_trace=detailed_trace)
         try:
             for index in range(samples):
                 if app == "CommandLine":
@@ -531,10 +533,10 @@ def children(binary, output, samples, motion, write):
             session.close()
 
 
-def interactions(binary, output, samples, motion, write, single_samples=None):
+def interactions(binary, output, samples, motion, write, single_samples=None, detailed_trace=False):
     for count, width, height in ((1, 120, 36), (2, 217, 39), (4, 217, 39)):
         case_samples = single_samples if count == 1 and single_samples is not None else samples
-        session = Session(binary, output, f"interact-{count}", width, height, motion)
+        session = Session(binary, output, f"interact-{count}", width, height, motion, detailed_trace=detailed_trace)
         try:
             current, _ = session.open_app("Launcher")
             original = titles(current)[0]["id"].rsplit(".", 1)[1]
@@ -660,6 +662,8 @@ def main():
     parser.add_argument("--application", choices=APPLICATIONS, action="append",
                         help="Limit new-window series to these applications; other phases are unchanged")
     parser.add_argument("--motion", choices=("full", "reduced"), default="full")
+    parser.add_argument("--detailed-trace", action="store_true",
+                        help="Record optional per-frame/input timing logs for separate diagnostics; adds observation overhead")
     parser.add_argument("--compare", type=Path)
     parser.add_argument("--enforce-budgets", action="store_true")
     args = parser.parse_args()
@@ -674,8 +678,9 @@ def main():
                 "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                 "platform": platform.platform(), "python": platform.python_version(),
                 "motion": args.motion, "terminal": "xterm-256color/truecolor",
+                "trace_enabled": args.detailed_trace,
                 "measurement": "Python monotonic_ns from physical PTY action to the first matching complete Ratatui output tail",
-                "boundary": "Ratatui buffer diff followed by Crossterm Hide/Show cursor and flush; snapshot verification is excluded",
+                "boundary": "Ratatui buffer diff followed by final cursor state and position commands and flush; snapshot verification is excluded",
                 "limitation": "PTY output completion is measured; terminal emulator pixel presentation is not measured",
                 "requested_phase": args.phase, "completed": False,
                 "applications_requested": args.application or list(APPLICATIONS),
@@ -710,12 +715,12 @@ def main():
         try:
             if args.phase in ("launch", "all"):
                 launches(binary, args.output, args.launch_samples, args.motion, write,
-                         args.application or APPLICATIONS)
+                         args.application or APPLICATIONS, detailed_trace=args.detailed_trace)
             if args.phase in ("interaction", "all"):
                 interactions(binary, args.output, args.interaction_samples, args.motion, write,
-                             args.single_interaction_samples)
+                             args.single_interaction_samples, detailed_trace=args.detailed_trace)
             if args.phase in ("child", "all"):
-                children(binary, args.output, args.child_samples, args.motion, write)
+                children(binary, args.output, args.child_samples, args.motion, write, detailed_trace=args.detailed_trace)
             metadata["completed"] = True
         finally:
             result = report(samples, dict(metadata, elapsed_seconds=round(time.monotonic() - started, 3)))
@@ -734,6 +739,7 @@ def main():
             (args.output / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
             checks = result["acceptance"].values()
             lines = [f"Requested run completed: {result['completed']} (workflow completion only).", "",
+                     f"trace_enabled: {result['trace_enabled']}; normal product logs are retained.", "",
                      f"Measured budget groups: {len(result['acceptance'])}; "
                      f"enough samples: {sum(item['enough_samples'] for item in checks)}; "
                      f"within P95 budget: {sum(item['passed'] for item in checks)}.", "",

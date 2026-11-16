@@ -1,7 +1,11 @@
-"""Check that PTY timing accepts complete visible frames and preserves VT state."""
+"""Check complete PTY frame timing, VT state, and optional trace isolation."""
 import importlib.util
+import os
 from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "workspace_performance", Path(__file__).with_name("workspace-performance.py")
@@ -79,6 +83,49 @@ class FrameBoundaryTests(unittest.TestCase):
             "id": "page/refresh", "actionable": True, "role": "button", "text": "Refresh",
             "rect": {"x": 0, "y": 2, "width": 8, "height": 1}}]}
         self.assertEqual(session.match_output(90, frame)["output_ns"], 100)
+
+
+class SessionTraceTests(unittest.TestCase):
+    def session_environment(self, detailed_trace=None):
+        captured = {}
+
+        class StopBeforeLaunch(Exception):
+            pass
+
+        def capture_environment(*args, **kwargs):
+            captured.update(kwargs["env"])
+            raise StopBeforeLaunch()
+
+        with tempfile.TemporaryDirectory(prefix="tundra-perf-trace-test-") as folder:
+            output = Path(folder)
+            session = performance.Session.__new__(performance.Session)
+            options = {} if detailed_trace is None else {"detailed_trace": detailed_trace}
+            with patch.dict(os.environ, {"TUNDRA_PERF_TRACE": "/inherited/trace.jsonl"}), \
+                    patch.object(performance.subprocess, "run", return_value=SimpleNamespace(returncode=0, stderr=b"")), \
+                    patch.object(performance.subprocess, "Popen", side_effect=capture_environment):
+                try:
+                    with self.assertRaises(StopBeforeLaunch):
+                        session.__init__(output / "tundra-shell", output, "test", **options)
+                    self.assertEqual(os.environ["TUNDRA_PERF_TRACE"], "/inherited/trace.jsonl")
+                finally:
+                    for name in ("raw", "frame_index"):
+                        stream = getattr(session, name, None)
+                        if stream is not None:
+                            stream.close()
+                    for name in ("master", "slave"):
+                        descriptor = getattr(session, name, None)
+                        if descriptor is not None:
+                            os.close(descriptor)
+                    session.temporary.cleanup()
+            return captured, str(output / "test.trace.jsonl")
+
+    def test_default_session_removes_inherited_detailed_trace(self):
+        environment, _ = self.session_environment()
+        self.assertIsNone(environment.get("TUNDRA_PERF_TRACE"))
+
+    def test_detailed_trace_explicitly_uses_this_runs_output(self):
+        environment, expected = self.session_environment(True)
+        self.assertEqual(environment.get("TUNDRA_PERF_TRACE"), expected)
 
 
 if __name__ == "__main__":
