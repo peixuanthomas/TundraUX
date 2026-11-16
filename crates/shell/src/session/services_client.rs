@@ -7,6 +7,22 @@ use workspace_protocol::{ServiceError, ServiceOperation, ServiceValue, WorkerRol
 
 type Completion = Box<dyn FnOnce(&mut ShellSession, io::Result<ServiceValue>) + Send>;
 
+fn automation_configuration_changed(
+    config: &storage::StorageConfig,
+    current: &workspace_protocol::ServiceDomain,
+) -> io::Result<bool> {
+    let current = current
+        .as_ref()
+        .map_err(|error| service_error(error.clone()))?;
+    let enabled = current
+        .value
+        .get("automation")
+        .and_then(|automation| automation.get("enabled"))
+        .and_then(serde_json::Value::as_bool)
+        .ok_or(io::ErrorKind::InvalidData)?;
+    Ok(config.automation.enabled != enabled)
+}
+
 fn workspace_job_reply<T>(
     result: T,
     successful: impl FnOnce(&T) -> bool,
@@ -570,22 +586,13 @@ impl ShellSession {
         config: storage::StorageConfig,
         complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
     ) -> bool {
-        self.defer_workspace_config_confirmed(config, false, complete)
-    }
-
-    pub(in crate::session) fn defer_workspace_config_confirmed(
-        &mut self,
-        config: storage::StorageConfig,
-        confirm_automation: bool,
-        complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
-    ) -> bool {
         if SessionServicesClient::current().is_none() {
             return false;
         }
         let completion = Arc::new(std::sync::Mutex::new(Some(complete)));
         let callback = completion.clone();
         let auth_revision = config.session_authorization_revision;
-        let operation = (|| -> io::Result<ServiceOperation> {
+        let operation = (|| -> io::Result<(ServiceOperation, bool)> {
             let revision = config
                 .session_revision
                 .ok_or_else(|| io::Error::other("configuration was not read"))?;
@@ -600,12 +607,16 @@ impl ShellSession {
             {
                 return Err(service_error(ServiceError::Forbidden));
             }
-            Ok(ServiceOperation::WriteConfig {
-                revision,
-                config: SessionServicesClient::encode(&config)?,
-            })
+            let confirm_automation = automation_configuration_changed(&config, &snapshot.config)?;
+            Ok((
+                ServiceOperation::WriteConfig {
+                    revision,
+                    config: SessionServicesClient::encode(&config)?,
+                },
+                confirm_automation,
+            ))
         })();
-        let result = operation.and_then(|operation| {
+        let result = operation.and_then(|(operation, confirm_automation)| {
             self.submit_workspace_write_kind(
                 operation,
                 true,

@@ -866,31 +866,27 @@ impl ShellSession {
             self.pages.common.workspace_draft,
             self.pages.settings.settings_state.clone(),
         );
-        if self.defer_workspace_config_confirmed(
-            config.clone(),
-            field == ui::SettingsField::AutomationEnabled,
-            move |state, result| match result {
-                Ok(config) => {
-                    state.replace_storage_config(config);
-                    let same = (
-                        state.pages.common.workspace_draft,
-                        state.pages.settings.settings_state.clone(),
-                    ) == draft;
-                    if let Some(settings) = state.pages.settings.settings_state.as_mut() {
-                        if same {
-                            settings.picker = None;
-                            settings.number_editor = None;
-                        }
-                        settings.status = settings_saved_field(field).into();
+        if self.defer_workspace_config(config.clone(), move |state, result| match result {
+            Ok(config) => {
+                state.replace_storage_config(config);
+                let same = (
+                    state.pages.common.workspace_draft,
+                    state.pages.settings.settings_state.clone(),
+                ) == draft;
+                if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                    if same {
+                        settings.picker = None;
+                        settings.number_editor = None;
                     }
-                    state.notify_status(settings_saved_field(field));
+                    settings.status = settings_saved_field(field).into();
                 }
-                Err(error) => state.set_settings_error(i18n::msg!(
-                    "settings-save-failed",
-                    reason = error.to_string()
-                )),
-            },
-        ) {
+                state.notify_status(settings_saved_field(field));
+            }
+            Err(error) => state.set_settings_error(i18n::msg!(
+                "settings-save-failed",
+                reason = error.to_string()
+            )),
+        }) {
             return false;
         }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {

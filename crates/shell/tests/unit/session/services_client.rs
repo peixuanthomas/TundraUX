@@ -490,6 +490,52 @@ fn locally_changed_login_rejects_an_automation_commit_despite_a_stale_config_rev
 }
 
 #[test]
+fn system_defaults_wait_for_the_real_automation_receipt_at_the_common_config_boundary() {
+    let mut state = state();
+    let mut original = storage::StorageConfig::default();
+    original.automation.enabled = true;
+    let mut cached = snapshot(None);
+    cached.config = domain(&original);
+    let mut defaults = original.clone();
+    defaults.automation = storage::StorageConfig::default().automation;
+    assert!(automation_configuration_changed(&defaults, &cached.config).unwrap());
+    let mut unrelated = original.clone();
+    unrelated.screen_timeout_seconds = 30;
+    assert!(!automation_configuration_changed(&unrelated, &cached.config).unwrap());
+
+    let client = SessionServicesClient::for_test(cached);
+    let token = client.submit_input_effect_token();
+    let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+    client.completions.lock().unwrap().push(PendingWrite {
+        receiver,
+        session: Some(None),
+        page: Some(state.active_page_id()),
+        complete: None,
+        task: None,
+        input_effect: Some(token),
+        automation_authorization: Some(7),
+    });
+    client.sync_session(&mut state);
+    assert!(!client.input_effect_fence_complete(token));
+    assert!(state.automation_commit.is_none());
+    reply
+        .send(Ok(ServiceValue::Versioned {
+            revision: 8,
+            value: serde_json::to_value(defaults).unwrap(),
+        }))
+        .unwrap();
+    client.sync_session(&mut state);
+    assert!(client.input_effect_fence_complete(token));
+    assert_eq!(
+        state
+            .automation_commit
+            .as_ref()
+            .map(|commit| (commit.enabled, commit.revision)),
+        Some((false, 8))
+    );
+}
+
+#[test]
 fn an_unchanged_unavailable_domain_does_not_repeat_feedback_or_redraw() {
     let mut state = state();
     let mut snapshot = snapshot(None);
