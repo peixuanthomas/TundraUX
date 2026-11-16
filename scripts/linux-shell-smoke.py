@@ -832,6 +832,20 @@ def check_system_settings_environment(master, output, child, cli, env):
 
 
 def check_editor_resize(master, slave, output, child, isolated, cli, env):
+    def tap_control(identifier, page=None):
+        deadline = time.monotonic() + 5.0
+        while True:
+            frame = control_snapshot(master, output, child, cli, env)
+            item = next((item for item in frame["nodes"]
+                         if item["id"].endswith(identifier) and item["actionable"]), None)
+            if item is not None and (page is None or frame["page"] == page):
+                x, y = control_position(frame, item["id"])
+                os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
+                return
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"Window control {identifier} is unavailable: {frame}")
+            read_available(master, output, 0.05)
+
     directory = isolated / "resize-workflow"
     directory.mkdir()
     path = directory / "notes.txt"
@@ -840,7 +854,9 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
     path.write_text(original)
 
     offset = len(output)
-    open_home_entry(master, output, child, cli, env, "Explorer", "Explorer")
+    frame = open_home_entry(master, output, child, cli, env, "Explorer", "Explorer")
+    explorer_window = next(item["id"].rsplit(".", 1)[1] for item in frame["nodes"]
+                           if "workspace.title." in item["id"] and item["selected"])
     if not wait_for_painted_text(master, output, "Quick access", child):
         raise SystemExit("Explorer did not open for the resize regression")
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
@@ -899,8 +915,21 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
         raise SystemExit("Editor did not accept the unsaved resize text")
     if path.read_text() != original:
         raise SystemExit("resize fixture was saved before requesting a save")
+    deadline = time.monotonic() + 5.0
+    while True:
+        frame = control_snapshot(master, output, child, cli, env)
+        if frame["page"] == "Editor" and any(
+            item["id"].startswith("page/") and addition.strip() in item["text"]
+            for item in frame["nodes"]
+        ):
+            break
+        if time.monotonic() >= deadline:
+            raise SystemExit(f"Editor did not display the unsaved resize text: {frame}")
+        read_available(master, output, 0.05)
+    editor_window = next(item["id"].rsplit(".", 1)[1] for item in frame["nodes"]
+                         if "workspace.title." in item["id"] and item["selected"])
     offset = len(output)
-    os.write(master, b"\x1b")
+    tap_control(f"workspace.close.{editor_window}", "Editor")
     if not wait_for_output(master, output, b"Unsaved document", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("dirty Editor did not show its close confirmation")
 
@@ -944,7 +973,21 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
         raise SystemExit("Editor did not settle after saving the preserved edit")
     offset = len(output)
-    os.write(master, b"\x1b")
+    tap_control(f"workspace.close.{editor_window}", "Editor")
+    deadline = time.monotonic() + 5.0
+    while True:
+        frame = control_snapshot(master, output, child, cli, env)
+        if not any(item["id"].endswith(f"workspace.taskbar.{editor_window}")
+                   for item in frame["nodes"]):
+            break
+        if time.monotonic() >= deadline:
+            raise SystemExit(f"Saved Editor window did not close: {frame}")
+        read_available(master, output, 0.05)
+    if not (frame["page"] == "Explorer" and any(
+        item["id"].endswith(f"workspace.title.{explorer_window}") and item["selected"]
+        for item in frame["nodes"]
+    )):
+        tap_control(f"workspace.taskbar.{explorer_window}")
     if not wait_for_painted_text(master, output, "Quick access", child):
         raise SystemExit("saved Editor did not return to Explorer")
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
