@@ -218,6 +218,46 @@ def control_position(snapshot, identifier):
     return rect["x"] + rect["width"] // 2 + 1, rect["y"] + rect["height"] // 2 + 1
 
 
+def wait_for_snapshot(master, output, child, cli, env, description, predicate):
+    deadline = time.monotonic() + 5.0
+    while True:
+        frame = control_snapshot(master, output, child, cli, env)
+        if predicate(frame):
+            return frame
+        if time.monotonic() >= deadline:
+            raise SystemExit(f"{description}: {json.dumps(frame, ensure_ascii=False)}\n"
+                             + output_diagnostic(output))
+        read_available(master, output, 0.05)
+
+
+def selected_window(frame):
+    return next(item["id"].rsplit(".", 1)[1] for item in frame["nodes"]
+                if "workspace.title." in item["id"] and item["selected"])
+
+
+def restore_window(master, output, child, cli, env, identifier, page, exited=None):
+    # Independent child AppHosts do not restore their caller when they exit.
+    def ready(frame):
+        return (frame["page"] == page
+                and any(item["id"].endswith(f"workspace.title.{identifier}") and item["selected"]
+                        for item in frame["nodes"])
+                and any(item["id"].startswith("page/") and item["actionable"]
+                        for item in frame["nodes"]))
+
+    frame = wait_for_snapshot(master, output, child, cli, env, f"{page} window cannot be restored",
+                              lambda frame: (exited is None or not any(item["id"].endswith(
+                                  (f"workspace.title.{exited}", f"workspace.taskbar.{exited}"))
+                                  for item in frame["nodes"]))
+                              and (ready(frame) or any(item["id"].endswith(f"workspace.taskbar.{identifier}")
+                                   and item["actionable"] for item in frame["nodes"])))
+    if not ready(frame):
+        item = next(item for item in frame["nodes"]
+                    if item["id"].endswith(f"workspace.taskbar.{identifier}") and item["actionable"])
+        x, y = control_position(frame, item["id"])
+        os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
+    return wait_for_snapshot(master, output, child, cli, env, f"{page} window did not restore", ready)
+
+
 def open_home_entry(master, output, child, cli, env, label, page):
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
@@ -469,7 +509,7 @@ def check_package_and_log_views(master: int, slave: int, output: bytearray, chil
             if not wait_for_output(master, output, names[1].encode(), child, 15.0):
                 raise SystemExit("Installed package list did not load")
             step(b"\x1bOS", names[0].encode(), "Package detail did not load")
-            step(b"\x1b", names[1].encode(), "Escape from details did not restore package rows")
+            step(b"\x1bOS", names[1].encode(), "F4 from details did not restore package rows")
     for key, title in ((b"\x1b[17~", b"Search packages"),
                        (b"\x1b[19~", b"Available updates"),
                        (b"\x1b[18~", b"Installed packages")):
@@ -588,7 +628,7 @@ def check_crash_screen(master: int, output: bytearray, child: subprocess.Popen, 
     print("PASS: crash reason/version/component/location/report, Q exit and saved report")
 
 
-def check_permission_draft(master, slave, output, child, path, cli, env):
+def check_permission_draft(master, slave, output, child, path, cli, env, explorer_window):
     original = path.stat()
     offset = len(output)
     os.write(master, b"\x1b[21;2~")
@@ -680,14 +720,26 @@ def check_permission_draft(master, slave, output, child, path, cli, env):
                              + "\npainted screen:\n" + "\n".join(screen)
                              + "\nPTY output:\n" + output_diagnostic(output))
         read_available(master, output, 0.05)
+    permissions_window = selected_window(frame)
     if screen_after(b"\x1b")[recursive_row][column:column + 3] != "[x]":
         raise SystemExit("cancelling discard lost the permission draft")
     if discard_confirmation_visible(control_snapshot(master, output, child, cli, env)):
         raise SystemExit("cancelling discard left its confirmation open")
     screen_after(b"\x1b")
     screen_after(b"\r")
+    wait_for_snapshot(master, output, child, cli, env, "Discard did not close the permission draft",
+                      lambda frame: frame["page"] == "Management"
+                      and selected_window(frame) == permissions_window
+                      and not any(item["id"].startswith(("page-overlay/management.form.",
+                                                        "modal/notification."))
+                                  for item in frame["nodes"]))
     offset = len(output)
     os.write(master, b"\x1b")
+    wait_for_snapshot(master, output, child, cli, env, "Permissions did not move to the background",
+                      lambda frame: frame["page"] == "Home" and any(
+                          item["id"].endswith(f"workspace.taskbar.{permissions_window}")
+                          for item in frame["nodes"]))
+    restore_window(master, output, child, cli, env, explorer_window, "Explorer")
     if not wait_for_painted_text(master, output, "Quick access", child):
         raise SystemExit("discarded permission draft did not return to Explorer")
     current = path.stat()
@@ -848,12 +900,16 @@ def check_system_settings_environment(master, output, child, cli, env):
            or item["actionable"] and "authorize" in item["id"].lower()
            for item in frame["nodes"]):
         raise SystemExit(f"OS environment limitation incorrectly offered authorization: {frame}")
-    for page in ["Management", "Settings", "Home"]:
-        os.write(master, b"\x1b")
-        wait_for_output_quiet(master, output, child, quiet_period=0.3)
-        frame = wait_page(page)
-        if page == "Settings":
-            control_position(frame, "page/settings.operating-system")
+    os.write(master, b"\x1b")
+    frame = wait_for_snapshot(master, output, child, cli, env, "OS details did not close",
+                              lambda frame: frame["page"] == "Management"
+                              and not any(item["id"].startswith("modal/") for item in frame["nodes"]))
+    x, y = control_position(frame, "chrome/shell.back")
+    os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
+    frame = wait_page("Settings")
+    control_position(frame, "page/settings.operating-system")
+    os.write(master, b"\x1b")
+    wait_page("Home")
     print("PASS: unsupported OS settings shows an environment limit and F4 explains systemd requirements without authorization")
 
 
@@ -1078,7 +1134,7 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
         )
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
         raise SystemExit("Explorer did not settle after renaming")
-    check_permission_draft(master, slave, output, child, renamed, cli, env)
+    check_permission_draft(master, slave, output, child, renamed, cli, env, explorer_window)
     offset = len(output)
     os.write(master, b"\x1b")
     if not wait_for_output(master, output, b"Launcher", child, 5.0, offset):
@@ -1260,6 +1316,7 @@ def main() -> int:
         # Exercise the companion CLI launched by the real Shell, not just a
         # standalone REPL. Rebuilding Shell alone can leave an older CLI beside it.
         frame = open_home_entry(master, output, child, cli, env, "Launcher", "Launcher")
+        launcher_window = selected_window(frame)
         if not any("builtin.command-line" in item["id"] and item["actionable"]
                    for item in frame["nodes"]):
             raise SystemExit(f"Launcher did not offer Command Line: {frame}")
@@ -1270,6 +1327,9 @@ def main() -> int:
         username = pwd.getpwuid(os.geteuid()).pw_name
         if not wait_for_output(master, output, f"{username}@/".encode(), child, 10.0, prompt_offset):
             raise SystemExit("embedded CLI did not show an absolute-path prompt; rebuild both shell and cli")
+        frame = wait_for_snapshot(master, output, child, cli, env, "Command Line window did not become ready",
+                                  lambda frame: frame["page"] == "CommandLine")
+        launcher_terminal = selected_window(frame)
         # Command Line's live cursor can keep painting. Drain through the entry
         # animation rather than requiring the entire terminal to become silent.
         entry_deadline = time.monotonic() + 1.0
@@ -1310,7 +1370,8 @@ def main() -> int:
             read_available(master, output, 0.05)
         launcher_offset = len(output)
         os.write(master, b"exit\r")
-        if not wait_for_output(master, output, b"Editor", child, 5.0, launcher_offset):
+        restore_window(master, output, child, cli, env, launcher_window, "Launcher", launcher_terminal)
+        if not wait_for_painted_text(master, output, "Editor", child):
             raise SystemExit("embedded CLI did not return to Launcher:\n" + output_diagnostic(output[launcher_offset:]))
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Launcher did not settle after CLI exit:\n" + output_diagnostic(output[launcher_offset:]))
@@ -1325,7 +1386,8 @@ def main() -> int:
         # Quotes, dollar signs and semicolons must stay part of the directory
         # name: this entry sets the child cwd rather than typing a cd command.
         explorer_offset = len(output)
-        open_home_entry(master, output, child, cli, env, "Explorer", "Explorer")
+        frame = open_home_entry(master, output, child, cli, env, "Explorer", "Explorer")
+        explorer_window = selected_window(frame)
         if not wait_for_painted_text(master, output, "Quick access", child):
             raise SystemExit("Explorer did not open before terminal directory verification")
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
@@ -1364,7 +1426,11 @@ def main() -> int:
         if not wait_for_output(master, output, expected_cwd, child, 5.0, cwd_offset, ignore_spaces=True):
             raise SystemExit("Explorer terminal child had the wrong working directory:\n" + output_diagnostic(output[cwd_offset:]))
         explorer_offset = len(output)
+        frame = wait_for_snapshot(master, output, child, cli, env, "Explorer terminal window did not become ready",
+                                  lambda frame: frame["page"] == "CommandLine")
+        explorer_terminal = selected_window(frame)
         os.write(master, b"exit\r")
+        restore_window(master, output, child, cli, env, explorer_window, "Explorer", explorer_terminal)
         if not wait_for_painted_text(master, output, "Quick access", child):
             raise SystemExit("Explorer terminal did not return to Explorer")
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
