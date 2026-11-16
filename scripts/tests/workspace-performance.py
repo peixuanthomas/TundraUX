@@ -217,6 +217,8 @@ class Session:
         os.set_blocking(self.master, False)
         self.screen = Screen(width, height)
         self.raw = (output / f"{label}.pty").open("wb")
+        self.frame_index = (output / f"{label}.frames.jsonl").open("w")
+        self.frame_number = 0
         self.frames = []
         self.bytes = 0
         self.info = None
@@ -261,8 +263,12 @@ class Session:
         observed = time.monotonic_ns()
         self.raw.write(data)
         self.bytes += len(data)
-        for cells in self.screen.feed(data):
-            self.frames.append({"observed_ns": observed, "byte_offset": self.bytes, "cells": cells})
+        for index, cells in enumerate(self.screen.feed(data)):
+            self.frame_number += 1
+            boundary = {"observed_ns": observed, "byte_offset": self.bytes,
+                        "frame_in_read": index, "frame_number": self.frame_number}
+            self.frame_index.write(json.dumps(boundary) + "\n")
+            self.frames.append(dict(boundary, cells=cells))
         return data
 
     def send(self, value):
@@ -363,6 +369,7 @@ class Session:
         return {"latency_ms": (matched["observed_ns"] - started) / 1_000_000,
                 "action_ns": started, "output_ns": matched["observed_ns"],
                 "output_byte_offset": matched["byte_offset"],
+                "output_frame_number": matched.get("frame_number"),
                 "verification": {"snapshot": frame["number"], "page": frame["page"],
                                  "rect": rect, "styled": styled,
                                  "content_sha256": hashlib.sha256(json.dumps(expected, ensure_ascii=False).encode()).hexdigest()}}
@@ -438,6 +445,7 @@ class Session:
             (self.output / f"{self.label}.startup.jsonl").write_bytes(result.stdout)
         finally:
             self.raw.close()
+            self.frame_index.close()
             after = termios.tcgetattr(self.slave)
             os.close(self.master)
             os.close(self.slave)
