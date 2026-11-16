@@ -30,8 +30,16 @@ fn click(session: &mut ShellSession, area: Rect) {
     assert!(!area.is_empty());
     session.refresh_hit_map();
     let point = (area.x, area.y);
-    session.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
-    session.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    // Debug-build work must not turn a short pointer gesture into a long press.
+    let pressed_at = Instant::now();
+    session.apply_input_at(
+        InputEvent::mouse_down(PointerButton::Left, point),
+        pressed_at,
+    );
+    session.apply_input_at(
+        InputEvent::mouse_up(PointerButton::Left, point),
+        pressed_at + Duration::from_millis(1),
+    );
 }
 fn next(session: &mut ShellSession) {
     let layout = ui::management_layout(
@@ -301,6 +309,7 @@ fn existing_native_tasks_use_common_time_fields_and_keep_complex_rules() {
         assert_eq!(wizard.get("schedule_kind"), "weekly");
         assert_eq!(wizard.get("hour"), "09");
         assert_eq!(wizard.get("minute"), "30");
+        assert_eq!(wizard.get("day_0"), "true", "{source}: {wizard:?}");
         if source == "crontab" {
             assert!(!form.fields[0].choices.iter().any(|value| value == "once"));
         }
@@ -313,9 +322,14 @@ fn existing_native_tasks_use_common_time_fields_and_keep_complex_rules() {
             .as_ref()
             .unwrap();
         assert!(
+            matches!(&form.purpose, FormPurpose::Scheduled(wizard) if wizard.step == ScheduleStep::Time),
+            "{source}: Next did not reach the time step: {form:?}"
+        );
+        assert!(
             form.fields
                 .iter()
-                .any(|field| field.id == "day_0" && field.value == "true")
+                .any(|field| field.id == "day_0" && field.value == "true"),
+            "{source}: {form:?}"
         );
         assert_eq!(
             form.fields.iter().any(|field| field.id == "persistent"),
