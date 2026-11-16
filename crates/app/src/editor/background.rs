@@ -111,6 +111,8 @@ impl<T: Send + 'static> Latest<T> {
                         None => {
                             state.running = false;
                             finish.armed = false;
+                            drop(state);
+                            platform::task_events::notify();
                             return;
                         }
                     }
@@ -122,6 +124,8 @@ impl<T: Send + 'static> Latest<T> {
                     && !cancellation.as_ref().is_some_and(|c| c.is_cancelled())
                 {
                     state.result = Some(result);
+                    drop(state);
+                    platform::task_events::notify();
                 }
             }
         };
@@ -178,6 +182,8 @@ impl<T> Drop for Finish<T> {
             state.pending = None;
             state.result = None;
             state.running = false;
+            drop(state);
+            platform::task_events::notify();
         }
     }
 }

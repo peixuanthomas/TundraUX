@@ -371,6 +371,8 @@ impl AutoAdminJob {
             }
             _ => {}
         }
+        drop(d);
+        platform::task_events::notify();
     }
     pub fn finish(&self, result: Result<String, String>) {
         self.emit(&match result {

@@ -66,6 +66,7 @@ impl Drop for TaskCompletion {
             };
             job.finish(Err(message));
         }
+        platform::task_events::notify();
     }
 }
 

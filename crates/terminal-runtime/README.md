@@ -34,6 +34,7 @@ Startup detection can read the terminal's base colors, default foreground/backgr
 - `PtyProcess::reported_minimum_size()` reads the current report. Report updates advance the output revision even when the screen is unchanged. The report stays out of rendered and recorded output and clears when the program exits.
 - `into_output` cleans up the process tree and drains output, returning a `TerminalOutput` that supports scrollback, resizing, and snapshots.
 - An output receiver can save the complete task history chunk by chunk in the reader thread, without the terminal's scrollback-line limit.
+- New parsed output and EOF notify the optional platform host-loop callback after releasing the parser lock, so output can be displayed as soon as it arrives.
 
 Unix uses process groups, and Windows uses Job Objects to clean up the corresponding child-process tree. macOS also terminates background process groups in the same terminal session, without affecting other terminal instances.
 In managed sessions the independent guardian registers a separate Unix PTY session before the program starts. On Windows the guardian's Job Object contains the child at launch and retains the terminal's nested Job Object for cleanup.

@@ -636,7 +636,7 @@ struct WorkerContext {
     platform: Arc<dyn Platform>,
     trash: Arc<dyn ExplorerTrash>,
     command_rx: mpsc::Receiver<WorkerCommand>,
-    event_tx: mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: platform::task_events::Sender<ExplorerTaskEvent>,
     busy: Arc<AtomicBool>,
     active: Arc<Mutex<Option<ActiveTask>>>,
     mutations_blocked: Arc<AtomicBool>,
@@ -660,7 +660,7 @@ impl ExplorerTaskEngine {
         watchdog: AppWatchdog,
     ) -> Result<Self, WatchdogError> {
         let (command_tx, command_rx) = mpsc::channel();
-        let (event_tx, event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
         let busy = Arc::new(AtomicBool::new(false));
         let active = Arc::new(Mutex::new(None));
         let worker_busy = Arc::clone(&busy);
@@ -1303,7 +1303,7 @@ fn execute_task(
     cancellation: ExplorerCancellationToken,
     platform: &dyn Platform,
     trash: &dyn ExplorerTrash,
-    event_tx: &mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: &platform::task_events::Sender<ExplorerTaskEvent>,
     journal: &mut OperationGuard,
 ) -> ExplorerTaskSummary {
     if let Err(error) = journal.checkpoint(OperationCheckpoint::new(
@@ -1530,7 +1530,7 @@ struct PlanningContext<'a> {
     platform: &'a dyn Platform,
     collision_policy: &'a ExplorerCollisionPolicy,
     cancellation: &'a ExplorerCancellationToken,
-    event_tx: &'a mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: &'a platform::task_events::Sender<ExplorerTaskEvent>,
     reserved_targets: BTreeSet<PathBuf>,
     windows_paths: bool,
     discovered_items: u64,
@@ -1542,7 +1542,7 @@ fn prepare_transfer(
     platform: &dyn Platform,
     plan: &ExplorerTransferPlan,
     cancellation: &ExplorerCancellationToken,
-    event_tx: &mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: &platform::task_events::Sender<ExplorerTaskEvent>,
 ) -> Result<PreparedTransfer, ExplorerTaskError> {
     if plan.sources.is_empty() {
         return Err(ExplorerTaskError::InvalidPlan {
@@ -1812,7 +1812,7 @@ fn prepare_delete(
     platform: &dyn Platform,
     plan: &ExplorerDeletePlan,
     cancellation: &ExplorerCancellationToken,
-    event_tx: &mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: &platform::task_events::Sender<ExplorerTaskEvent>,
 ) -> Result<Vec<(PathBuf, FileAttributes)>, ExplorerTaskError> {
     if plan.paths.is_empty() {
         return Err(ExplorerTaskError::InvalidPlan {
@@ -1906,7 +1906,7 @@ struct ExecutionContext<'a> {
     platform: &'a dyn Platform,
     trash: &'a dyn ExplorerTrash,
     cancellation: ExplorerCancellationToken,
-    event_tx: &'a mpsc::Sender<ExplorerTaskEvent>,
+    event_tx: &'a platform::task_events::Sender<ExplorerTaskEvent>,
     progress: ExplorerTaskProgress,
     summary: ExplorerTaskSummary,
     chunk_size: usize,
@@ -1922,7 +1922,7 @@ impl<'a> ExecutionContext<'a> {
         platform: &'a dyn Platform,
         trash: &'a dyn ExplorerTrash,
         cancellation: ExplorerCancellationToken,
-        event_tx: &'a mpsc::Sender<ExplorerTaskEvent>,
+        event_tx: &'a platform::task_events::Sender<ExplorerTaskEvent>,
         total_items: u64,
         total_bytes: u64,
         chunk_size: usize,
@@ -2872,7 +2872,7 @@ fn log_metadata_error(
     app.record_log(event);
 }
 
-fn send_event(sender: &mpsc::Sender<ExplorerTaskEvent>, event: ExplorerTaskEvent) {
+fn send_event(sender: &platform::task_events::Sender<ExplorerTaskEvent>, event: ExplorerTaskEvent) {
     let _ = sender.send(event);
 }
 

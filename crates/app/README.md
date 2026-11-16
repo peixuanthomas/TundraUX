@@ -32,6 +32,8 @@ The shared application catalog supplies Home and Launcher. System applications s
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 
+Editor calculations, Explorer tasks, and diagnostic results notify an optional host event loop after publishing their results. Domain code uses the platform notifier and does not depend on Shell.
+
 Script state stores the interpreter, arguments, breakpoints, run ID, and pause ID for each document. Editing, undo, and redo move breakpoints; results from an old run or pause location do not overwrite current data.
 
 ### Updates and logs

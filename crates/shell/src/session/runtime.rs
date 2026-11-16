@@ -225,7 +225,7 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         system_services_config_for_startup(&initial_startup),
         shell_watchdog.clone(),
     );
-    let (time_sync_sender, time_sync_receiver) = mpsc::channel();
+    let (time_sync_sender, time_sync_receiver) = platform::task_events::channel();
     let time_sync_watchdog = shell_watchdog.child_component(ComponentId::from_static("time-sync"));
     // Both background jobs must be live before the blocking frost animation so
     // normal login can consume time calibration and prefetched weather data.
@@ -488,7 +488,8 @@ impl LauncherIconRuntime {
         watchdog: &AppWatchdog,
     ) -> Result<Self, String> {
         let (request_sender, request_receiver) = mpsc::channel::<LauncherIconRequest>();
-        let (result_sender, result_receiver) = mpsc::channel::<LauncherIconResult>();
+        let (result_sender, result_receiver) =
+            platform::task_events::channel::<LauncherIconResult>();
         let group = watchdog
             .child_component(ComponentId::from_static("launcher-icons"))
             .task_group("native-icons");
@@ -930,6 +931,7 @@ pub(super) struct FullscreenShellSessionInput<'a, W> {
 pub(super) fn run_fullscreen_shell_session<W: Write>(
     input: FullscreenShellSessionInput<'_, W>,
 ) -> io::Result<(FullscreenShellSessionOutcome, ui::RuntimeAsciiAssets)> {
+    platform::task_events::install_notifier(crate::process_host::event_loop::wake);
     let FullscreenShellSessionInput {
         output,
         config,
@@ -2225,7 +2227,7 @@ fn load_startup_runtime_ascii_assets() -> io::Result<(
 }
 
 pub(super) fn spawn_time_sync_worker(
-    sender: mpsc::Sender<TimedTimeSyncResult>,
+    sender: platform::task_events::Sender<TimedTimeSyncResult>,
     watchdog: &AppWatchdog,
     system_services: system_services::SystemServicesHandle,
 ) -> Result<TimeSyncWorker, watchdog::WatchdogError> {
@@ -2312,7 +2314,7 @@ async fn next_time_sync_wakeup(
 
 fn forward_time_sync_snapshot(
     snapshot: system_services::SystemSnapshot,
-    sender: &mpsc::Sender<TimedTimeSyncResult>,
+    sender: &platform::task_events::Sender<TimedTimeSyncResult>,
     last_utc: &mut Option<DateTime<Utc>>,
     last_error: &mut Option<String>,
 ) -> bool {

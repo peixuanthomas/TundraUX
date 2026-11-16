@@ -25,13 +25,13 @@ pub(in crate::session) struct SettingsUpdateControl {
 
 pub(in crate::session) struct ShellSettingsTaskShared {
     pub(in crate::session) task_group: Option<ManagedTaskGroup>,
-    pub(in crate::session) event_tx: mpsc::Sender<SettingsTimeSyncValidationEvent>,
+    pub(in crate::session) event_tx: platform::task_events::Sender<SettingsTimeSyncValidationEvent>,
     pub(in crate::session) event_rx: Mutex<mpsc::Receiver<SettingsTimeSyncValidationEvent>>,
     pub(in crate::session) workers: Mutex<BTreeMap<u64, ManagedThreadHandle<()>>>,
     pub(in crate::session) next_request_id: std::sync::atomic::AtomicU64,
     pub(in crate::session) system_services: Option<system_services::SystemServicesHandle>,
     pub(in crate::session) system_services_config: Mutex<system_services::SystemServicesConfig>,
-    pub(in crate::session) update_event_tx: mpsc::Sender<SettingsUpdateTaskEvent>,
+    pub(in crate::session) update_event_tx: platform::task_events::Sender<SettingsUpdateTaskEvent>,
     pub(in crate::session) update_event_rx: Mutex<mpsc::Receiver<SettingsUpdateTaskEvent>>,
     pub(in crate::session) update_worker: Mutex<Option<ManagedThreadHandle<()>>>,
     update_control: Mutex<Option<SettingsUpdateControl>>,
@@ -63,8 +63,8 @@ pub(in crate::session) struct ShellSettingsTaskRuntime {
 
 impl ShellSettingsTaskRuntime {
     pub(in crate::session) fn unavailable() -> Self {
-        let (event_tx, event_rx) = mpsc::channel();
-        let (update_event_tx, update_event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
+        let (update_event_tx, update_event_rx) = platform::task_events::channel();
         Self {
             shared: Arc::new(ShellSettingsTaskShared {
                 task_group: None,
@@ -100,8 +100,8 @@ impl ShellSettingsTaskRuntime {
     ) -> Self {
         use std::sync::atomic::Ordering;
 
-        let (event_tx, event_rx) = mpsc::channel();
-        let (update_event_tx, update_event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
+        let (update_event_tx, update_event_rx) = platform::task_events::channel();
         let runtime_id = NEXT_SETTINGS_RUNTIME_ID
             .fetch_add(1, Ordering::Relaxed)
             .max(1);
@@ -548,7 +548,7 @@ impl ShellSettingsTaskRuntime {
                 continue;
             };
             if worker.as_ref().is_some_and(|worker| !worker.is_finished()) {
-                let _ = self.shared.update_event_tx.send(event);
+                let _ = self.shared.update_event_tx.requeue(event);
                 continue;
             }
             if let Some(worker) = worker.take() {

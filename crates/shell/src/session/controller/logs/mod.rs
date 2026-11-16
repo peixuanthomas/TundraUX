@@ -247,6 +247,8 @@ impl ShellSession {
                 && let Ok(mut slot) = output.result.lock()
             {
                 *slot = Some(result);
+                drop(slot);
+                platform::task_events::notify();
             }
         }) {
             Ok(worker) => {

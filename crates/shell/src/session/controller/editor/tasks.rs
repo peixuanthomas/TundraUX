@@ -92,7 +92,7 @@ pub(in crate::session) struct EditorDetachedSave {
 
 pub(in crate::session) struct ShellEditorTaskShared {
     pub(in crate::session) task_group: Option<ManagedTaskGroup>,
-    pub(in crate::session) event_tx: std_mpsc::Sender<EditorTaskEvent>,
+    pub(in crate::session) event_tx: platform::task_events::Sender<EditorTaskEvent>,
     pub(in crate::session) event_rx: StdMutex<std_mpsc::Receiver<EditorTaskEvent>>,
     pub(in crate::session) cancelled: StdArc<StdMutex<BTreeSet<u64>>>,
     pub(in crate::session) workers: StdMutex<BTreeMap<u64, ManagedThreadHandle<()>>>,
@@ -141,7 +141,7 @@ impl ShellEditorTaskRuntime {
     }
 
     pub(in crate::session) fn unavailable() -> Self {
-        let (event_tx, event_rx) = std_mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
         Self {
             shared: StdArc::new(ShellEditorTaskShared {
                 task_group: None,
@@ -159,7 +159,7 @@ impl ShellEditorTaskRuntime {
     }
 
     pub(in crate::session) fn new_managed(watchdog: AppWatchdog) -> Self {
-        let (event_tx, event_rx) = std_mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
         let runtime_id = NEXT_EDITOR_RUNTIME_ID
             .fetch_add(1, Ordering::Relaxed)
             .max(1);
@@ -617,7 +617,7 @@ impl Eq for ShellEditorTaskRuntime {}
 
 pub(in crate::session) fn load_editor_document_task(
     request: &EditorLoadTaskRequest,
-    events: &std_mpsc::Sender<EditorTaskEvent>,
+    events: &platform::task_events::Sender<EditorTaskEvent>,
     cancelled: &StdArc<StdMutex<BTreeSet<u64>>>,
     active_load_bytes: &AtomicU64,
 ) -> Result<EditorLoadedTaskDocument, String> {

@@ -18,9 +18,12 @@
 | `command_session` | System command sessions and executable lookup |
 | `shell_control` | Local Shell control connections and session discovery |
 | `task_history` | History and output for pages, helpers, and scheduled tasks |
+| `task_events` | Result channels and optional host-loop wake notifications |
 | `diagnostics` | `doctor` environment and path checks |
 
 Platform-specific implementations are in `src/linux/`, `src/windows/`, and `src/macos/`. Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
+
+Hosts can install one process-local `task_events` notifier. Result channels notify only after successful delivery; shared result slots and PTY readers notify after publishing and releasing their locks. Libraries retain ordinary channel behavior when no host notifier is installed.
 
 Explorer moves, renames, and undo share `file_operations`: Linux uses `renameat2(RENAME_NOREPLACE)`, macOS uses `renamex_np(RENAME_EXCL)`, and Windows uses `MoveFileExW` without replacement. An existing destination preserves both files. File identities serialize over authenticated session IPC so the shared undo service can validate the same object and parent directories across app processes.
 

@@ -881,6 +881,8 @@ fn read_terminal_output_recorded(
                 if parser.finish_output() {
                     output_revision.fetch_add(1, Ordering::Release);
                 }
+                drop(parser);
+                platform::task_events::notify();
                 return;
             }
             Ok(count) => {
@@ -890,6 +892,7 @@ fn read_terminal_output_recorded(
                     output_revision.fetch_add(1, Ordering::Release);
                     recorded
                 };
+                platform::task_events::notify();
                 if let Some(history) = history
                     && !recorded.is_empty()
                 {

@@ -397,6 +397,8 @@ impl ShellSession {
                         message: message.clone(),
                         select: select.clone(),
                     });
+                    drop(slot);
+                    platform::task_events::notify();
                 }
             },
         ) {

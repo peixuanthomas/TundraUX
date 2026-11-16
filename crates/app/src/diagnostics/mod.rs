@@ -256,7 +256,7 @@ pub struct DiagnosticsTaskRuntime {
     storage: StorageManager,
     process: ProcessWatchdog,
     group: ManagedTaskGroup,
-    event_tx: mpsc::Sender<DiagnosticsTaskEnvelope>,
+    event_tx: platform::task_events::Sender<DiagnosticsTaskEnvelope>,
     event_rx: mpsc::Receiver<DiagnosticsTaskEnvelope>,
     workers: Mutex<BTreeMap<u64, DiagnosticsWorker>>,
     restart_required: Arc<AtomicBool>,
@@ -269,7 +269,7 @@ impl DiagnosticsTaskRuntime {
         process: ProcessWatchdog,
         watchdog: AppWatchdog,
     ) -> Result<Self, WatchdogError> {
-        let (event_tx, event_rx) = mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
         Ok(Self {
             platform,
             storage,
@@ -341,6 +341,7 @@ impl DiagnosticsTaskRuntime {
                     impl Drop for Finished {
                         fn drop(&mut self) {
                             self.0.store(true, Ordering::Release);
+                            platform::task_events::notify();
                         }
                     }
                     let _finished = Finished(worker_task.finished.clone());
@@ -415,7 +416,7 @@ impl DiagnosticsTaskRuntime {
                     .get(&envelope.request_id)
                     .is_some_and(|record| !record.worker.is_finished())
                 {
-                    let _ = self.event_tx.send(envelope);
+                    let _ = self.event_tx.requeue(envelope);
                     continue;
                 }
                 if let Some(record) = workers.remove(&envelope.request_id) {

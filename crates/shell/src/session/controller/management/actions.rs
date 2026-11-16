@@ -1002,6 +1002,7 @@ impl ShellSession {
             };
             if let Some(output) = output.upgrade() {
                 *output.draft.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                platform::task_events::notify();
             }
         }) {
             Ok(worker) => {
@@ -1122,6 +1123,8 @@ impl ShellSession {
                         let mut events = shared.events.lock().unwrap_or_else(|e| e.into_inner());
                         if events.len() < 512 {
                             events.push_back(event.take().expect("event queued once"));
+                            drop(events);
+                            platform::task_events::notify();
                             return;
                         }
                         drop(events);

@@ -198,6 +198,7 @@ impl ShellSession {
             let result = platform::management::query(&query, &cancelled);
             if let Some(output) = output.upgrade() {
                 *output.result.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                platform::task_events::notify();
             }
         });
         self.install_system_time_job(job, worker);
@@ -293,6 +294,7 @@ impl ShellSession {
                         && let Some(output) = output.upgrade()
                     {
                         *output.result.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                        platform::task_events::notify();
                     }
                 };
                 let result = worker_aa.run_approved(std::convert::identity, || {
@@ -311,6 +313,7 @@ impl ShellSession {
                     && let Some(output) = output.upgrade()
                 {
                     *output.result.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(error));
+                    platform::task_events::notify();
                 }
             },
         );

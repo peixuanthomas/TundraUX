@@ -117,6 +117,8 @@ Keyboard, mouse, and touch use the same interruptible transitions. Page, dialog,
 
 Terminal, Vim, and script adapters report changes from output, process errors, saves, document closure, and deferred script launches explicitly, so these events redraw even when their terminal pixels stay the same. Unchanged adapters keep their shared snapshots and request no redraw.
 
+Shell and AppHost install the shared platform event notifier. Background task results, progress, and PTY output wake their event loops after publication; the notifier does not advance watchdog business progress.
+
 Launcher confirmations use the current shared layout to capture button presses and releases before a redraw. Their search field and list remain covered. Explorer popup wheels move the popup selection, and right clicks retain the active popup without changing the covered file list.
 
 See [UI requirements](../../docs/UI-requirements.md) for shared buttons, forms, animations, and layouts. See [Editor and script workspace](../../docs/source-editor.md) for editor operations and [List selection](../../docs/list-selection.md) for page multi-selection.

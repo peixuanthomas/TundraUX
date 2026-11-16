@@ -25,7 +25,7 @@ impl EditorVimHost {
         platform: &dyn Platform,
     ) -> io::Result<()> {
         let directory = app::update::installed_vim_directory(platform).map_err(io::Error::other)?;
-        let (tx, events) = mpsc::channel();
+        let (tx, events) = platform::task_events::channel();
         let cancel = app::update::UpdateCancellation::default();
         let worker_cancel = cancel.clone();
         let language = state.language.clone();

@@ -770,6 +770,7 @@ impl ShellSession {
             let result = query_management_snapshot(&query, &cancelled);
             if let Some(output) = output.upgrade() {
                 *output.snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+                platform::task_events::notify();
             }
         }) {
             Ok(worker) => {

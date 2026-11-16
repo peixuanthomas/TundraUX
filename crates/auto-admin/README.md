@@ -25,6 +25,8 @@ AA policies are `manual`, `automatic`, and `deny`. Automatic approval skips only
 
 Approval, execution, cancellation, and results are synchronized to the shared task history. Output is archived in chunks; secret input is not archived. Pages and helpers use stable IDs, and read-only queries and previews are not registered as modification tasks.
 
+Published output, questions, results, and worker completion notify the optional platform host-loop callback after releasing shared display state.
+
 Homebrew operations also use AA. brew runs as the current macOS user, and native installers receive system passwords for Casks through the task terminal.
 
 ## Documentation and validation

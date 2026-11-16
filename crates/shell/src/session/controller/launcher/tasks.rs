@@ -15,7 +15,7 @@ pub(in crate::session) enum LauncherRefreshEvent {
 pub(in crate::session) struct ShellLauncherTaskShared {
     pub(in crate::session) platform: std::sync::Arc<dyn Platform>,
     pub(in crate::session) task_group: watchdog::ManagedTaskGroup,
-    pub(in crate::session) event_tx: std::sync::mpsc::Sender<LauncherRefreshEvent>,
+    pub(in crate::session) event_tx: platform::task_events::Sender<LauncherRefreshEvent>,
     pub(in crate::session) event_rx:
         std::sync::Mutex<std::sync::mpsc::Receiver<LauncherRefreshEvent>>,
     pub(in crate::session) workers:
@@ -67,7 +67,7 @@ impl ShellLauncherTaskRuntime {
     ) -> Self {
         use std::sync::atomic::Ordering;
 
-        let (event_tx, event_rx) = std::sync::mpsc::channel();
+        let (event_tx, event_rx) = platform::task_events::channel();
         let runtime_id = NEXT_LAUNCHER_RUNTIME_ID
             .fetch_add(1, Ordering::Relaxed)
             .max(1);

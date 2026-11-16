@@ -753,6 +753,7 @@ impl ShellSession {
                         details: vec![(String::new(), message)],
                         ..Default::default()
                     }));
+                platform::task_events::notify();
             }
         }) {
             Ok(worker) => {

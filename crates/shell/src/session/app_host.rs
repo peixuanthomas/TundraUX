@@ -64,6 +64,7 @@ impl AppHostSession {
         services: Arc<SessionServicesClient>,
         timings: &mut AppStartupTimings,
     ) -> io::Result<Self> {
+        platform::task_events::install_notifier(crate::process_host::event_loop::wake);
         let launch: WindowLaunch = serde_json::from_value(init.launch)?;
         let application = launch.application();
         let auth: Option<AuthSession> = init.profile.map(serde_json::from_value).transpose()?;
