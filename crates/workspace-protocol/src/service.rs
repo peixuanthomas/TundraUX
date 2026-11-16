@@ -26,23 +26,72 @@ pub struct ServiceRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServiceOperation {
+    ReadSessionSnapshot,
+    Authorized {
+        authorization_revision: u64,
+        operation: Box<ServiceOperation>,
+    },
     ReadConfig,
-    WriteConfig { revision: u64, config: Value },
+    WriteConfig {
+        revision: u64,
+        config: Value,
+    },
     ReadAuthorization,
-    WriteAuthorization { revision: u64, policy: Value },
+    WriteAuthorization {
+        revision: u64,
+        policy: Value,
+    },
     ReadProfile,
-    WriteProfile { revision: u64, profile: Value },
+    WriteProfile {
+        revision: u64,
+        profile: Value,
+    },
     ReadClockProfile,
-    WriteClockProfile { revision: u64, profile: Value },
-    DeleteClockProfile { user_id: String },
+    WriteClockProfile {
+        revision: u64,
+        profile: Value,
+    },
+    DeleteClockProfile {
+        user_id: String,
+    },
     ReadClockTime,
-    WriteClockTime { anchor: Value },
+    WriteClockTime {
+        anchor: Value,
+    },
     ReadFileOperations,
-    UpdateFileOperations { operation: Value },
+    UpdateFileOperations {
+        operation: Value,
+    },
     ReadSystemSnapshot,
-    WriteSystemSnapshot { snapshot: Value },
-    RequestSystemStatus { active: Option<bool>, refresh: bool },
+    WriteSystemSnapshot {
+        snapshot: Value,
+    },
+    RequestSystemStatus {
+        active: Option<bool>,
+        refresh: bool,
+    },
     ReadSystemStatusRequests,
+}
+
+/// One atomic view of the domains this worker is allowed to read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServiceSessionSnapshot {
+    pub authorization: ServiceDomain,
+    pub config: ServiceDomain,
+    pub profile: ServiceDomain,
+    pub clock_profile: ServiceDomain,
+    pub clock_time: ServiceDomain,
+    pub files: ServiceDomain,
+    pub system: ServiceDomain,
+    pub system_requests: ServiceDomain,
+}
+
+pub type ServiceDomain = Result<ServiceVersion, ServiceError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServiceVersion {
+    pub revision: u64,
+    pub value: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

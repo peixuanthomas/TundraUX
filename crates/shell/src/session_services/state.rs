@@ -7,7 +7,10 @@ use identity::{
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use storage::{StorageConfig, StorageManager};
-use workspace_protocol::{ServiceError, ServiceOperation, ServiceValue, WorkerId, WorkerRole};
+use workspace_protocol::{
+    ServiceDomain, ServiceError, ServiceOperation, ServiceSessionSnapshot, ServiceValue,
+    ServiceVersion, WorkerId, WorkerRole,
+};
 
 pub(super) struct ServiceState {
     storage: StorageManager,
@@ -70,9 +73,50 @@ impl ServiceState {
         operation: ServiceOperation,
         platform: &dyn platform::Platform,
     ) -> Result<ServiceValue, ServiceError> {
+        if let ServiceOperation::Authorized {
+            authorization_revision,
+            operation,
+        } = operation
+        {
+            if authorization_revision != self.authorization.0
+                || matches!(*operation, ServiceOperation::Authorized { .. })
+            {
+                return Err(ServiceError::Forbidden);
+            }
+            return self.execute(worker, *operation, platform);
+        }
         let Some(registered_session) = self.identities.get(&worker) else {
             return Err(ServiceError::Forbidden);
         };
+        if matches!(operation, ServiceOperation::ReadSessionSnapshot) {
+            let snapshot = ServiceSessionSnapshot {
+                authorization: self.snapshot_domain(
+                    worker,
+                    ServiceOperation::ReadAuthorization,
+                    platform,
+                ),
+                config: self.snapshot_domain(worker, ServiceOperation::ReadConfig, platform),
+                profile: self.snapshot_domain(worker, ServiceOperation::ReadProfile, platform),
+                clock_profile: self.snapshot_domain(
+                    worker,
+                    ServiceOperation::ReadClockProfile,
+                    platform,
+                ),
+                clock_time: self.snapshot_domain(worker, ServiceOperation::ReadClockTime, platform),
+                files: self.snapshot_domain(worker, ServiceOperation::ReadFileOperations, platform),
+                system: self.snapshot_domain(
+                    worker,
+                    ServiceOperation::ReadSystemSnapshot,
+                    platform,
+                ),
+                system_requests: self.snapshot_domain(
+                    worker,
+                    ServiceOperation::ReadSystemStatusRequests,
+                    platform,
+                ),
+            };
+            return value(self.authorization.0, snapshot);
+        }
         let shell = worker.role == WorkerRole::Shell;
         let authorization = self.authorization.1.as_ref();
         if !shell {
@@ -95,6 +139,9 @@ impl ServiceState {
             }
         }
         match operation {
+            ServiceOperation::ReadSessionSnapshot | ServiceOperation::Authorized { .. } => {
+                unreachable!()
+            }
             ServiceOperation::ReadConfig => value(self.config.0, &self.config.1),
             ServiceOperation::WriteConfig { revision, config } => {
                 if !shell
@@ -261,6 +308,18 @@ impl ServiceState {
                 };
                 value(0, requests)
             }
+        }
+    }
+
+    fn snapshot_domain(
+        &mut self,
+        worker: WorkerId,
+        operation: ServiceOperation,
+        platform: &dyn platform::Platform,
+    ) -> ServiceDomain {
+        match self.execute(worker, operation, platform)? {
+            ServiceValue::Versioned { revision, value } => Ok(ServiceVersion { revision, value }),
+            ServiceValue::Empty => Err(ServiceError::InvalidRequest),
         }
     }
 }

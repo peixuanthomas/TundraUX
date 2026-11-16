@@ -14,6 +14,61 @@ use workspace_protocol::{ProcessGeneration, RunId, SessionId};
 use super::*;
 
 #[test]
+fn session_snapshot_keeps_domain_permissions_and_stale_window_identity() {
+    let fixture = Fixture::new();
+    let mut state = fixture.state();
+    let shell = worker(WorkerRole::Shell, 1);
+    let guest = worker(WorkerRole::App(SessionId(1)), 2);
+    state.register(shell);
+    state.register(guest);
+    let (_, snapshot): (_, workspace_protocol::ServiceSessionSnapshot) =
+        read(&mut state, guest, ServiceOperation::ReadSessionSnapshot);
+    assert!(snapshot.config.is_ok());
+    assert!(snapshot.authorization.is_ok());
+    assert!(snapshot.clock_time.is_ok());
+    assert_eq!(snapshot.profile, Err(ServiceError::Forbidden));
+    assert_eq!(snapshot.files, Err(ServiceError::Forbidden));
+    assert_eq!(snapshot.system_requests, Err(ServiceError::Forbidden));
+
+    login(&mut state, shell, 0, "next");
+    let (_, stale): (_, workspace_protocol::ServiceSessionSnapshot) =
+        read(&mut state, guest, ServiceOperation::ReadSessionSnapshot);
+    assert_eq!(stale.authorization.unwrap().value, Value::Null);
+    assert_eq!(stale.config, Err(ServiceError::Forbidden));
+    assert_eq!(stale.profile, Err(ServiceError::Forbidden));
+    assert_eq!(stale.clock_time, Err(ServiceError::Forbidden));
+}
+
+#[test]
+fn queued_shell_write_cannot_cross_an_authorization_revision() {
+    let fixture = Fixture::new();
+    let mut state = fixture.state();
+    let shell = worker(WorkerRole::Shell, 1);
+    state.register(shell);
+    let (revision, config): (_, StorageConfig) =
+        read(&mut state, shell, ServiceOperation::ReadConfig);
+    login(&mut state, shell, 0, "next");
+    assert_eq!(
+        state.execute(
+            shell,
+            ServiceOperation::Authorized {
+                authorization_revision: 0,
+                operation: Box::new(ServiceOperation::WriteConfig {
+                    revision,
+                    config: json!(config)
+                }),
+            },
+            &UnsupportedPlatform
+        ),
+        Err(ServiceError::Forbidden)
+    );
+    assert_eq!(
+        read::<StorageConfig>(&mut state, shell, ServiceOperation::ReadConfig),
+        (revision, config)
+    );
+}
+
+#[test]
 fn only_current_authorized_configuration_revision_can_be_saved() {
     let fixture = Fixture::new();
     let mut state = fixture.state();
