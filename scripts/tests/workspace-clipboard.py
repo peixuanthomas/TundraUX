@@ -44,10 +44,10 @@ def main():
 
     def select_file(name):
         frame = session.until(lambda frame: any(
-            item["role"] == "row" and item["id"].startswith("page/")
+            item["role"] == "listitem" and item["id"].startswith("page/")
             and item["actionable"] and name in item["text"] for item in frame["nodes"]
         ))
-        row = next(item for item in frame["nodes"] if item["role"] == "row"
+        row = next(item for item in frame["nodes"] if item["role"] == "listitem"
                    and item["id"].startswith("page/") and item["actionable"]
                    and name in item["text"])
         return click(row["id"])
