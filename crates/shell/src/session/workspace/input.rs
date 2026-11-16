@@ -69,15 +69,16 @@ impl Workspace {
                 .input_focus
                 .and_then(|id| self.windows.get(&id))
                 .is_some_and(|window| {
-                    window.frame.as_ref().map_or_else(
-                        || {
-                            matches!(
-                                window.launch.application(),
-                                WindowApplication::Editor | WindowApplication::CommandLine
-                            )
-                        },
-                        |frame| frame.modal || frame.ctrl_w_passthrough,
-                    )
+                    !window.input_blocked
+                        && window.frame.as_ref().map_or_else(
+                            || {
+                                matches!(
+                                    window.launch.application(),
+                                    WindowApplication::Editor | WindowApplication::CommandLine
+                                )
+                            },
+                            |frame| frame.modal || frame.ctrl_w_passthrough,
+                        )
                 });
             if application_owns_key {
                 self.prefix.clear();
@@ -222,16 +223,15 @@ impl Workspace {
         }
     }
 
-    fn send_input(&mut self, id: SessionId, input: &InputEvent) -> io::Result<()> {
-        self.enqueue(
+    fn send_input(&mut self, id: SessionId, input: &InputEvent) -> io::Result<bool> {
+        Ok(self.enqueue(
             id,
             ShellToApp::Input {
                 serial: 0,
                 layout: self.generation,
                 event: serde_json::to_value(input)?,
             },
-        );
-        Ok(())
+        ))
     }
 
     pub(super) fn cancel_capture(&mut self) {
@@ -297,11 +297,13 @@ impl Workspace {
         }
         self.layout.panes.iter().find_map(|pane| {
             if pane.content.contains(point.into()) {
-                self.windows[&pane.id]
+                let window = &self.windows[&pane.id];
+                window
                     .presented
                     .as_ref()
                     .filter(|frame| {
-                        frame.layout == self.generation
+                        !window.input_blocked
+                            && frame.layout == self.generation
                             && frame.size == Size::new(pane.content.width, pane.content.height)
                     })
                     .map(|_| PointerTarget::Pane(pane.id))
@@ -346,6 +348,15 @@ impl Workspace {
             _ => {}
         }
         self.last_pointer = Some(point);
+        if !matches!(mouse.kind, ui::MouseEventKind::Moved)
+            && self.layout.panes.iter().any(|pane| {
+                pane.content.contains(point.into()) && self.windows[&pane.id].input_blocked
+            })
+        {
+            self.input_rejected = true;
+            self.cancel_capture();
+            return Ok(true);
+        }
         let hit = self.target(point);
         match mouse.kind {
             ui::MouseEventKind::Down(button) => {
@@ -381,7 +392,10 @@ impl Workspace {
                                 return Ok(true);
                             }
                         }
-                        self.send_mouse(id, mouse)?;
+                        if !self.send_mouse(id, mouse)? {
+                            self.suppress_release = Some(button);
+                            return Ok(true);
+                        }
                     }
                     self.capture = Some(PointerCapture {
                         target,
@@ -402,7 +416,14 @@ impl Workspace {
                         && hit == Some(capture.target)
                     {
                         if let PointerTarget::Pane(id) = capture.target {
-                            self.send_mouse(id, mouse)?;
+                            if !self.send_mouse(id, mouse)? {
+                                self.enqueue(
+                                    id,
+                                    ShellToApp::CancelPointer {
+                                        layout: capture.generation,
+                                    },
+                                );
+                            }
                         } else if button == PointerButton::Left {
                             self.activate_pointer(capture.target, state)?;
                         }
@@ -502,7 +523,7 @@ impl Workspace {
             || (self.hides_home() && self.layout.available.contains(point.into())))
     }
 
-    fn send_mouse(&mut self, id: SessionId, mut mouse: MouseInput) -> io::Result<()> {
+    fn send_mouse(&mut self, id: SessionId, mut mouse: MouseInput) -> io::Result<bool> {
         if let Some(pane) = self
             .layout
             .panes
@@ -511,9 +532,9 @@ impl Workspace {
         {
             mouse.position.column -= pane.content.x;
             mouse.position.row -= pane.content.y;
-            self.send_input(id, &InputEvent::Mouse(mouse))?;
+            return self.send_input(id, &InputEvent::Mouse(mouse));
         }
-        Ok(())
+        Ok(false)
     }
 
     fn activate_pointer(&mut self, target: PointerTarget, state: &ShellSession) -> io::Result<()> {

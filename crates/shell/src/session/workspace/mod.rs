@@ -43,6 +43,7 @@ struct Window {
     force_when_started: bool,
     view_requested: Option<ShellToApp>,
     launch_error: bool,
+    input_blocked: bool,
     startup: Option<WindowStartup>,
 }
 
@@ -165,6 +166,8 @@ pub(super) struct Workspace {
     input_serial: u64,
     input_recipients: HashSet<SessionId>,
     input_fences: BTreeMap<SessionId, u64>,
+    input_rejected: bool,
+    input_busy_notice: bool,
     task_catalogs: BTreeMap<SessionId, Vec<String>>,
     tasks_return: Option<(SessionId, SessionId)>,
     toggle_tasks_requested: bool,
@@ -217,6 +220,8 @@ impl Workspace {
             input_serial: 0,
             input_recipients: HashSet::new(),
             input_fences: BTreeMap::new(),
+            input_rejected: false,
+            input_busy_notice: false,
             task_catalogs: BTreeMap::new(),
             tasks_return: None,
             toggle_tasks_requested: false,
@@ -371,6 +376,13 @@ impl Workspace {
                         )
                         || window.status.unresponsive
                 })
+    }
+
+    pub(super) fn take_input_rejection(&mut self) -> (bool, bool) {
+        (
+            std::mem::take(&mut self.input_rejected),
+            std::mem::take(&mut self.input_busy_notice),
+        )
     }
 
     pub(super) fn focused_page(&self) -> Option<&str> {

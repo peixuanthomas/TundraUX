@@ -1021,6 +1021,7 @@ pub fn run_app_host(
         host.receive(message)?;
     }
 
+    let mut outgoing_blocked = false;
     loop {
         let generation = crate::process_host::event_loop::generation();
         connection.progress()?;
@@ -1033,25 +1034,33 @@ pub fn run_app_host(
                 return Ok(());
             }
         }
-        for message in stream.poll()? {
-            host.receive(message)?;
-        }
         let now = Instant::now();
-        host.poll(now)?;
+        if !outgoing_blocked {
+            for message in stream.poll()? {
+                host.receive(message)?;
+            }
+            host.poll(now)?;
+        }
         if let Some(timings) = &mut startup
             && !first_poll_done
         {
             timings.first_poll_us = now.elapsed().as_micros() as u64;
             first_poll_done = true;
         }
+        let was_blocked = outgoing_blocked;
+        outgoing_blocked = false;
         while let Some(message) = host.output.pop_front() {
             if let Err(error) = stream.queue(&message) {
                 if error.kind() == io::ErrorKind::WouldBlock {
                     host.output.push_front(message);
+                    outgoing_blocked = true;
                     break;
                 }
                 return Err(error);
             }
+        }
+        if was_blocked && !outgoing_blocked {
+            continue;
         }
         if host.close_status == WindowClose::Confirmed
             && host.output.is_empty()
@@ -1085,13 +1094,21 @@ pub fn run_app_host(
                 }
             }
         }
-        if !host.output.is_empty() {
+        if !host.output.is_empty() && !outgoing_blocked {
             continue;
         }
         let now = Instant::now();
-        let timeout = host
-            .poll_timeout(now)
-            .min(watchdog::WORKER_PROGRESS_INTERVAL);
+        let timeout = if outgoing_blocked {
+            let timeout = host.next_service_sync.saturating_duration_since(now);
+            if timeout.is_zero() {
+                watchdog::WORKER_PROGRESS_INTERVAL
+            } else {
+                timeout.min(watchdog::WORKER_PROGRESS_INTERVAL)
+            }
+        } else {
+            host.poll_timeout(now)
+                .min(watchdog::WORKER_PROGRESS_INTERVAL)
+        };
         crate::process_host::event_loop::wait_since(generation, timeout);
     }
 }

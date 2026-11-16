@@ -219,6 +219,7 @@ fn framing_preserves_split_headers_bodies_and_final_message_before_eof() {
         ScriptedIo {
             input,
             output: Vec::new(),
+            blocked_writes: 0,
         },
         20,
     );
@@ -236,7 +237,13 @@ fn framing_preserves_split_headers_bodies_and_final_message_before_eof() {
 
 #[test]
 fn framing_bounds_the_write_queue_and_recovers_after_drain() {
-    let mut stream = Framed::new(ScriptedIo::default(), 8);
+    let mut stream = Framed::new(
+        ScriptedIo {
+            blocked_writes: 1,
+            ..Default::default()
+        },
+        8,
+    );
     assert_eq!(
         stream.queue(&"1234567").unwrap_err().kind(),
         io::ErrorKind::InvalidInput
@@ -251,6 +258,7 @@ fn framing_bounds_the_write_queue_and_recovers_after_drain() {
     assert!(stream.poll::<String>().unwrap().is_empty());
     assert!(!stream.pending_write());
     stream.queue(&"next").unwrap();
+    assert!(!stream.pending_write());
     stream.poll::<String>().unwrap();
     assert!(!stream.pending_write());
 }
@@ -260,6 +268,7 @@ fn framing_rejects_oversized_and_truncated_messages() {
     let stream = ScriptedIo {
         input: VecDeque::from([Some(vec![0, 0, 0, 21])]),
         output: Vec::new(),
+        blocked_writes: 0,
     };
     assert_eq!(
         Framed::new(stream, 20).poll::<String>().unwrap_err().kind(),
@@ -268,6 +277,7 @@ fn framing_rejects_oversized_and_truncated_messages() {
     let stream = ScriptedIo {
         input: VecDeque::from([Some(vec![0, 0, 0, 3, b'"']), Some(Vec::new())]),
         output: Vec::new(),
+        blocked_writes: 0,
     };
     assert_eq!(
         Framed::new(stream, 20).poll::<String>().unwrap_err().kind(),
@@ -279,6 +289,7 @@ fn framing_rejects_oversized_and_truncated_messages() {
 struct ScriptedIo {
     input: VecDeque<Option<Vec<u8>>>,
     output: Vec<u8>,
+    blocked_writes: usize,
 }
 
 impl Read for ScriptedIo {
@@ -293,6 +304,10 @@ impl Read for ScriptedIo {
 
 impl Write for ScriptedIo {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.blocked_writes != 0 {
+            self.blocked_writes -= 1;
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
         let size = bytes.len().min(3);
         self.output.extend_from_slice(&bytes[..size]);
         Ok(size)

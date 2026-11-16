@@ -1567,6 +1567,16 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         && !state.screen_saver_active()
                         && windows.input(&input, &mut state)?
                     {
+                        let (rejected, notice) = windows.take_input_rejection();
+                        if rejected && has_external_input {
+                            control.reject_busy();
+                        }
+                        if notice {
+                            state.notify_alert_with_tone(
+                                i18n::msg!("workspace-input-busy"),
+                                ui::NotificationTone::Warning,
+                            );
+                        }
                         state.consume_screen_saver_input(&input, received_at);
                         action = Some(ShellAction::Redraw);
                         continue;
@@ -1668,6 +1678,16 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             }
             if let Some(windows) = workspace.as_mut() {
                 windows.finish_input_batch(has_external_input);
+                let (rejected, notice) = windows.take_input_rejection();
+                if rejected && has_external_input {
+                    control.reject_busy();
+                }
+                if notice {
+                    state.notify_alert_with_tone(
+                        i18n::msg!("workspace-input-busy"),
+                        ui::NotificationTone::Warning,
+                    );
+                }
             }
 
             if control.needs_frame() {

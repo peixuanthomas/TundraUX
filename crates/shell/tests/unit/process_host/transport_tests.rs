@@ -50,6 +50,51 @@ fn byte_backpressure_recovers_after_the_writer_consumes_a_message() {
     queue.push(message).unwrap();
 }
 
+#[test]
+fn a_full_input_queue_keeps_fifo_space_for_pointer_cancel_and_close() {
+    let queue = Queue::new(MAX_CONTROL_BYTES);
+    for serial in 0..(MAX_MESSAGES - RESERVED_MESSAGES) as u64 {
+        queue
+            .push(ShellToApp::Input {
+                serial,
+                layout: LayoutGeneration(1),
+                event: serde_json::Value::Null,
+            })
+            .unwrap();
+    }
+    assert_eq!(
+        queue
+            .push(ShellToApp::Input {
+                serial: 999,
+                layout: LayoutGeneration(1),
+                event: serde_json::Value::Null
+            })
+            .unwrap_err()
+            .0
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+    queue
+        .push(ShellToApp::CancelPointer {
+            layout: LayoutGeneration(1),
+        })
+        .unwrap();
+    queue.push(ShellToApp::RequestClose).unwrap();
+    let state = queue.state.lock().unwrap();
+    for (index, message) in state
+        .messages
+        .iter()
+        .take(MAX_MESSAGES - RESERVED_MESSAGES)
+        .enumerate()
+    {
+        assert!(matches!(message, ShellToApp::Input { serial, .. } if *serial == index as u64));
+    }
+    assert!(matches!(
+        state.messages.back(),
+        Some(ShellToApp::RequestClose)
+    ));
+}
+
 #[cfg(unix)]
 #[test]
 fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {

@@ -73,3 +73,4 @@ ui-workspace-start-application = Start a new application
 ui-workspace-choose-application = Choose an application
 
 ui-workspace-search = Search…
+workspace-input-busy = This window is busy. Try input again shortly, or switch to another window. Window controls remain available.

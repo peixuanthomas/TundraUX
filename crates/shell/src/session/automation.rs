@@ -239,6 +239,20 @@ impl ControlRuntime {
         self.awaiting_frame
     }
 
+    pub fn reject_busy(&mut self) {
+        if let Some(client) = self.active.take()
+            && let Some(server) = &mut self.server
+        {
+            server.respond(
+                client,
+                &Response::failure("busy", i18n::tr!("workspace-input-busy")),
+            );
+        }
+        self.events.clear();
+        self.awaiting_frame = false;
+        cancel_pointer(&mut self.releases);
+    }
+
     pub fn poll_batch(&mut self, now: Instant) -> Vec<Event> {
         let Some(event) = self.poll(now) else {
             return Vec::new();

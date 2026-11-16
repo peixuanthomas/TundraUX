@@ -11,8 +11,10 @@ use workspace_protocol::{
     AppToShell, ShellToApp, SupervisorToWorker, WindowFrame, WorkerToSupervisor,
 };
 
-const MAX_MESSAGES: usize = 256;
-const MAX_CONTROL_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_MESSAGES: usize = 256;
+pub(crate) const MAX_CONTROL_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const RESERVED_MESSAGES: usize = 8;
+pub(crate) const RESERVED_BYTES: usize = 64 * 1024;
 
 pub trait Message: Serialize + DeserializeOwned + Clone + Send + 'static {
     fn frame(&self) -> Option<&WindowFrame> {
@@ -23,6 +25,9 @@ pub trait Message: Serialize + DeserializeOwned + Clone + Send + 'static {
     }
     fn resident_bytes(&self) -> usize {
         size_of_val(self)
+    }
+    fn reserved(&self) -> bool {
+        false
     }
 }
 
@@ -45,6 +50,12 @@ fn value_bytes(value: &serde_json::Value) -> usize {
 }
 
 impl Message for ShellToApp {
+    fn reserved(&self) -> bool {
+        matches!(
+            self,
+            Self::RequestClose | Self::CancelPointer { .. } | Self::InputFence { .. }
+        )
+    }
     fn resident_bytes(&self) -> usize {
         size_of_val(self)
             + match self {
@@ -64,6 +75,12 @@ impl Message for ShellToApp {
     }
 }
 impl Message for WorkerToSupervisor {
+    fn reserved(&self) -> bool {
+        matches!(
+            self,
+            Self::ForceKill { .. } | Self::Finished(_) | Self::Exiting { .. } | Self::AppClosing
+        )
+    }
     fn resident_bytes(&self) -> usize {
         use workspace_protocol::{DesktopOperation, ShellCompletion};
         size_of_val(self)
@@ -82,6 +99,9 @@ impl Message for WorkerToSupervisor {
     }
 }
 impl Message for SupervisorToWorker {
+    fn reserved(&self) -> bool {
+        matches!(self, Self::Close | Self::Exit | Self::Ping { .. })
+    }
     fn resident_bytes(&self) -> usize {
         size_of_val(self)
             + match self {
@@ -168,10 +188,16 @@ impl<M: Message> Queue<M> {
             return Err((io::Error::new(*kind, error.clone()), message));
         }
         let bytes = message.resident_bytes();
-        if bytes > self.budget {
+        let budget = if message.reserved() {
+            self.budget
+        } else {
+            self.budget
+                .saturating_sub(RESERVED_BYTES.min(self.budget / 8))
+        };
+        if bytes > budget {
             return Err((io::ErrorKind::InvalidInput.into(), message));
         }
-        if bytes > self.budget.saturating_sub(state.bytes) {
+        if bytes > budget.saturating_sub(state.bytes) {
             return Err((io::ErrorKind::WouldBlock.into(), message));
         }
         if let Some(frame) = message.frame_mut() {
@@ -192,7 +218,11 @@ impl<M: Message> Queue<M> {
             .iter()
             .filter(|message| message.frame().is_none())
             .count()
-            >= MAX_MESSAGES
+            >= if message.reserved() {
+                MAX_MESSAGES
+            } else {
+                MAX_MESSAGES - RESERVED_MESSAGES
+            }
         {
             return Err((io::ErrorKind::WouldBlock.into(), message));
         }
@@ -386,6 +416,15 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         state.in_flight || !state.messages.is_empty()
+    }
+
+    pub(crate) fn write_backpressured(&self) -> bool {
+        let state = self
+            .outgoing
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.bytes >= self.outgoing.budget / 2 || state.messages.len() >= MAX_MESSAGES / 2
     }
 
     pub fn poll(&mut self) -> io::Result<Vec<Receive>> {

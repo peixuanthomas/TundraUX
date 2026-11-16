@@ -53,6 +53,7 @@ impl Workspace {
             .filter(|pane| pane.id != SessionId(0))
         {
             let window = self.windows.get_mut(&pane.id).expect("visible window");
+            let controls_blocked = controls_blocked || window.input_blocked;
             let focused = Some(pane.id) == self.selection.focused();
             if let Some(capture) = capture {
                 let group = format!("session/{}", pane.id);

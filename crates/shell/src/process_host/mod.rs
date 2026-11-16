@@ -5,14 +5,14 @@ use watchdog::ProcessWatchdog;
 use workspace_protocol::{ShellCompletion, WorkerRole};
 
 mod client;
-pub(crate) mod event_loop;
 #[cfg(target_os = "linux")]
 mod delegated;
 #[cfg(windows)]
 mod desktop;
+pub(crate) mod event_loop;
 mod guardian;
 mod terminal;
-mod transport;
+pub(crate) mod transport;
 
 pub use client::{AppWindowConnection, WindowConnection, WorkerConnection};
 #[cfg(target_os = "linux")]

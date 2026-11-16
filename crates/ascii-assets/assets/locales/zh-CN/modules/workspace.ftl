@@ -73,3 +73,4 @@ ui-workspace-start-application = 启动新应用
 ui-workspace-choose-application = 选择应用
 
 ui-workspace-search = 搜索…
+workspace-input-busy = 此窗口繁忙，暂时无法接收新输入。请稍后重试或切换窗口；窗口管理按钮仍可使用。

@@ -22,8 +22,47 @@ pub(super) fn window(minimum: Size) -> Window {
         force_when_started: false,
         view_requested: None,
         launch_error: false,
+        input_blocked: false,
         startup: None,
     }
+}
+
+#[cfg(unix)]
+fn connected_window(
+    minimum: Size,
+) -> (
+    Window,
+    platform::shell_control::AsyncLocalConnection,
+    platform::shell_control::AsyncLocalListener,
+) {
+    let path = std::env::temp_dir().join(format!(
+        "tundra-prefix-{}-{}.sock",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let listener = {
+        let _runtime = crate::process_host::event_loop::runtime().enter();
+        platform::shell_control::AsyncLocalListener::bind(path.to_str().unwrap()).unwrap()
+    };
+    let (connection, peer) = crate::process_host::event_loop::runtime().block_on(async {
+        let connection = platform::shell_control::AsyncLocalConnection::connect(
+            path.to_str().unwrap(),
+            std::process::id(),
+        )
+        .await
+        .unwrap();
+        let peer = listener.accept().await.unwrap();
+        (connection, peer)
+    });
+    let mut app = window(minimum);
+    app.stream = Some(WindowConnection::new(
+        connection,
+        workspace_protocol::MAX_WINDOW_FRAME_BYTES,
+    ));
+    (app, peer, listener)
 }
 
 fn show(workspace: &mut Workspace, id: SessionId) {
@@ -484,33 +523,7 @@ fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
     let mut state = shell_state();
     let id = SessionId(1);
     let mut workspace = Workspace::new(None, false);
-    let path = std::env::temp_dir().join(format!(
-        "tundra-prefix-{}-{}.sock",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let listener = {
-        let _runtime = crate::process_host::event_loop::runtime().enter();
-        platform::shell_control::AsyncLocalListener::bind(path.to_str().unwrap()).unwrap()
-    };
-    let (connection, peer) = crate::process_host::event_loop::runtime().block_on(async {
-        let connection = platform::shell_control::AsyncLocalConnection::connect(
-            path.to_str().unwrap(),
-            std::process::id(),
-        )
-        .await
-        .unwrap();
-        let peer = listener.accept().await.unwrap();
-        (connection, peer)
-    });
-    let mut app = window(Size::new(106, 16));
-    app.stream = Some(WindowConnection::new(
-        connection,
-        workspace_protocol::MAX_WINDOW_FRAME_BYTES,
-    ));
+    let (app, peer, listener) = connected_window(Size::new(106, 16));
     workspace.windows.insert(id, app);
     workspace.selection.open(id);
     workspace.relayout(Rect::new(0, 0, 217, 39), Rect::new(0, 1, 217, 37), false);
@@ -558,9 +571,112 @@ fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
     drop(workspace);
     drop(peer);
     drop(listener);
-    if path.exists() {
-        std::fs::remove_file(path).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn saturated_window_cancels_pointer_capture_and_keeps_global_shortcuts() {
+    use crate::process_host::transport::{MAX_MESSAGES, RESERVED_MESSAGES};
+    let mut state = shell_state();
+    let id = SessionId(1);
+    let mut workspace = Workspace::new(None, false);
+    let (app, _peer, _listener) = connected_window(Size::new(106, 16));
+    workspace.windows.insert(id, app);
+    workspace.selection.open(id);
+    workspace.relayout(Rect::new(0, 0, 217, 39), Rect::new(0, 1, 217, 37), false);
+    let content = workspace.layout.panes[0].content;
+    let mut frame = WindowFrame::new(
+        workspace.generation,
+        Size::new(content.width, content.height),
+    );
+    frame.sequence = 1;
+    frame.ctrl_w_passthrough = true;
+    workspace
+        .receive(id, AppToShell::Frame(frame), &mut state)
+        .unwrap();
+    workspace.capture = Some(PointerCapture {
+        target: PointerTarget::Pane(id),
+        generation: workspace.generation,
+        button: PointerButton::Left,
+    });
+    let mut accepted = 0;
+    while workspace.enqueue(
+        id,
+        ShellToApp::Input {
+            serial: 0,
+            layout: workspace.generation,
+            event: serde_json::Value::Null,
+        },
+    ) {
+        accepted += 1;
+        assert!(accepted <= MAX_MESSAGES - RESERVED_MESSAGES);
     }
+    assert!(workspace.windows[&id].input_blocked);
+    assert!(workspace.capture.is_none());
+    assert!(matches!(
+        workspace.windows[&id].queued.back(),
+        Some(ShellToApp::CancelPointer { .. })
+    ));
+    assert_eq!(workspace.take_input_rejection(), (true, true));
+    workspace
+        .input(
+            &InputEvent::key_with_modifiers(InputKey::Char('w'), crate::InputModifiers::CTRL),
+            &mut state,
+        )
+        .unwrap();
+    workspace
+        .input(&InputEvent::from_key_label("v"), &mut state)
+        .unwrap();
+    assert!(workspace.chooser.is_some());
+    workspace.request_close(id);
+    assert!(matches!(
+        workspace.windows[&id].queued.back(),
+        Some(ShellToApp::RequestClose)
+    ));
+    assert!(workspace.windows[&id].queued.len() <= MAX_MESSAGES);
+}
+
+#[test]
+fn visible_input_fence_requires_a_current_frame_and_terminal_states_release_it() {
+    let mut state = shell_state();
+    let id = SessionId(1);
+    let mut workspace = Workspace::new(None, false);
+    workspace.windows.insert(id, window(Size::new(106, 16)));
+    workspace.selection.open(id);
+    workspace.relayout(Rect::new(0, 0, 108, 20), Rect::new(0, 1, 108, 18), false);
+    workspace.input_fences.insert(id, 42);
+    workspace
+        .receive(id, AppToShell::InputFence { serial: 42 }, &mut state)
+        .unwrap();
+    assert_eq!(workspace.input_fences.get(&id), Some(&42));
+    let content = workspace.layout.panes[0].content;
+    let mut frame = WindowFrame::new(
+        workspace.generation,
+        Size::new(content.width, content.height),
+    );
+    frame.sequence = 1;
+    frame.processed_input_serial = 41;
+    workspace
+        .receive(id, AppToShell::Frame(frame.clone()), &mut state)
+        .unwrap();
+    assert_eq!(workspace.input_fences.get(&id), Some(&42));
+    frame.sequence = 2;
+    frame.processed_input_serial = 42;
+    workspace
+        .receive(id, AppToShell::Frame(frame.clone()), &mut state)
+        .unwrap();
+    assert!(!workspace.input_fences.contains_key(&id));
+    workspace.input_fences.insert(id, 43);
+    frame.sequence = 1;
+    frame.processed_input_serial = 99;
+    workspace
+        .receive(id, AppToShell::Frame(frame), &mut state)
+        .unwrap();
+    assert_eq!(workspace.input_fences.get(&id), Some(&43));
+    workspace
+        .receive(id, AppToShell::CloseStarted, &mut state)
+        .unwrap();
+    assert!(!workspace.input_fences.contains_key(&id));
 }
 
 #[test]

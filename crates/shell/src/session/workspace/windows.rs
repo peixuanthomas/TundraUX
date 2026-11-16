@@ -1,4 +1,7 @@
 use super::*;
+use crate::process_host::transport::{
+    MAX_CONTROL_BYTES, MAX_MESSAGES, Message, RESERVED_BYTES, RESERVED_MESSAGES,
+};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 impl Workspace {
@@ -49,7 +52,10 @@ impl Workspace {
                     {
                         window.worker = Some(worker);
                         window.state = status;
-                        if status == ProcessState::Unresponsive {
+                        if matches!(
+                            status,
+                            ProcessState::Unresponsive | ProcessState::ForceStopping
+                        ) {
                             self.input_fences.remove(&id);
                         }
                         if let ProcessState::Exited { code, forced } = status {
@@ -131,6 +137,19 @@ impl Workspace {
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
                     Err(_) => window.view_requested = None,
                 }
+            }
+            if window.input_blocked
+                && !stream.write_backpressured()
+                && window.queued.len() < MAX_MESSAGES / 2
+                && window
+                    .queued
+                    .iter()
+                    .map(Message::resident_bytes)
+                    .sum::<usize>()
+                    < MAX_CONTROL_BYTES / 2
+            {
+                window.input_blocked = false;
+                redraw = true;
             }
             match stream.poll() {
                 Ok(messages) => received.extend(messages.into_iter().map(|message| (id, message))),
@@ -353,6 +372,7 @@ impl Workspace {
                 force_when_started: false,
                 view_requested: None,
                 launch_error: false,
+                input_blocked: false,
                 startup: Some(WindowStartup {
                     requested,
                     accepted: None,
@@ -606,7 +626,12 @@ impl Workspace {
                     self.toggle_tasks(state)?;
                 }
             }
-            AppToShell::Status(status) => window.update_status(status),
+            AppToShell::Status(status) => {
+                if status.unresponsive {
+                    self.input_fences.remove(&id);
+                }
+                window.update_status(status);
+            }
             AppToShell::OpenApp(launch) => {
                 if self.selection.focused() == Some(id) && self.pending_global.is_none() {
                     match serde_json::from_value(launch)? {
@@ -649,6 +674,7 @@ impl Workspace {
             }
             AppToShell::CloseStarted => {
                 window.close = CloseProgress::Cleaning(Instant::now());
+                self.input_fences.remove(&id);
             }
             AppToShell::CloseCancelled => {
                 window.close = CloseProgress::Idle;
@@ -800,6 +826,37 @@ impl Workspace {
                 CloseProgress::Cleaning(_) | CloseProgress::Waiting | CloseProgress::Exiting
             )
         {
+            let reserved = message.reserved();
+            let messages = if reserved {
+                MAX_MESSAGES
+            } else {
+                MAX_MESSAGES - RESERVED_MESSAGES
+            };
+            let bytes = if reserved {
+                MAX_CONTROL_BYTES
+            } else {
+                MAX_CONTROL_BYTES - RESERVED_BYTES
+            };
+            if (!reserved && window.input_blocked)
+                || window.queued.len() + usize::from(window.view_requested.is_some()) >= messages
+                || window
+                    .queued
+                    .iter()
+                    .map(Message::resident_bytes)
+                    .sum::<usize>()
+                    + window
+                        .view_requested
+                        .as_ref()
+                        .map_or(0, Message::resident_bytes)
+                    + message.resident_bytes()
+                    > bytes
+            {
+                self.input_busy_notice |= !window.input_blocked;
+                window.input_blocked = true;
+                self.input_rejected = true;
+                self.cancel_capture();
+                return false;
+            }
             if let ShellToApp::Input { serial, .. } = &mut message {
                 self.input_serial += 1;
                 *serial = self.input_serial;
@@ -816,26 +873,7 @@ impl Workspace {
             if let Some(viewport) = window.view_requested.take() {
                 window.queued.push_back(viewport);
             }
-            if let (
-                Some(ShellToApp::Input {
-                    layout: old_layout,
-                    event: old,
-                    serial: old_serial,
-                }),
-                ShellToApp::Input {
-                    layout,
-                    event,
-                    serial,
-                },
-            ) = (window.queued.back_mut(), &message)
-                && old_layout == layout
-                && same_mouse_motion(old, event)
-            {
-                *old = event.clone();
-                *old_serial = *serial;
-            } else {
-                window.queued.push_back(message);
-            }
+            window.queued.push_back(message);
             true
         } else {
             false
@@ -848,18 +886,6 @@ fn report_launch_failure(state: &mut ShellSession, reason: String) {
         i18n::msg!("workspace-launch-failed", reason = reason),
         ui::NotificationTone::Error,
     );
-}
-
-fn same_mouse_motion(previous: &serde_json::Value, next: &serde_json::Value) -> bool {
-    let (Some(previous), Some(next)) = (previous.get("Mouse"), next.get("Mouse")) else {
-        return false;
-    };
-    let (Some(kind), Some(next_kind)) = (previous.get("kind"), next.get("kind")) else {
-        return false;
-    };
-    kind == next_kind
-        && (kind.as_str() == Some("Moved") || kind.get("Drag").is_some())
-        && previous.get("modifiers") == next.get("modifiers")
 }
 
 impl WindowStartup {
