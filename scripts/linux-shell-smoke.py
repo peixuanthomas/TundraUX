@@ -832,6 +832,23 @@ def check_system_settings_environment(master, output, child, cli, env):
 
 
 def check_editor_resize(master, slave, output, child, isolated, cli, env):
+    def wait_frame(description, predicate):
+        deadline = time.monotonic() + 5.0
+        while True:
+            frame = control_snapshot(master, output, child, cli, env)
+            if predicate(frame):
+                return frame
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"{description}: {json.dumps(frame, ensure_ascii=False)}\n"
+                                 + output_diagnostic(output))
+            read_available(master, output, 0.05)
+
+    def window_node(frame, identifier):
+        return next((item for item in frame["nodes"] if item["id"].endswith(identifier)), {})
+
+    def painted(frame):
+        return "".join(frame["lines"]).replace(" ", "")
+
     def tap_control(identifier, page=None):
         deadline = time.monotonic() + 5.0
         while True:
@@ -936,8 +953,26 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
     offset = len(output)
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     os.kill(child.pid, signal.SIGWINCH)
-    if not wait_for_output(master, output, b"Terminal is too small (80x24)", child, 5.0, offset, ignore_spaces=True):
-        raise SystemExit("small-terminal overlay did not render")
+
+    def hidden_confirmation(frame):
+        return ((frame["width"], frame["height"], frame["page"]) == (80, 24, "terminal_size")
+                and window_node(frame, f"workspace.title.{editor_window}").get("selected")
+                and window_node(frame, f"workspace.close.{editor_window}").get("enabled") is False
+                and not any(item["actionable"] and item["id"].startswith(("page/", "page-overlay/"))
+                            for item in frame["nodes"]))
+
+    wait_frame("Small terminal did not explain the hidden close confirmation",
+               lambda frame: hidden_confirmation(frame)
+               and window_node(frame, "workspace.dismiss").get("actionable")
+               and window_node(frame, f"workspace.force-kill.{editor_window}").get("actionable")
+               and "largerterminaltoshowitssaveorrunning-taskconfirmation" in painted(frame))
+    os.write(master, b"\x1b")
+    wait_frame("Dismissing the size guidance did not retain the paused Editor",
+               lambda frame: hidden_confirmation(frame)
+               and not window_node(frame, f"workspace.close.{editor_window}").get("actionable")
+               and window_node(frame, f"workspace.minimize.{editor_window}").get("actionable")
+               and "Enlargetheterminaltoatleast108×20." in painted(frame)
+               and "Currentterminal:80×24" in painted(frame))
     os.write(master, b"UNEXPECTED_SMALL_TERMINAL_INPUT\r")
     deadline = time.monotonic() + 0.5
     while time.monotonic() < deadline:
@@ -952,6 +987,10 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
     os.kill(child.pid, signal.SIGWINCH)
     if not wait_for_output(master, output, b"Unsaved document", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("restoring the terminal lost the active close confirmation")
+    wait_frame("Restoring the terminal did not restore the original Editor's confirmation",
+               lambda frame: frame["page"] == "Editor"
+               and window_node(frame, f"workspace.title.{editor_window}").get("selected")
+               and "Unsaveddocument" in painted(frame))
     deadline = time.monotonic() + 0.75
     while time.monotonic() < deadline:
         read_available(master, output, 0.05)
