@@ -571,7 +571,7 @@ impl Workspace {
                 if self
                     .input_fences
                     .get(&id)
-                    .is_some_and(|serial| frame.processed_input_serial >= *serial)
+                    .is_some_and(|serial| frame.confirmed_input_fence >= *serial)
                 {
                     self.input_fences.remove(&id);
                 }

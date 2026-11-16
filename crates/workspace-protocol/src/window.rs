@@ -207,6 +207,8 @@ pub struct AppStartupTimings {
 pub struct WindowFrame {
     pub sequence: u64,
     pub processed_input_serial: u64,
+    #[serde(default)]
+    pub confirmed_input_fence: u64,
     pub layout: LayoutGeneration,
     pub size: Size,
     #[serde(default)]
@@ -239,6 +241,7 @@ impl WindowFrame {
         Self {
             sequence: 0,
             processed_input_serial: 0,
+            confirmed_input_fence: 0,
             layout,
             size,
             page: String::new(),

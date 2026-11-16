@@ -17,7 +17,7 @@ Window frames include the additive, default-false `ctrl_w_passthrough` flag. App
 
 Window frames also carry styled Markdown headings as text and geometry. The receiving Shell can use native text sizing after checking the pane's bounds.
 
-Private protocol version 2 adds monotonic frame sequences and processed input serials. A visible input fence completes when Shell accepts a current-viewport frame carrying its serial. Background window I/O resolves image references in wire order before retaining only the newest frame; it preserves first-frame startup timings across replacement.
+Private protocol version 2 adds monotonic frame sequences, processed input serials for visible-feedback tracing, and a separate `confirmed_input_fence` high-water mark. A visible input fence completes when Shell accepts a current-viewport frame confirming that fence after its required operation receipt. Ordinary input tracing cannot confirm a fence that has not arrived or is still awaiting its receipt. Background window I/O resolves image references in wire order before retaining only the newest frame; it preserves first-frame startup timings across replacement.
 
 The public watchdog request and CLI result protocol keeps its separate `WATCHDOG_PROTOCOL_VERSION` at 1.
 

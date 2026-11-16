@@ -654,20 +654,21 @@ fn visible_input_fence_requires_a_current_frame_and_terminal_states_release_it()
         Size::new(content.width, content.height),
     );
     frame.sequence = 1;
-    frame.processed_input_serial = 41;
+    frame.processed_input_serial = 99;
+    frame.confirmed_input_fence = 41;
     workspace
         .receive(id, AppToShell::Frame(frame.clone()), &mut state)
         .unwrap();
     assert_eq!(workspace.input_fences.get(&id), Some(&42));
     frame.sequence = 2;
-    frame.processed_input_serial = 42;
+    frame.confirmed_input_fence = 42;
     workspace
         .receive(id, AppToShell::Frame(frame.clone()), &mut state)
         .unwrap();
     assert!(!workspace.input_fences.contains_key(&id));
     workspace.input_fences.insert(id, 43);
     frame.sequence = 1;
-    frame.processed_input_serial = 99;
+    frame.confirmed_input_fence = 99;
     workspace
         .receive(id, AppToShell::Frame(frame), &mut state)
         .unwrap();

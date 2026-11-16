@@ -64,6 +64,7 @@ pub fn capture_workspace_frame(
     WindowFrame {
         sequence: 0,
         processed_input_serial: 0,
+        confirmed_input_fence: 0,
         layout,
         size,
         cells,
