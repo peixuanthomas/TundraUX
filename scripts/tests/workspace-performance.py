@@ -531,8 +531,9 @@ def children(binary, output, samples, motion, write):
             session.close()
 
 
-def interactions(binary, output, samples, motion, write):
+def interactions(binary, output, samples, motion, write, single_samples=None):
     for count, width, height in ((1, 120, 36), (2, 217, 39), (4, 217, 39)):
+        case_samples = single_samples if count == 1 and single_samples is not None else samples
         session = Session(binary, output, f"interact-{count}", width, height, motion)
         try:
             current, _ = session.open_app("Launcher")
@@ -547,7 +548,7 @@ def interactions(binary, output, samples, motion, write):
                 session.send(b"\x17s")
                 current = choose(session, "Launcher", "application.launcher")
             current = session.until(lambda frame: len(titles(frame)) == count and frame["page"] == "Launcher")
-            for index in range(samples):
+            for index in range(case_samples):
                 # Each sample is one physical input, then complete output, then verification.
                 current = session.until(lambda frame: any(item["id"] == "page/launcher.search" and item["actionable"]
                                                           for item in frame["nodes"]))
@@ -592,7 +593,7 @@ def interactions(binary, output, samples, motion, write):
                     write(dict(kind="interaction", action="pane-focus", index=index,
                                layout=f"{count}-window", size=f"{width}x{height}", **timing))
             write(dict(kind="resources", layout=f"{count}-window", resources=session.resources()))
-            print(f"PASS: {count} windows: {samples} samples per interaction type", flush=True)
+            print(f"PASS: {count} windows: {case_samples} samples per interaction type", flush=True)
         finally:
             session.close()
 
@@ -652,6 +653,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--launch-samples", type=int, default=50)
     parser.add_argument("--interaction-samples", type=int, default=100)
+    parser.add_argument("--single-interaction-samples", type=int,
+                        help="Override only the single-window interaction count for diagnostic runs")
     parser.add_argument("--child-samples", type=int, default=10)
     parser.add_argument("--phase", choices=("launch", "interaction", "child", "all"), default="all")
     parser.add_argument("--application", choices=APPLICATIONS, action="append",
@@ -661,6 +664,7 @@ def main():
     parser.add_argument("--enforce-budgets", action="store_true")
     args = parser.parse_args()
     assert args.launch_samples >= 1 and args.interaction_samples >= 1 and args.child_samples >= 1
+    assert args.single_interaction_samples is None or args.single_interaction_samples >= 1
     binary = args.binary.resolve()
     assert binary.is_file() and binary.with_name("tundra-cli").is_file()
     args.output.mkdir(parents=True, exist_ok=False)
@@ -677,6 +681,7 @@ def main():
                 "applications_requested": args.application or list(APPLICATIONS),
                 "launch_samples_requested": args.launch_samples,
                 "child_samples_requested": args.child_samples,
+                "single_window_interaction_samples_requested": args.single_interaction_samples or args.interaction_samples,
                 "interaction_samples_requested_per_type": args.interaction_samples}
     environment = binary.parent / "build-environment.json"
     if environment.is_file():
@@ -707,7 +712,8 @@ def main():
                 launches(binary, args.output, args.launch_samples, args.motion, write,
                          args.application or APPLICATIONS)
             if args.phase in ("interaction", "all"):
-                interactions(binary, args.output, args.interaction_samples, args.motion, write)
+                interactions(binary, args.output, args.interaction_samples, args.motion, write,
+                             args.single_interaction_samples)
             if args.phase in ("child", "all"):
                 children(binary, args.output, args.child_samples, args.motion, write)
             metadata["completed"] = True
