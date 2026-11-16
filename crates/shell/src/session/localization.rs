@@ -21,15 +21,14 @@ pub(super) struct PreparedLanguage {
     pub diagnostics: Vec<i18n::RepairDiagnostic>,
 }
 
-pub(super) enum InitialLanguage {
-    Prepared(PreparedLanguage),
-    FromShell(serde_json::Value),
-}
-
 #[derive(serde::Serialize, serde::Deserialize)]
 struct WindowLanguage {
     snapshot: i18n::LanguageSnapshotData,
     catalog: i18n::LanguageCatalog,
+}
+
+thread_local! {
+    static WINDOW_LANGUAGE: std::cell::RefCell<Option<(Arc<i18n::LanguageSnapshot>, u64, serde_json::Value)>> = const { std::cell::RefCell::new(None) };
 }
 
 impl PreparedLanguage {
@@ -66,9 +65,24 @@ impl PreparedLanguage {
 
 impl ShellSession {
     pub(super) fn export_window_language(&self) -> serde_json::Result<serde_json::Value> {
-        serde_json::to_value(WindowLanguage {
-            snapshot: self.language.export(),
-            catalog: self.language_catalog.clone(),
+        WINDOW_LANGUAGE.with(|cached| {
+            let mut cached = cached.borrow_mut();
+            if let Some((snapshot, generation, data)) = cached.as_ref()
+                && Arc::ptr_eq(snapshot, &self.language)
+                && *generation == self.language.generation()
+            {
+                return Ok(data.clone());
+            }
+            let data = serde_json::to_value(WindowLanguage {
+                snapshot: self.language.export(),
+                catalog: self.language_catalog.clone(),
+            })?;
+            *cached = Some((
+                self.language.clone(),
+                self.language.generation(),
+                data.clone(),
+            ));
+            Ok(data)
         })
     }
 

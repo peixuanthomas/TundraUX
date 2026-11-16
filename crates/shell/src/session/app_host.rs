@@ -119,7 +119,8 @@ impl AppHostSession {
         if authoritative_auth != auth {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
-        SessionServicesClient::decode::<storage::StorageConfig>(&session_snapshot.config)?;
+        let (_, config): (_, storage::StorageConfig) =
+            SessionServicesClient::decode(&session_snapshot.config)?;
         if auth
             .as_ref()
             .is_some_and(|auth| auth.role != UserRole::Guest)
@@ -128,6 +129,15 @@ impl AppHostSession {
                 &session_snapshot.profile,
             )?;
         }
+        let language_ready = init.language.map(|data| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            crate::process_host::event_loop::runtime().spawn_blocking(move || {
+                let started = Instant::now();
+                let language = PreparedLanguage::restore_from_shell(data, &config.language);
+                let _ = sender.send((language, started.elapsed().as_micros() as u64));
+            });
+            receiver
+        });
         let platform: Arc<dyn Platform> = Arc::from(platform::native_platform());
         let mut startup = ShellStartupState::clean(platform.kind(), platform.capabilities());
         startup.storage_manager = Some(StorageManager::from_layout(
@@ -154,6 +164,11 @@ impl AppHostSession {
         let resources_started = Instant::now();
         let ascii_assets = ui::RuntimeAsciiAssets::load_default().map_err(asset_io_error)?;
         timings.resources_us = resources_started.elapsed().as_micros() as u64;
+        let (language, language_restore_us) = language_ready
+            .map(|receiver| receiver.recv())
+            .transpose()
+            .map_err(io::Error::other)?
+            .unwrap_or((None, 0));
         let size = Size::new(
             init.size.width.max(MIN_CONTENT_SIZE.width),
             init.size
@@ -163,13 +178,14 @@ impl AppHostSession {
         );
         let terminal_size = (size.width, size.height + 2);
         let build_started = Instant::now();
+        let mut construction_language_us = 0;
         let mut state = ShellSession::new_with_runtime_services(
             ShellLaunchConfig::default(),
             terminal_size,
             startup,
             ascii_assets,
             ShellRuntimeServices {
-                language: init.language.map(InitialLanguage::FromShell),
+                language,
                 terminal_image_support: init.image_cell_size.is_some(),
                 explorer,
                 diagnostics,
@@ -184,8 +200,9 @@ impl AppHostSession {
                 inherited_auth: auth,
                 session_snapshot: Some(session_snapshot),
             },
-            Some(&mut timings.language_load_us),
+            Some(&mut construction_language_us),
         );
+        timings.language_load_us = language_restore_us + construction_language_us;
         timings.session_build_us = build_started.elapsed().as_micros() as u64;
         state.set_terminal_text_sizing_support(init.text_sizing);
         if application == WindowApplication::Launcher {

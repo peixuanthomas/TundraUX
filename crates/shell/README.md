@@ -58,6 +58,8 @@ Opening a managed application restores a running window or creates an AppHost if
 
 Shell validates the configured language and its English fallback during the startup animation. It sends the current validated resources and language choices to new AppHosts. AppHosts rebuild their translation bundles in memory and load from disk if the shared resources are unavailable or the configured language has changed. Choosing the current language again in Settings refreshes the resources for new windows.
 
+Shell caches the exported language data for each language generation. New AppHosts restore shared translation bundles alongside loading static assets; unavailable or mismatched language data follows the same disk recovery path as before.
+
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
 The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Logged-in non-guest users can open Tasks. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9 after required account validation.
@@ -151,7 +153,7 @@ Per-window input queues stop admitting new application input when their bounded 
 | `handshake_us` | From receiving `AppStarted` through connecting to AppHost, exchanging Hello/Welcome, and queuing Init |
 | `services_setup_us` | From AppHost receiving Init through connecting to SessionServices, reading configuration, and registering its local watchdog |
 | `resources_us` | Loading the default ASCII artwork, icon catalogs, and clock font |
-| `session_init_us` | Building and activating the AppHost session, excluding `resources_us`. Includes session construction (`session_build_us`), initial profile/config synchronization (`session_sync_us`), and opening the requested page (`launch_activate_us`). Within construction, `language_load_us` measures rebuilding the shared translation bundles or loading them from disk. |
+| `session_init_us` | Building and activating the AppHost session, excluding `resources_us`. Includes session construction (`session_build_us`), initial profile/config synchronization (`session_sync_us`), and opening the requested page (`launch_activate_us`). `language_load_us` measures rebuilding shared translation bundles or the disk fallback; shared restoration can overlap static asset loading. |
 | `first_frame_ready_us` | From session initialization to preparation of AppHost's first frame. Includes its first event-loop poll (`first_poll_us`), any wait to render, and the actual draw and capture (`first_draw_us`) |
 | `window_ipc_us` | Remaining time after the Init enqueue. Includes Init delivery, frame serialization and delivery, Shell polling and validation, and any wait for a subsequent frame if the first viewport is stale |
 

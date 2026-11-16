@@ -148,17 +148,9 @@ impl ShellSession {
             storage_config.time_sync.server_url = None;
         }
         let language_started = language_load_us.as_ref().map(|_| Instant::now());
-        let prepared_language = runtime_services
-            .language
-            .and_then(|language| match language {
-                InitialLanguage::Prepared(language) => Some(language),
-                InitialLanguage::FromShell(data) => {
-                    PreparedLanguage::restore_from_shell(data, &storage_config.language)
-                }
-            })
-            .unwrap_or_else(|| {
-                PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language)
-            });
+        let prepared_language = runtime_services.language.unwrap_or_else(|| {
+            PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language)
+        });
         if let (Some(duration), Some(started)) = (language_load_us, language_started) {
             *duration = started.elapsed().as_micros() as u64;
         }

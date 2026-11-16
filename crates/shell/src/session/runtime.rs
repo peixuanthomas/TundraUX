@@ -992,7 +992,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         startup,
         ascii_assets,
         ShellRuntimeServices {
-            language: Some(InitialLanguage::Prepared(language_runtime.clone())),
+            language: Some(language_runtime.clone()),
             terminal_image_support: launcher_icons.is_some(),
             explorer: explorer_task_runtime,
             diagnostics: diagnostics_task_runtime,

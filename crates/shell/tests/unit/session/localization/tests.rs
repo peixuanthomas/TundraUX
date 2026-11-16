@@ -414,3 +414,44 @@ fn discovered_language_rows_share_setup_render_and_mouse_geometry() {
     let last_row = (rendered.x, rendered.y + 2);
     assert_eq!(f.state.setup_language_index_at(last_row), Some(2));
 }
+
+#[test]
+fn window_language_export_cache_tracks_reloads_and_cannot_be_mutated_by_a_caller() {
+    let mut fixture = fixture();
+    fixture
+        .state
+        .save_region_picker_value(Some("zh-CN".into()), None);
+    let first = fixture.state.export_window_language().unwrap();
+    let first_generation = PreparedLanguage::restore_from_shell(first, "zh-CN")
+        .unwrap()
+        .snapshot
+        .generation();
+    let path = fixture
+        .root
+        .join("assets/locales/zh-CN/recovery/startup.ftl");
+    let original = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        original.replace(
+            "resources-recovery-ok = 确定",
+            "resources-recovery-ok = 缓存已刷新",
+        ),
+    )
+    .unwrap();
+    fixture
+        .state
+        .save_region_picker_value(Some("zh-CN".into()), None);
+    let current = fixture.state.export_window_language().unwrap();
+    let restored = PreparedLanguage::restore_from_shell(current.clone(), "zh-CN").unwrap();
+    assert!(restored.snapshot.generation() > first_generation);
+    assert_eq!(
+        restored
+            .snapshot
+            .render(&i18n::msg!("resources-recovery-ok")),
+        "缓存已刷新"
+    );
+    let mut modified = current.clone();
+    modified["snapshot"]["code"] = "invalid".into();
+    assert_eq!(fixture.state.export_window_language().unwrap(), current);
+    assert!(PreparedLanguage::restore_from_shell(modified, "zh-CN").is_none());
+}
