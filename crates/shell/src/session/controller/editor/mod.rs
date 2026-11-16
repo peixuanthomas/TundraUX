@@ -647,6 +647,7 @@ impl ShellSession {
                 self.clear_editor_recovery();
             } else {
                 self.pages.editor.editor_recovery_dirty_since = None;
+                self.pages.editor.editor_recovery_retry_after = None;
             }
         }
         if mode_changed {

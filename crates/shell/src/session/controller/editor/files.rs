@@ -669,6 +669,7 @@ impl ShellSession {
                 self.pages.editor.editor_discard_for_open = false;
                 self.pages.editor.editor_recovery_dirty_since = None;
                 self.pages.editor.editor_last_recovery_write = None;
+                self.pages.editor.editor_recovery_retry_after = None;
                 let read_only = self
                     .app
                     .editor_state()

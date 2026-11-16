@@ -157,6 +157,7 @@ impl ShellSession {
         self.pages.editor.editor_message = None;
         self.pages.editor.editor_recovery_dirty_since = None;
         self.pages.editor.editor_last_recovery_write = None;
+        self.pages.editor.editor_recovery_retry_after = None;
         self.app.dispatch_at(
             app::AppCommand::SetDiagnosticsSnapshot(None),
             Instant::now(),

@@ -39,6 +39,8 @@ Background controllers report whether they consumed content, layout, notificatio
 
 Scheduled-task preview debounce deadlines run only on the time step while no preview request is active. Returning to an earlier step keeps the draft without leaving an expired timer in the event loop.
 
+Failed editor recovery writes retain the dirty draft and retry after ten seconds. Editing does not postpone that retry deadline; normal close and logout can still request an immediate recovery write and require its actual result.
+
 External input fences confirm Copy/Cut only after the shared clipboard service has completed the corresponding mutation and its result has reached the UI; later clipboard writes do not delay that fence. Physical input feedback and other windows continue while it waits.
 
 ## Session flow

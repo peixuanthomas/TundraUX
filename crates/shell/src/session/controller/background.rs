@@ -92,6 +92,9 @@ impl ShellSession {
                 if let Some(last) = page.editor_last_recovery_write {
                     at = at.max(last + super::editor::EDITOR_RECOVERY_INTERVAL);
                 }
+                if let Some(retry_at) = page.editor_recovery_retry_after {
+                    at = at.max(retry_at);
+                }
                 timeout = timeout.min(at.saturating_duration_since(now));
             }
         }

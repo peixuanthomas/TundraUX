@@ -1,6 +1,10 @@
 use super::*;
 use crate::session::*;
 
+#[cfg(test)]
+#[path = "../../../../tests/unit/session/controller/editor/recovery_tests.rs"]
+mod tests;
+
 impl ShellSession {
     pub(in crate::session) fn reset_editor_recovery_identity(&mut self) -> bool {
         if !self.clear_editor_recovery() {
@@ -90,6 +94,11 @@ impl ShellSession {
                 .editor
                 .editor_last_recovery_write
                 .is_some_and(|last| now.saturating_duration_since(last) < EDITOR_RECOVERY_INTERVAL)
+            || self
+                .pages
+                .editor
+                .editor_recovery_retry_after
+                .is_some_and(|retry_at| now < retry_at)
         {
             return false;
         }
@@ -164,6 +173,8 @@ impl ShellSession {
             ) {
                 Ok(lease) => self.pages.editor.editor_recovery_lease = Some(lease),
                 Err(error) => {
+                    self.pages.editor.editor_recovery_retry_after =
+                        Some(now + EDITOR_RECOVERY_INTERVAL);
                     self.report_editor_error(i18n::LocalizedText::from(i18n::msg!(
                         "shell-could-not-save-recovery-error",
                         error = error.to_string()
@@ -181,9 +192,12 @@ impl ShellSession {
         match app::editor_recovery::write_editor_recovery_v2(lease, &record) {
             Ok(()) => {
                 self.pages.editor.editor_last_recovery_write = Some(now);
+                self.pages.editor.editor_recovery_retry_after = None;
                 true
             }
             Err(error) => {
+                self.pages.editor.editor_recovery_retry_after =
+                    Some(now + EDITOR_RECOVERY_INTERVAL);
                 self.report_editor_error(i18n::LocalizedText::from(i18n::msg!(
                     "shell-could-not-save-recovery-error",
                     error = error.to_string()
@@ -229,6 +243,7 @@ impl ShellSession {
         }
         self.pages.editor.editor_recovery_dirty_since = None;
         self.pages.editor.editor_last_recovery_write = None;
+        self.pages.editor.editor_recovery_retry_after = None;
         true
     }
 }
