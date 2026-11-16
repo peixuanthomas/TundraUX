@@ -732,12 +732,19 @@ def main():
                     "passed": stats["p95_ms"] <= budget,
                     "enough_samples": stats["count"] >= (50 if key.startswith("launch/") else 100)}
             (args.output / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
-            lines = ["| Case | N | P50 ms | P95 ms | P99 ms |", "| --- | ---: | ---: | ---: | ---: |"]
+            checks = result["acceptance"].values()
+            lines = [f"Requested run completed: {result['completed']} (workflow completion only).", "",
+                     f"Measured budget groups: {len(result['acceptance'])}; "
+                     f"enough samples: {sum(item['enough_samples'] for item in checks)}; "
+                     f"within P95 budget: {sum(item['passed'] for item in checks)}.", "",
+                     "Reduced samples or a partial matrix do not certify overall acceptance. "
+                     "See report.json for each group's sample-size and budget checks.", "",
+                     "| Case | N | P50 ms | P95 ms | P99 ms |", "| --- | ---: | ---: | ---: | ---: |"]
             for key, stats in result["summaries"].items():
                 lines.append(f"| {key} | {stats['count']} | {stats['p50_ms']} | {stats['p95_ms']} | {stats['p99_ms']} |")
             if args.compare:
                 baseline = json.loads(args.compare.read_text())
-                lines.extend(["", "| Case | Baseline P95 ms | Final P95 ms | Change ms |",
+                lines.extend(["", "| Case | Baseline P95 ms | Candidate P95 ms | Change ms |",
                               "| --- | ---: | ---: | ---: |"])
                 for key, stats in result["summaries"].items():
                     old = baseline["summaries"].get(key)
