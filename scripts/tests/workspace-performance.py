@@ -53,6 +53,7 @@ class Screen:
         self.style = ()
         self.foreground = self.background = None
         self.attributes = set()
+        self.saw_rgb = False
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.pending = ""
 
@@ -130,6 +131,7 @@ class Screen:
                 self.attributes.clear()
             elif value in (38, 48):
                 length = 2 if values[index + 1] == 5 else 4
+                self.saw_rgb |= length == 4
                 color = tuple(values[index + 1:index + 1 + length])
                 if value == 38:
                     self.foreground = color
@@ -185,7 +187,7 @@ class Session:
         self.temporary = tempfile.TemporaryDirectory(prefix="tundra-perf-")
         root = Path(self.temporary.name)
         self.env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor", LC_ALL="C.UTF-8",
-                        TUNDRA_VIM_CLEAN="1")
+                        TUNDRA_VIM_CLEAN="1", NO_COLOR="")
         vim = binary.parent / "vim" / "vim"
         if vim.is_file():
             self.env["TUNDRA_VIM"] = str(vim)
@@ -236,6 +238,7 @@ class Session:
             self.send(b"\x1b[21~" if current["page"] == "FirstRunSetup" else b"\r")
             self.drain(.08)
         self.until(lambda frame: frame["page"] == "Home" and not self.has_modal(frame))
+        assert self.screen.saw_rgb, "Truecolor output is required for comparable focus measurements"
 
     def drain(self, timeout=0):
         if not select.select([self.master], [], [], timeout)[0]:
@@ -298,7 +301,9 @@ class Session:
             current = self.snapshot()
             if predicate(current):
                 return current
-        raise AssertionError(f"Condition timed out: {current}")
+        path = self.output / f"{self.label}.last-snapshot.json"
+        path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n")
+        raise AssertionError(f"Condition timed out; see {path}")
 
     @staticmethod
     def has_modal(frame):
@@ -324,7 +329,10 @@ class Session:
         matched = matches[0]
         return {"latency_ms": (matched["observed_ns"] - started) / 1_000_000,
                 "action_ns": started, "output_ns": matched["observed_ns"],
-                "output_byte_offset": matched["byte_offset"]}
+                "output_byte_offset": matched["byte_offset"],
+                "verification": {"snapshot": frame["number"], "page": frame["page"],
+                                 "rect": rect, "styled": styled,
+                                 "content_sha256": hashlib.sha256(json.dumps(expected, ensure_ascii=False).encode()).hexdigest()}}
 
     def open_app(self, app):
         current = self.snapshot()
@@ -499,7 +507,7 @@ def interactions(binary, output, samples, motion, write):
                 session.tap(current, "page/launcher.search")
                 session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
                 session.send(b"\x15")
-                current = session.until(lambda frame: not node(frame, "page/launcher.search")["text"].strip())
+                current = session.until(lambda frame: node(frame, "page/launcher.search")["text"].rsplit(":", 1)[-1].strip() in ("", "_"))
                 marker = chr(0x0400 + index % 200)
                 session.frames.clear()
                 started = session.send(marker.encode())
