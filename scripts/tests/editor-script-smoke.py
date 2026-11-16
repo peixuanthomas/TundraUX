@@ -322,11 +322,12 @@ def main():
                 return
             assert binary.with_name("vim").joinpath("vim").is_file(), "Build the pinned Vim engine before this test"
             source_focus()
+            persisted_vim_flag = vim_flag()
             key("F8")
             until(lambda current: "F8 VIM mode enabled" in text(current))
             before_vim = vim_processes()
             assert len(before_vim) == 1, before_vim
-            assert vim_flag() == "true"
+            assert vim_flag() == persisted_vim_flag, "F8 changed the configured default for other windows"
             vim_ex("let g:script_smoke_marker='same-vim'")
             key("G")
             key("o")
@@ -336,12 +337,12 @@ def main():
             key("F5")
             paused(2)
             assert document.read_text(encoding="utf-8") == SOURCE + "# VIM_UNSAVED_SMOKE\n"
-            assert vim_flag() == "true", "debug launch changed the persisted Vim setting"
+            assert vim_flag() == persisted_vim_flag, "debug launch changed the persisted Vim default"
             assert vim_processes() == before_vim, "debug launch replaced the Vim process"
             key("F5", "shift")
             until(lambda current: "F8 VIM mode enabled" in text(current) and "Finished" in text(current))
             assert vim_processes() == before_vim, "ending debug replaced the Vim process"
-            assert vim_flag() == "true", "ending debug changed the persisted Vim setting"
+            assert vim_flag() == persisted_vim_flag, "ending debug changed the persisted Vim default"
             vim_ex("echo 'VIM_SCRIPT:' . get(g:,'script_smoke_marker','missing')")
             until(lambda current: "VIM_SCRIPT:same-vim" in text(current))
             key("G")
@@ -350,9 +351,10 @@ def main():
             key("Escape")
             vim_ex("write")
             until(lambda _: document.read_text(encoding="utf-8") == SOURCE + "# VIM_UNSAVED_SMOKE_EDITABLE\n")
-            print("PASS: Vim exported/saved its draft, kept its setting/PID/state, and resumed editing after debug", flush=True)
+            print("PASS: Vim exported/saved its draft, preserved the configured default/PID/state, and resumed editing after debug", flush=True)
             key("F8")
             until(lambda current: "F8 VIM mode disabled" in text(current))
+            assert vim_flag() == persisted_vim_flag, "leaving Vim changed the configured default"
             key("F1")
             until(lambda current: "F6 / Shift+F6" in text(current) and "Shift+F11" in text(current))
             print("PASS: script-specific F1 help matches the implemented controls", flush=True)
