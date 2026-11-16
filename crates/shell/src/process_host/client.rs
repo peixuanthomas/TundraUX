@@ -1,10 +1,11 @@
 use super::HANDSHAKE_TIMEOUT;
 use platform::shell_control::LocalConnection;
 use std::collections::{BTreeMap, VecDeque};
+use std::future::Future;
 use std::io;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use workspace_protocol::transport::Framed;
 use workspace_protocol::{
     Hello, MAX_CONTROL_FRAME_BYTES, MAX_SERVICE_FRAME_BYTES, MAX_WINDOW_FRAME_BYTES,
@@ -159,13 +160,36 @@ impl WorkerConnection {
     pub fn accept_shell(
         &self,
         listener: &platform::shell_control::AsyncLocalListener,
+        timeout: Duration,
     ) -> io::Result<AppWindowConnection> {
         let (_, expected_pid) = self.shell_peer.ok_or(io::ErrorKind::PermissionDenied)?;
-        let stream = super::event_loop::runtime().block_on(async {
-            tokio::time::timeout(HANDSHAKE_TIMEOUT, listener.accept())
-                .await
-                .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
-        })?;
+        let deadline = Instant::now() + timeout;
+        let mut accepted = std::pin::pin!(listener.accept());
+        let waker = super::event_loop::waker();
+        let mut context = std::task::Context::from_waker(&waker);
+        let stream = loop {
+            let generation = super::event_loop::generation();
+            self.progress()?;
+            if self.shutdown_requested() {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            let readiness = {
+                let _runtime = super::event_loop::runtime().enter();
+                accepted.as_mut().poll(&mut context)
+            };
+            match readiness {
+                std::task::Poll::Ready(stream) => break stream?,
+                std::task::Poll::Pending => {}
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            super::event_loop::wait_since(
+                generation,
+                remaining.min(watchdog::WORKER_PROGRESS_INTERVAL),
+            );
+        };
         if stream.peer_pid()? != expected_pid {
             return Err(io::ErrorKind::PermissionDenied.into());
         }

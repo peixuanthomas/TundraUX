@@ -1008,7 +1008,10 @@ pub fn run_app_host(
     connection.send(WorkerToSupervisor::Ready)?;
     connection.progress()?;
     let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
-    let mut stream = connection.accept_shell(&listener)?;
+    let mut stream = connection.accept_shell(
+        &listener,
+        deadline.saturating_duration_since(Instant::now()),
+    )?;
     let (shell, shell_pid) = connection.shell_peer().ok_or(io::ErrorKind::InvalidInput)?;
     let mut hello_received = false;
     let (mut init, pending) = 'receive_init: loop {
@@ -1037,7 +1040,9 @@ pub fn run_app_host(
         }
         crate::process_host::event_loop::wait_since(
             generation,
-            deadline.saturating_duration_since(Instant::now()),
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(watchdog::WORKER_PROGRESS_INTERVAL),
         );
     };
     let services_started = Instant::now();

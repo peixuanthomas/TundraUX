@@ -1,5 +1,18 @@
 use std::sync::{Condvar, Mutex, OnceLock};
+use std::task::{Wake, Waker};
 use std::time::Duration;
+
+struct EventWake;
+
+impl Wake for EventWake {
+    fn wake(self: std::sync::Arc<Self>) {
+        wake();
+    }
+}
+
+pub(crate) fn waker() -> Waker {
+    Waker::from(std::sync::Arc::new(EventWake))
+}
 
 static WAKE: (Mutex<u64>, Condvar) = (Mutex::new(0), Condvar::new());
 static ASYNC_WAKE: OnceLock<tokio::sync::watch::Sender<u64>> = OnceLock::new();
@@ -82,5 +95,16 @@ mod tests {
         let started = Instant::now();
         wait_since(generation, Duration::from_secs(1));
         assert!(started.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
+    fn async_wait_observes_a_wake_before_subscription() {
+        let generation = generation();
+        wake();
+        runtime().block_on(async {
+            tokio::time::timeout(Duration::from_millis(100), wait_async_since(generation))
+                .await
+                .unwrap();
+        });
     }
 }

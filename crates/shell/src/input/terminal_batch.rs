@@ -4,20 +4,11 @@ use futures_core::Stream;
 use std::{io, time::Duration};
 use std::{
     pin::Pin,
-    sync::Arc,
-    task::{Context, Poll, Wake, Waker},
+    task::{Context, Poll, Waker},
 };
 
 const MAX_READY_TERMINAL_EVENTS_PER_FRAME: usize = 4_096;
 const MAX_READY_CHILD_TERMINAL_EVENTS_PER_FRAME: usize = 256;
-
-struct TerminalWake;
-
-impl Wake for TerminalWake {
-    fn wake(self: Arc<Self>) {
-        crate::process_host::event_loop::wake();
-    }
-}
 
 pub(crate) struct TerminalEvents {
     stream: Option<event::EventStream>,
@@ -30,7 +21,7 @@ impl TerminalEvents {
         Self {
             stream: Some(event::EventStream::new()),
             pending: None,
-            waker: Waker::from(Arc::new(TerminalWake)),
+            waker: crate::process_host::event_loop::waker(),
         }
     }
 
