@@ -85,6 +85,8 @@ Esc first dismisses an active dialog or menu. On an ordinary application page, i
 
 Closing a window prompts for unsaved changes or running tasks. If cleanup still runs after two seconds, the Shell offers **Keep waiting** and **Force kill**. A force kill goes directly to the watchdog.
 
+New windows show their frame and background for the first 100ms, then a localized starting indicator while awaiting usable content. The first frame replaces it immediately. Split, cancel, full screen, restore, and resize retain the last successfully displayed app frame until a frame matches the new layout and size. The retained frame stays aligned at the top left, clips text and images together, and fills added space with the canvas background. Its old pointer targets, automation actions, and cursor are suspended; window controls and keyboard input remain available.
+
 The terminal minimum is 108 × 20 cells. The global title and bottom bars each occupy one row, and a window frame reserves one cell on each edge. Built-in app content can use the remaining 106 × 16 cells. Resizing temporarily hides windows that no longer fit. A minimized window stays in the bottom bar until restored. When a running app's minimum exceeds the terminal size, window controls remain available and app content is paused. Enlarge the terminal if a normal close needs to display a save or task confirmation.
 
 With the default minimum, left/right needs 217×20, top/bottom 108×39, and a full 2×2 grid 217×39 terminal cells.

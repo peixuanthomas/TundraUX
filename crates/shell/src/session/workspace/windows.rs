@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 impl Workspace {
     pub(in crate::session) fn poll(&mut self, state: &mut ShellSession) -> io::Result<bool> {
-        let mut redraw = false;
+        let mut redraw = self.placeholder_redraw_due(Instant::now());
         let connection = WorkerConnection::current().expect("managed workspace");
         connection.progress()?;
         while let Some(message) = connection.try_recv()? {
@@ -336,6 +336,9 @@ impl Workspace {
                 stream: None,
                 init: Some(init),
                 frame: None,
+                presented: None,
+                presenting: None,
+                starting_presenting: false,
                 image_assets: BTreeMap::new(),
                 status: WindowStatus::default(),
                 state: ProcessState::Starting,
@@ -347,6 +350,8 @@ impl Workspace {
                 launch_error: false,
                 startup: Some(WindowStartup {
                     requested,
+                    accepted: None,
+                    starting_presented: false,
                     app_started: None,
                     init_queued: None,
                     process_spawn_us: 0,
@@ -486,7 +491,7 @@ impl Workspace {
         Ok(())
     }
 
-    fn receive(
+    pub(super) fn receive(
         &mut self,
         id: SessionId,
         message: AppToShell,
@@ -555,15 +560,18 @@ impl Workspace {
                 {
                     return Ok(false);
                 }
-                if window.frame.as_ref() == Some(&frame) {
+                if window.frame.as_deref() == Some(&frame) {
                     return Ok(false);
                 }
                 let modal_changed = window
                     .frame
                     .as_ref()
                     .is_some_and(|old| old.modal != frame.modal);
-                window.frame = Some(frame);
-                if let Some(startup) = window.startup.take() {
+                window.frame = Some(Arc::new(frame));
+                if let Some(startup) = &mut window.startup
+                    && startup.accepted.is_none()
+                {
+                    startup.accepted = Some(Instant::now());
                     startup.record(id, window.launch.id(), window.worker, state.auth_session());
                 }
                 if self.split_launch.is_some_and(|(_, launch)| launch == id) {
@@ -856,13 +864,13 @@ fn same_mouse_motion(previous: &serde_json::Value, next: &serde_json::Value) -> 
 
 impl WindowStartup {
     fn record(
-        self,
+        &self,
         session: SessionId,
         application: &str,
         worker: Option<WorkerId>,
         auth: Option<&AuthSession>,
     ) {
-        let accepted = Instant::now();
+        let accepted = self.accepted.expect("accepted window frame");
         let (Some(app_started), Some(init_queued), Some(app), Some(worker)) =
             (self.app_started, self.init_queued, self.app_timings, worker)
         else {

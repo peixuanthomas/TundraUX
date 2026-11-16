@@ -24,13 +24,17 @@ mod windows;
 
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
 const APP_POLL: Duration = Duration::from_millis(16);
+const STARTING_DELAY: Duration = Duration::from_millis(100);
 
 struct Window {
     launch: WindowLaunch,
     worker: Option<WorkerId>,
     stream: Option<WindowConnection>,
     init: Option<WindowInit>,
-    frame: Option<WindowFrame>,
+    frame: Option<Arc<WindowFrame>>,
+    presented: Option<Arc<WindowFrame>>,
+    presenting: Option<Arc<WindowFrame>>,
+    starting_presenting: bool,
     image_assets: BTreeMap<u64, Arc<[u8]>>,
     status: WindowStatus,
     state: ProcessState,
@@ -45,6 +49,8 @@ struct Window {
 
 struct WindowStartup {
     requested: Instant,
+    accepted: Option<Instant>,
+    starting_presented: bool,
     app_started: Option<Instant>,
     init_queued: Option<Instant>,
     process_spawn_us: u64,
@@ -53,6 +59,18 @@ struct WindowStartup {
 }
 
 impl Window {
+    fn initial_placeholder(&self, now: Instant) -> WorkspacePanePlaceholder {
+        if self
+            .startup
+            .as_ref()
+            .is_some_and(|startup| now.duration_since(startup.requested) > STARTING_DELAY)
+        {
+            WorkspacePanePlaceholder::Starting
+        } else {
+            WorkspacePanePlaceholder::Pending
+        }
+    }
+
     fn finish_cleanup(&mut self) {
         self.close = CloseProgress::Exiting;
     }
@@ -154,6 +172,7 @@ pub(super) struct Workspace {
     shutdown: bool,
     reset: bool,
     frozen: bool,
+    placeholder_redraw_at: Option<Instant>,
 }
 
 impl Workspace {
@@ -205,6 +224,7 @@ impl Workspace {
             shutdown: false,
             reset: false,
             frozen: false,
+            placeholder_redraw_at: None,
         }
     }
 
@@ -231,10 +251,39 @@ impl Workspace {
     }
 
     pub(super) fn poll_timeout(&self) -> Duration {
-        if self.active() {
+        let maximum = if self.active() {
             APP_POLL
         } else {
             Duration::from_millis(250)
+        };
+        self.placeholder_redraw_at.map_or(maximum, |deadline| {
+            maximum.min(deadline.saturating_duration_since(Instant::now()))
+        })
+    }
+
+    fn placeholder_redraw_due(&mut self, now: Instant) -> bool {
+        if self
+            .placeholder_redraw_at
+            .is_some_and(|deadline| now >= deadline)
+        {
+            self.placeholder_redraw_at = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(super) fn did_present(&mut self, _state: &ShellSession, _terminal_output_us: u64) {
+        for window in self.windows.values_mut() {
+            if std::mem::take(&mut window.starting_presenting)
+                && let Some(startup) = &mut window.startup
+            {
+                startup.starting_presented = true;
+            }
+            if let Some(frame) = window.presenting.take() {
+                window.presented = Some(frame);
+                window.startup = None;
+            }
         }
     }
 
@@ -375,16 +424,17 @@ impl Workspace {
     }
 
     pub(super) fn animating(&self) -> bool {
-        self.layout
-            .panes
-            .iter()
-            .filter_map(|pane| self.windows.get(&pane.id))
-            .any(|window| {
-                window
-                    .frame
-                    .as_ref()
-                    .is_some_and(|frame| frame.animation_running)
-            })
+        self.placeholder_redraw_at.is_some()
+            || self
+                .layout
+                .panes
+                .iter()
+                .filter_map(|pane| self.windows.get(&pane.id))
+                .any(|window| {
+                    window.frame.as_ref().is_some_and(|frame| {
+                        frame.layout == self.generation && frame.animation_running
+                    })
+                })
     }
 
     pub(super) fn cursor_shape(&self) -> Option<CursorShape> {
@@ -561,3 +611,7 @@ impl Workspace {
 #[cfg(test)]
 #[path = "../../../tests/unit/session/workspace_close.rs"]
 mod close_tests;
+
+#[cfg(test)]
+#[path = "../../../tests/unit/session/workspace_presentation.rs"]
+mod presentation_tests;

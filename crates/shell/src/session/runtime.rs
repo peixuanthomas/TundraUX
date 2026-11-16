@@ -1301,6 +1301,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 });
                 let mut animation_running = false;
                 let mut weather_error = None;
+                let output_started_at = Instant::now();
                 guard.terminal_mut().draw(|frame| {
                     let bounds = frame.area();
                     // The terminal can resize after polling but before drawing.
@@ -1350,6 +1351,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         );
                     }
                 })?;
+                if let Some(windows) = &mut workspace {
+                    windows.did_present(&state, output_started_at.elapsed().as_micros() as u64);
+                }
                 if let Some(error) = weather_error {
                     return Err(error);
                 }

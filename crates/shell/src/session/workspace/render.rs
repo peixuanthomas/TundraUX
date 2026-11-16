@@ -14,6 +14,12 @@ impl Workspace {
         image_cleanup: &mut Vec<u8>,
         text_sizing: bool,
     ) {
+        let now = Instant::now();
+        self.placeholder_redraw_at = None;
+        for window in self.windows.values_mut() {
+            window.presenting = None;
+            window.starting_presenting = false;
+        }
         let mut cached_images = HashSet::new();
         let controls_blocked = controls_blocked || self.has_overlay();
         if let Some(capture) = capture {
@@ -46,7 +52,7 @@ impl Workspace {
             .iter()
             .filter(|pane| pane.id != SessionId(0))
         {
-            let window = &self.windows[&pane.id];
+            let window = self.windows.get_mut(&pane.id).expect("visible window");
             let focused = Some(pane.id) == self.selection.focused();
             if let Some(capture) = capture {
                 let group = format!("session/{}", pane.id);
@@ -61,11 +67,15 @@ impl Workspace {
                 || window.status.unresponsive
             {
                 Some(WorkspacePanePlaceholder::Unresponsive)
+            } else if window.launch_error {
+                Some(WorkspacePanePlaceholder::Unavailable)
             } else if matches!(window.state, ProcessState::ForceStopping)
                 || matches!(
                     window.close,
                     CloseProgress::Cleaning(_) | CloseProgress::Waiting | CloseProgress::Exiting
                 )
+                || (window.presented.is_none()
+                    && matches!(window.close, CloseProgress::Requested(_)))
             {
                 Some(WorkspacePanePlaceholder::Closing)
             } else {
@@ -75,18 +85,21 @@ impl Workspace {
                 ui::render_workspace_pane_placeholder(frame, pane.content, placeholder, context);
                 continue;
             }
-            if let Some(rendered) = window.frame.as_ref().filter(|rendered| {
-                rendered.size == Size::new(pane.content.width, pane.content.height)
-            }) {
+            let current = window.frame.as_ref().filter(|rendered| {
+                rendered.layout == self.generation
+                    && rendered.size == Size::new(pane.content.width, pane.content.height)
+            });
+            let rendered = current.or(window.presented.as_ref());
+            if let Some(rendered) = rendered {
+                let current = current.is_some();
                 ui::render_workspace_frame(
                     frame,
                     pane.content,
                     rendered,
                     context,
-                    !controls_blocked && rendered.layout == self.generation,
+                    !controls_blocked && current,
                 );
                 if let Some(picker) = picker
-                    && rendered.layout == self.generation
                     && !rendered.modal
                     && !rendered.images.is_empty()
                 {
@@ -98,7 +111,7 @@ impl Workspace {
                     );
                     cached_images.insert(pane.id);
                 }
-                if text_sizing && rendered.layout == self.generation && !rendered.modal {
+                if text_sizing && !rendered.modal {
                     ui::components::render_workspace_headings(
                         frame,
                         pane.content,
@@ -108,7 +121,7 @@ impl Workspace {
                 }
                 if !controls_blocked
                     && Some(pane.id) == self.input_focus
-                    && rendered.layout == self.generation
+                    && current
                     && let Some(cursor) = rendered.cursor
                 {
                     frame.set_cursor_position((
@@ -116,13 +129,24 @@ impl Workspace {
                         pane.content.y + cursor.y,
                     ));
                 }
+                if current {
+                    window.presenting = Some(Arc::clone(rendered));
+                }
             } else {
-                ui::render_workspace_pane_placeholder(
-                    frame,
-                    pane.content,
-                    WorkspacePanePlaceholder::Starting,
-                    context,
-                );
+                let placeholder = window.initial_placeholder(now);
+                ui::render_workspace_pane_placeholder(frame, pane.content, placeholder, context);
+                let deadline = if placeholder == WorkspacePanePlaceholder::Starting {
+                    window.starting_presenting = true;
+                    ui::BusyIndicator::redraw_interval(context.motion, context.capabilities.color)
+                        .map(|interval| now + interval)
+                } else {
+                    window
+                        .startup
+                        .as_ref()
+                        .map(|startup| startup.requested + STARTING_DELAY + Duration::from_nanos(1))
+                };
+                self.placeholder_redraw_at =
+                    self.placeholder_redraw_at.into_iter().chain(deadline).min();
             }
         }
         image_caches.retain(|id, cache| {

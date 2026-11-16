@@ -413,6 +413,7 @@ pub fn render_workspace_close_wait(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspacePanePlaceholder {
+    Pending,
     Starting,
     Closing,
     Unresponsive,
@@ -426,11 +427,34 @@ pub fn render_workspace_pane_placeholder(
     context: &RenderContext,
 ) {
     let text = match state {
+        WorkspacePanePlaceholder::Pending => String::new(),
         WorkspacePanePlaceholder::Starting => i18n::tr!("ui-workspace-starting"),
         WorkspacePanePlaceholder::Closing => i18n::tr!("ui-workspace-closing"),
         WorkspacePanePlaceholder::Unresponsive => i18n::tr!("ui-workspace-unresponsive"),
         WorkspacePanePlaceholder::Unavailable => i18n::tr!("ui-components-unavailable"),
     };
+    if state == WorkspacePanePlaceholder::Starting {
+        render_notice(frame, area, "", context.theme.muted, context);
+        let label_area = centered_rect(area, area.width, 1.min(area.height));
+        crate::automation::control(
+            "workspace.starting",
+            "status",
+            &text,
+            label_area,
+            Default::default(),
+            &[],
+        );
+        frame.render_widget(
+            Paragraph::new(crate::BusyIndicator::from_motion(context.motion).label(
+                &text,
+                label_area.width,
+                context,
+            ))
+            .alignment(HorizontalAlignment::Center),
+            label_area,
+        );
+        return;
+    }
     let color = if state == WorkspacePanePlaceholder::Unresponsive {
         context.theme.warning
     } else {

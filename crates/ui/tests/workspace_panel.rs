@@ -3,8 +3,9 @@ use std::sync::Arc;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use ui::{
     ColorCapability, RenderCapabilities, RenderContext, TundraTheme, WorkspaceAction,
-    WorkspaceCloseWait, WorkspacePanel, WorkspacePanelViewModel, WorkspaceWindowViewModel,
-    automation::FrameCapture, render_workspace_close_wait, render_workspace_panel,
+    WorkspaceCloseWait, WorkspacePanePlaceholder, WorkspacePanel, WorkspacePanelViewModel,
+    WorkspaceWindowViewModel, automation::FrameCapture, render_workspace_close_wait,
+    render_workspace_pane_placeholder, render_workspace_panel,
 };
 use workspace_protocol::{SessionId, Size};
 
@@ -145,6 +146,64 @@ fn close_wait_renders_wait_and_force_kill_with_shared_hit_regions() {
                 .find(|node| node.id.ends_with(&action.id()))
                 .unwrap();
             assert_eq!(node.focused, action == WorkspaceAction::Dismiss);
+        }
+    }
+}
+
+#[test]
+fn starting_is_localized_and_pending_has_only_the_canvas() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    for language in ["en-US", "zh-CN"] {
+        let snapshot = i18n::LanguageSnapshot::load(&assets, language, 1)
+            .unwrap()
+            .snapshot;
+        let _locale = i18n::enter_snapshot(Arc::new(snapshot));
+        for color in [ColorCapability::TrueColor, ColorCapability::Ansi] {
+            let mut context = RenderContext::default();
+            context.capabilities.color = color;
+            context.motion.reduced_motion = true;
+            let mut terminal = Terminal::new(TestBackend::new(30, 5)).unwrap();
+            let area = Rect::new(1, 1, 28, 3);
+            let mut snapshot = None;
+            terminal
+                .draw(|frame| {
+                    let capture = FrameCapture::begin(frame.area(), "workspace");
+                    render_workspace_pane_placeholder(
+                        frame,
+                        area,
+                        WorkspacePanePlaceholder::Starting,
+                        &context,
+                    );
+                    snapshot = Some(capture.finish(frame.buffer_mut()));
+                })
+                .unwrap();
+            let snapshot = snapshot.unwrap();
+            let starting = snapshot
+                .nodes
+                .iter()
+                .find(|node| node.id.ends_with("workspace.starting"))
+                .unwrap();
+            assert_eq!(starting.name, i18n::tr!("ui-workspace-starting"));
+            assert!(!starting.actionable && starting.actions.is_empty());
+            assert!(snapshot.lines.join("\n").contains('⋯'));
+
+            terminal
+                .draw(|frame| {
+                    render_workspace_pane_placeholder(
+                        frame,
+                        area,
+                        WorkspacePanePlaceholder::Pending,
+                        &context,
+                    );
+                })
+                .unwrap();
+            for y in area.y..area.bottom() {
+                for x in area.x..area.right() {
+                    let cell = &terminal.backend().buffer()[(x, y)];
+                    assert_eq!(cell.symbol(), " ");
+                    assert_eq!(cell.bg, context.theme.canvas);
+                }
+            }
         }
     }
 }

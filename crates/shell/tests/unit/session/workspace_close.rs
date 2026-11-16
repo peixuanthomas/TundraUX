@@ -1,12 +1,15 @@
 use super::*;
 
-fn window(minimum: Size) -> Window {
+pub(super) fn window(minimum: Size) -> Window {
     Window {
         launch: WindowLaunch::Clock,
         worker: None,
         stream: None,
         init: None,
         frame: None,
+        presented: None,
+        presenting: None,
+        starting_presenting: false,
         image_assets: BTreeMap::new(),
         status: WindowStatus {
             minimum,
@@ -32,7 +35,7 @@ fn show(workspace: &mut Workspace, id: SessionId) {
     workspace.selection.open(id);
 }
 
-fn shell_state() -> ShellSession {
+pub(super) fn shell_state() -> ShellSession {
     ShellSession::new_for_home_mode(ShellLaunchConfig::default(), (108, 20), ShellHomeMode::User)
 }
 
@@ -460,7 +463,7 @@ fn split_chooser_cancellation_and_resize_restore_only_the_pending_region() {
     assert!(!workspace.external_snapshot_ready());
     let mut frame = WindowFrame::new(workspace.generation, Size::new(106, 35));
     frame.animation_running = true;
-    workspace.windows.get_mut(&id).unwrap().frame = Some(frame);
+    workspace.windows.get_mut(&id).unwrap().frame = Some(Arc::new(frame));
     assert!(workspace.animating());
     assert!(workspace.external_snapshot_ready());
     workspace
@@ -509,7 +512,7 @@ fn editor_and_terminal_ctrl_w_is_sent_to_the_app_without_arming_the_prefix() {
         Size::new(215, 35),
     );
     frame.ctrl_w_passthrough = true;
-    workspace.windows.get_mut(&id).unwrap().frame = Some(frame);
+    workspace.windows.get_mut(&id).unwrap().frame = Some(Arc::new(frame));
     workspace
         .input(
             &InputEvent::key_with_modifiers(InputKey::Char('w'), crate::InputModifiers::CTRL),

@@ -296,7 +296,14 @@ impl Workspace {
         }
         self.layout.panes.iter().find_map(|pane| {
             if pane.content.contains(point.into()) {
-                Some(PointerTarget::Pane(pane.id))
+                self.windows[&pane.id]
+                    .presented
+                    .as_ref()
+                    .filter(|frame| {
+                        frame.layout == self.generation
+                            && frame.size == Size::new(pane.content.width, pane.content.height)
+                    })
+                    .map(|_| PointerTarget::Pane(pane.id))
             } else {
                 self.frame_target(pane, point)
             }
