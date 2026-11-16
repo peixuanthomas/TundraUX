@@ -73,6 +73,7 @@ class Screen:
                         break
                     raw, _, command = match.groups()
                     if raw == "?25" and command == "l":
+                        self.await_cursor_position = False
                         tails.append(tuple(tuple(row) for row in self.cells))
                     elif raw == "?25" and command == "h":
                         self.await_cursor_position = True
