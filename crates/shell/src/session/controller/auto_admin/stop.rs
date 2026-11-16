@@ -1,8 +1,8 @@
 use super::*;
 impl ShellSession {
-    pub(super) fn poll_auto_admin_stop(&mut self, now: Instant) {
+    pub(super) fn poll_auto_admin_stop(&mut self, now: Instant) -> bool {
         if self.auto_admin.closing_page.is_some() {
-            return;
+            return false;
         }
         if self
             .auto_admin
@@ -17,6 +17,8 @@ impl ShellSession {
             self.auto_admin.suppress_repeats = true;
             self.interaction.button_capture = None;
             self.last_key_event = None;
+            return true;
         }
+        false
     }
 }

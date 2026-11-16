@@ -4259,3 +4259,65 @@ fn detail_motion_only_cancels_scrollbar_drags_whose_track_moves() {
         }
     }
 }
+
+#[test]
+fn management_background_results_and_operation_completion_invalidate_without_input() {
+    let mut session = shortcut_action_state(ManagementKind::Disks, "inspect");
+    let (query, _) = session.management_job();
+    let snapshot = ManagementSnapshot {
+        backend: "background backend".into(),
+        ..Default::default()
+    };
+    *query.0.snapshot.lock().unwrap() = Some(Ok(snapshot));
+    session.register_management_job(&query, TaskDomain::ManagementQuery, TaskClass::Query);
+    session.pages.management.management_state.query_job = Some(query);
+    assert!(
+        session
+            .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+            .1
+    );
+    assert_eq!(
+        session.pages.management.management_state.snapshot.backend,
+        "background backend"
+    );
+    assert!(
+        !session
+            .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+            .1
+    );
+
+    let (operation, _) = session.management_job();
+    operation
+        .0
+        .events
+        .lock()
+        .unwrap()
+        .push_back(OperationEvent::Completed {
+            message: "background operation completed".into(),
+        });
+    session.register_management_job(
+        &operation,
+        TaskDomain::ManagementOperation,
+        TaskClass::Operation,
+    );
+    session.pages.management.management_state.received_snapshot = true;
+    session.pages.management.management_state.operation_job = Some(operation);
+    assert!(
+        session
+            .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+            .1
+    );
+    assert!(
+        session
+            .pages
+            .management
+            .management_state
+            .operation_job
+            .is_none()
+    );
+    assert_eq!(
+        session.pages.management.management_state.status,
+        "background operation completed"
+    );
+    assert!(!session.tasks.has_running_operations());
+}

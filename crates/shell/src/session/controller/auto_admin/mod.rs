@@ -351,9 +351,9 @@ impl ShellSession {
         }
     }
     pub(in crate::session) fn poll_auto_admin(&mut self) -> bool {
-        self.poll_auto_admin_stop(Instant::now());
+        let stopped = self.poll_auto_admin_stop(Instant::now());
         let Some(job) = self.auto_admin.job.clone() else {
-            return false;
+            return stopped;
         };
         #[cfg(target_os = "linux")]
         job.poll_terminal();
@@ -372,10 +372,11 @@ impl ShellSession {
             self.last_key_event = None;
             self.synchronize_overlay_focus();
         }
+        let completed = finished && self.auto_admin.task_request.is_some();
         if finished && let Some(request) = self.auto_admin.task_request.take() {
             self.tasks.complete(TaskDomain::AutoAdmin, request);
         }
-        changed || show
+        stopped || changed || show || completed
     }
     pub(in crate::session) fn close_auto_admin(&mut self) {
         self.synchronize_overlay_focus();

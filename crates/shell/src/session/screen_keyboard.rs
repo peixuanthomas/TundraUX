@@ -49,6 +49,22 @@ impl ShellSession {
         animating
     }
 
+    pub(super) fn input_keyboard_poll_timeout(&self, now: Instant, maximum: Duration) -> Duration {
+        [
+            self.screen_keyboard.physical.next_expiration(),
+            self.screen_keyboard
+                .pressed
+                .as_ref()
+                .map(|(_, at)| *at + Duration::from_millis(501)),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|at| at.saturating_duration_since(now))
+        .min()
+        .unwrap_or(maximum)
+        .min(maximum)
+    }
+
     pub(super) fn poll_input_keyboard(&mut self, now: Instant) -> bool {
         let mut changed = self.sync_input_keyboard();
         changed |= self.screen_keyboard.physical.expire(now);

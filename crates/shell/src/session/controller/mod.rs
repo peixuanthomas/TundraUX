@@ -1,5 +1,6 @@
 mod account;
 pub(super) mod auto_admin;
+mod background;
 mod input;
 pub(super) use auto_admin::{AutoAdminJob, AutoAdminState};
 mod clock;

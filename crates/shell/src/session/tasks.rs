@@ -411,11 +411,13 @@ impl ShellTasks {
         }
     }
 
-    pub(in crate::session) fn reap(&mut self) {
+    pub(in crate::session) fn reap(&mut self) -> bool {
+        let previous = self.records.len();
         self.records.retain(|_, task| {
             !(task.control.finished)()
                 || (!task.completed && task.accepts_result && task.epoch == self.epoch)
         });
+        previous != self.records.len()
     }
 
     pub(in crate::session) fn has_work(&self) -> bool {

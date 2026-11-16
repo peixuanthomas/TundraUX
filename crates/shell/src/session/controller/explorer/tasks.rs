@@ -754,15 +754,20 @@ impl ShellSession {
         Ok(())
     }
 
-    pub(in crate::session) fn poll_explorer_background_tasks(&mut self, platform: &dyn Platform) {
+    pub(in crate::session) fn poll_explorer_background_tasks(
+        &mut self,
+        platform: &dyn Platform,
+    ) -> bool {
         let events = self
             .explorer_task_runtime
             .as_ref()
             .map(ShellExplorerTaskRuntime::drain_events)
             .unwrap_or_default();
+        let changed = !events.is_empty();
         for event in events {
             self.apply_explorer_task_event(event, platform);
         }
+        changed
     }
 
     pub(in crate::session) fn apply_explorer_task_event(

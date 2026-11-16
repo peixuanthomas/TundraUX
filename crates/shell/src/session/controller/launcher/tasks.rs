@@ -194,15 +194,17 @@ impl ShellLauncherTaskRuntime {
 }
 
 impl ShellSession {
-    pub(in crate::session) fn poll_launcher_background_tasks(&mut self) {
+    pub(in crate::session) fn poll_launcher_background_tasks(&mut self) -> bool {
         let events = self
             .launcher_task_runtime
             .as_ref()
             .map(ShellLauncherTaskRuntime::drain_events)
             .unwrap_or_default();
+        let changed = !events.is_empty();
         for event in events {
             self.deliver_launcher_refresh_event(event);
         }
+        changed
     }
 
     fn deliver_launcher_refresh_event(&mut self, event: LauncherRefreshEvent) {

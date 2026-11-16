@@ -12,10 +12,14 @@ impl ShellSession {
         saved
     }
 
-    pub(in crate::session) fn persist_all_editor_recovery_if_due(&mut self, now: Instant) {
+    pub(in crate::session) fn persist_all_editor_recovery_if_due(&mut self, now: Instant) -> bool {
+        let mut changed = false;
         for id in self.pages.editor.ids() {
-            self.with_page_context(id, |session| session.persist_editor_recovery_if_due(now));
+            changed |= self
+                .with_page_context(id, |session| session.persist_editor_recovery_if_due(now))
+                .unwrap_or(false);
         }
+        changed
     }
 
     /// Every page return reaches this gate before its state is destroyed.
@@ -188,8 +192,8 @@ impl ShellSession {
         self.approved_editor_closes.remove(&id);
     }
 
-    pub(in crate::session) fn poll_page_closes(&mut self) {
-        self.tasks.reap();
+    pub(in crate::session) fn poll_page_closes(&mut self) -> bool {
+        let mut changed = self.tasks.reap();
         let waiting = self.pending_page_closes.iter().copied().collect::<Vec<_>>();
         for id in waiting {
             if self.page_screen(id) == Some(ShellScreen::Settings)
@@ -201,6 +205,7 @@ impl ShellSession {
                 continue;
             }
             self.pending_page_closes.remove(&id);
+            changed = true;
             if let Some((revision, discard)) = self.approved_editor_closes.get(&id).copied() {
                 let changed = self
                     .with_page_context(id, |session| {
@@ -217,6 +222,7 @@ impl ShellSession {
             }
             self.finish_managed_page_close(id);
         }
+        changed
     }
 
     fn finish_managed_page_close(&mut self, id: PageInstanceId) {

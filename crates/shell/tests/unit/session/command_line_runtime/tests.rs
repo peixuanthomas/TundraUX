@@ -84,6 +84,7 @@ fn embedded_panic_exit_enters_fullscreen_panic_without_login_or_dialog() {
     let mut state = crate::ShellSession::new(crate::ShellLaunchConfig::default(), (120, 40));
     let screen_before = state.active_screen();
     let message = crate::session::runtime::drain_watchdog_incidents(&mut state, &process)
+        .0
         .expect("panic must request a standalone crash page even without login");
     assert!(message.contains("Intentional watchdog panic"));
     assert!(message.contains(&id));
@@ -138,6 +139,7 @@ fn embedded_panic_exit_enters_fullscreen_panic_without_login_or_dialog() {
             ))
             .unwrap();
         let message = crate::session::runtime::drain_watchdog_incidents(&mut state, &process)
+            .0
             .expect("every account must see background panic details");
         assert!(message.contains("background worker failed to read a file"));
         assert!(!message.contains("Incident:"));

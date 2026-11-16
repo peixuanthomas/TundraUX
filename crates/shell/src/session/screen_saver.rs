@@ -36,9 +36,9 @@ impl ShellSession {
         )
     }
 
-    pub(super) fn advance_screen_saver_at(&mut self, now: Instant) {
+    pub(super) fn advance_screen_saver_at(&mut self, now: Instant) -> bool {
         if matches!(self.window_owner, WindowOwner::App(_)) {
-            return;
+            return false;
         }
         if !self.screen_saver.active && self.screen_saver_poll_timeout(now, Duration::MAX).is_zero()
         {
@@ -51,7 +51,9 @@ impl ShellSession {
             self.interaction = Default::default();
             self.last_click = None;
             self.hovered_component = None;
+            return true;
         }
+        false
     }
 
     pub(super) fn consume_screen_saver_input(&mut self, input: &InputEvent, now: Instant) -> bool {

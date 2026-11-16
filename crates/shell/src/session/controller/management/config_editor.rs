@@ -308,10 +308,10 @@ impl ShellSession {
             self.reveal_source_caret();
         }
     }
-    pub(in crate::session) fn poll_editor_preview(&mut self) {
-        self.poll_inline_replacement();
+    pub(in crate::session) fn poll_editor_preview(&mut self) -> bool {
+        let changed = self.poll_inline_replacement();
         if self.pages.editor.editor_preview_request.is_none() {
-            return;
+            return changed;
         }
         let valid_form = self
             .pages
@@ -343,12 +343,14 @@ impl ShellSession {
         if !valid_form || !valid_revision {
             self.pages.editor.editor_preview_task.cancel();
             self.pages.editor.editor_preview_request = None;
-            return;
+            return true;
         }
         if let Some(result) = self.pages.editor.editor_preview_task.take() {
             let (_, _, fields) = self.pages.editor.editor_preview_request.take().unwrap();
             self.finish_editor_preview(result, fields);
+            return true;
         }
+        changed
     }
 
     fn finish_editor_preview(

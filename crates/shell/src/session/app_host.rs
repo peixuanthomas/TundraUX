@@ -40,6 +40,9 @@ struct AppHostSession {
     theme_reloader: UserThemeReloader,
     redraw: RedrawScheduler,
     next_service_sync: Instant,
+    last_background_poll: Instant,
+    last_storage_config_revision: u64,
+    status_dirty: bool,
     size: Size,
     layout: LayoutGeneration,
     visible: bool,
@@ -153,6 +156,7 @@ impl AppHostSession {
             RedrawIdentity::from_session(&state),
             reduced_motion_enabled(&state),
         );
+        let last_storage_config_revision = state.app.storage_config_revision();
         let mut host = Self {
             state,
             platform,
@@ -169,6 +173,9 @@ impl AppHostSession {
             redraw,
             watchdog,
             next_service_sync: now,
+            last_background_poll: now - HOST_TICK,
+            last_storage_config_revision,
+            status_dirty: true,
             size,
             layout: init.layout,
             visible: true,
@@ -226,6 +233,9 @@ impl AppHostSession {
     ) {
         if layout < self.layout {
             return;
+        }
+        if self.frozen != size.is_none() || self.visible != visible || self.focused != focused {
+            self.redraw.request_input_redraw();
         }
         self.frozen = size.is_none();
         self.visible = visible;
@@ -452,6 +462,7 @@ impl AppHostSession {
     }
 
     fn receive(&mut self, message: ShellToApp) -> io::Result<()> {
+        self.status_dirty = true;
         match message {
             ShellToApp::Viewport {
                 layout,
@@ -486,17 +497,17 @@ impl AppHostSession {
                 if layout == self.layout && self.focused && !self.frozen =>
             {
                 self.state.toggle_input_keyboard();
-                self.redraw.request_redraw();
+                self.redraw.request_input_redraw();
             }
             ShellToApp::Help { layout }
                 if layout == self.layout && self.focused && !self.frozen =>
             {
                 self.state.open_page_help();
-                self.redraw.request_redraw();
+                self.redraw.request_input_redraw();
             }
             ShellToApp::CancelPointer { layout } if layout == self.layout => {
                 self.state.cancel_pointer_gestures_for_modal();
-                self.redraw.request_redraw();
+                self.redraw.request_input_redraw();
             }
             ShellToApp::RequestClose => self.request_close(),
             ShellToApp::InputFence { serial } => {
@@ -510,7 +521,7 @@ impl AppHostSession {
                     } else if let Some(page) = page {
                         self.state.activate_task_page(page);
                     }
-                    self.redraw.request_redraw();
+                    self.redraw.request_input_redraw();
                 }
             }
             ShellToApp::TaskCatalog { ids } => {
@@ -524,7 +535,7 @@ impl AppHostSession {
                     LauncherCommand::RequestLaunch(id),
                     self.platform.as_ref(),
                 );
-                self.redraw.request_redraw();
+                self.redraw.request_input_redraw();
             }
             _ => {}
         }
@@ -533,10 +544,9 @@ impl AppHostSession {
 
     fn poll(&mut self, now: Instant) -> io::Result<()> {
         let _language = i18n::enter_snapshot(self.state.language.clone());
-        let mut before = self.state.clone();
-        let previous_theme = self.theme.clone();
-        if now >= self.next_service_sync {
-            self.services.sync_session(&mut self.state);
+        let mut changed = false;
+        if now >= self.next_service_sync || self.services.has_updates() {
+            changed |= self.services.sync_session(&mut self.state);
             self.next_service_sync = now + SERVICE_TICK;
             if self.state.auth_session().is_none() {
                 self.state.window_close = WindowClose::Confirmed;
@@ -551,26 +561,31 @@ impl AppHostSession {
         {
             self.redraw.request_redraw();
         }
-        let action = self
-            .state
-            .apply_input_with_platform(InputEvent::Tick, self.platform.as_ref());
-        self.observe_action(action);
-        self.state.poll_input_keyboard(now);
-        self.theme_reloader
+        if changed || self.background_poll_timeout(now).is_zero() {
+            let (action, background_changed) =
+                self.state.poll_background_at(self.platform.as_ref(), now);
+            self.observe_action(action);
+            changed |= background_changed;
+            self.last_background_poll = now;
+        }
+        changed |= self.state.poll_input_keyboard(now);
+        changed |= self
+            .theme_reloader
             .poll_at(now, &mut self.theme, &mut self.state);
-        let (changed, event) = self.command_lines.poll(
+        let (terminal_changed, event) = self.command_lines.poll(
             &mut self.state,
             self.platform.as_ref(),
             self.theme.tokens().accent,
         );
         self.command_line_event(event);
-        let changed = self.vim.poll(&mut self.state, self.platform.as_ref())
+        changed |= self.vim.poll(&mut self.state, self.platform.as_ref())
             | self.scripts.poll(&mut self.state, self.platform.as_ref())
-            | changed;
+            | terminal_changed;
         if let Some(path) = &self.pending_explorer_selection
             && self.state.select_explorer_path(path)
         {
             self.pending_explorer_selection = None;
+            changed = true;
         }
         if let Some(routed) = self.compositor.take_deferred_close(&self.state) {
             let action = self
@@ -607,7 +622,9 @@ impl AppHostSession {
         if std::mem::take(&mut self.state.window_tasks_requested) {
             self.output.push_back(AppToShell::ToggleTasks);
         }
-        if before.app.storage_config() != self.state.app.storage_config() {
+        let config_revision = self.state.app.storage_config_revision();
+        if self.last_storage_config_revision != config_revision {
+            self.last_storage_config_revision = config_revision;
             self.output
                 .push_back(AppToShell::ShellAction(HostAction::SettingsChanged));
         }
@@ -628,10 +645,7 @@ impl AppHostSession {
         if self.close_status == WindowClose::Confirmed {
             return Ok(());
         }
-        if changed
-            || previous_theme != self.theme
-            || session_render_state_changed(&mut before, &self.state)
-        {
+        if changed {
             self.redraw.request_redraw();
         }
         self.redraw.observe(
@@ -639,6 +653,14 @@ impl AppHostSession {
             RedrawIdentity::from_session(&self.state),
             reduced_motion_enabled(&self.state),
         );
+        self.redraw.set_state_clock(
+            now,
+            self.visible && self.state.content_screen() == ShellScreen::Clock,
+        );
+        if !changed && !self.status_dirty {
+            return Ok(());
+        }
+        self.status_dirty = false;
         let minimum = [
             self.command_lines.minimum_content_size(),
             self.vim.minimum_content_size(),
@@ -649,12 +671,11 @@ impl AppHostSession {
         .fold(MIN_CONTENT_SIZE, |minimum, (width, height)| {
             Size::new(minimum.width.max(width), minimum.height.max(height))
         });
-        let dirty = self.state.pages.editor.ids().into_iter().any(|id| {
+        let dirty = self.state.pages.editor.iter().any(|(id, _)| {
             self.state
-                .with_page_context(id, |state| {
-                    state.app.editor_state().is_some_and(EditorState::is_dirty)
-                })
-                .unwrap_or(false)
+                .app
+                .editor_state_for_page(id)
+                .is_some_and(EditorState::is_dirty)
         });
         let status = WindowStatus {
             minimum,
@@ -674,6 +695,50 @@ impl AppHostSession {
             self.output.push_back(AppToShell::Status(status));
         }
         Ok(())
+    }
+
+    fn background_poll_timeout(&self, now: Instant) -> Duration {
+        let next_poll =
+            HOST_TICK.saturating_sub(now.saturating_duration_since(self.last_background_poll));
+        let work = if session_has_background_work(&self.state) {
+            next_poll
+        } else {
+            Duration::MAX
+        };
+        let timers = self
+            .state
+            .background_timer_timeout(now, Duration::MAX)
+            .max(next_poll);
+        self.state.auth_poll_timeout(
+            now,
+            self.state.notification_poll_timeout(now, work.min(timers)),
+        )
+    }
+
+    fn poll_timeout(&self, now: Instant) -> Duration {
+        if self.services.has_updates() {
+            return Duration::ZERO;
+        }
+        let mut timeout = self
+            .next_service_sync
+            .saturating_duration_since(now)
+            .min(
+                self.theme_reloader
+                    .next_check
+                    .saturating_duration_since(now),
+            )
+            .min(self.background_poll_timeout(now));
+        timeout = self.state.input_keyboard_poll_timeout(now, timeout);
+        if self.command_lines.has_running_processes()
+            || self.vim.running()
+            || self.scripts.running()
+        {
+            timeout = timeout.min(HOST_TICK);
+        }
+        if self.visible && !self.frozen {
+            timeout = self.redraw.poll_timeout(now, timeout);
+        }
+        timeout
     }
 
     fn render_context(&self, now: Instant) -> ui::RenderContext {

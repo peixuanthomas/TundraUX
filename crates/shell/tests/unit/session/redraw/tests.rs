@@ -24,6 +24,7 @@ fn id(screen: &str, focus: &str, overlay: Option<&str>) -> RedrawIdentity {
 fn initial_idle_and_state_clock_are_event_driven() {
     let origin = Instant::now();
     let mut scheduler = RedrawScheduler::new(origin, id("home", "one", None), false);
+    scheduler.set_state_clock(origin, true);
     assert!(scheduler.is_due(origin));
     scheduler.did_draw(origin);
     assert!(!scheduler.is_due(origin + Duration::from_millis(999)));
@@ -96,10 +97,7 @@ fn continuous_color_frames_keep_their_clock_when_motion_is_reduced() {
     let mut scheduler = RedrawScheduler::new(origin, identity.clone(), true);
     scheduler.did_draw(origin);
     scheduler.request_animation_frame(origin);
-    assert_eq!(
-        scheduler.poll_timeout(origin, Duration::MAX),
-        STATE_CLOCK_INTERVAL
-    );
+    assert_eq!(scheduler.poll_timeout(origin, Duration::MAX), Duration::MAX);
 
     for frame_number in 0..3 {
         let now = origin + CONTINUOUS_FRAME_INTERVAL * frame_number;
@@ -155,7 +153,7 @@ fn demand_uses_nearest_deadline_and_slow_output_never_replays_frame_backlog() {
     scheduler.did_draw(completed + Duration::from_millis(2));
     assert_eq!(
         scheduler.poll_timeout(completed + Duration::from_millis(2), Duration::MAX),
-        Duration::from_millis(918)
+        Duration::MAX
     );
 }
 
@@ -163,6 +161,7 @@ fn demand_uses_nearest_deadline_and_slow_output_never_replays_frame_backlog() {
 fn slow_output_skips_missed_state_clock_ticks_but_preserves_elapsed_motion_time() {
     let origin = Instant::now();
     let mut scheduler = RedrawScheduler::new(origin, id("home", "one", None), false);
+    scheduler.set_state_clock(origin, true);
     scheduler.did_draw_finished(origin, origin + Duration::from_millis(2_500));
     let next = origin + Duration::from_millis(2_500) + FRAME_INTERVAL;
     scheduler.request_animation_frame(origin + Duration::from_millis(2_500));
@@ -174,4 +173,17 @@ fn slow_output_skips_missed_state_clock_ticks_but_preserves_elapsed_motion_time(
         scheduler.frame(next, 100).delta,
         Duration::from_millis(2_500) + FRAME_INTERVAL
     );
+}
+
+#[test]
+fn static_app_windows_have_no_implicit_clock_deadline() {
+    let origin = Instant::now();
+    let mut scheduler = RedrawScheduler::new(origin, id("settings", "one", None), false);
+    scheduler.did_draw(origin);
+    assert_eq!(scheduler.poll_timeout(origin, Duration::MAX), Duration::MAX);
+    assert!(!scheduler.is_due(origin + Duration::from_secs(60)));
+    scheduler.set_state_clock(origin, true);
+    assert!(scheduler.is_due(origin + Duration::from_secs(1)));
+    scheduler.set_state_clock(origin, false);
+    assert!(!scheduler.is_due(origin + Duration::from_secs(1)));
 }

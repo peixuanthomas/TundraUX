@@ -198,11 +198,12 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn poll_settings_background_tasks(&mut self) {
-        self.poll_system_time_settings();
+    pub(in crate::session) fn poll_settings_background_tasks(&mut self) -> bool {
+        let mut changed = self.poll_system_time_settings();
         let events = self
             .settings_task_runtime
             .drain_time_sync_validation_events();
+        changed |= !events.is_empty();
         for event in events {
             let request = event.request_id;
             let owner = self.tasks.owner(TaskDomain::SettingsTimeSync, request);
@@ -213,6 +214,7 @@ impl ShellSession {
         }
 
         for event in self.settings_task_runtime.drain_update_events() {
+            changed = true;
             let request = self.settings_update_request;
             let owner = request.and_then(|id| self.tasks.owner(TaskDomain::Update, id));
             let prepared = matches!(&event, SettingsUpdateTaskEvent::PrepareCompleted(Ok(_)));
@@ -275,10 +277,15 @@ impl ShellSession {
             }
         }
         // Keep a prepared update until AA finishes or its confirmation is rejected.
-        if self.update_apply_manifest.is_some() && !self.auto_admin_running() {
+        if self.update_apply_manifest.is_some()
+            && !self.auto_admin_running()
+            && !self.update_restart_requested
+        {
+            changed = true;
             self.settings_update_state.status = i18n::msg!("settings-update-restarting").into();
             self.update_restart_requested = true;
         }
+        changed
     }
 
     fn apply_time_validation_event(&mut self, event: SettingsTimeSyncValidationEvent) {

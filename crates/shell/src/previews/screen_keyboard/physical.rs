@@ -29,6 +29,10 @@ impl PhysicalKeyboard {
         self.presses.clear();
     }
 
+    pub fn next_expiration(&self) -> Option<Instant> {
+        self.presses.iter().filter_map(|press| press.expires).min()
+    }
+
     pub fn expire(&mut self, now: Instant) -> bool {
         let count = self.presses.len();
         self.presses

@@ -317,10 +317,14 @@ impl ShellSession {
         self.install_system_time_job(job, worker);
     }
 
-    pub(super) fn poll_system_time_settings(&mut self) {
+    pub(super) fn poll_system_time_settings(&mut self) -> bool {
+        let mut changed = false;
         for page in self.pages.settings.ids() {
-            self.with_page_context(page, |session| session.poll_system_time_page());
+            changed |= self
+                .with_page_context(page, |session| session.poll_system_time_page())
+                .unwrap_or(false);
         }
+        changed
     }
 
     pub(in crate::session) fn detach_system_time_page(&mut self, page: PageInstanceId) {
@@ -340,7 +344,7 @@ impl ShellSession {
         });
     }
 
-    fn poll_system_time_page(&mut self) {
+    fn poll_system_time_page(&mut self) -> bool {
         let Some(job) = self
             .pages
             .settings
@@ -348,16 +352,16 @@ impl ShellSession {
             .as_ref()
             .and_then(|state| state.system_time.job.clone())
         else {
-            return;
+            return false;
         };
         if !job.finished() {
-            return;
+            return false;
         }
         let owner = self.tasks.owner(TaskDomain::SettingsSystemTime, job.0.id);
         self.tasks
             .complete(TaskDomain::SettingsSystemTime, job.0.id);
         if owner != self.pages.common.selected_id().map(TaskOwner::Page) {
-            return;
+            return true;
         }
         let result = job
             .0
@@ -371,7 +375,7 @@ impl ShellSession {
                 )))
             });
         let Some(state) = self.pages.settings.settings_state.as_mut() else {
-            return;
+            return true;
         };
         state.system_time.job = None;
         match result {
@@ -397,6 +401,7 @@ impl ShellSession {
             }
         }
         self.refresh_hit_map();
+        true
     }
 
     pub(super) fn set_system_timezone(&mut self, timezone: String) {

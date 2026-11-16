@@ -397,3 +397,35 @@ fn settings_scroll_stops_at_the_content_boundaries() {
     assert_eq!(settings_scroll_offset(0, -6, 2_100), 0);
     assert_eq!(settings_scroll_offset(0, 6, 0), 0);
 }
+
+#[test]
+fn background_update_completion_invalidates_without_input_or_a_hit_map_refresh() {
+    let mut state = ShellSession::new_for_home_mode(
+        ShellLaunchConfig::default(),
+        (120, 40),
+        ShellHomeMode::User,
+    );
+    state.settings_update_state.busy = true;
+    let generation = state.hit_map().generation();
+    state
+        .settings_task_runtime
+        .shared
+        .update_event_tx
+        .send(SettingsUpdateTaskEvent::CheckCompleted(Err(
+            "completed with a background error".into(),
+        )))
+        .unwrap();
+    assert!(
+        state
+            .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+            .1
+    );
+    assert!(!state.settings_update_state.busy);
+    assert!(state.settings_update_state.error.is_some());
+    assert_eq!(state.hit_map().generation(), generation);
+    assert!(
+        !state
+            .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+            .1
+    );
+}

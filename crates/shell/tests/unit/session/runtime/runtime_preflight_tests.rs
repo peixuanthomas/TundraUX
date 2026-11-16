@@ -502,40 +502,31 @@ fn startup_uses_memory_when_asset_root_is_not_writable() {
 }
 
 #[test]
-fn runtime_redraw_tracks_visible_changes_without_mutating_the_live_state() {
+fn idle_background_poll_keeps_hit_map_and_does_not_request_a_frame() {
     let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
-    state.open_editor();
-    let mut before = state.clone();
-    assert!(!session_render_state_changed(&mut before, &state));
+    let platform = platform::mock::UnsupportedPlatform;
+    let generation = state.hit_map().generation();
+    for _ in 0..3 {
+        let (action, changed) = state.poll_background_at(&platform, Instant::now());
+        assert_eq!(action, ShellAction::Redraw);
+        assert!(!changed);
+        assert_eq!(state.hit_map().generation(), generation);
+    }
+}
 
-    state.ui.tick_count += 1;
-    let expected = state.clone();
-    assert!(!session_render_state_changed(&mut before, &state));
-    assert_eq!(state, expected);
-
-    state.pages.common.error_message = Some("A visible error".into());
-    assert!(session_render_state_changed(&mut before, &state));
-    state.pages.common.error_message = before.pages.common.error_message.clone();
-    assert!(!session_render_state_changed(&mut before, &state));
-
-    let mut regions = state.hit_map().regions().to_vec();
-    regions[0].area.width = regions[0].area.width.saturating_sub(1);
-    state.ui.hit_map =
-        ShellHitMap::new(state.terminal_size(), state.hit_map().generation(), regions);
-    assert!(session_render_state_changed(&mut before, &state));
-    state.ui.hit_map = before.ui.hit_map.clone();
-    assert!(!session_render_state_changed(&mut before, &state));
-
-    state.pages.common.focused_component = ShellComponent::StatusBar;
-    assert!(session_render_state_changed(&mut before, &state));
-    state.pages.common.focused_component = before.pages.common.focused_component;
-
-    state.app.dispatch_at(
-        app::AppCommand::Editor(app::editor::EditorCommand::InsertText("changed".into())),
-        Instant::now(),
+#[test]
+fn toast_expiration_requests_one_background_frame_at_its_deadline() {
+    let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
+    let platform = platform::mock::UnsupportedPlatform;
+    state.notify_toast("temporary background result");
+    let deadline = state.app.notification_center().poll_deadline().unwrap();
+    assert!(
+        !state
+            .poll_background_at(&platform, deadline - Duration::from_nanos(1))
+            .1
     );
-    assert!(session_render_state_changed(&mut before, &state));
-    assert!(state.app.editor_state().unwrap().is_dirty());
+    assert!(state.poll_background_at(&platform, deadline).1);
+    assert!(!state.poll_background_at(&platform, deadline).1);
 }
 
 #[test]

@@ -421,11 +421,14 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn poll_user_management_task(&mut self) {
+    pub(in crate::session) fn poll_user_management_task(&mut self) -> bool {
+        let mut changed = false;
         for id in self.pages.user_management.ids() {
-            self.with_page_context(id, |session| session.poll_user_management_page());
+            changed |= self
+                .with_page_context(id, |session| session.poll_user_management_page())
+                .unwrap_or(false);
         }
-        self.poll_detached_user_management_jobs();
+        self.poll_detached_user_management_jobs() || changed
     }
 
     fn register_user_management_job(&mut self, job: &UserManagementJob) {
@@ -452,7 +455,8 @@ impl ShellSession {
         }
     }
 
-    fn poll_detached_user_management_jobs(&mut self) {
+    fn poll_detached_user_management_jobs(&mut self) -> bool {
+        let mut changed = false;
         for job in std::mem::take(&mut self.detached_user_management_jobs) {
             if self.tasks.owner(TaskDomain::UserManagement, job.0.id) != Some(TaskOwner::Session) {
                 continue;
@@ -465,6 +469,7 @@ impl ShellSession {
                 .unwrap_or_else(|error| error.into_inner())
                 .take();
             if let Some(outcome) = outcome {
+                changed = true;
                 self.tasks.complete(TaskDomain::UserManagement, job.0.id);
                 if self
                     .app
@@ -476,7 +481,7 @@ impl ShellSession {
                 if outcome.result.is_ok()
                     && self.apply_user_management_completion(&job.0.completion)
                 {
-                    return;
+                    return true;
                 }
                 if let Some(message) = match outcome.result {
                     Ok(()) => outcome.message,
@@ -485,12 +490,14 @@ impl ShellSession {
                     self.notify_status(message);
                 }
             } else if finished {
+                changed = true;
                 self.tasks.complete(TaskDomain::UserManagement, job.0.id);
                 self.notify_status(platform::service::ServiceError::Unknown.to_string());
             } else {
                 self.detached_user_management_jobs.push(job);
             }
         }
+        changed
     }
 
     fn apply_user_management_completion(&mut self, completion: &Completion) -> bool {
@@ -534,9 +541,9 @@ impl ShellSession {
         }
     }
 
-    fn poll_user_management_page(&mut self) {
+    fn poll_user_management_page(&mut self) -> bool {
         let Some(job) = self.pages.user_management.user_management_job.clone() else {
-            return;
+            return false;
         };
         if self.tasks.owner(TaskDomain::UserManagement, job.0.id)
             != self
@@ -546,7 +553,7 @@ impl ShellSession {
                 .map(TaskOwner::Page)
         {
             self.pages.user_management.user_management_job = None;
-            return;
+            return true;
         }
         let stopped = job.0.worker.lock().ok().is_some_and(|worker| {
             worker
@@ -567,7 +574,7 @@ impl ShellSession {
                     platform::service::ServiceError::Unknown.to_string(),
                 );
             }
-            return;
+            return stopped;
         };
         let session_id = job.0.session_id.clone();
         self.pages.user_management.user_management_job = None;
@@ -577,10 +584,10 @@ impl ShellSession {
             .auth_session()
             .is_none_or(|actor| actor.session_id != session_id)
         {
-            return;
+            return true;
         }
         if outcome.result.is_ok() && self.apply_user_management_completion(&job.0.completion) {
-            return;
+            return true;
         }
         match outcome.result {
             Ok(()) => {
@@ -635,6 +642,7 @@ impl ShellSession {
                 self.report_user_management_refresh_error(feedback);
             }
         }
+        true
     }
 }
 

@@ -79,31 +79,32 @@ impl ShellSession {
         client: &SessionServicesClient,
         snapshot: &time::ClockSnapshot,
         now: Instant,
-    ) {
+    ) -> bool {
         if self.ui.workspace_clock.profile.is_none() {
-            return;
+            return false;
         }
         let Some(scheduler) = self.ui.clock_scheduler.as_mut() else {
-            return;
+            return false;
         };
         let previous = scheduler.clone();
         let due = scheduler.advance(snapshot, now);
         let reproject = self.clock_persist_pending;
         if due.is_empty() && !reproject {
-            return;
+            return false;
         }
         if let Err(error) =
             self.write_workspace_clock_profile(client, Some(&previous), reproject, snapshot, now)
         {
             self.clock_scheduler = Some(previous);
             self.report_clock_storage_error(error);
-            return;
+            return true;
         }
         self.clock_persist_pending = false;
         self.sync_clock_selection_at(now);
         let _ = self.handle_clock_due_events(due);
         self.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
         self.refresh_hit_map();
+        true
     }
 }
 

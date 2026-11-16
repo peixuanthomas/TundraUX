@@ -786,16 +786,42 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn poll_management(&mut self) {
+    pub(in crate::session) fn management_poll_timeout(
+        &self,
+        now: Instant,
+        maximum: Duration,
+    ) -> Duration {
+        let mut timeout = self.scheduled_preview_poll_timeout(now, maximum);
+        let state = &self.pages.management.management_state;
+        if self.active_screen() == ShellScreen::Management
+            && matches!(
+                state.kind,
+                Some(ManagementKind::Processes | ManagementKind::Tasks)
+            )
+            && !state.terminal_mode
+            && state.query_job.is_none()
+            && state.operation_job.is_none()
+            && state.form.is_none()
+            && let Some(last) = state.refreshed
+        {
+            timeout = timeout.min((last + Duration::from_secs(5)).saturating_duration_since(now));
+        }
+        timeout
+    }
+
+    pub(in crate::session) fn poll_management(&mut self) -> bool {
+        let mut changed = false;
         for id in self.pages.management.ids() {
             let visible = self.active_page_id() == id
                 && matches!(
                     self.active_screen(),
                     ShellScreen::Management | ShellScreen::Editor
                 );
-            self.with_page_context(id, |session| session.poll_management_page(visible));
+            changed |= self
+                .with_page_context(id, |session| session.poll_management_page(visible))
+                .unwrap_or(false);
         }
-        self.poll_detached_management_operations();
+        self.poll_detached_management_operations() || changed
     }
 
     pub(in crate::session) fn drain_management_for_shutdown(&mut self) {
@@ -846,7 +872,8 @@ impl ShellSession {
         }
     }
 
-    fn poll_detached_management_operations(&mut self) {
+    fn poll_detached_management_operations(&mut self) -> bool {
+        let mut changed = false;
         let mut pending = Vec::new();
         for operation in std::mem::take(&mut self.detached_management_operations) {
             let finished = operation.job.finished();
@@ -858,6 +885,7 @@ impl ShellSession {
                 .unwrap_or_else(|e| e.into_inner())
                 .drain(..)
                 .collect::<Vec<_>>();
+            changed |= !events.is_empty() || finished;
             let accepts_result = self
                 .tasks
                 .owner(TaskDomain::ManagementOperation, operation.job.0.id)
@@ -893,24 +921,28 @@ impl ShellSession {
             }
         }
         self.detached_management_operations = pending;
+        changed
     }
 
-    fn poll_management_page(&mut self, visible: bool) {
-        self.poll_scheduled_preview();
+    fn poll_management_page(&mut self, visible: bool) -> bool {
+        let mut changed = self.poll_scheduled_preview();
         if let Some(job) = self.pages.management.management_state.query_job.clone()
             && !self.management_job_belongs_here(TaskDomain::ManagementQuery, &job)
         {
             self.pages.management.management_state.query_job = None;
+            changed = true;
         }
         if let Some(job) = self.pages.management.management_state.draft_job.clone()
             && !self.management_job_belongs_here(TaskDomain::ManagementDraft, &job)
         {
             self.pages.management.management_state.draft_job = None;
+            changed = true;
         }
         if let Some(job) = self.pages.management.management_state.operation_job.clone()
             && !self.management_job_belongs_here(TaskDomain::ManagementOperation, &job)
         {
             self.pages.management.management_state.operation_job = None;
+            changed = true;
         }
         // Read completion before the result slot: a worker that finishes during
         // this poll must still get a later chance to publish its final result.
@@ -965,6 +997,7 @@ impl ShellSession {
             .as_ref()
             .and_then(|job| job.0.draft.lock().ok()?.take());
         if let Some(result) = draft_result {
+            changed = true;
             if let Some(job) = self.pages.management.management_state.draft_job.take() {
                 self.tasks.complete(TaskDomain::ManagementDraft, job.0.id);
             }
@@ -981,6 +1014,7 @@ impl ShellSession {
         }
         if visible {
             if let Some(draft) = self.pages.management.management_state.pending_draft.take() {
+                changed = true;
                 self.begin_config_editor(
                     draft.path.clone(),
                     Some(draft),
@@ -1008,6 +1042,7 @@ impl ShellSession {
                     .map(|result| (result, job.0.language.clone(), job.0.query.clone()))
             });
         if let Some((result, language, query)) = result {
+            changed = true;
             if let Some(job) = self.pages.management.management_state.query_job.take() {
                 self.tasks.complete(TaskDomain::ManagementQuery, job.0.id);
             }
@@ -1109,6 +1144,7 @@ impl ShellSession {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        changed |= !events.is_empty();
         let mut completed = false;
         for event in events {
             if cfg!(windows)
@@ -1480,13 +1516,16 @@ impl ShellSession {
                 .refreshed
                 .is_some_and(|t| t.elapsed() > Duration::from_secs(5))
         {
+            changed = true;
             if self.pages.management.management_state.kind == Some(ManagementKind::Tasks) {
                 self.refresh_personal_task_history();
             } else {
                 self.refresh_management();
             }
         }
-        self.clamp_management_scroll();
+        if changed {
+            self.clamp_management_scroll();
+        }
         if visible
             && matches!(
                 self.pages.management.management_state.kind,
@@ -1513,6 +1552,7 @@ impl ShellSession {
                 if selected.is_some() && query.target != selected {
                     query.target = selected;
                     self.refresh_management();
+                    changed = true;
                 }
             }
         }
@@ -1531,7 +1571,9 @@ impl ShellSession {
             && state.form.is_none()
         {
             self.refresh_management();
+            changed = true;
         }
+        changed
     }
 
     pub(in crate::session) fn management_keyboard_identity(&self) -> Option<String> {

@@ -430,9 +430,9 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn poll_inline_replacement(&mut self) {
+    pub(in crate::session) fn poll_inline_replacement(&mut self) -> bool {
         let Some((generation, revision)) = self.pages.editor.editor_inline_replace_request else {
-            return;
+            return false;
         };
         if generation != self.pages.editor.editor_document_generation
             || self
@@ -442,10 +442,10 @@ impl ShellSession {
             || self.pages.editor.editor_search_bar.is_none()
         {
             self.cancel_inline_replacement();
-            return;
+            return true;
         }
         let Some(result) = self.pages.editor.editor_preview_task.take() else {
-            return;
+            return false;
         };
         self.pages.editor.editor_inline_replace_request = None;
         match result {
@@ -465,5 +465,6 @@ impl ShellSession {
                     Some(i18n::msg!("editor-search-preview-limit").into())
             }
         }
+        true
     }
 }

@@ -783,19 +783,22 @@ impl UserThemeReloader {
         now: Instant,
         theme: &mut ui::TundraTheme,
         state: &mut ShellSession,
-    ) {
+    ) -> bool {
         let active_user_id = state.auth_session().map(|session| session.user_id.clone());
         let user_changed = self.active_user_id != active_user_id;
         if !user_changed && now < self.next_check {
-            return;
+            return false;
         }
         self.next_check = now.checked_add(THEME_RELOAD_INTERVAL).unwrap_or(now);
 
         let Some(storage) = self.storage.as_ref() else {
-            return;
+            return false;
         };
 
         if active_user_id.is_none() {
+            if !user_changed {
+                return false;
+            }
             let app_config = ShellAppConfig::default();
             theme.border_shape = app_config.border_shape;
             theme.border_color = app_config.border_color;
@@ -806,12 +809,12 @@ impl UserThemeReloader {
             self.active_user_id = None;
             state.notification_dismiss_modal_by_key(THEME_RELOAD_NOTIFICATION_KEY);
             state.finish_modal_focus_transition();
-            return;
+            return true;
         }
 
         let observed = users_file_signature(storage);
         if !user_changed && self.last_observed.as_ref() == Some(&observed) {
-            return;
+            return false;
         }
         self.last_observed = Some(observed.clone());
 
@@ -853,6 +856,7 @@ impl UserThemeReloader {
                 state.notify_modal_with_options(notification);
             }
         }
+        true
     }
 }
 
@@ -1057,6 +1061,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         RedrawIdentity::from_session(&state),
         reduced_motion_enabled(&state),
     );
+    redraw.set_state_clock(runtime_origin, true);
     let mut compositor = ScreenCompositor::default();
     compositor.set_terminal_image_picker(terminal_graphics_probe.picker().cloned());
     let mut screen_saver_display = None;
@@ -1068,6 +1073,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
 
     let execution = std::panic::catch_unwind(AssertUnwindSafe(|| -> io::Result<Option<String>> {
         loop {
+            let mut background_changed = false;
             if let Some(windows) = &mut workspace {
                 if windows.poll(&mut state)? {
                     redraw.request_redraw();
@@ -1086,9 +1092,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 let next_sync = Instant::now();
                 if next_sync.duration_since(last_workspace_sync) >= BACKGROUND_POLL_INTERVAL
                     || !state.window_launches.is_empty()
+                    || workspace_services.is_some_and(|services| services.has_updates())
                 {
                     if let Some(services) = workspace_services {
-                        services.sync_session(&mut state);
+                        background_changed |= services.sync_session(&mut state);
                     }
                     last_workspace_sync = next_sync;
                 }
@@ -1104,6 +1111,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             }
             let was_control_enabled = control.enabled();
             if let Err(error) = control.synchronize(state.app.storage_config().automation.enabled) {
+                background_changed = true;
                 state.notify_alert_with_tone(
                     i18n::msg!("ui-control-unavailable", reason = error.to_string()),
                     ui::NotificationTone::Error,
@@ -1113,18 +1121,17 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             if was_control_enabled != control.enabled() {
                 redraw.request_redraw();
             }
-            state.resize_auto_admin();
             language_runtime.update_from(&state);
             let _language = i18n::enter_snapshot(state.language.clone());
-            let mut state_before_polling = state.clone();
-            let theme_before_polling = theme.clone();
-            drain_system_status_snapshot(&mut system_status_snapshots, &mut state);
+            background_changed |=
+                drain_system_status_snapshot(&mut system_status_snapshots, &mut state);
             // logind signals are delivered by a backend worker and drained here so
             // neither D-Bus nor policy authorization can block terminal input.
             for _ in 0..16 {
                 let lifecycle_event = match platform.poll_lifecycle_event() {
                     Ok(event) => event,
                     Err(error) => {
+                        background_changed = true;
                         state.notify_alert_with_tone(
                             i18n::msg!("startup-lifecycle-failed", reason = error.to_string()),
                             ui::NotificationTone::Error,
@@ -1160,6 +1167,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         terminal_suspended = true;
                     }
                     PlatformLifecycleEvent::Resumed => {
+                        background_changed = true;
                         if let Some(windows) = &mut workspace {
                             windows.set_suspend(false);
                         }
@@ -1227,8 +1235,12 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 redraw.request_redraw();
             }
 
-            drain_time_sync_results(&mut state, time_sync_receiver, cached_time_sync);
-            if let Some(message) = drain_watchdog_incidents(&mut state, process_watchdog) {
+            background_changed |=
+                drain_time_sync_results(&mut state, time_sync_receiver, cached_time_sync);
+            let (panic_message, incidents_changed) =
+                drain_watchdog_incidents(&mut state, process_watchdog);
+            background_changed |= incidents_changed;
+            if let Some(message) = panic_message {
                 return Ok(Some(message));
             }
             shell_watchdog.heartbeat(RuntimeSnapshot {
@@ -1237,7 +1249,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 ..RuntimeSnapshot::default()
             });
             let frame_now = Instant::now();
-            state.advance_screen_saver_at(frame_now);
+            background_changed |= state.advance_screen_saver_at(frame_now);
             if !state.screen_saver_active() {
                 screen_saver_display = None;
                 next_weather_frame = frame_now;
@@ -1248,12 +1260,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             {
                 redraw.request_redraw();
             }
-            theme_reloader.poll_at(frame_now, &mut theme, &mut state);
-            let clock_snapshot = state.app.snapshot().clock;
-            state.advance_clock_background_at(&clock_snapshot, frame_now);
-            if session_render_state_changed(&mut state_before_polling, &state)
-                || theme != theme_before_polling
-            {
+            background_changed |= theme_reloader.poll_at(frame_now, &mut theme, &mut state);
+            background_changed |= state.advance_clock_background();
+            if background_changed {
                 redraw.request_redraw();
             }
             redraw.observe(
@@ -1451,6 +1460,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 background_work_outstanding,
                 poll_now.saturating_duration_since(last_background_poll),
             );
+            let background_poll_timeout =
+                state.background_timer_timeout(poll_now, background_poll_timeout);
+            let background_poll_timeout =
+                state.input_keyboard_poll_timeout(poll_now, background_poll_timeout);
             let state_poll_timeout = state.screen_saver_poll_timeout(
                 poll_now,
                 state.auth_poll_timeout(
@@ -1632,7 +1645,12 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             } else if state_timeout_wakeup
                 && Instant::now().saturating_duration_since(poll_now) >= state_poll_timeout
             {
-                action = Some(state.apply_input_with_platform(InputEvent::Tick, platform.as_ref()));
+                let (tick_action, changed) =
+                    state.poll_background_at(platform.as_ref(), Instant::now());
+                action = Some(tick_action);
+                if changed {
+                    redraw.request_redraw();
+                }
                 if background_work_outstanding
                     && poll_now.saturating_duration_since(last_background_poll)
                         >= BACKGROUND_POLL_INTERVAL
@@ -1652,9 +1670,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 redraw.request_redraw();
             }
             if terminal_event_received && action == Some(ShellAction::Redraw) {
-                redraw.request_redraw();
-            }
-            if session_render_state_changed(&mut state_before_polling, &state) {
                 redraw.request_redraw();
             }
 
@@ -1934,36 +1949,30 @@ pub(super) fn synchronize_motion_hit_map_after_input(
     state.refresh_hit_map_with_motion(redraw.transitions(now));
 }
 
-pub(super) fn session_render_state_changed(
-    before: &mut ShellSession,
-    after: &ShellSession,
-) -> bool {
-    before.ui.tick_count = after.ui.tick_count;
-    before.ui.hit_map_generation = after.ui.hit_map_generation;
-    before.ui.hit_map.generation = after.ui.hit_map.generation;
-    *before != *after
-}
-
-fn session_has_background_work(state: &ShellSession) -> bool {
+pub(super) fn session_has_background_work(state: &ShellSession) -> bool {
     state.tasks.has_work()
         || state.auto_admin_running()
-        || state.content_screen() == ShellScreen::CommandLine
-        || state.pages.launcher.launcher_refresh_request.is_some()
-        || state.pages.editor.editor_load_state.is_some()
-        || state.pages.editor.editor_save_state.is_some()
-        || state.pages.editor.editor_preview_request.is_some()
-        || state.pages.editor.editor_inline_replace_request.is_some()
-        || state
-            .app
-            .editor_state()
-            .is_some_and(app::editor::EditorState::has_background_work)
-        || state.pages.diagnostics.diagnostics_scanning
+        || !state.pending_page_closes.is_empty()
         || state
             .pages
-            .settings
-            .settings_state
-            .as_ref()
-            .is_some_and(|settings| settings.time_sync_validation_request_id.is_some())
+            .launcher
+            .iter()
+            .any(|(_, page)| page.launcher_refresh_request.is_some())
+        || state.pages.editor.iter().any(|(id, page)| {
+            page.editor_load_state.is_some()
+                || page.editor_save_state.is_some()
+                || page.editor_preview_request.is_some()
+                || page.editor_inline_replace_request.is_some()
+                || state
+                    .app
+                    .editor_state_for_page(id)
+                    .is_some_and(app::editor::EditorState::has_background_work)
+        })
+        || state
+            .pages
+            .diagnostics
+            .iter()
+            .any(|(_, page)| page.diagnostics_scanning)
         || state.settings_task_runtime.update_busy()
         || state
             .app
@@ -2432,16 +2441,21 @@ fn weathr_watchdog_descriptor() -> AppDescriptor {
 pub(super) fn drain_watchdog_incidents(
     state: &mut ShellSession,
     watchdog: &ProcessWatchdog,
-) -> Option<String> {
+) -> (Option<String>, bool) {
     let mut panic_messages = Vec::new();
-    for incident in watchdog.drain_incidents() {
+    let incidents = watchdog.drain_incidents();
+    let changed = !incidents.is_empty();
+    for incident in incidents {
         if incident.kind == IncidentKind::Panic {
             panic_messages.push(panic_incident_message(&incident));
         } else {
             show_watchdog_incident(state, incident);
         }
     }
-    (!panic_messages.is_empty()).then(|| panic_messages.join("\n\n"))
+    (
+        (!panic_messages.is_empty()).then(|| panic_messages.join("\n\n")),
+        changed,
+    )
 }
 
 fn watchdog_incident_summary(incident: &IncidentReceipt) -> String {
@@ -2530,14 +2544,19 @@ pub(super) fn drain_time_sync_results(
     state: &mut ShellSession,
     receiver: &mpsc::Receiver<TimedTimeSyncResult>,
     cached: &mut Option<CachedTimeSyncResult>,
-) {
+) -> bool {
+    let mut changed = false;
     loop {
         match receiver.try_recv() {
-            Ok(result) => apply_timed_time_sync_result_at(state, cached, result, Instant::now()),
+            Ok(result) => {
+                changed = true;
+                apply_timed_time_sync_result_at(state, cached, result, Instant::now());
+            }
             Err(mpsc::TryRecvError::Empty) => break,
             Err(mpsc::TryRecvError::Disconnected) => break,
         }
     }
+    changed
 }
 
 pub(super) fn apply_timed_time_sync_result_at(

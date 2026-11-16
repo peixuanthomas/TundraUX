@@ -65,10 +65,7 @@ fn text(buffer: &Buffer, area: Rect) -> String {
 }
 
 #[test]
-fn settled_frames_do_not_schedule_themselves_but_inputs_and_layout_changes_do() {
-    use super::super::runtime::session_render_state_changed;
-
-    let platform = platform::mock::UnsupportedPlatform;
+fn settled_frames_do_not_schedule_themselves_when_hit_maps_refresh() {
     for screen in [ShellScreen::Home, ShellScreen::CommandLine] {
         let mut state = session();
         state.enter_screen(screen);
@@ -83,35 +80,10 @@ fn settled_frames_do_not_schedule_themselves_but_inputs_and_layout_changes_do() 
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
 
         for _ in 0..3 {
-            let mut before = state.clone();
             let generation = state.hit_map().generation();
             assert!(!draw(&mut compositor, &mut terminal, &mut state, &prepared));
             assert!(state.hit_map().generation() > generation);
-            // Refreshing hit targets during a draw must not request another frame.
-            assert!(
-                !session_render_state_changed(&mut before, &state),
-                "{screen:?}"
-            );
         }
-
-        let mut before = state.clone();
-        state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
-        assert!(session_render_state_changed(&mut before, &state));
-
-        let mut before = state.clone();
-        state.open_clock();
-        assert!(session_render_state_changed(&mut before, &state));
-
-        let mut before = state.clone();
-        state.apply_input_with_platform(
-            InputEvent::Resize {
-                width: 140,
-                height: 42,
-            },
-            &platform,
-        );
-        assert!(before.hit_map().regions() != state.hit_map().regions());
-        assert!(session_render_state_changed(&mut before, &state));
     }
 }
 

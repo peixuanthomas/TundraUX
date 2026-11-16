@@ -499,15 +499,17 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn drain_diagnostics_events(&mut self) {
+    pub(in crate::session) fn drain_diagnostics_events(&mut self) -> bool {
         let events = self
             .diagnostics_task_runtime
             .as_ref()
             .map(ShellDiagnosticsTaskRuntime::drain_events)
             .unwrap_or_default();
+        let changed = !events.is_empty();
         for envelope in events {
             self.deliver_diagnostics_event(envelope);
         }
+        changed
     }
 
     fn deliver_diagnostics_event(&mut self, envelope: app::diagnostics::DiagnosticsTaskEnvelope) {

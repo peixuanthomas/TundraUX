@@ -18,7 +18,7 @@ impl ShellSession {
         self.pages.common.error_message = None;
     }
 
-    pub(in crate::session) fn expire_login_password_visibility_at(&mut self, now: Instant) {
+    pub(in crate::session) fn expire_login_password_visibility_at(&mut self, now: Instant) -> bool {
         if self
             .pages
             .login
@@ -26,7 +26,9 @@ impl ShellSession {
             .is_some_and(|deadline| now >= deadline)
         {
             self.pages.login.login_password_visible_until = None;
+            return true;
         }
+        false
     }
 
     pub(in crate::session) fn login_password_is_visible_at(&self, now: Instant) -> bool {

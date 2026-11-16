@@ -283,12 +283,14 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn notification_expire(&mut self, now: Instant) {
+    pub(in crate::session) fn notification_expire(&mut self, now: Instant) -> bool {
+        let changed = self
+            .app
+            .notification_center()
+            .poll_deadline()
+            .is_some_and(|at| now >= at);
         self.app.dispatch_at(app::AppCommand::Tick, now);
-    }
-
-    pub(in crate::session) fn notification_tick(&mut self) {
-        self.notification_expire(Instant::now());
+        changed
     }
 
     pub(in crate::session) fn notification_poll_timeout(

@@ -498,6 +498,22 @@ impl ShellEditorTaskRuntime {
             .push((lease, Instant::now() + super::EDITOR_RECOVERY_INTERVAL));
     }
 
+    pub(in crate::session) fn recovery_cleanup_poll_timeout(
+        &self,
+        now: Instant,
+        maximum: Duration,
+    ) -> Duration {
+        self.shared
+            .recovery_cleanup
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .map(|(_, at)| at.saturating_duration_since(now))
+            .min()
+            .unwrap_or(maximum)
+            .min(maximum)
+    }
+
     pub(in crate::session) fn retry_recovery_cleanup(&self, now: Instant) {
         self.shared
             .recovery_cleanup

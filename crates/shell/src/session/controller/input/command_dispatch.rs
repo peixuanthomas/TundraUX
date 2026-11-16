@@ -26,6 +26,9 @@ impl ShellSession {
         received_at: Instant,
     ) -> ShellAction {
         let _language = i18n::enter_snapshot(self.language.clone());
+        if matches!(input, InputEvent::Tick) {
+            return self.poll_background_at(platform, received_at).0;
+        }
         let Some(input) = self.prepare_input(input, platform, received_at) else {
             return ShellAction::Redraw;
         };
@@ -390,52 +393,7 @@ impl ShellSession {
                 self.app
                     .dispatch_at(app::AppCommand::ConfirmExit, received_at)
             }
-            ShellCommand::Tick => {
-                let _ = self.app.dispatch_at(app::AppCommand::Tick, received_at);
-                self.tick_count = self.tick_count.saturating_add(1);
-                self.notification_tick();
-                self.advance_clock_background();
-                self.poll_explorer_background_tasks(platform);
-                self.poll_launcher_background_tasks();
-                self.poll_settings_background_tasks();
-                self.drain_diagnostics_events();
-                if self.pending_login_reset.is_some() || self.pending_session_exit.is_some() {
-                    self.drain_logs_for_shutdown();
-                    self.drain_management_for_shutdown();
-                } else {
-                    self.poll_logs_tasks();
-                    self.poll_management();
-                }
-                self.poll_auto_admin();
-                self.poll_user_management_task();
-                self.poll_editor_background_tasks(platform);
-                self.persist_all_editor_recovery_if_due(received_at);
-                self.poll_page_closes();
-                if !self.tasks.has_running()
-                    && let Some(status) = self.pending_login_reset.take()
-                {
-                    let lockscreen = std::mem::take(&mut self.pending_lockscreen_after_logout);
-                    self.return_to_login_at(status, received_at);
-                    if lockscreen && self.app.auth_session().is_none() {
-                        self.prepare_return_to_lockscreen();
-                        return ShellAction::Exit;
-                    }
-                }
-                if !self.tasks.has_running()
-                    && let Some(command) = self.pending_session_exit.take()
-                {
-                    return self.apply_routed_event_once(
-                        RoutedEvent {
-                            command,
-                            input: InputEvent::Tick,
-                            target: RoutedTarget::Global,
-                        },
-                        platform,
-                        received_at,
-                    );
-                }
-                ShellAction::Redraw
-            }
+            ShellCommand::Tick => self.poll_background_at(platform, received_at).0,
             ShellCommand::RefreshHitMap { width, height } => {
                 self.terminal_size = (width, height);
                 if self.active_screen() == ShellScreen::Editor && self.pages.editor.editor_soft_wrap

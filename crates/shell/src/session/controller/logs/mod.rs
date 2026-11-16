@@ -265,10 +265,28 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn poll_logs_tasks(&mut self) {
-        for id in self.pages.logs.ids() {
-            self.with_page_context(id, |session| session.poll_logs_page());
+    pub(in crate::session) fn logs_poll_timeout(
+        &self,
+        now: Instant,
+        maximum: Duration,
+    ) -> Duration {
+        if self.active_screen() == ShellScreen::Logs
+            && self.pages.logs.logs_state.job.is_none()
+            && let Some(last) = self.pages.logs.logs_state.last_refresh
+        {
+            return maximum.min((last + Duration::from_secs(1)).saturating_duration_since(now));
         }
+        maximum
+    }
+
+    pub(in crate::session) fn poll_logs_tasks(&mut self) -> bool {
+        let mut changed = false;
+        for id in self.pages.logs.ids() {
+            changed |= self
+                .with_page_context(id, |session| session.poll_logs_page())
+                .unwrap_or(false);
+        }
+        changed
     }
 
     pub(in crate::session) fn drain_logs_for_shutdown(&mut self) {
@@ -299,18 +317,18 @@ impl ShellSession {
         );
     }
 
-    fn poll_logs_page(&mut self) {
+    fn poll_logs_page(&mut self) -> bool {
         let visible = self.pages.logs.selected_id() == Some(self.active_page_id());
         if visible && let Some(path) = self.pages.logs.logs_state.pending_document.take() {
             self.show_logs_document(path);
-            return;
+            return true;
         }
         if self.pages.logs.logs_state.job.as_ref().is_some_and(|job| {
             self.tasks.owner(TaskDomain::Logs, job.0.id)
                 != self.pages.logs.selected_id().map(TaskOwner::Page)
         }) {
             self.pages.logs.logs_state.job = None;
-            return;
+            return true;
         }
         let stopped = self.pages.logs.logs_state.job.as_ref().is_some_and(|job| {
             job.0.worker.lock().ok().is_some_and(|worker| {
@@ -335,8 +353,7 @@ impl ShellSession {
                     "shell-logs-worker-stopped-before-completing-the-request"
                 )));
             }
-            self.poll_live_logs();
-            return;
+            return self.poll_live_logs() || stopped;
         };
         let background = self
             .pages
@@ -456,6 +473,7 @@ impl ShellSession {
                 }
             }
         }
+        true
     }
 
     fn show_logs_document(&mut self, path: PathBuf) {
@@ -599,7 +617,7 @@ impl ShellSession {
         self.request_logs_job(None);
     }
 
-    fn poll_live_logs(&mut self) {
+    fn poll_live_logs(&mut self) -> bool {
         if self.active_screen() == ShellScreen::Logs
             && self.pages.logs.selected_id() == Some(self.active_page_id())
             && self.pages.logs.logs_state.job.is_none()
@@ -613,7 +631,9 @@ impl ShellSession {
             self.pages.logs.logs_state.background_refresh = true;
             self.request_logs_job(None);
             self.pages.logs.logs_state.background_refresh = false;
+            return true;
         }
+        false
     }
     fn logs_restore_event_order(&mut self) {
         let sort_key = self.logs_sort_key();

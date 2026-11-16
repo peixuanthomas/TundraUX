@@ -780,7 +780,28 @@ impl ShellSession {
         }
     }
 
-    pub(super) fn poll_scheduled_preview(&mut self) {
+    pub(in crate::session) fn scheduled_preview_poll_timeout(
+        &self,
+        now: Instant,
+        maximum: Duration,
+    ) -> Duration {
+        self.pages
+            .management
+            .iter()
+            .filter_map(|(_, page)| {
+                let form = page.management_state.form.as_ref()?;
+                let FormPurpose::Scheduled(wizard) = &form.purpose else {
+                    return None;
+                };
+                wizard.preview_after
+            })
+            .map(|at| at.saturating_duration_since(now))
+            .min()
+            .unwrap_or(maximum)
+            .min(maximum)
+    }
+
+    pub(super) fn poll_scheduled_preview(&mut self) -> bool {
         if let Some(form) = self.pages.management.management_state.form.as_ref()
             && let FormPurpose::Scheduled(mut wizard) = form.purpose.clone()
             && wizard.step == ScheduleStep::Time
@@ -805,18 +826,18 @@ impl ShellSession {
                     form.purpose = FormPurpose::Scheduled(wizard);
                     form.message = i18n::tr!("schedule-working");
                 }
-                return;
+                return true;
             }
             if wizard.preview_id.is_none()
                 && wizard.preview_after.is_some_and(|at| Instant::now() >= at)
             {
                 self.begin_scheduled_preview(wizard, true);
-                return;
+                return true;
             }
         }
         let state = &mut self.pages.management.management_state;
         let Some(job) = state.scheduled_preview.clone() else {
-            return;
+            return false;
         };
         let result = job
             .0
@@ -825,19 +846,19 @@ impl ShellSession {
             .unwrap_or_else(|e| e.into_inner())
             .take();
         let Some(result) = result else {
-            return;
+            return false;
         };
         self.tasks.complete(TaskDomain::ManagementDraft, job.0.id);
         let state = &mut self.pages.management.management_state;
         state.scheduled_preview = None;
         let Some(form) = state.form.as_mut() else {
-            return;
+            return true;
         };
         let FormPurpose::Scheduled(wizard) = &mut form.purpose else {
-            return;
+            return true;
         };
         if wizard.preview_id != Some(job.0.id) {
-            return;
+            return true;
         }
         match result {
             Ok(snapshot) => {
@@ -857,5 +878,6 @@ impl ShellSession {
         }
         self.cancel_management_pointer_gesture();
         self.interaction.button_capture = None;
+        true
     }
 }

@@ -72,17 +72,17 @@ impl ShellSession {
         )));
     }
 
-    pub(in crate::session) fn persist_editor_recovery_if_due(&mut self, now: Instant) {
+    pub(in crate::session) fn persist_editor_recovery_if_due(&mut self, now: Instant) -> bool {
         if self
             .app
             .editor_state()
             .is_none_or(|state| !state.is_dirty())
         {
-            return;
+            return false;
         }
         let Some(dirty_since) = self.pages.editor.editor_recovery_dirty_since else {
             self.pages.editor.editor_recovery_dirty_since = Some(now);
-            return;
+            return false;
         };
         if now.saturating_duration_since(dirty_since) < EDITOR_RECOVERY_IDLE
             || self
@@ -91,9 +91,9 @@ impl ShellSession {
                 .editor_last_recovery_write
                 .is_some_and(|last| now.saturating_duration_since(last) < EDITOR_RECOVERY_INTERVAL)
         {
-            return;
+            return false;
         }
-        let _ = self.persist_editor_recovery_now(now);
+        !self.persist_editor_recovery_now(now)
     }
 
     /// Writes the current dirty buffer without debounce. Interactive exit and

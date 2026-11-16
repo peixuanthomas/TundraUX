@@ -200,23 +200,25 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn advance_clock_background(&mut self) {
-        let snapshot = self.app.snapshot().clock;
-        self.advance_clock_background_at(&snapshot, Instant::now());
+    pub(in crate::session) fn advance_clock_background(&mut self) -> bool {
+        if self.window_owner.is_app() || self.clock_scheduler.is_none() {
+            return false;
+        }
+        let snapshot = self.app.clock_snapshot();
+        self.advance_clock_background_at(&snapshot, Instant::now())
     }
 
     pub(in crate::session) fn advance_clock_background_at(
         &mut self,
         snapshot: &time::ClockSnapshot,
         now: Instant,
-    ) {
-        self.notification_expire(now);
+    ) -> bool {
+        let changed = self.notification_expire(now);
         if self.window_owner.is_app() {
-            return;
+            return changed;
         }
         if let Some(services) = SessionServicesClient::current() {
-            self.advance_workspace_clock(services, snapshot, now);
-            return;
+            return self.advance_workspace_clock(services, snapshot, now) || changed;
         }
         let due = self
             .clock_scheduler
@@ -235,6 +237,7 @@ impl ShellSession {
         if let Some(summary) = ordinary_due {
             self.remember_clock_due_summary(summary);
         }
+        let changed = changed || has_due || self.clock_persist_pending;
         if has_due || self.clock_persist_pending {
             match self.persist_clock_scheduler_at(snapshot, now) {
                 Ok(()) => {
@@ -248,6 +251,7 @@ impl ShellSession {
                 }
             }
         }
+        changed
     }
 
     pub(in crate::session) fn handle_clock_due_events(

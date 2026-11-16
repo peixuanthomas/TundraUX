@@ -46,7 +46,7 @@ pub(super) struct RedrawScheduler {
     last_frame_at: Duration,
     next_motion_frame: Option<Duration>,
     next_continuous_frame: Option<Duration>,
-    next_state_clock: Duration,
+    next_state_clock: Option<Duration>,
     urgent_redraw: bool,
     needs_redraw: bool,
     reduced_motion: bool,
@@ -60,7 +60,7 @@ impl RedrawScheduler {
             last_frame_at: Duration::ZERO,
             next_motion_frame: None,
             next_continuous_frame: None,
-            next_state_clock: STATE_CLOCK_INTERVAL,
+            next_state_clock: None,
             needs_redraw: true,
             urgent_redraw: true,
             reduced_motion,
@@ -69,6 +69,19 @@ impl RedrawScheduler {
 
     pub(super) fn elapsed(&self, now: Instant) -> Duration {
         now.saturating_duration_since(self.origin)
+    }
+
+    pub(super) fn set_state_clock(&mut self, now: Instant, enabled: bool) {
+        if !enabled {
+            self.next_state_clock = None;
+        } else if self.next_state_clock.is_none() {
+            let elapsed = self.elapsed(now);
+            self.next_state_clock = Some(Duration::from_secs(
+                elapsed
+                    .as_secs()
+                    .saturating_add(STATE_CLOCK_INTERVAL.as_secs()),
+            ));
+        }
     }
 
     pub(super) fn request_redraw(&mut self) {
@@ -143,7 +156,9 @@ impl RedrawScheduler {
             self.needs_redraw && next_frame.is_none_or(|deadline| now >= deadline);
         self.urgent_redraw
             || redraw_request_due
-            || now >= self.next_state_clock
+            || self
+                .next_state_clock
+                .is_some_and(|deadline| now >= deadline)
             || next_frame.is_some_and(|deadline| now >= deadline)
     }
 
@@ -176,8 +191,13 @@ impl RedrawScheduler {
         self.last_frame_at = sampled_at;
         self.next_motion_frame = None;
         self.next_continuous_frame = None;
-        if self.next_state_clock <= now {
-            self.next_state_clock = Duration::from_secs(now.as_secs().saturating_add(1));
+        if self
+            .next_state_clock
+            .is_some_and(|deadline| deadline <= now)
+        {
+            self.next_state_clock = Some(Duration::from_secs(
+                now.as_secs().saturating_add(STATE_CLOCK_INTERVAL.as_secs()),
+            ));
         }
     }
 
@@ -186,11 +206,13 @@ impl RedrawScheduler {
         if self.urgent_redraw || (self.needs_redraw && self.next_frame().is_none()) {
             return Duration::ZERO;
         }
-        let deadline = self
-            .next_frame()
-            .unwrap_or(Duration::MAX)
-            .min(self.next_state_clock);
-        maximum.min(deadline.saturating_sub(now))
+        let deadline = [self.next_frame(), self.next_state_clock]
+            .into_iter()
+            .flatten()
+            .min();
+        deadline.map_or(maximum, |deadline| {
+            maximum.min(deadline.saturating_sub(now))
+        })
     }
 }
 

@@ -362,7 +362,11 @@ fn hidden_load_failure_belongs_to_its_original_picker_not_the_covering_page() {
                 })
                 .unwrap();
 
-            state.poll_editor_background_tasks(&platform::mock::UnsupportedPlatform);
+            assert!(
+                state
+                    .poll_background_at(&platform::mock::UnsupportedPlatform, Instant::now())
+                    .1
+            );
 
             assert_eq!(state.active_page_id(), covering);
             assert_eq!(state.pages.common.focused_component, focus);

@@ -218,24 +218,35 @@ impl ShellSession {
         self.refresh_hit_map();
     }
 
-    pub(in crate::session) fn poll_editor_background_tasks(&mut self, platform: &dyn Platform) {
-        self.poll_editor_preview();
-        let cursor = self.app.editor_state().map(|s| s.cursor.byte_offset);
-        let computation = self.app.poll_editor_computations();
-        if computation.changed {
-            if cursor != self.app.editor_state().map(|s| s.cursor.byte_offset)
-                || (computation.wrapped && self.pages.editor.editor_soft_wrap)
-            {
-                self.reveal_source_caret();
-            }
-            self.refresh_hit_map();
+    pub(in crate::session) fn poll_editor_background_tasks(
+        &mut self,
+        platform: &dyn Platform,
+    ) -> bool {
+        let mut changed = false;
+        for page in self.pages.editor.ids() {
+            changed |= self
+                .with_page_context(page, |session| {
+                    let mut changed = session.poll_editor_preview();
+                    let cursor = session.app.editor_state().map(|s| s.cursor.byte_offset);
+                    let computation = session.app.poll_editor_computations();
+                    changed |= computation.changed;
+                    if computation.changed {
+                        if cursor != session.app.editor_state().map(|s| s.cursor.byte_offset)
+                            || (computation.wrapped && session.pages.editor.editor_soft_wrap)
+                        {
+                            session.reveal_source_caret();
+                        }
+                        session.refresh_hit_map();
+                    }
+                    changed
+                })
+                .unwrap_or(false);
         }
         self.editor_task_runtime
             .retry_recovery_cleanup(Instant::now());
         let events = self.editor_task_runtime.drain_events();
         if events.is_empty() {
-            self.resume_pending_editor_open(platform);
-            return;
+            return self.resume_pending_editor_open(platform) || changed;
         }
         for event in events {
             let (id, done) = match &event {
@@ -279,9 +290,10 @@ impl ShellSession {
         }
         self.resume_pending_editor_open(platform);
         self.refresh_hit_map();
+        true
     }
 
-    fn resume_pending_editor_open(&mut self, platform: &dyn Platform) {
+    fn resume_pending_editor_open(&mut self, platform: &dyn Platform) -> bool {
         if self.active_screen() == ShellScreen::Editor
             && self.pages.editor.editor_save_state.is_none()
             && self.pages.editor.editor_load_state.is_none()
@@ -293,7 +305,9 @@ impl ShellSession {
         {
             self.pages.editor.editor_open_after_save = false;
             self.continue_editor_open_after_save(platform);
+            return true;
         }
+        false
     }
 
     fn apply_editor_task_event(&mut self, event: EditorTaskEvent, platform: &dyn Platform) {
