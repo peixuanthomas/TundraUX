@@ -81,6 +81,7 @@ impl ShellSession {
                 window_owner: Default::default(),
                 inherited_auth: None,
             },
+            None,
         )
     }
 
@@ -90,6 +91,7 @@ impl ShellSession {
         startup: ShellStartupState,
         ascii_assets: ui::RuntimeAsciiAssets,
         runtime_services: ShellRuntimeServices,
+        language_load_us: Option<&mut u64>,
     ) -> Self {
         let diagnostics_restart_required = runtime_services
             .diagnostics
@@ -132,7 +134,13 @@ impl ShellSession {
             storage_config.time_sync.server_url = None;
         }
         let prepared_language = runtime_services.language.unwrap_or_else(|| {
-            PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language)
+            let started = language_load_us.as_ref().map(|_| Instant::now());
+            let prepared =
+                PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language);
+            if let (Some(duration), Some(started)) = (language_load_us, started) {
+                *duration = started.elapsed().as_micros() as u64;
+            }
+            prepared
         });
         let language_catalog = prepared_language.catalog;
         let language = prepared_language.snapshot;

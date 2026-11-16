@@ -98,6 +98,7 @@ impl AppHostSession {
                 .min(u16::MAX - 2),
         );
         let terminal_size = (size.width, size.height + 2);
+        let build_started = Instant::now();
         let mut state = ShellSession::new_with_runtime_services(
             ShellLaunchConfig::default(),
             terminal_size,
@@ -118,7 +119,9 @@ impl AppHostSession {
                 window_owner: WindowOwner::App(application),
                 inherited_auth: auth,
             },
+            Some(&mut timings.language_load_us),
         );
+        timings.session_build_us = build_started.elapsed().as_micros() as u64;
         state.set_terminal_text_sizing_support(init.text_sizing);
         if application == WindowApplication::Launcher {
             state.launcher_task_runtime = Some(ShellLauncherTaskRuntime::new_managed(
@@ -134,7 +137,9 @@ impl AppHostSession {
             WindowLaunch::ExplorerPath { select, .. } => select.clone().map(PathBuf::from),
             _ => None,
         };
+        let activation_started = Instant::now();
         launch.activate(&mut state, platform.as_ref());
+        timings.launch_activate_us = activation_started.elapsed().as_micros() as u64;
         if state.content_screen() == ShellScreen::Home {
             let message = state.pages.common.error_message.as_ref().map_or_else(
                 || state.to_shell_chrome_view_model().status.full_message(),

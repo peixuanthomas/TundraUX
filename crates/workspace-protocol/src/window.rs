@@ -170,6 +170,12 @@ pub struct AppStartupTimings {
     pub services_setup_us: u64,
     pub resources_us: u64,
     pub session_init_us: u64,
+    #[serde(default)]
+    pub session_build_us: u64,
+    #[serde(default)]
+    pub language_load_us: u64,
+    #[serde(default)]
+    pub launch_activate_us: u64,
     pub session_sync_us: u64,
     pub first_frame_ready_us: u64,
     pub first_poll_us: u64,

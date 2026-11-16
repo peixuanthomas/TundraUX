@@ -997,6 +997,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             },
             inherited_auth: None,
         },
+        None,
     );
     if let Some(report) = startup_resource_report {
         state.report_graphical_resource_recovery(&report);

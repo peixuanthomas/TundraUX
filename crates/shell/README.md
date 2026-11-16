@@ -130,7 +130,7 @@ Already-due wheel steps from one external scroll request share a frame without d
 | `handshake_us` | From receiving `AppStarted` through connecting to AppHost, exchanging Hello/Welcome, and queuing Init |
 | `services_setup_us` | From AppHost receiving Init through connecting to SessionServices, reading configuration, and registering its local watchdog |
 | `resources_us` | Loading the default ASCII artwork, icon catalogs, and clock font |
-| `session_init_us` | Building and activating the AppHost session, excluding `resources_us`. Includes its first profile/config synchronization (`session_sync_us`) |
+| `session_init_us` | Building and activating the AppHost session, excluding `resources_us`. Includes session construction (`session_build_us`, with `language_load_us` inside it), initial profile/config synchronization (`session_sync_us`), and opening the requested page (`launch_activate_us`) |
 | `first_frame_ready_us` | From session initialization to preparation of AppHost's first frame. Includes its first event-loop poll (`first_poll_us`), any wait to render, and the actual draw and capture (`first_draw_us`) |
 | `window_ipc_us` | Remaining time after the Init enqueue. Includes Init delivery, frame serialization and delivery, Shell polling and validation, and any wait for a subsequent frame if the first viewport is stale |
 

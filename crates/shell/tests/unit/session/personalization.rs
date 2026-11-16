@@ -116,6 +116,7 @@ fn linux_startup(
             editor: ShellEditorTaskRuntime::unavailable(),
             settings: ShellSettingsTaskRuntime::unavailable(),
         },
+        None,
     );
     // Resource normalization can report a startup repair; acknowledge it just
     // as the terminal user does before entering the onboarding flow.

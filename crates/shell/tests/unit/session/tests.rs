@@ -2992,6 +2992,7 @@ fn system_status_live_service_home_open_refresh_and_background_close() {
                 None,
             ),
         },
+        None,
     );
     state.complete_login(admin_session);
     state.set_navigation_path(vec![ShellScreen::Home]);
