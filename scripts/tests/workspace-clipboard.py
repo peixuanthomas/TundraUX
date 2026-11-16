@@ -144,7 +144,7 @@ def main():
                  ("copy-visible", "c", True))
         for label, _, _ in cases:
             (source / f"{label}-源.txt").write_text(f"{label}: e\u0301 中文\n")
-        frame, _ = session.open_app("Explorer")
+        frame, _ = session.open_app("Explorer", timed=False)
         first = next(item for item in performance.titles(frame) if item["selected"])["id"]
         session.snapshot()
         navigate(source)
