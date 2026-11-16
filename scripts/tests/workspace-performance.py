@@ -681,6 +681,20 @@ def main():
     environment = binary.parent / "build-environment.json"
     if environment.is_file():
         metadata["build_environment"] = json.loads(environment.read_text())
+    limits = {}
+    for name in ("cpu.max", "memory.max", "cpuset.cpus.effective"):
+        path = Path("/sys/fs/cgroup") / name
+        if path.is_file():
+            limits[name] = path.read_text().strip()
+    metadata["environment_preflight"] = {
+        "captured_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "loadavg": Path("/proc/loadavg").read_text().strip(), "cgroup_limits": limits,
+        "processes": subprocess.run(["ps", "-eo", "pid,ppid,comm,pcpu,stat", "--sort=-pcpu"],
+                                    capture_output=True, text=True, check=True).stdout,
+    }
+    (args.output / "environment-preflight.json").write_text(
+        json.dumps(metadata["environment_preflight"], indent=2) + "\n"
+    )
     samples = []
     started = time.monotonic()
     with (args.output / "samples.jsonl").open("w") as raw:
