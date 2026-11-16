@@ -667,6 +667,16 @@ impl AppHostSession {
         if self.close_status == WindowClose::Confirmed {
             return Ok(());
         }
+        let minimum = [
+            self.command_lines.minimum_content_size(),
+            self.vim.minimum_content_size(),
+            self.scripts.minimum_content_size(),
+        ]
+        .into_iter()
+        .flatten()
+        .fold(MIN_CONTENT_SIZE, |minimum, (width, height)| {
+            Size::new(minimum.width.max(width), minimum.height.max(height))
+        });
         let busy = self.state.tasks.has_running()
             || self.state.auto_admin_running()
             || self.command_lines.has_running_processes()
@@ -676,7 +686,8 @@ impl AppHostSession {
         let awaiting_approval = self.state.auto_admin.waiting_for_approval();
         let unresponsive = self.vim.unresponsive();
         changed |= self.last_status.as_ref().is_none_or(|status| {
-            status.busy != busy
+            status.minimum != minimum
+                || status.busy != busy
                 || status.running_operations != running_operations
                 || status.awaiting_approval != awaiting_approval
                 || status.unresponsive != unresponsive
@@ -697,16 +708,6 @@ impl AppHostSession {
             return Ok(());
         }
         self.status_dirty = false;
-        let minimum = [
-            self.command_lines.minimum_content_size(),
-            self.vim.minimum_content_size(),
-            self.scripts.minimum_content_size(),
-        ]
-        .into_iter()
-        .flatten()
-        .fold(MIN_CONTENT_SIZE, |minimum, (width, height)| {
-            Size::new(minimum.width.max(width), minimum.height.max(height))
-        });
         let dirty = self.state.pages.editor.iter().any(|(id, _)| {
             self.state
                 .app
