@@ -2,6 +2,7 @@
 """Exercise incremental splits and app selection in an isolated real PTY."""
 import fcntl
 import importlib.util
+import json
 import os
 from pathlib import Path
 import pty
@@ -79,7 +80,7 @@ def main():
 
         def resize(width, height, count):
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
-            os.kill(child.pid, signal.SIGWINCH)
+            os.kill(shell_pid, signal.SIGWINCH)
             return until(lambda frame: (frame["width"], frame["height"]) == (width, height) and len(titles(frame)) == count)
 
         try:
@@ -93,6 +94,9 @@ def main():
                 send(b"\x1b[21~" if current["page"] == "FirstRunSetup" else b"\r")
                 smoke.read_available(master, output, 0.1)
             current = until(lambda frame: frame["page"] == "Home")
+            sessions = subprocess.run([str(cli), "ui", "sessions"], env=env, capture_output=True, text=True, timeout=15)
+            assert sessions.returncode == 0, sessions.stderr
+            shell_pid = next(session["pid"] for session in json.loads(sessions.stdout)["sessions"] if session["session"] == current["session"])
             launcher = next(node for node in current["nodes"] if "home.entry." in node["id"] and "Launcher" in node["name"])
             tap(current, launcher["id"])
             current = until(lambda frame: frame["page"] == "Launcher" and len(titles(frame)) == 1)

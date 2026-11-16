@@ -111,12 +111,14 @@ def main():
                     key("Enter")
                 time.sleep(0.1)
             current = until(lambda current: current["page"] == "Home")
+            shell_pid = next(session["pid"] for session in ui("sessions")["sessions"]
+                if session["session"] == current["session"])
             print("PASS: external CLI completed first-use setup")
             home_names = {node["name"] for node in current["nodes"] if node["id"].startswith("page/home.entry.")}
             assert home_names
             for width, height in [(140, 48), (108, 20), (107, 20), (108, 19), (108, 20), (140, 40)]:
                 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", height, width, 0, 0))
-                os.kill(child.pid, signal.SIGWINCH)
+                os.kill(shell_pid, signal.SIGWINCH)
                 valid = width >= 108 and height >= 20
                 page = "Home" if valid else "terminal_size"
                 current = until(lambda current: current["width"] == width and current["height"] == height and current["page"] == page)
@@ -256,6 +258,8 @@ def main():
             ui("text", str(root))
             key("Enter")
             current = until(lambda current: any(node["role"] == "listitem" and "sample.rs" in node["text"] for node in current["nodes"]))
+            explorer_taskbar = node_by(current, lambda node: "workspace.taskbar." in node["id"]
+                and node["selected"] and not node["id"].endswith(".close"))["id"]
             row = node_by(current, lambda node: node["role"] == "listitem" and "sample.rs" in node["text"])
             click(row["id"], double=True)
             current = until(lambda current: current["page"] == "Editor" and "// original" in "\n".join(current["lines"]))
@@ -279,15 +283,18 @@ def main():
             assert not blocked["actionable"]
             refused = ui("click", "--id", blocked["id"], okay=False)
             assert refused["error"]["code"] == "target_unavailable"
-            key("Escape")
+            current = key("Escape")
+            old = current["number"]
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 41, 116, 0, 0))
-            os.kill(child.pid, signal.SIGWINCH)
-            refused = ui("key", "F1", okay=False)
-            assert refused["error"]["code"] == "stale_snapshot", refused
+            os.kill(shell_pid, signal.SIGWINCH)
             current = until(lambda current: current["width"] == 116 and current["height"] == 41)
+            refused = ui("key", "F1", "--snapshot", old, okay=False)
+            assert refused["error"]["code"] == "stale_snapshot", refused
             assert len(current["lines"]) == 41
             print("PASS: drag, scroll, modal blocking and real terminal resize")
             click("chrome/shell.back")
+            until(lambda current: current["page"] == "Home")
+            click(explorer_taskbar)
             until(lambda current: current["page"] == "Explorer")
             click("chrome/shell.back")
             until(lambda current: current["page"] == "Home")
@@ -296,6 +303,8 @@ def main():
             key("Left")
             key("Enter")
             current = until(lambda current: current["page"] == "Launcher")
+            launcher_taskbar = node_by(current, lambda node: "workspace.taskbar." in node["id"]
+                and node["selected"] and not node["id"].endswith(".close"))["id"]
             command = node_by(current, lambda node: node["role"] == "button" and "Command Line" in node["name"])
             click(command["id"], double=True)
             until(lambda current: current["page"] == "CommandLine")
@@ -315,6 +324,8 @@ def main():
             until(lambda current: any("external_cli_terminal_ok" in node["text"] for node in current["nodes"] if node["role"] == "terminal"))
             ui("text", "exit")
             key("Enter")
+            until(lambda current: current["page"] == "Home")
+            click(launcher_taskbar)
             until(lambda current: current["page"] == "Launcher")
             print("PASS: external input reached the embedded terminal and its output appeared in snapshots")
             click("chrome/shell.back")
