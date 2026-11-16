@@ -127,6 +127,24 @@ fn script_creation_reaches_time_settings_with_unmodified_pointer_clicks() {
     assert!(
         matches!(&session.pages.management.management_state.form.as_ref().unwrap().purpose,FormPurpose::Scheduled(wizard) if wizard.get("script_path")==script.to_str().unwrap())
     );
+    assert!(session.poll_scheduled_preview());
+    let FormPurpose::Scheduled(wizard) = &session
+        .pages
+        .management
+        .management_state
+        .form
+        .as_ref()
+        .unwrap()
+        .purpose
+    else {
+        panic!("wizard");
+    };
+    let preview_due = wizard.preview_after.unwrap();
+    let maximum = Duration::from_secs(1);
+    assert_eq!(
+        session.scheduled_preview_poll_timeout(preview_due, maximum),
+        Duration::ZERO
+    );
     let layout = ui::management_layout(
         session.management_main(),
         &session.to_management_view_model(),
@@ -134,6 +152,11 @@ fn script_creation_reaches_time_settings_with_unmodified_pointer_clicks() {
     click(&mut session, layout.cancel);
     assert!(
         matches!(&session.pages.management.management_state.form.as_ref().unwrap().purpose,FormPurpose::Scheduled(wizard) if wizard.step==ScheduleStep::Kind)
+    );
+    assert!(!session.poll_scheduled_preview());
+    assert_eq!(
+        session.scheduled_preview_poll_timeout(preview_due, maximum),
+        maximum
     );
     std::fs::remove_file(script).unwrap();
     std::fs::remove_dir(directory).unwrap();

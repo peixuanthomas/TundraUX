@@ -794,6 +794,9 @@ impl ShellSession {
                 let FormPurpose::Scheduled(wizard) = &form.purpose else {
                     return None;
                 };
+                if wizard.step != ScheduleStep::Time || wizard.preview_id.is_some() {
+                    return None;
+                }
                 wizard.preview_after
             })
             .map(|at| at.saturating_duration_since(now))
