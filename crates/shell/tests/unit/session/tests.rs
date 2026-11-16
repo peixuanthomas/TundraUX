@@ -7547,3 +7547,69 @@ fn user_management_more_keeps_focus_and_blocks_covered_rows() {
     state.apply_input(InputEvent::mouse_up(PointerButton::Left, (area.x, area.y)));
     assert!(state.pages.user_management.user_management_more_open);
 }
+
+#[test]
+fn unrelated_system_metrics_keep_static_pages_idle_but_alert_changes_invalidate() {
+    use system_services::{StoragePressure, SystemVolumeSource};
+    let mut state = ShellSession::new_for_home_mode(
+        ShellLaunchConfig::default(),
+        (120, 40),
+        ShellHomeMode::User,
+    );
+    set_test_auth_role(&mut state, UserRole::User);
+    state.enter_screen(ShellScreen::Settings);
+    let generation = state.hit_map().generation();
+    for revision in [1, 2] {
+        assert!(
+            !state.apply_system_status_snapshot(system_status_test_snapshot(
+                revision,
+                StoragePressure::Normal,
+                true,
+                SystemVolumeSource::Detected,
+            ))
+        );
+    }
+    assert_eq!(state.app.system_status_snapshot().unwrap().revision, 2);
+    assert_eq!(state.hit_map().generation(), generation);
+    assert!(
+        state.apply_system_status_snapshot(system_status_test_snapshot(
+            3,
+            StoragePressure::Low,
+            true,
+            SystemVolumeSource::Detected,
+        ))
+    );
+    assert!(
+        !state.apply_system_status_snapshot(system_status_test_snapshot(
+            4,
+            StoragePressure::Low,
+            true,
+            SystemVolumeSource::Detected,
+        ))
+    );
+    assert!(
+        state.apply_system_status_snapshot(system_status_test_snapshot(
+            5,
+            StoragePressure::Critical,
+            false,
+            SystemVolumeSource::Detected,
+        ))
+    );
+    assert!(
+        state.apply_system_status_snapshot(system_status_test_snapshot(
+            6,
+            StoragePressure::Normal,
+            true,
+            SystemVolumeSource::Detected,
+        ))
+    );
+    state.enter_screen(ShellScreen::SystemStatus);
+    assert!(
+        state.apply_system_status_snapshot(system_status_test_snapshot(
+            7,
+            StoragePressure::Normal,
+            true,
+            SystemVolumeSource::Detected,
+        ))
+    );
+}

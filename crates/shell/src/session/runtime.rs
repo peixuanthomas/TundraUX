@@ -1895,16 +1895,15 @@ pub(in crate::session) fn drain_system_status_snapshot(
     if !snapshots.has_changed().unwrap_or(false) {
         return false;
     }
-    apply_current_system_status_snapshot(snapshots, state);
-    true
+    apply_current_system_status_snapshot(snapshots, state)
 }
 
 pub(in crate::session) fn apply_current_system_status_snapshot(
     snapshots: &mut tokio::sync::watch::Receiver<system_services::SystemSnapshot>,
     state: &mut ShellSession,
-) {
+) -> bool {
     let snapshot = app::AppSystemStatusSnapshot::from(&*snapshots.borrow_and_update());
-    state.apply_system_status_snapshot(snapshot);
+    state.apply_system_status_snapshot(snapshot)
 }
 
 fn command_line_poll_timeout(

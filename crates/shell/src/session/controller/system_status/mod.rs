@@ -103,7 +103,7 @@ impl ShellSession {
     pub(in crate::session) fn apply_system_status_snapshot(
         &mut self,
         snapshot: app::AppSystemStatusSnapshot,
-    ) {
+    ) -> bool {
         let selected_key = if self.active_screen() == ShellScreen::SystemStatus {
             self.to_system_status_view_model().and_then(|m| {
                 m.table_data()
@@ -140,19 +140,21 @@ impl ShellSession {
                 })
                 .unwrap_or(0);
         }
-        self.evaluate_system_status_alerts(&snapshot);
+        self.evaluate_system_status_alerts(&snapshot)
+            || self.active_screen() == ShellScreen::SystemStatus
     }
 
     pub(in crate::session) fn evaluate_system_status_alerts(
         &mut self,
         snapshot: &app::AppSystemStatusSnapshot,
-    ) {
+    ) -> bool {
         let Some(role) = self.app.auth_session().map(|s| s.role) else {
-            return;
+            return false;
         };
         if role == UserRole::Guest {
-            return;
+            return false;
         }
+        let mut changed = false;
         let volumes = match &snapshot.storage {
             StorageState::Ready(value) => Some(&value.volumes),
             StorageState::Stale { last_good, .. } => Some(&last_good.volumes),
@@ -170,13 +172,24 @@ impl ShellSession {
                 .cloned()
                 .collect::<Vec<_>>()
             {
-                self.resolve_notification_alert(&format!("system-status.storage:{missing}"));
+                let key = format!("system-status.storage:{missing}");
+                changed |= self
+                    .app
+                    .notification_center()
+                    .alert_message_for_key(&key)
+                    .is_some();
+                self.resolve_notification_alert(&key);
                 self.system_status_storage_alerts.remove(&missing);
             }
             for volume in volumes {
                 let key = format!("system-status.storage:{}", volume.identifier);
                 match volume.pressure {
                     StoragePressure::Normal => {
+                        changed |= self
+                            .app
+                            .notification_center()
+                            .alert_message_for_key(&key)
+                            .is_some();
                         self.system_status_storage_alerts.remove(&volume.identifier);
                         self.resolve_notification_alert(&key);
                     }
@@ -198,6 +211,7 @@ impl ShellSession {
                             _ => false,
                         };
                         if notify {
+                            changed = true;
                             let available = volume
                                 .available_bytes
                                 .map(format_bytes)
@@ -229,6 +243,7 @@ impl ShellSession {
             match self.system_status_network_baseline.replace(link) {
                 Some(true) if !link => {
                     if !self.system_status_disconnected_notified {
+                        changed = true;
                         self.notify_alert_with_key(
                             "system-status.network",
                             i18n::LocalizedText::from(i18n::msg!(
@@ -240,12 +255,18 @@ impl ShellSession {
                     }
                 }
                 Some(false) if link => {
+                    changed |= self
+                        .app
+                        .notification_center()
+                        .alert_message_for_key("system-status.network")
+                        .is_some();
                     self.resolve_notification_alert("system-status.network");
                     self.system_status_disconnected_notified = false;
                 }
                 _ => {}
             }
         }
+        changed
     }
 
     pub(in crate::session) fn reset_system_status_trackers(&mut self) {
