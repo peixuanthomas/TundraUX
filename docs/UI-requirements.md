@@ -128,7 +128,7 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 
 - Object and option selection dialogs always have a top search input, initially focused. Filter names, descriptions and command keywords case-insensitively while preserving original IDs and disabled states. Up/Down selects results, Enter confirms, and Esc closes. Empty results cannot activate a previous selection. Retain specialized previews such as theme colors and the timezone map. Compact right-click and More action menus do not add search.
 
-- Place the screen-keyboard entry between the status message and Tasks. On ordinary pages, the expanded keyboard uses the bottom row and clips the page above it. The header continues to show status and the clock. AA adjusts only the topmost dialog.
+- Place the screen-keyboard entry between the status message and Tasks. The expanded keyboard clips the page above it. In an app window, the last key row fits inside the content area, above the window frame and the bottom window bar. The header continues to show status and the clock. AA adjusts only the topmost dialog.
 - Keep forms and action buttons above the keyboard. If the terminal cannot fit them, ask the user to enlarge it instead of covering required fields.
 - Place Paste at the left end of the keyboard's bottom row and Hide at the right. Physical-key feedback and mouse-latched modifiers use separate state; clear both on focus loss or resize.
 - Keyboard keys use neutral boundaries and text contrast of at least 4.5:1. Pressed or latched keys use accent fill.

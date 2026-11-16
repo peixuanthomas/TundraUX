@@ -128,19 +128,28 @@ impl ShellSession {
     }
 
     pub(super) fn input_keyboard_layout(&self) -> ScreenKeyboardLayout {
-        let mut bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        if let ui::ShellLayout::Full { bottom, .. } = ui::compute_shell_layout(bounds) {
-            let slide = (u32::from(bottom.height) * u32::from(self.input_keyboard_visibility()))
-                .div_ceil(1_000) as u16;
-            bounds.height = bottom.y + slide;
-        }
+        let visibility = self.input_keyboard_visibility();
         ui::screen_keyboard_input_layout_with_visibility(
-            bounds,
+            self.input_keyboard_bounds(visibility),
             self.input_keyboard_open(),
-            self.input_keyboard_visibility(),
+            visibility,
             self.auto_admin_visible(),
             self.screen_keyboard.section,
         )
+    }
+
+    fn input_keyboard_bounds(&self, visibility: u16) -> Rect {
+        let mut bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
+        if let ui::ShellLayout::Full { bottom, .. } = ui::compute_shell_layout(bounds) {
+            // AppHost sends only the content rows to Shell.
+            let slide = if self.window_owner.is_app() {
+                0
+            } else {
+                (u32::from(bottom.height) * u32::from(visibility)).div_ceil(1_000) as u16
+            };
+            bounds.height = bottom.y + slide;
+        }
+        bounds
     }
 
     fn input_keyboard_visibility(&self) -> u16 {
@@ -219,7 +228,8 @@ impl ShellSession {
             return Some(button.area);
         }
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        if self.input_keyboard_visibility() == 0 {
+        let visibility = self.input_keyboard_visibility();
+        if visibility == 0 {
             if let Some(area) = self
                 .frame_layout
                 .filter(|layout| layout.bounds == bounds)
@@ -238,7 +248,9 @@ impl ShellSession {
             .with_keyboard_launcher(true)
             .keyboard_launcher;
         }
-        Some(ui::screen_keyboard_launcher_area(bounds))
+        Some(ui::screen_keyboard_launcher_area(
+            self.input_keyboard_bounds(visibility),
+        ))
     }
 
     pub(super) fn toggle_input_keyboard(&mut self) {

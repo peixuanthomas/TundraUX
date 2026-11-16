@@ -159,11 +159,11 @@ Logs keep F3 expert controls visible across row and filter changes; Tab traverse
 
 ## On-screen keyboard for AA and Command Line
 
-The compositor places the on-screen keyboard entry at the bottom right. It covers text input in AA, Command Line, management forms, login, first-time setup, accounts, settings, the editor, file paths, and search.
+The compositor places the on-screen keyboard control in the header. It covers text input in AA, Command Line, management forms, login, first-time setup, accounts, settings, the editor, file paths, and search.
 
 - Virtual keys and paste enter the normal input flow of the current page or child terminal.
 - Ctrl, Alt, Shift, and CapsLock can be latched by tapping; key combinations continue to be sent to the current program.
-- On ordinary pages, expanding the keyboard collapses the title and bottom bars to leave room for the page and forms; in AA, only the topmost dialog moves.
+- In app windows, expanding the keyboard clips the page above it and keeps the last key row inside the app content. The frame and window bar stay visible. In AA, only the topmost dialog moves.
 - Keyboard ownership is bound to the page instance and form ID; switching pages, tasks, or dialogs clears old input state.
 - When the window lacks space, keep the form and action buttons visible and prompt the user to enlarge it.
 - Keyboard text comes from language packs; layout, rendering, and clicks share the positions in the current animation frame.

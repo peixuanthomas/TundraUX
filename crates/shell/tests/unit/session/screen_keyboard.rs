@@ -12,45 +12,98 @@ fn session() -> ShellSession {
 }
 
 #[test]
-fn closed_keyboard_entry_uses_status_row_without_covering_page_content() {
+fn closed_keyboard_entry_uses_header_without_covering_page_content() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
         let mut state = session();
         state.terminal_size = (width, height);
         let bounds = Rect::new(0, 0, width, height);
-        let layout = state.input_keyboard_content_layout(ui::ShellFrameLayout::new(
+        let base = ui::ShellFrameLayout::new(
             bounds,
             state.status_time_button_label().as_deref(),
             &ui::RenderContext::default(),
-        ));
+        )
+        .with_back_shortcut(state.shell_back_shortcut())
+        .with_help_button(state.help_button_available())
+        .with_tasks_button(state.tasks_button_label().as_deref());
+        let layout = state.input_keyboard_content_layout(base);
         let launcher = state.keyboard_launcher_area().unwrap();
         assert_eq!(layout.keyboard_launcher, Some(launcher));
-        assert_eq!(launcher.y, height - 1);
+        assert_eq!(launcher.y, 0);
         assert!(layout.main.intersection(launcher).is_empty());
         assert_eq!(layout.main, Rect::new(0, 1, width, height - 2));
         assert!(layout.status_message.unwrap().right() <= launcher.x);
-        if let Some(time) = layout.time_button {
-            assert_eq!(launcher.right(), time.x);
-        }
         state.toggle_input_keyboard();
         state.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
-        let shown = state.input_keyboard_content_layout(ui::ShellFrameLayout::new(
-            bounds,
-            state.status_time_button_label().as_deref(),
-            &ui::RenderContext::default(),
-        ));
+        let shown = state.input_keyboard_content_layout(base);
         assert_eq!(shown.main.y, 1);
         assert_eq!(
             shown.main.bottom(),
             state.input_keyboard_layout().keyboard.y
         );
-        assert!(shown.status_message.is_none());
-        assert!(shown.time_button.is_none());
+        assert!(shown.status_message.is_some());
+        assert_eq!(shown.time_button, layout.time_button);
         assert!(
             shown
                 .main
                 .intersection(state.keyboard_launcher_area().unwrap())
                 .is_empty()
         );
+    }
+}
+
+#[test]
+fn app_host_keyboard_keeps_bottom_keys_inside_the_window_content() {
+    use super::window_launch::{WindowApplication, WindowOwner};
+
+    for (width, height, authorization) in [
+        (106, 16, false),
+        (118, 32, false),
+        (178, 46, false),
+        (106, 16, true),
+    ] {
+        let mut state = session();
+        state.window_owner = WindowOwner::App(WindowApplication::CommandLine);
+        state.terminal_size = (width, height + 2);
+        let content = Rect::new(0, 1, width, height);
+        let (tx, _rx) = std::sync::mpsc::channel();
+        if authorization {
+            state
+                .begin_auto_admin("Keyboard input".into(), false, tx)
+                .unwrap();
+        }
+        state.toggle_input_keyboard();
+        state.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
+
+        let layout = state.input_keyboard_layout();
+        if authorization {
+            assert!(!layout.usable);
+            assert!(!layout.hint.is_empty());
+            assert_eq!(layout.hint.intersection(content), layout.hint);
+        } else {
+            assert_eq!(layout.keyboard.bottom(), content.bottom());
+            assert_eq!(layout.bordered_buttons, height == 46);
+            for action in [Action::Paste, Action::Space, Action::ToggleKeyboard] {
+                let area = layout
+                    .buttons
+                    .iter()
+                    .find(|key| key.action == action)
+                    .unwrap()
+                    .area;
+                assert_eq!(area.intersection(content), area);
+            }
+        }
+        let hide = state.keyboard_launcher_area().unwrap();
+        assert_eq!(hide.bottom(), content.bottom());
+        let bottom_right = (hide.right() - 1, hide.bottom() - 1);
+        route(
+            &mut state,
+            InputEvent::mouse_down(PointerButton::Left, bottom_right),
+        );
+        route(
+            &mut state,
+            InputEvent::mouse_up(PointerButton::Left, bottom_right),
+        );
+        assert!(!state.input_keyboard_open());
     }
 }
 

@@ -63,6 +63,8 @@ Split the focused pane incrementally: three-window T layouts are supported, with
 
 The bottom row is dedicated to the window bar. Click a title to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
 
+The screen keyboard fits inside the app content. Its bottom row, including Paste, Space, and Hide, sits above the window frame and the window bar.
+
 | After Ctrl+W | Action |
 | --- | --- |
 | v / s | Split left/right / top/bottom |
