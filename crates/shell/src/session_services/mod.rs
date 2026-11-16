@@ -1,4 +1,5 @@
 pub(crate) mod client;
+mod client_jobs;
 mod client_worker;
 pub(crate) mod clock;
 mod server;

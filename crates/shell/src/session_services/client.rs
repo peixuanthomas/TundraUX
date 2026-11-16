@@ -1,4 +1,4 @@
-use super::SessionProfile;
+use super::{SessionProfile, client_jobs::ServiceJobs};
 use crate::process_host::WorkerConnection;
 use app::explorer::{
     ExplorerError, ExplorerSharedOperations, ExplorerSharedRequest, ExplorerSharedSnapshot,
@@ -58,7 +58,8 @@ pub(crate) struct SessionServicesClient {
     worker: WorkerId,
     commands: tokio::sync::mpsc::Sender<Request>,
     shared: Arc<Shared>,
-    jobs: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
+    jobs: Option<ServiceJobs>,
+    _rpc: Option<watchdog::OwnedTask<()>>,
     clipboard_submitted: AtomicU64,
     clipboard_completed: Mutex<ClipboardCompletions>,
     pub sync: Mutex<SyncState>,
@@ -84,7 +85,6 @@ impl SessionServicesClient {
     #[cfg(test)]
     pub(crate) fn for_test(snapshot: ServiceSessionSnapshot) -> Arc<Self> {
         let (commands, _) = tokio::sync::mpsc::channel(1);
-        let (jobs, _) = mpsc::sync_channel(1);
         Arc::new(Self {
             worker: WorkerId {
                 run: workspace_protocol::RunId(1),
@@ -92,7 +92,8 @@ impl SessionServicesClient {
                 generation: workspace_protocol::ProcessGeneration(1),
             },
             commands,
-            jobs,
+            jobs: None,
+            _rpc: None,
             clipboard_submitted: AtomicU64::new(0),
             clipboard_completed: Mutex::new(ClipboardCompletions::default()),
             shared: Arc::new(Shared {
@@ -117,20 +118,21 @@ impl SessionServicesClient {
             system_refresh: AtomicBool::new(false),
         });
         let (ready, initial) = mpsc::sync_channel(1);
-        let (jobs, job_queue) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(32);
-        std::thread::Builder::new()
-            .name("workspace-services-operations".into())
-            .spawn(move || {
-                while let Ok(job) = job_queue.recv() {
-                    job();
-                }
-            })?;
-        crate::process_host::event_loop::runtime().spawn(super::client_worker::run(
-            connection,
-            receiver,
-            shared.clone(),
-            ready,
-        ));
+        let process = watchdog::ProcessWatchdog::current()
+            .ok_or_else(|| io::Error::other("workspace services require a process watchdog"))?;
+        let owner = process
+            .register_app(watchdog::AppDescriptor::new(
+                watchdog::AppId::from_static("session-services-client"),
+                "Tundra shared service operations",
+                env!("CARGO_PKG_VERSION"),
+                watchdog::AppCriticality::Optional,
+            ))
+            .map_err(io::Error::other)?;
+        let jobs = ServiceJobs::start(&owner)?;
+        let rpc = watchdog::OwnedTask::spawn_on(
+            crate::process_host::event_loop::runtime().handle(),
+            super::client_worker::run(connection, receiver, shared.clone(), ready),
+        );
         initial
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| service_error(ServiceError::Unavailable))??;
@@ -138,7 +140,8 @@ impl SessionServicesClient {
             worker: connection.worker(),
             commands,
             shared,
-            jobs,
+            jobs: Some(jobs),
+            _rpc: Some(rpc),
             clipboard_submitted: AtomicU64::new(0),
             clipboard_completed: Mutex::new(ClipboardCompletions::default()),
             sync: Mutex::new(SyncState::default()),
@@ -256,8 +259,9 @@ impl SessionServicesClient {
 
     pub(crate) fn submit_job(&self, job: Box<dyn FnOnce() + Send>) -> io::Result<()> {
         self.jobs
-            .try_send(job)
-            .map_err(|_| service_error(ServiceError::Unavailable))
+            .as_ref()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?
+            .submit(job)
     }
 
     pub(crate) fn in_authorization<T>(revision: u64, work: impl FnOnce() -> T) -> T {
