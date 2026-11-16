@@ -141,6 +141,8 @@ Each output directory preserves the pre-run process/cgroup environment snapshot,
 
 Acceptance targets are new built-in application action-to-first-business-frame P95 ≤100ms and ordinary interaction feedback P95 ≤50ms. Report each measured series and any failing scene rather than treating a hidden Starting label as readiness. The first-open series has one sample per isolated Shell in this run and must be reported separately from the larger repeated-new-process series.
 
+The [2026-11-16 Linux acceptance report](performance-linux-2026-11-16.md) records complete, matching 50/100/10 matrices for original source `919db6b5` and standard candidate `e2c12ef6`, using harness `8350f92e`. Each version has 1,723 rows, zero capture failures, full motion, trace off, and no RPCs or resource probes inside capture. Candidate built-in startup P95 is 44.403–79.566ms and all eleven interaction P95 values are 3.773–14.448ms. Three individual startups exceed 100ms and five interactions exceed 50ms; all remain included. CommandLine child readiness P95 is separately 430.576ms and Vim 73.879ms. The report includes every group's sample count, target, quantiles and slow count, restore visibility limits, build/harness/resource identities, resource points, and reproduction commands. It does not certify terminal-emulator pixels or other platforms.
+
 ## Real Vim regression tests
 
 Ordinary workspace tests skip ignored cases that require a complete Vim. After building the engine, run them explicitly:
