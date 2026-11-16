@@ -7,7 +7,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::io;
 use std::sync::{
     Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc,
 };
 use std::time::Duration;
@@ -58,6 +58,8 @@ pub(crate) struct SessionServicesClient {
     commands: tokio::sync::mpsc::Sender<Request>,
     shared: Arc<Shared>,
     jobs: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
+    clipboard_submitted: AtomicU64,
+    clipboard_completed: AtomicU64,
     pub sync: Mutex<SyncState>,
     pub(crate) completions: Mutex<Vec<crate::session::services_client::PendingWrite>>,
 }
@@ -72,6 +74,34 @@ impl std::fmt::Debug for SessionServicesClient {
 }
 
 impl SessionServicesClient {
+    #[cfg(test)]
+    pub(crate) fn for_test(snapshot: ServiceSessionSnapshot) -> Arc<Self> {
+        let (commands, _) = tokio::sync::mpsc::channel(1);
+        let (jobs, _) = mpsc::sync_channel(1);
+        Arc::new(Self {
+            worker: WorkerId {
+                run: workspace_protocol::RunId(1),
+                role: workspace_protocol::WorkerRole::App(workspace_protocol::SessionId(1)),
+                generation: workspace_protocol::ProcessGeneration(1),
+            },
+            commands,
+            jobs,
+            clipboard_submitted: AtomicU64::new(0),
+            clipboard_completed: AtomicU64::new(0),
+            shared: Arc::new(Shared {
+                snapshot: Mutex::new(Some(SnapshotState {
+                    snapshot: Arc::new(snapshot),
+                    generation: 1,
+                    failed: false,
+                })),
+                updated: AtomicBool::new(true),
+                system_refresh: AtomicBool::new(false),
+            }),
+            sync: Mutex::new(SyncState::default()),
+            completions: Mutex::new(Vec::new()),
+        })
+    }
+
     pub(crate) fn connect(connection: &'static WorkerConnection) -> io::Result<Arc<Self>> {
         let (commands, receiver) = tokio::sync::mpsc::channel(64);
         let shared = Arc::new(Shared {
@@ -102,6 +132,8 @@ impl SessionServicesClient {
             commands,
             shared,
             jobs,
+            clipboard_submitted: AtomicU64::new(0),
+            clipboard_completed: AtomicU64::new(0),
             sync: Mutex::new(SyncState::default()),
             completions: Mutex::new(Vec::new()),
         }))
@@ -134,11 +166,46 @@ impl SessionServicesClient {
         let state = state
             .as_ref()
             .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        if JOB_AUTHORIZATION.with(|revision| {
+            revision.get().is_some_and(|revision| {
+                state
+                    .snapshot
+                    .authorization
+                    .as_ref()
+                    .ok()
+                    .map(|auth| auth.revision)
+                    != Some(revision)
+            })
+        }) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
         Ok((state.generation, state.failed, state.snapshot.clone()))
     }
 
     pub(crate) fn has_updates(&self) -> bool {
         self.shared.updated.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn has_pending_writes(&self) -> bool {
+        self.completions.try_lock().map_or(true, |pending| {
+            pending.iter().any(|pending| pending.is_write())
+        })
+    }
+
+    pub(crate) fn clipboard_fence(&self) -> u64 {
+        self.clipboard_submitted.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn clipboard_fence_complete(&self, token: u64) -> bool {
+        self.clipboard_completed.load(Ordering::Acquire) >= token
+    }
+
+    pub(crate) fn submit_clipboard_token(&self) -> u64 {
+        self.clipboard_submitted.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    pub(crate) fn complete_clipboard_token(&self, token: u64) {
+        self.clipboard_completed.fetch_max(token, Ordering::Release);
     }
 
     pub(crate) fn acknowledge_updates(&self) {

@@ -412,8 +412,7 @@ impl AppState {
         storage: &storage::StorageManager,
         _at: Instant,
     ) -> (AppAction, ExplorerEffect) {
-        let controller = ExplorerController::new(self.explorer_files.clone())
-            .with_editor_extensions(self.storage_config.editor.explorer_open_extensions.clone());
+        let controller = self.explorer_controller();
         let effect = self
             .page_models
             .explorer
@@ -451,6 +450,19 @@ impl AppState {
         self.explorer_files.refresh_shared()?;
         self.sync_explorer_clipboard();
         Ok(())
+    }
+
+    pub fn explorer_controller(&self) -> ExplorerController {
+        ExplorerController::new(self.explorer_files.clone())
+            .with_editor_extensions(self.storage_config.editor.explorer_open_extensions.clone())
+    }
+
+    pub fn apply_shared_explorer_snapshot(
+        &mut self,
+        snapshot: crate::explorer::ExplorerSharedSnapshot,
+    ) {
+        self.explorer_files.apply_shared_snapshot(snapshot);
+        self.sync_explorer_clipboard();
     }
 
     pub fn explorer_operation_started(&mut self) -> Result<(), crate::explorer::ExplorerError> {

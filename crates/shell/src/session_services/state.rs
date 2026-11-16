@@ -53,7 +53,9 @@ impl ServiceState {
 
     pub(super) fn unregister(&mut self, worker: WorkerId) {
         self.identities.remove(&worker);
-        self.busy.remove(&worker);
+        if self.busy.remove(&worker) {
+            self.files_revision += 1;
+        }
         self.system_active.remove(&worker);
         let _ = self.files.set_operation_busy(!self.busy.is_empty());
     }
@@ -261,14 +263,7 @@ impl ServiceState {
                 {
                     return Err(ServiceError::Forbidden);
                 }
-                if let ExplorerSharedRequest::SetBusy(busy) = operation {
-                    if busy {
-                        self.busy.insert(worker);
-                    } else {
-                        self.busy.remove(&worker);
-                    }
-                    operation = ExplorerSharedRequest::SetBusy(!self.busy.is_empty());
-                }
+                operation = self.prepare_file_operation(worker, operation);
                 let snapshot = self
                     .files
                     .apply_shared_request(operation, self.authorization.1.as_ref(), platform)
@@ -320,6 +315,30 @@ impl ServiceState {
         match self.execute(worker, operation, platform)? {
             ServiceValue::Versioned { revision, value } => Ok(ServiceVersion { revision, value }),
             ServiceValue::Empty => Err(ServiceError::InvalidRequest),
+        }
+    }
+
+    fn prepare_file_operation(
+        &mut self,
+        worker: WorkerId,
+        operation: ExplorerSharedRequest,
+    ) -> ExplorerSharedRequest {
+        match operation {
+            ExplorerSharedRequest::SetBusy(busy) => {
+                if busy {
+                    self.busy.insert(worker);
+                } else {
+                    self.busy.remove(&worker);
+                }
+                ExplorerSharedRequest::SetBusy(!self.busy.is_empty())
+            }
+            ExplorerSharedRequest::Batch(requests) => ExplorerSharedRequest::Batch(
+                requests
+                    .into_iter()
+                    .map(|request| self.prepare_file_operation(worker, request))
+                    .collect(),
+            ),
+            operation => operation,
         }
     }
 }

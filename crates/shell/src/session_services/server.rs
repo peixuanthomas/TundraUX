@@ -35,12 +35,14 @@ pub(crate) fn run_session_services(
         )?
     };
     let allowed = Allowed::default();
+    let (changes, _) = tokio::sync::watch::channel(0u64);
     let accept = runtime.spawn(accept_peers(
         listener,
         allowed.clone(),
         state.clone(),
         platform,
         connection.worker(),
+        changes.clone(),
     ));
     connection.send(WorkerToSupervisor::Ready)?;
     let result = 'service: loop {
@@ -67,6 +69,7 @@ pub(crate) fn run_session_services(
                         .lock()
                         .map_err(|_| io::Error::other("services state poisoned"))?
                         .unregister(worker);
+                    changes.send_modify(|generation| *generation = generation.wrapping_add(1));
                 }
                 SupervisorToWorker::Close | SupervisorToWorker::Exit => {
                     connection.send(WorkerToSupervisor::Exiting { code: 0 })?;
@@ -84,6 +87,11 @@ pub(crate) fn run_session_services(
         connection.progress()?;
         event_loop::wait_since(generation, Duration::from_millis(100));
     };
+    allowed
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clear();
+    changes.send_modify(|generation| *generation = generation.wrapping_add(1));
     accept.abort();
     result
 }
@@ -94,6 +102,7 @@ async fn accept_peers(
     state: Arc<Mutex<ServiceState>>,
     platform: Arc<dyn platform::Platform>,
     services_worker: WorkerId,
+    changes: tokio::sync::watch::Sender<u64>,
 ) -> io::Result<()> {
     let permits = Arc::new(tokio::sync::Semaphore::new(64));
     loop {
@@ -117,9 +126,19 @@ async fn accept_peers(
         let allowed = allowed.clone();
         let state = state.clone();
         let platform = platform.clone();
+        let changes = changes.subscribe();
         tokio::spawn(async move {
             let _permit = permit;
-            let _ = serve_peer(stream, pid, allowed, state, platform, services_worker).await;
+            let _ = serve_peer(
+                stream,
+                pid,
+                allowed,
+                state,
+                platform,
+                services_worker,
+                changes,
+            )
+            .await;
         });
     }
 }
@@ -131,6 +150,7 @@ async fn serve_peer(
     state: Arc<Mutex<ServiceState>>,
     platform: Arc<dyn platform::Platform>,
     services_worker: WorkerId,
+    mut changes: tokio::sync::watch::Receiver<u64>,
 ) -> io::Result<()> {
     let mut stream = connection.into_inner();
     let bytes = tokio::time::timeout(
@@ -163,12 +183,27 @@ async fn serve_peer(
     stream.write_all(&welcome).await?;
     let mut last_request = None;
     loop {
-        let bytes = tokio::time::timeout(
-            Duration::from_secs(10),
-            read_payload(&mut stream, MAX_SERVICE_FRAME_BYTES),
-        )
-        .await
-        .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))??;
+        let bytes = {
+            let read = tokio::time::timeout(
+                Duration::from_secs(10),
+                read_payload(&mut stream, MAX_SERVICE_FRAME_BYTES),
+            );
+            tokio::pin!(read);
+            loop {
+                if allowed
+                    .lock()
+                    .map_err(|_| io::Error::other("services registry poisoned"))?
+                    .get(&hello.worker)
+                    != Some(&pid)
+                {
+                    return Err(io::ErrorKind::PermissionDenied.into());
+                }
+                tokio::select! {
+                    bytes = &mut read => break bytes.map_err(|_| io::Error::from(io::ErrorKind::TimedOut))??,
+                    changed = changes.changed() => { changed.map_err(io::Error::other)?; }
+                }
+            }
+        };
         let allowed = allowed.clone();
         let state = state.clone();
         let platform = platform.clone();

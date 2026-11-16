@@ -1068,6 +1068,7 @@ pub fn run_app_host(
             continue;
         }
         if host.close_status == WindowClose::Confirmed
+            && !host.services.has_pending_writes()
             && host.output.is_empty()
             && !stream.pending_write()
         {

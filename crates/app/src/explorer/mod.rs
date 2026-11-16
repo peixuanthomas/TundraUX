@@ -911,6 +911,17 @@ fn selected_paths_or_error(state: &ExplorerState) -> Result<Vec<PathBuf>, Explor
     }
 }
 
+pub fn prepare_explorer_clipboard(
+    state: &ExplorerState,
+    mode: ExplorerClipboardMode,
+) -> Result<ExplorerClipboard, ExplorerError> {
+    ensure_filesystem_location(state)?;
+    Ok(ExplorerClipboard {
+        paths: selected_paths_or_error(state)?,
+        mode,
+    })
+}
+
 fn selected_trash_entry(state: &ExplorerState) -> Result<ExplorerEntry, ExplorerError> {
     let selected = state.effective_selected_paths();
     if selected.len() != 1 {

@@ -12,6 +12,7 @@ pub enum ExplorerSharedRequest {
     SetBusy(bool),
     RecordMoves(Option<Vec<ExplorerUndoMove>>),
     Undo,
+    Batch(Vec<ExplorerSharedRequest>),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -76,6 +77,13 @@ impl ExplorerFileService {
             ExplorerSharedRequest::SetBusy(busy) => self.set_operation_busy(busy)?,
             ExplorerSharedRequest::RecordMoves(moves) => self.record_moves(moves)?,
             ExplorerSharedRequest::Undo => undone = self.undo_batch(session, platform)?,
+            ExplorerSharedRequest::Batch(requests) => {
+                for request in requests {
+                    undone += self
+                        .apply_shared_request(request, session, platform)?
+                        .undone;
+                }
+            }
         }
         Ok(ExplorerSharedSnapshot {
             undone,
@@ -94,7 +102,7 @@ impl ExplorerFileService {
         Ok(true)
     }
 
-    pub(super) fn apply_shared_snapshot(&self, snapshot: ExplorerSharedSnapshot) {
+    pub(crate) fn apply_shared_snapshot(&self, snapshot: ExplorerSharedSnapshot) {
         let mut operations = self
             .operations
             .lock()

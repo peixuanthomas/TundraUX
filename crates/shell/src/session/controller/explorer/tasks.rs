@@ -377,6 +377,54 @@ impl ShellSession {
         }
     }
     pub(in crate::session) fn start_explorer_background_paste(&mut self, platform: &dyn Platform) {
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let Some(destination) = self
+                .app
+                .explorer_state()
+                .map(|state| state.current_path.clone())
+            else {
+                return;
+            };
+            let queued = self.submit_workspace_write(
+                workspace_protocol::ServiceOperation::ReadFileOperations,
+                true,
+                move |state, result| {
+                    let result = result.and_then(|value| match value {
+                        workspace_protocol::ServiceValue::Versioned { value, .. } => {
+                            serde_json::from_value::<app::explorer::ExplorerSharedSnapshot>(value)
+                                .map_err(io::Error::other)
+                        }
+                        workspace_protocol::ServiceValue::Empty => {
+                            Err(io::ErrorKind::InvalidData.into())
+                        }
+                    });
+                    match result {
+                        Ok(snapshot) => {
+                            let clipboard = snapshot.clipboard.clone();
+                            state.app.apply_shared_explorer_snapshot(snapshot);
+                            if let Some(clipboard) = clipboard {
+                                let platform = platform::native_platform();
+                                state.prepare_explorer_background_transfer(
+                                    clipboard,
+                                    destination,
+                                    true,
+                                    platform.as_ref(),
+                                );
+                            } else {
+                                state.report_explorer_task_error(i18n::msg!(
+                                    "shell-clipboard-is-empty"
+                                ));
+                            }
+                        }
+                        Err(error) => state.report_explorer_task_error(error.to_string()),
+                    }
+                },
+            );
+            if let Err(error) = queued {
+                self.report_explorer_task_error(error.to_string());
+            }
+            return;
+        }
         let Some(state) = self.app.explorer_state() else {
             self.report_explorer_task_error(i18n::LocalizedText::from(i18n::msg!(
                 "shell-explorer-unavailable"
@@ -655,10 +703,43 @@ impl ShellSession {
         plan: ExplorerTaskPlan,
         kind: ShellExplorerTaskKind,
     ) {
+        let page = self.active_page_id();
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let operation = app::explorer::ExplorerSharedRequest::SetBusy(true);
+            let queued = crate::session_services::SessionServicesClient::encode(&operation)
+                .and_then(|operation| {
+                    self.submit_workspace_write(
+                        workspace_protocol::ServiceOperation::UpdateFileOperations { operation },
+                        false,
+                        move |state, result| match result {
+                            Ok(_) => state.start_reserved_explorer_task(plan, kind, page),
+                            Err(error) => state.report_explorer_task_error(error.to_string()),
+                        },
+                    )
+                });
+            if let Err(error) = queued {
+                self.report_explorer_task_error(error.to_string());
+            }
+            return;
+        }
+        if let Err(error) = self.app.explorer_operation_started() {
+            self.report_explorer_task_error(error.localized().message);
+            return;
+        }
+        self.start_reserved_explorer_task(plan, kind, page);
+    }
+
+    fn start_reserved_explorer_task(
+        &mut self,
+        plan: ExplorerTaskPlan,
+        kind: ShellExplorerTaskKind,
+        page: PageInstanceId,
+    ) {
         let Some(runtime) = self.explorer_task_runtime.clone() else {
-            self.report_explorer_task_error(i18n::LocalizedText::from(i18n::msg!(
+            self.finish_explorer_shared_operation(None, Vec::new());
+            self.report_explorer_task_error(i18n::msg!(
                 "shell-explorer-task-service-is-unavailable"
-            )));
+            ));
             return;
         };
         let actor = self
@@ -667,17 +748,19 @@ impl ShellSession {
             .map(|session| session.user_id.clone())
             .unwrap_or_else(|| "Guest".to_string());
         let operation = plan.operation();
-        if let Err(error) = self.app.explorer_operation_started() {
-            self.report_explorer_task_error(error.localized().message);
-            return;
-        }
         match runtime.submit(plan, kind, actor) {
             Ok(id) => {
                 let cancel = runtime.clone();
                 let finished = runtime.clone();
-                self.register_page_task(
+                let owner = if self.page_screen(page).is_some() {
+                    TaskOwner::Page(page)
+                } else {
+                    TaskOwner::Session
+                };
+                self.tasks.register(
                     TaskDomain::Explorer,
                     id.0,
+                    owner,
                     TaskClass::Operation,
                     TaskControl::new(
                         move || {
@@ -688,27 +771,29 @@ impl ShellSession {
                         move || finished.context_for(id).is_none(),
                     ),
                 );
-                let _ = self.update_explorer_state(|state| {
-                    state.pending_conflict = None;
-                    state.pending_transfer = None;
-                    state.error = None;
-                    state.message = None;
-                    state.operation = Some(ExplorerOperationProgress {
-                        operation,
-                        phase: ExplorerOperationPhase::Scanning,
-                        label: i18n::LocalizedText::from(i18n::msg!("shell-scanning-files")),
-                        completed_items: 0,
-                        total_items: None,
-                        completed_bytes: 0,
-                        total_bytes: None,
-                        cancellable: true,
+                self.with_page_context(page, |state| {
+                    let _ = state.update_explorer_state(|state| {
+                        state.pending_conflict = None;
+                        state.pending_transfer = None;
+                        state.error = None;
+                        state.message = None;
+                        state.operation = Some(ExplorerOperationProgress {
+                            operation,
+                            phase: ExplorerOperationPhase::Scanning,
+                            label: i18n::LocalizedText::from(i18n::msg!("shell-scanning-files")),
+                            completed_items: 0,
+                            total_items: None,
+                            completed_bytes: 0,
+                            total_bytes: None,
+                            cancellable: true,
+                        });
                     });
+                    state.pages.common.error_message = None;
+                    state.resolve_explorer_alert();
+                    state.notify_status(i18n::LocalizedText::from(i18n::msg!(
+                        "shell-explorer-operation-started"
+                    )));
                 });
-                self.pages.common.error_message = None;
-                self.resolve_explorer_alert();
-                self.notify_status(i18n::LocalizedText::from(i18n::msg!(
-                    "shell-explorer-operation-started"
-                )));
             }
             Err(ExplorerTaskSubmitError::Busy { .. }) => {
                 let message = i18n::LocalizedText::from(i18n::msg!(
@@ -725,11 +810,55 @@ impl ShellSession {
                 );
             }
             Err(error) => {
-                self.app.explorer_operation_finished(&[]);
+                self.finish_explorer_shared_operation(None, Vec::new());
                 self.report_explorer_task_error(error.localized().message);
             }
         }
     }
+    fn finish_explorer_shared_operation(
+        &mut self,
+        moves: Option<Option<Vec<app::explorer::ExplorerUndoMove>>>,
+        moved_sources: Vec<PathBuf>,
+    ) {
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            use app::explorer::ExplorerSharedRequest;
+            let mut requests = Vec::new();
+            if let Some(moves) = moves {
+                requests.push(ExplorerSharedRequest::RecordMoves(moves));
+            }
+            requests.push(ExplorerSharedRequest::ConsumeCutPaths(moved_sources));
+            requests.push(ExplorerSharedRequest::SetBusy(false));
+            let queued = crate::session_services::SessionServicesClient::encode(
+                &ExplorerSharedRequest::Batch(requests),
+            )
+            .and_then(|operation| {
+                self.submit_workspace_write(
+                    workspace_protocol::ServiceOperation::UpdateFileOperations { operation },
+                    false,
+                    |state, result| match result.and_then(|value| match value {
+                        workspace_protocol::ServiceValue::Versioned { value, .. } => {
+                            serde_json::from_value(value).map_err(io::Error::other)
+                        }
+                        workspace_protocol::ServiceValue::Empty => {
+                            Err(io::ErrorKind::InvalidData.into())
+                        }
+                    }) {
+                        Ok(snapshot) => state.app.apply_shared_explorer_snapshot(snapshot),
+                        Err(error) => state.notify_status(error.to_string()),
+                    },
+                )
+            });
+            if let Err(error) = queued {
+                self.notify_status(error.to_string());
+            }
+        } else {
+            if let Some(moves) = moves {
+                self.app.record_explorer_moves(moves);
+            }
+            self.app.explorer_operation_finished(&moved_sources);
+        }
+    }
+
     pub(in crate::session) fn preflight_explorer_permissions(
         &self,
         action: PermissionAction,
@@ -797,7 +926,6 @@ impl ShellSession {
                 ExplorerTaskEvent::Finished { summary, .. } => {
                     let moved_sources =
                         if matches!(context.kind, ShellExplorerTaskKind::Move { .. }) {
-                            self.app.record_explorer_moves(summary.undo_moves.clone());
                             context
                                 .sources
                                 .iter()
@@ -811,13 +939,14 @@ impl ShellSession {
                         } else {
                             Vec::new()
                         };
-                    self.app.explorer_operation_finished(&moved_sources);
+                    let moves = matches!(context.kind, ShellExplorerTaskKind::Move { .. })
+                        .then(|| summary.undo_moves.clone());
+                    self.finish_explorer_shared_operation(moves, moved_sources);
                 }
                 ExplorerTaskEvent::Panicked { .. } => {
-                    if matches!(context.kind, ShellExplorerTaskKind::Move { .. }) {
-                        self.app.record_explorer_moves(None);
-                    }
-                    self.app.explorer_operation_finished(&[]);
+                    let moves =
+                        matches!(context.kind, ShellExplorerTaskKind::Move { .. }).then_some(None);
+                    self.finish_explorer_shared_operation(moves, Vec::new());
                 }
                 _ => {}
             }

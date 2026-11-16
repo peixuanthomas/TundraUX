@@ -1049,6 +1049,53 @@ impl ShellSession {
         };
         config.language = self.selected_setup_language_value();
         config.timezone = self.selected_setup_timezone_value();
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let draft = (*self.pages.setup).clone();
+            let debug_policy = self.debug_policy;
+            let backend = self.identity_backend;
+            let queued = self.submit_workspace_job(
+                move || {
+                    storage.save_config(&config)?;
+                    let validation = UserService::with_debug_policy(storage, debug_policy)
+                        .with_backend(backend)
+                        .validate_bootstrap_admin(&username, &password, hint.as_deref());
+                    Ok::<_, storage::StorageError>((config, validation))
+                },
+                move |state, result| match result {
+                    Ok((config, validation)) => {
+                        state.replace_storage_config(config);
+                        if (*state.pages.setup).clone() != draft {
+                            return;
+                        }
+                        match validation {
+                            Ok(()) => {
+                                state.pages.setup.setup_step = ui::SetupStep::Appearance;
+                                state.pages.common.page_touch.setup_scroll = 0;
+                                state.pages.setup.setup_focused_field =
+                                    ui::SetupField::AppearanceShape;
+                                state.pages.common.focused_component =
+                                    ShellComponent::SetupAppearanceShape;
+                                state.pages.common.error_message = None;
+                                state.notify_status(i18n::msg!("account-choose-appearance"));
+                            }
+                            Err(error) => {
+                                state.pages.common.error_message = Some(format_core_error(&error));
+                                state.notify_status(i18n::msg!("account-setup-failed"));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        state.pages.common.error_message = Some(error.to_string().into());
+                        state.notify_status(i18n::msg!("account-setup-failed"));
+                    }
+                },
+            );
+            if let Err(error) = queued {
+                self.pages.common.error_message = Some(error.to_string().into());
+                self.notify_status(i18n::msg!("account-setup-failed"));
+            }
+            return;
+        }
         if let Err(error) = storage.save_config(&config) {
             self.pages.common.error_message = Some(i18n::LocalizedText::Raw(error.to_string()));
             self.notify_status(i18n::msg!("account-setup-failed"));
@@ -1112,6 +1159,57 @@ impl ShellSession {
         let users = UserService::with_debug_policy(storage.clone(), self.debug_policy)
             .with_backend(self.identity_backend);
         if let Some(session) = self.pending_personalization_session.clone() {
+            if crate::session_services::SessionServicesClient::current().is_some() {
+                let config = storage.load_config().map(|mut config| {
+                    config.language = self.selected_setup_language_value();
+                    if self.identity_backend != identity::IdentityBackend::Linux {
+                        config.timezone = self.selected_setup_timezone_value();
+                    }
+                    config
+                });
+                let config = match config {
+                    Ok(config) => config,
+                    Err(error) => {
+                        self.pages.common.error_message = Some(error.to_string().into());
+                        return;
+                    }
+                };
+                let draft = (*self.pages.setup).clone();
+                let queued = self.submit_workspace_job(
+                    move || {
+                        storage.save_config(&config)?;
+                        let result = users.complete_personalization(&session, appearance);
+                        Ok::<_, storage::StorageError>((config, result, session))
+                    },
+                    move |state, result| match result {
+                        Ok((config, result, session)) => {
+                            state.replace_storage_config(config);
+                            if (*state.pages.setup).clone() != draft {
+                                return;
+                            }
+                            match result {
+                                Ok(_) => state.complete_login(session),
+                                Err(error) => {
+                                    state.pages.common.error_message =
+                                        Some(format_core_error(&error));
+                                    state.notify_status(i18n::msg!(
+                                        "account-personalization-save-failed"
+                                    ));
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            state.pages.common.error_message = Some(error.to_string().into());
+                            state.notify_status(i18n::msg!("account-personalization-save-failed"));
+                        }
+                    },
+                );
+                if let Err(error) = queued {
+                    self.pages.common.error_message = Some(error.to_string().into());
+                    self.notify_status(i18n::msg!("account-personalization-save-failed"));
+                }
+                return;
+            }
             // Save setup preferences before marking the profile complete so a
             // failed write leaves the onboarding flow available for retry.
             let result = storage.load_config().and_then(|mut config| {

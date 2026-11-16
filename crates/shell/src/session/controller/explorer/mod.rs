@@ -568,6 +568,117 @@ impl ShellSession {
             return;
         }
 
+        if crate::session_services::SessionServicesClient::current().is_some()
+            && matches!(command, ExplorerCommand::Copy | ExplorerCommand::Cut)
+        {
+            let Some(explorer) = self.app.explorer_state() else {
+                return;
+            };
+            let cut = matches!(command, ExplorerCommand::Cut);
+            let mode = if cut {
+                ExplorerClipboardMode::Cut
+            } else {
+                ExplorerClipboardMode::Copy
+            };
+            let clipboard = match app::explorer::prepare_explorer_clipboard(explorer, mode) {
+                Ok(clipboard) => clipboard,
+                Err(error) => {
+                    self.report_explorer_task_error(error.localized().message);
+                    return;
+                }
+            };
+            let operation = crate::session_services::SessionServicesClient::encode(
+                &app::explorer::ExplorerSharedRequest::SetClipboard(Some(clipboard)),
+            );
+            let queued = operation.and_then(|operation| {
+                self.submit_workspace_clipboard(
+                    workspace_protocol::ServiceOperation::UpdateFileOperations { operation },
+                    move |state, result| {
+                        let result = result.and_then(|value| match value {
+                            workspace_protocol::ServiceValue::Versioned { value, .. } => {
+                                serde_json::from_value(value).map_err(io::Error::other)
+                            }
+                            workspace_protocol::ServiceValue::Empty => {
+                                Err(io::ErrorKind::InvalidData.into())
+                            }
+                        });
+                        match result {
+                            Ok(snapshot) => {
+                                state.app.apply_shared_explorer_snapshot(snapshot);
+                                let message = if cut {
+                                    i18n::msg!("app-explorer-cut-selection")
+                                } else {
+                                    i18n::msg!("app-explorer-copied-selection")
+                                };
+                                let _ = state.update_explorer_state(|current| {
+                                    current.error = None;
+                                    current.message = Some(message.clone().into());
+                                });
+                                state.pages.common.error_message = None;
+                                state.resolve_explorer_alert();
+                                state.notify_status(message);
+                            }
+                            Err(error) => state.report_explorer_task_error(error.to_string()),
+                        }
+                    },
+                )
+            });
+            if let Err(error) = queued {
+                self.report_explorer_task_error(error.to_string());
+            }
+            return;
+        }
+        if crate::session_services::SessionServicesClient::current().is_some()
+            && matches!(command, ExplorerCommand::Undo | ExplorerCommand::Rename(_))
+        {
+            let Some(mut explorer) = self.app.explorer_state().cloned() else {
+                return;
+            };
+            let original_path = explorer.current_path.clone();
+            let refresh = matches!(command, ExplorerCommand::Undo | ExplorerCommand::Rename(_));
+            let controller = self.app.explorer_controller();
+            let auth = self.app.auth_session().cloned();
+            if let Err(error) = self.submit_workspace_job(
+                move || {
+                    let platform = platform::native_platform();
+                    controller.apply(
+                        &mut explorer,
+                        command,
+                        auth.as_ref(),
+                        platform.as_ref(),
+                        &storage,
+                    );
+                    explorer
+                },
+                move |state, explorer| {
+                    if refresh
+                        && state
+                            .app
+                            .explorer_state()
+                            .is_some_and(|current| current.current_path == original_path)
+                    {
+                        state.app.dispatch_at(
+                            app::AppCommand::SetExplorerState(Some(explorer.clone())),
+                            Instant::now(),
+                        );
+                    } else {
+                        let _ = state.update_explorer_state(|current| {
+                            current.error = explorer.error.clone();
+                            current.message = explorer.message.clone();
+                        });
+                    }
+                    let _ = state.app.refresh_shared_explorer();
+                    if let Some(error) = explorer.error {
+                        state.report_explorer_task_error(error);
+                    } else if let Some(message) = explorer.message {
+                        state.notify_status(message);
+                    }
+                },
+            ) {
+                self.report_explorer_task_error(error.to_string());
+            }
+            return;
+        }
         let (_, effect) =
             self.app
                 .dispatch_explorer_at(command, platform, &storage, Instant::now());

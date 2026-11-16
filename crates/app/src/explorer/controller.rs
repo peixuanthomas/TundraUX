@@ -451,22 +451,20 @@ impl ExplorerController {
                 ExplorerEffect::None
             }
             ExplorerCommand::Copy => {
-                ensure_filesystem_location(state)?;
-                let paths = selected_paths_or_error(state)?;
-                self.file_service.set_clipboard(Some(ExplorerClipboard {
-                    paths,
-                    mode: ExplorerClipboardMode::Copy,
-                }))?;
+                self.file_service
+                    .set_clipboard(Some(prepare_explorer_clipboard(
+                        state,
+                        ExplorerClipboardMode::Copy,
+                    )?))?;
                 state.set_success(msg!("app-explorer-copied-selection"));
                 ExplorerEffect::None
             }
             ExplorerCommand::Cut => {
-                ensure_filesystem_location(state)?;
-                let paths = selected_paths_or_error(state)?;
-                self.file_service.set_clipboard(Some(ExplorerClipboard {
-                    paths,
-                    mode: ExplorerClipboardMode::Cut,
-                }))?;
+                self.file_service
+                    .set_clipboard(Some(prepare_explorer_clipboard(
+                        state,
+                        ExplorerClipboardMode::Cut,
+                    )?))?;
                 state.set_success(msg!("app-explorer-cut-selection"));
                 ExplorerEffect::None
             }

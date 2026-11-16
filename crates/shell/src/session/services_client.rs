@@ -13,9 +13,13 @@ pub(crate) struct PendingWrite {
     page: Option<PageInstanceId>,
     complete: Option<Completion>,
     task: Option<(u64, Arc<std::sync::atomic::AtomicBool>)>,
+    clipboard: Option<u64>,
 }
 
 impl PendingWrite {
+    pub(crate) fn is_write(&self) -> bool {
+        self.task.is_some()
+    }
     pub(crate) fn silent(
         receiver: std::sync::mpsc::Receiver<Result<ServiceValue, ServiceError>>,
     ) -> Self {
@@ -25,6 +29,7 @@ impl PendingWrite {
             page: None,
             complete: None,
             task: None,
+            clipboard: None,
         }
     }
 }
@@ -92,7 +97,20 @@ impl SessionServicesClient {
                 .as_ref()
                 .is_some_and(|session| session != &current)
             {
+                if let Some(token) = pending.clipboard {
+                    self.complete_clipboard_token(token);
+                }
                 continue;
+            }
+            if pending.task.is_some()
+                && result.is_err()
+                && matches!(
+                    state.window_close,
+                    super::app_host::WindowClose::Checking
+                        | super::app_host::WindowClose::Confirmed
+                )
+            {
+                state.window_close = super::app_host::WindowClose::Cancelled;
             }
             if let Some(complete) = pending.complete {
                 if let Some(page) = pending.page {
@@ -110,6 +128,9 @@ impl SessionServicesClient {
             } else if result.is_err() {
                 state.notify_status(i18n::msg!("workspace-services-unavailable"));
                 changed = true;
+            }
+            if let Some(token) = pending.clipboard {
+                self.complete_clipboard_token(token);
             }
         }
         let Ok(mut sync) = self.sync.try_lock() else {
@@ -168,6 +189,7 @@ impl SessionServicesClient {
                             }
                         })),
                         task: None,
+                        clipboard: None,
                     });
             }
             return Ok(false);
@@ -249,6 +271,7 @@ impl SessionServicesClient {
                             }
                         })),
                         task: None,
+                        clipboard: None,
                     });
             }
             if local != profile.1 && profile.1 != SessionProfile::default() {
@@ -375,6 +398,7 @@ impl ShellSession {
                     }
                 })),
                 task,
+                clipboard: None,
             });
         Ok(())
     }
@@ -383,6 +407,24 @@ impl ShellSession {
         &mut self,
         operation: ServiceOperation,
         page: bool,
+        complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
+    ) -> io::Result<()> {
+        self.submit_workspace_write_kind(operation, page, false, complete)
+    }
+
+    pub(super) fn submit_workspace_clipboard(
+        &mut self,
+        operation: ServiceOperation,
+        complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
+    ) -> io::Result<()> {
+        self.submit_workspace_write_kind(operation, true, true, complete)
+    }
+
+    fn submit_workspace_write_kind(
+        &mut self,
+        operation: ServiceOperation,
+        page: bool,
+        clipboard: bool,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
         let client = SessionServicesClient::current()
@@ -399,6 +441,7 @@ impl ShellSession {
             ServiceOperation::WriteClockTime { .. } | ServiceOperation::WriteSystemSnapshot { .. }
         );
         let receiver = client.submit(SessionServicesClient::authorized(operation, revision))?;
+        let clipboard = clipboard.then(|| client.submit_clipboard_token());
         let task = track.then(|| self.register_workspace_save());
         client
             .completions
@@ -410,6 +453,7 @@ impl ShellSession {
                 page: page.then(|| self.active_page_id()),
                 complete: Some(Box::new(complete)),
                 task,
+                clipboard,
             });
         Ok(())
     }
@@ -495,3 +539,7 @@ impl ShellSession {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/session/services_client.rs"]
+mod tests;

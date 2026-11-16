@@ -510,24 +510,29 @@ impl ShellSession {
                 if let Some(user_id) = user_id
                     && let Some(storage) = &self.storage_manager
                 {
-                    let result = if let Some(services) =
-                        crate::session_services::SessionServicesClient::current()
-                    {
-                        services
-                            .request(workspace_protocol::ServiceOperation::DeleteClockProfile {
-                                user_id: user_id.clone(),
-                            })
-                            .map(|_| ())
+                    let result =
+                        if crate::session_services::SessionServicesClient::current().is_some() {
+                            self.submit_workspace_write(
+                                workspace_protocol::ServiceOperation::DeleteClockProfile {
+                                    user_id: user_id.clone(),
+                                },
+                                false,
+                                |state, result| {
+                                    if let Err(error) = result {
+                                        state.report_clock_storage_error(error.to_string());
+                                    }
+                                },
+                            )
                             .map_err(|error| error.to_string())
-                    } else {
-                        storage
-                            .load_clock()
-                            .and_then(|mut document| {
-                                document.profiles.remove(user_id);
-                                storage.save_clock(&document)
-                            })
-                            .map_err(|error| error.to_string())
-                    };
+                        } else {
+                            storage
+                                .load_clock()
+                                .and_then(|mut document| {
+                                    document.profiles.remove(user_id);
+                                    storage.save_clock(&document)
+                                })
+                                .map_err(|error| error.to_string())
+                        };
                     if let Err(error) = result {
                         self.report_clock_storage_error(error);
                     }

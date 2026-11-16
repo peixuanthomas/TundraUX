@@ -132,6 +132,25 @@ async fn transact<S: AsyncRead + AsyncWrite + Unpin>(
 }
 
 fn publish(shared: &Shared, snapshot: ServiceSessionSnapshot) {
+    let mut current = shared
+        .snapshot
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if current.as_ref().is_some_and(|current| {
+        current
+            .snapshot
+            .authorization
+            .as_ref()
+            .ok()
+            .map(|auth| auth.revision)
+            != snapshot
+                .authorization
+                .as_ref()
+                .ok()
+                .map(|auth| auth.revision)
+    }) {
+        shared.system_refresh.store(false, Ordering::Release);
+    }
     if snapshot.system_requests.as_ref().is_ok_and(|requests| {
         requests
             .value
@@ -141,10 +160,6 @@ fn publish(shared: &Shared, snapshot: ServiceSessionSnapshot) {
     }) {
         shared.system_refresh.store(true, Ordering::Release);
     }
-    let mut current = shared
-        .snapshot
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
     if let Some(current) = current.as_mut() {
         let changed = current.failed || *current.snapshot != snapshot;
         current.failed = false;
@@ -178,4 +193,45 @@ fn failed(shared: &Shared) {
 fn signal(shared: &Shared) {
     shared.updated.store(true, Ordering::Release);
     event_loop::wake();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use workspace_protocol::ServiceVersion;
+
+    fn snapshot(authorization_revision: u64, refresh: bool) -> ServiceSessionSnapshot {
+        let unavailable = Err(ServiceError::Unavailable);
+        ServiceSessionSnapshot {
+            authorization: Ok(ServiceVersion {
+                revision: authorization_revision,
+                value: serde_json::Value::Null,
+            }),
+            config: unavailable.clone(),
+            profile: unavailable.clone(),
+            clock_profile: unavailable.clone(),
+            clock_time: unavailable.clone(),
+            files: unavailable.clone(),
+            system: unavailable,
+            system_requests: Ok(ServiceVersion {
+                revision: 0,
+                value: serde_json::json!({"active": false, "refresh": refresh}),
+            }),
+        }
+    }
+
+    #[test]
+    fn refresh_survives_a_newer_snapshot_until_consumed_but_never_crosses_login() {
+        let shared = Shared {
+            snapshot: std::sync::Mutex::new(None),
+            updated: std::sync::atomic::AtomicBool::new(false),
+            system_refresh: std::sync::atomic::AtomicBool::new(false),
+        };
+        publish(&shared, snapshot(1, true));
+        publish(&shared, snapshot(1, false));
+        assert!(shared.system_refresh.swap(false, Ordering::AcqRel));
+        publish(&shared, snapshot(1, true));
+        publish(&shared, snapshot(2, false));
+        assert!(!shared.system_refresh.load(Ordering::Acquire));
+    }
 }

@@ -684,3 +684,38 @@ impl Drop for Fixture {
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
+
+#[test]
+fn file_completion_batch_releases_only_its_workers_busy_reservation() {
+    let fixture = Fixture::new();
+    let mut state = fixture.state();
+    let shell = worker(WorkerRole::Shell, 1);
+    let first = worker(WorkerRole::App(SessionId(1)), 2);
+    let second = worker(WorkerRole::App(SessionId(2)), 3);
+    state.register(shell);
+    login(&mut state, shell, 0, "first");
+    state.register(first);
+    state.register(second);
+    update_files(&mut state, first, ExplorerSharedRequest::SetBusy(true));
+    update_files(&mut state, second, ExplorerSharedRequest::SetBusy(true));
+    let (before, _): (_, ExplorerSharedSnapshot) =
+        read(&mut state, shell, ServiceOperation::ReadFileOperations);
+    let shared = update_files(
+        &mut state,
+        first,
+        ExplorerSharedRequest::Batch(vec![
+            ExplorerSharedRequest::RecordMoves(None),
+            ExplorerSharedRequest::ConsumeCutPaths(Vec::new()),
+            ExplorerSharedRequest::SetBusy(false),
+        ]),
+    );
+    assert!(shared.busy);
+    let (completed, _): (_, ExplorerSharedSnapshot) =
+        read(&mut state, shell, ServiceOperation::ReadFileOperations);
+    assert_eq!(completed, before + 1);
+    state.unregister(second);
+    let (released, shared): (_, ExplorerSharedSnapshot) =
+        read(&mut state, shell, ServiceOperation::ReadFileOperations);
+    assert!(released > completed);
+    assert!(!shared.busy);
+}
