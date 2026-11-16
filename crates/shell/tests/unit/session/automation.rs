@@ -602,6 +602,50 @@ fn a_late_older_authorization_cannot_replace_the_pending_disable_before_synchron
 }
 
 #[test]
+fn a_newer_same_session_receipt_is_authoritative_while_the_cache_is_behind() {
+    let directory = TempDirectory::new();
+    let mut control = ControlRuntime::new(directory.0.clone());
+    let mut cached = control_config(7, true);
+    cached.session_authorization_revision = Some(6);
+    control
+        .synchronize_configuration(&cached, Some("A"))
+        .unwrap();
+    let mut committed = automation_commit(8, false);
+    committed.authorization_session = Some("A".into());
+    control.observe_automation_commit(committed.clone(), &cached, Some("A"));
+    control
+        .synchronize_configuration(&cached, Some("A"))
+        .unwrap();
+    assert!(!control.enabled());
+
+    let mut old = committed.clone();
+    old.authorization_revision = 6;
+    old.enabled = true;
+    old.revision = 9;
+    control.observe_automation_commit(old, &cached, Some("A"));
+    control
+        .synchronize_configuration(&cached, Some("A"))
+        .unwrap();
+    assert!(!control.enabled());
+
+    cached.session_authorization_revision = Some(8);
+    control
+        .synchronize_configuration(&cached, Some("A"))
+        .unwrap();
+    control.observe_automation_commit(committed.clone(), &cached, Some("A"));
+    assert!(control.enabled());
+    assert!(control.committed_automation.is_none());
+
+    cached.session_authorization_revision = Some(6);
+    control.observe_automation_commit(committed, &cached, Some("B"));
+    control
+        .synchronize_configuration(&cached, Some("B"))
+        .unwrap();
+    assert!(control.enabled());
+    assert!(control.committed_automation.is_none());
+}
+
+#[test]
 fn failure_feedback_keeps_control_available_and_cancellation_cannot_be_completed_twice() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());

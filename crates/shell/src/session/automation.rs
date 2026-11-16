@@ -75,7 +75,7 @@ impl ControlRuntime {
         if commit.authorization_session.as_deref() != session
             || config
                 .session_authorization_revision
-                .is_some_and(|revision| revision != commit.authorization_revision)
+                .is_some_and(|revision| revision > commit.authorization_revision)
             || config
                 .session_revision
                 .is_some_and(|revision| revision >= commit.revision)
@@ -101,7 +101,7 @@ impl ControlRuntime {
             commit.authorization_session.as_deref() != session
                 || config
                     .session_authorization_revision
-                    .is_some_and(|revision| revision != commit.authorization_revision)
+                    .is_some_and(|revision| revision > commit.authorization_revision)
                 || (config.session_authorization_revision == Some(commit.authorization_revision)
                     && config
                         .session_revision
