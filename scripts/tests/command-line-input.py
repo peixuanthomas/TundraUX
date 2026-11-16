@@ -67,8 +67,8 @@ try:
     run_command("export PERSISTED='kept=value'")
     current_directory = folder
     run_command("cd " + shlex.quote(str(folder)))
-    run_command("cd /tundra-path-that-does-not-exist",
-                code=1 if sys.platform == "darwin" else 2)
+    # cd's failure status depends on the selected shell, not the host OS.
+    run_command("cd /tundra-path-that-does-not-exist || false", code=1)
     output.clear()
     os.write(master, b"/help\r")
     wait_for(b"/config set motion reduced")
