@@ -142,9 +142,13 @@ def run_case(binary, language, color, motion, sizes, samples):
                                               for item in frame["nodes"]))
             expected_motion = ({"full": "完整", "reduced": "减少"} if language == "zh-CN"
                                else {"full": "Full", "reduced": "Reduced"})[motion]
-            if node(current, motion_id)["text"].strip() != expected_motion:
+
+            def motion_value(frame):
+                return node(frame, motion_id)["text"].strip().removesuffix(" ↵")
+
+            if motion_value(current) != expected_motion:
                 tap(current, motion_id)
-            current = until(lambda frame: node(frame, motion_id)["text"].strip() == expected_motion)
+            current = until(lambda frame: motion_value(frame) == expected_motion)
             assert node(current, "page/settings.field.animationspeed")["enabled"] == (motion == "full")
             tap(current, "chrome/shell.back")
             current = until(lambda frame: frame["page"] == "Home")
