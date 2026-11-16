@@ -1,5 +1,7 @@
 """Check complete PTY frame timing, VT state, and optional trace isolation."""
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -46,6 +48,12 @@ class FrameBoundaryTests(unittest.TestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual("".join(cell[0] for cell in frames[0][0]), "中 Ω     ")
         self.assertEqual("".join(cell[0] for cell in frames[0][1]), "  ok    ")
+
+    def test_snapshot_text_preserves_wide_cell_positions_for_sealed_validation(self):
+        screen = performance.Screen(8, 2)
+        rendered = screen.feed("\x1b[1;1HA中Ω\x1b[2;1HZ\x1b[?25l".encode())[0]
+        snapshot = {"width": 8, "height": 2, "lines": ["A中Ω", "Z"]}
+        self.assertEqual(performance.snapshot_cells(snapshot), rendered)
 
     def test_blank_or_unchanged_regions_cannot_prove_feedback(self):
         session = performance.Session.__new__(performance.Session)
@@ -126,6 +134,340 @@ class SessionTraceTests(unittest.TestCase):
     def test_detailed_trace_explicitly_uses_this_runs_output(self):
         environment, expected = self.session_environment(True)
         self.assertEqual(environment.get("TUNDRA_PERF_TRACE"), expected)
+
+
+class CaptureFixture(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="tundra-capture-test-")
+        self.addCleanup(self.temporary.cleanup)
+        self.clock = SimpleNamespace(now=0)
+        self.session = performance.Session.__new__(performance.Session)
+        self.session.output = Path(self.temporary.name)
+        self.session.label = "test"
+        self.session.frames = []
+        self.session.frame_number = 0
+        self.session.capture_timeout = .005
+        self.session.capture_active = self.session.pty_eof = False
+        self.session.rpc_count = self.session.rpc_response_bytes = 0
+        self.session.capture_audit = []
+        self.clock_patch = patch.object(performance.time, "monotonic_ns", lambda: self.clock.now)
+        self.clock_patch.start()
+        self.addCleanup(self.clock_patch.stop)
+        self.rect = {"x": 0, "y": 0, "width": 8, "height": 1}
+
+    @staticmethod
+    def cells(text, clock="clock"):
+        return tuple(tuple((char, ()) for char in row.ljust(8)[:8]) for row in (text, clock))
+
+    def drain_frames(self, values):
+        pending = iter(values)
+        last = values[-1]
+
+        def drain(timeout=0):
+            nonlocal last
+            self.clock.now += 1_000_000
+            last = next(pending, last)
+            self.session.frame_number += 1
+            self.session.frames.append({"observed_ns": self.clock.now,
+                "byte_offset": self.session.frame_number * 10, "frame_number": self.session.frame_number,
+                "cells": self.cells(last, str(self.session.frame_number))})
+        self.session.drain = drain
+
+    def snapshot(self, text, clock="clock"):
+        return {"number": 20, "page": "Launcher", "width": 8, "height": 2,
+                "lines": [text, clock], "nodes": [{"id": "page/search", "role": "textbox",
+                "actionable": True, "text": text, "rect": self.rect}]}
+
+    def reply(self, snapshot):
+        def control(action):
+            self.assertFalse(self.session.capture_active)
+            self.session.rpc_count += 1
+            return snapshot
+        self.session.control = control
+
+
+class CaptureTests(CaptureFixture):
+    def test_known_target_waits_across_reads_without_rpc_or_process_queries(self):
+        self.drain_frames(["wait", "wait", "ready"])
+        cue = performance.frame_cue(self.cells("ready", "different"), [self.rect])
+        captured = self.session.capture_output(lambda: 0, cue)
+        self.assertEqual(captured["rpc_count"], 0)
+        self.assertEqual(captured["sealed_frame_number"], 3)
+        self.assertFalse(self.session.capture_active)
+        # No child/process object exists: capture must not inspect /proc or poll a PID.
+
+    def test_footer_only_changes_cannot_complete_keyboard_focus_capture(self):
+        def cells(style, footer):
+            return (tuple((char, (style,)) for char in "search  "), self.cells("", footer)[1])
+        candidates = iter([cells("focused", "update1"), cells("focused", "update2"), cells("unfocused", "update3")])
+
+        def drain(timeout):
+            self.clock.now += 1_000_000
+            self.session.frame_number += 1
+            self.session.frames.append({"observed_ns": self.clock.now, "frame_number": self.session.frame_number,
+                                        "byte_offset": 10, "cells": next(candidates)})
+        self.session.drain = drain
+        capture = self.session.capture_output(lambda: 0,
+            performance.frame_cue(cells("unfocused", "old"), [self.rect], True))
+        self.assertEqual(capture["sealed_frame_number"], 3)
+
+    def test_discovery_keeps_real_first_sample_and_ignores_continuous_clock_changes(self):
+        self.drain_frames(["ready"])
+        captured = self.session.capture_output(lambda: 0)
+        self.assertEqual(len(captured["frames"]), 5)
+        snapshot = self.snapshot("ready", "later")
+        self.reply(snapshot)
+        verified = self.session.verify_capture(captured, lambda frame: frame["page"] == "Launcher")
+        timing = self.session.captured_timing(captured, verified)
+        self.assertEqual(timing["latency_ms"], 1)
+        self.assertEqual(timing["output_frame_number"], 1)
+        self.assertEqual(self.session.rpc_count, 1)
+
+    def test_rpc_during_capture_is_blocked_before_connect_and_retained_as_failure(self):
+        def accidental_rpc(timeout):
+            self.session.control({"command": "snapshot"})
+        self.session.drain = accidental_rpc
+        with patch.object(performance.socket, "socket") as socket:
+            with self.assertRaisesRegex(AssertionError, "forbidden"):
+                self.session.capture_output(lambda: 0)
+            socket.assert_not_called()
+        failures = list(map(json.loads,
+                            (self.session.output / "failed-attempts.jsonl").read_text().splitlines()))
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]["started_ns"], 0)
+        self.assertEqual(failures[0]["rpc_count"], 0)
+        self.assertFalse(failures[0]["completed"])
+
+    def test_resource_probe_during_capture_is_blocked_before_proc_access(self):
+        self.session.drain = lambda timeout: self.session.resources()
+        with patch.object(performance.Path, "iterdir") as probe:
+            with self.assertRaisesRegex(AssertionError, "probes are forbidden"):
+                self.session.capture_output(lambda: 0)
+            probe.assert_not_called()
+
+    def test_timeout_is_retained_without_retry_or_replacing_slow_attempt(self):
+        self.drain_frames(["wait"])
+        raw = self.session.output / "test.pty"
+        raw.write_bytes(b"preserved")
+        cue = performance.frame_cue(self.cells("ready"), [self.rect])
+        with self.assertRaisesRegex(AssertionError, "timeout"):
+            self.session.capture_output(lambda: 0, cue, "slow-input")
+        self.assertEqual(self.session.frame_number, 5)
+        self.assertEqual(raw.read_bytes(), b"preserved")
+        failures = (self.session.output / "failed-attempts.jsonl").read_text().splitlines()
+        self.assertEqual(len(failures), 1)
+        self.assertIn('"operation": "slow-input"', failures[0])
+
+    def test_verification_cannot_supply_a_business_frame_after_the_seal(self):
+        self.drain_frames(["old"])
+        capture = self.session.capture_output(lambda: 0,
+            performance.frame_cue(self.cells("old"), [self.rect]))
+        snapshot = self.snapshot("new")
+
+        def control(action):
+            self.session.rpc_count += 1
+            self.session.frames.append({"observed_ns": self.clock.now + 1,
+                "byte_offset": 20, "frame_number": 2, "cells": self.cells("new")})
+            return snapshot
+        self.session.control = control
+        verified = self.session.verify_capture(capture, lambda frame: True)
+        with self.assertRaisesRegex(AssertionError, "not present before"):
+            self.session.captured_timing(capture, verified)
+        self.assertEqual(capture["sealed_frame_number"], 1)
+        self.assertEqual(len(capture["frames"]), 1)
+        self.assertEqual(len(self.session.frames), 2)
+
+
+class NativeVimCueTests(CaptureFixture):
+    @staticmethod
+    def vim_cells(intro=""):
+        rows = [""] + ["~"] * 6 + ["[Scratch] 0,0-1 All", ""]
+        if intro:
+            rows[3] = "~" + intro.center(59)
+        return tuple(tuple((char, ()) for char in row.ljust(60)[:60]) for row in rows)
+
+    def test_intro_variants_share_the_first_buffer_cue(self):
+        rect = {"x": 0, "y": 0, "width": 60, "height": 9}
+        variants = [self.vim_cells(text) for text in ("", "Help children in Uganda!", "Sponsor Vim development!")]
+        for cells in variants:
+            self.assertTrue(performance.vim_buffer_ready(cells, rect))
+            self.assertFalse(performance.vim_buffer_ready(cells, rect, performance.region(cells, rect)))
+        self.assertEqual(len({performance.signature(cells, performance.vim_ready_rects(rect)) for cells in variants}), 1)
+        self.assertEqual(len({performance.region(cells, rect) for cells in variants}), 3)
+
+    def test_partial_eob_or_command_prompt_is_not_a_ready_buffer(self):
+        rect = {"x": 0, "y": 0, "width": 60, "height": 9}
+        partial = list(self.vim_cells())
+        partial[2] = tuple((" ", ()) for _ in range(60))
+        self.assertFalse(performance.vim_buffer_ready(tuple(partial), rect))
+        blocked = list(self.vim_cells())
+        blocked[-1] = tuple((char, ()) for char in "Press ENTER to continue".ljust(60))
+        self.assertFalse(performance.vim_buffer_ready(tuple(blocked), rect))
+
+    def test_later_intro_change_cannot_delay_the_sealed_first_buffer(self):
+        rect = {"x": 0, "y": 0, "width": 60, "height": 9}
+        partial = list(self.vim_cells())
+        partial[2] = tuple((" ", ()) for _ in range(60))
+        candidates = iter([tuple(partial), self.vim_cells("Sponsor Vim development!")])
+
+        def drain(timeout):
+            self.clock.now += 1_000_000
+            self.session.frame_number += 1
+            self.session.frames.append({"observed_ns": self.clock.now, "frame_number": self.session.frame_number,
+                                        "byte_offset": 10, "cells": next(candidates)})
+        self.session.drain = drain
+        capture = self.session.capture_output(lambda: 0,
+            lambda candidate: performance.vim_buffer_ready(candidate["cells"], rect))
+        snapshot = {"number": 30, "page": "Editor", "width": 60, "height": 9,
+                    "lines": ["".join(cell[0] for cell in row) for row in self.vim_cells()],
+                    "nodes": [{"id": "page/terminal", "role": "terminal", "text": "~", "actionable": True, "rect": rect}]}
+        self.reply(snapshot)
+        verified = self.session.verify_capture(capture, lambda frame: True)
+        timing = self.session.captured_timing(capture, verified, performance.vim_ready_rects(rect))
+        self.assertEqual(timing["output_frame_number"], 2)
+        self.assertEqual(timing["latency_ms"], 2)
+
+    def test_backtracking_cannot_choose_an_earlier_blocked_command_or_nonempty_first_line(self):
+        rect = {"x": 0, "y": 0, "width": 60, "height": 9}
+        nonempty = list(self.vim_cells())
+        nonempty[0] = tuple((char, ()) for char in "loading".ljust(60))
+        blocked = list(self.vim_cells())
+        blocked[-1] = tuple((char, ()) for char in "Press ENTER to continue".ljust(60))
+        candidates = iter([tuple(nonempty), tuple(blocked), self.vim_cells()])
+
+        def drain(timeout):
+            self.clock.now += 1_000_000
+            self.session.frame_number += 1
+            self.session.frames.append({"observed_ns": self.clock.now, "frame_number": self.session.frame_number,
+                                        "byte_offset": 10, "cells": next(candidates)})
+        self.session.drain = drain
+        capture = self.session.capture_output(lambda: 0,
+            lambda candidate: performance.vim_buffer_ready(candidate["cells"], rect))
+        snapshot = {"number": 30, "page": "Editor", "width": 60, "height": 9,
+                    "lines": ["".join(cell[0] for cell in row) for row in self.vim_cells()],
+                    "nodes": [{"id": "page/terminal", "role": "terminal", "text": "~", "actionable": True, "rect": rect}]}
+        self.reply(snapshot)
+        verified = self.session.verify_capture(capture, lambda frame: True)
+        timing = self.session.captured_timing(capture, verified, performance.vim_ready_rects(rect))
+        self.assertEqual(timing["output_frame_number"], 3)
+        self.assertEqual(timing["latency_ms"], 3)
+
+
+class NewAppSourceTests(CaptureFixture):
+    def test_activation_waits_for_different_page_closed_old_id_and_absent_old_pixels(self):
+        target = {"id": "home.entry.launcher", "name": "Launcher", "role": "button",
+                  "actionable": True, "rect": self.rect}
+
+        def home(page="Home", old_window=False):
+            return {"page": page, "nodes": [target] + ([{"id": "workspace.taskbar.1"}] if old_window else [])}
+
+        self.session.business_templates = {("Launcher", None): (self.cells("ready"), [self.rect])}
+        self.session.new_process_pids = {"1": [100]}
+        self.session.snapshot = lambda: home()
+        checked = []
+        preparations = 0
+
+        def prepare(predicate, timeout=20):
+            nonlocal preparations
+            preparations += 1
+            if preparations == 1:
+                self.assertTrue(predicate(home()))
+                return home()
+            for frame, text in ((home(old_window=True), "home"), (home(page="Launcher"), "home"),
+                                (home(), "ready"), (home(), "home")):
+                self.session.frame_number += 1
+                self.session.frames = [{"cells": self.cells(text), "frame_number": self.session.frame_number,
+                                        "observed_ns": -1, "byte_offset": 0}]
+                checked.append(predicate(frame))
+                if checked[-1]:
+                    return frame
+            self.fail("No valid pre-action source")
+        self.session.until = prepare
+        self.drain_frames(["ready"])
+        activations = []
+
+        def activate(frame, identifier):
+            self.assertTrue(self.session.capture_active)
+            self.assertEqual(checked, [False, False, False, True])
+            activations.append(identifier)
+            return 0
+        self.session.tap = activate
+        points = iter([{"processes": [{"pid": 1}]}, {"processes": [{"pid": 1}, {"pid": 2}]}])
+
+        def resources():
+            self.assertFalse(self.session.capture_active)
+            return next(points)
+        self.session.resources = resources
+        verified = self.snapshot("ready")
+        verified["nodes"].append({"id": "workspace.title.2", "selected": True})
+        self.reply(verified)
+        _, timing = self.session.open_app("Launcher")
+        self.assertEqual(activations, ["home.entry.launcher"])
+        self.assertEqual(timing["activation_context"]["page_before_action"], "Home")
+        self.assertFalse(timing["activation_context"]["known_business_signature_visible_before_action"])
+        self.assertEqual(timing["activation_context"]["previous_measured_window_ids_absent"], ["1"])
+        self.assertEqual(timing["process_identity"]["new_process_pids"], [2])
+
+
+class ReportConditionTests(unittest.TestCase):
+    def test_incompatible_comparisons_are_rejected_before_any_process_starts(self):
+        with tempfile.TemporaryDirectory(prefix="tundra-report-condition-") as folder:
+            root = Path(folder)
+            binary = root / "tundra-shell"
+            binary.touch()
+            (root / "tundra-cli").touch()
+            baseline = root / "baseline.json"
+            compatible = {"trace_enabled": False, "summaries": {}, "acceptance_eligible": True,
+                          "observation_condition": "zero-rpc-sealed-pty-capture-v1",
+                          "native_vim_endpoint": performance.NATIVE_VIM_ENDPOINT,
+                          "input_focus_endpoint": performance.FOCUS_ENDPOINT}
+            cases = [("observation_condition", "polling-active", "observation conditions"),
+                     ("trace_enabled", True, "detailed-trace settings"),
+                     ("native_vim_endpoint", "full-terminal-sha", "native Vim ready definitions"),
+                     ("input_focus_endpoint", "whole-page", "keyboard focus definitions"),
+                     ("acceptance_eligible", False, "Diagnostic compiler profiles")]
+            for index, (field, value, error) in enumerate(cases):
+                with self.subTest(field=field):
+                    baseline.write_text(json.dumps(dict(compatible, **{field: value})))
+                    output = root / f"output-{index}"
+                    argv = ["workspace-performance.py", str(binary), "--output", str(output), "--compare", str(baseline)]
+                    with patch.object(performance.sys, "argv", argv), \
+                            patch.object(performance.platform, "platform", return_value="test"), \
+                            patch.object(performance.subprocess, "Popen") as process:
+                        with self.assertRaisesRegex(AssertionError, error):
+                            performance.main()
+                        process.assert_not_called()
+                    self.assertFalse((output / "samples.jsonl").exists())
+
+    def test_completed_small_run_reports_condition_trace_and_insufficient_samples(self):
+        with tempfile.TemporaryDirectory(prefix="tundra-report-condition-") as folder:
+            root = Path(folder)
+            binary = root / "tundra-shell"
+            binary.touch()
+            (root / "tundra-cli").touch()
+            output = root / "output"
+            argv = ["workspace-performance.py", str(binary), "--output", str(output),
+                    "--phase", "launch", "--application", "Launcher", "--launch-samples", "1"]
+
+            def launch(*args, **kwargs):
+                self.assertFalse(kwargs["detailed_trace"])
+                args[4]({"kind": "launch", "application": "Launcher",
+                         "mode": "first_open_in_shell", "latency_ms": 1})
+
+            with patch.object(performance.sys, "argv", argv), \
+                    patch.object(performance.sys, "stdout", io.StringIO()), \
+                    patch.object(performance.platform, "platform", return_value="test"), \
+                    patch.object(performance.subprocess, "run", return_value=SimpleNamespace(stdout="")), \
+                    patch.object(performance.subprocess, "Popen") as process, \
+                    patch.object(performance, "launches", side_effect=launch):
+                performance.main()
+                process.assert_not_called()
+            report = json.loads((output / "report.json").read_text())
+            self.assertTrue(report["completed"])
+            self.assertFalse(report["trace_enabled"])
+            self.assertEqual(report["observation_condition"], "zero-rpc-sealed-pty-capture-v1")
+            self.assertFalse(report["acceptance"]["launch/Launcher/all_new_processes"]["enough_samples"])
+            self.assertEqual(report["failed_attempts"], [])
 
 
 if __name__ == "__main__":

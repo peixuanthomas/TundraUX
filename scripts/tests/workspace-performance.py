@@ -41,6 +41,9 @@ spec.loader.exec_module(smoke)
 APPLICATIONS = ("Launcher", "Settings", "Explorer", "Clock", "Editor", "SystemStatus")
 LABELS = {"SystemStatus": "System Status", "CommandLine": "Command Line"}
 CSI = re.compile(r"\x1b\[([0-?]*)([ -/]*)([@-~])")
+CAPTURE_TIMEOUT_SECONDS = 20.0
+NATIVE_VIM_ENDPOINT = "changed-empty-vt-eob-scratch-v1"
+FOCUS_ENDPOINT = "launcher-search-field-focus-style-v1"
 
 
 class Screen:
@@ -177,6 +180,12 @@ def titles(frame):
     return [item for item in frame["nodes"] if "workspace.title." in item["id"]]
 
 
+def focus_state(frame):
+    return [(item["id"], item.get("focused", False), item.get("selected", False))
+            for item in frame["nodes"] if item["id"].startswith("page/")
+            and (item.get("focused") or item.get("selected"))]
+
+
 def percentile(values, fraction):
     return round(sorted(values)[max(0, math.ceil(len(values) * fraction) - 1)], 3)
 
@@ -187,10 +196,68 @@ def statistics(values):
             "max_ms": round(max(values), 3)}
 
 
+def business_rects(frame):
+    rects = [dict(item["rect"], height=1) if "system-status.widget." in item["id"] else item["rect"]
+             for item in frame["nodes"]
+             if item["id"].startswith("page/") and item["actionable"]
+             and item["role"] in ("button", "textbox", "tab", "checkbox")
+             and item["text"].strip()]
+    if not rects:
+        rects = [item["rect"] for item in frame["nodes"]
+                 if item["id"].startswith("page/") and item["actionable"]
+                 and item["role"] == "terminal" and item["text"].strip()]
+    assert rects, "A business frame requires nonempty interactive application controls"
+    return rects
+
+
+def signature(cells, rects, styled=False):
+    return tuple(region(cells, rect, styled) for rect in rects)
+
+
+def snapshot_cells(frame):
+    screen = Screen(frame["width"], frame["height"])
+    for row, line in enumerate(frame["lines"]):
+        screen.feed(f"\x1b[{row + 1};1H".encode() + line.encode())
+    return tuple(tuple(row) for row in screen.cells)
+
+
+def frame_cue(cells, rects, styled=False):
+    expected = signature(cells, rects, styled)
+    return lambda candidate: signature(candidate["cells"], rects, styled) == expected
+
+
+def vim_terminal_rect(page_rect):
+    return dict(page_rect, y=page_rect["y"] + 1, height=page_rect["height"] - 1)
+
+
+def vim_ready_rects(rect):
+    # The empty buffer has one editable line, EOB rows, a Scratch status
+    # line and a command line. Intro text may occupy the middle columns.
+    return ([dict(rect, height=1)]
+            + [dict(rect, y=rect["y"] + row, width=1, height=1) for row in range(1, rect["height"] - 2)]
+            + [dict(rect, y=rect["y"] + rect["height"] - 2, height=1),
+               dict(rect, y=rect["y"] + rect["height"] - 1, height=1)])
+
+
+def vim_buffer_ready(cells, rect, before=None):
+    rows = region(cells, rect)
+    if len(rows) < 5 or rows == before or rows[0].strip() or rows[-1].strip():
+        return False
+    return (all(row.startswith("~") for row in rows[1:-2])
+            and "[Scratch]" in rows[-2] and "0,0-1" in rows[-2]
+            and re.search(r"\bAll\b", rows[-2]) is not None)
+
+
 class Session:
     def __init__(self, binary, output, label, width=120, height=36, motion="full", detailed_trace=False):
         self.binary, self.cli = binary, binary.with_name("tundra-cli")
         self.output, self.label = output, label
+        self.capture_timeout = CAPTURE_TIMEOUT_SECONDS
+        self.capture_active = False
+        self.rpc_count = self.rpc_response_bytes = 0
+        self.capture_audit = []
+        self.business_templates = {}
+        self.new_process_pids = {}
         self.temporary = tempfile.TemporaryDirectory(prefix="tundra-perf-")
         root = Path(self.temporary.name)
         self.env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor", LC_ALL="C.UTF-8",
@@ -223,6 +290,7 @@ class Session:
         self.frame_number = 0
         self.frames = []
         self.bytes = 0
+        self.pty_eof = False
         self.info = None
         self.child = subprocess.Popen([str(binary)], env=self.env, cwd=root / "home",
                                       stdin=self.slave, stdout=self.slave, stderr=self.slave,
@@ -260,7 +328,13 @@ class Session:
             return b""
         try:
             data = os.read(self.master, 256 * 1024)
-        except (BlockingIOError, OSError):
+        except BlockingIOError:
+            return b""
+        except OSError:
+            self.pty_eof = True
+            return b""
+        if not data:
+            self.pty_eof = True
             return b""
         observed = time.monotonic_ns()
         self.raw.write(data)
@@ -280,10 +354,12 @@ class Session:
         return started
 
     def control(self, action):
+        assert not self.capture_active, "Automation RPC is forbidden during PTY capture"
         assert self.info
         with socket.socket(socket.AF_UNIX) as connection:
             connection.connect(self.info["endpoint"])
             connection.sendall(json.dumps(dict(protocol=1, **action)).encode() + b"\n")
+            self.rpc_count += 1
             connection.setblocking(False)
             reply = b""
             deadline = time.monotonic() + 20
@@ -298,6 +374,7 @@ class Session:
                     reply += chunk
                 assert self.child.poll() is None, f"Shell exited: {self.child.returncode}"
             assert b"\n" in reply, "Shell control timed out"
+            self.rpc_response_bytes += len(reply)
             response = json.loads(reply)
             if response.get("error", {}).get("code") == "not_ready":
                 return None
@@ -341,30 +418,111 @@ class Session:
         x, y = smoke.control_position(frame, target["id"])
         return self.send(f"\x1b[<{button};{x};{y}M\x1b[<{button};{x};{y}m".encode())
 
-    def match_output(self, started, frame, rect=None, styled=False, changed_from=None):
-        assert self.frames, "No completed PTY frame"
+    def failed_attempt(self, capture, reason):
+        record = {key: value for key, value in capture.items() if key != "frames"}
+        record.setdefault("sealed_ns", time.monotonic_ns())
+        record.setdefault("sealed_frame_number", self.frame_number)
+        record["raw_byte_offset_at_failure"] = getattr(self, "bytes", 0)
+        if record.get("started_ns") is not None:
+            record["capture_elapsed_ms"] = (record["sealed_ns"] - record["started_ns"]) / 1e6
+            record["deadline_ns"] = record["started_ns"] + int(record["timeout_seconds"] * 1e9)
+        record.update(session_label=self.label, reason=reason, completed=False,
+                      raw_pty=f"{self.label}.pty", frame_index=f"{self.label}.frames.jsonl")
+        with (self.output / "failed-attempts.jsonl").open("a") as stream:
+            stream.write(json.dumps(record) + "\n")
+
+    def capture_output(self, action, cue=None, operation="feedback"):
+        assert not self.capture_active
+        self.frames.clear()
+        before_rpc = self.rpc_count
+        capture = {"operation": operation, "started_ns": None, "frames": (),
+                   "timeout_seconds": self.capture_timeout, "discovery": cue is None}
+        self.capture_active = True
+        try:
+            capture["started_ns"] = action()
+            deadline_ns = capture["started_ns"] + int(self.capture_timeout * 1e9)
+            checked = 0
+            matched = None
+            while time.monotonic_ns() < deadline_ns:
+                self.drain(min(.02, max(0, (deadline_ns - time.monotonic_ns()) / 1e9)))
+                if self.pty_eof:
+                    raise AssertionError("PTY closed during output capture")
+                if cue is not None:
+                    for candidate in self.frames[checked:]:
+                        if capture["started_ns"] <= candidate["observed_ns"] <= deadline_ns and cue(candidate):
+                            matched = candidate
+                            break
+                    checked = len(self.frames)
+                    if matched is not None:
+                        break
+            capture["sealed_ns"] = time.monotonic_ns()
+            capture["rpc_count"] = self.rpc_count - before_rpc
+            assert capture["rpc_count"] == 0, "Automation ran during physical output capture"
+            cutoff = matched["frame_number"] if matched is not None else self.frame_number
+            capture["sealed_frame_number"] = cutoff
+            capture["frames"] = tuple(item for item in self.frames
+                                      if capture["started_ns"] <= item["observed_ns"] <= deadline_ns
+                                      and item["frame_number"] <= cutoff)
+            if cue is not None and matched is None:
+                raise AssertionError("PTY target did not arrive before the capture timeout")
+            assert capture["frames"], "No completed PTY frame in capture window"
+        except BaseException as error:
+            capture.setdefault("sealed_ns", time.monotonic_ns())
+            capture["rpc_count"] = self.rpc_count - before_rpc
+            self.capture_active = False
+            self.failed_attempt(capture, str(error))
+            raise
+        finally:
+            self.capture_active = False
+        return capture
+
+    def verify_capture(self, capture, predicate):
+        before_rpc = self.rpc_count
+        try:
+            frame = self.control({"command": "snapshot"})
+            assert frame is not None and predicate(frame), "Post-capture state verification failed"
+            assert self.rpc_count - before_rpc == 1, "Verification must use one snapshot request"
+            return frame
+        except BaseException as error:
+            self.failed_attempt(capture, str(error))
+            raise
+
+    def captured_timing(self, capture, frame, rect=None, styled=False, changed_from=None):
+        try:
+            rects = business_rects(frame) if rect is None else ([rect] if isinstance(rect, dict) else rect)
+            # A later verification reply cannot lend its new business content to
+            # an older/blank frame in the sealed interval.
+            expected_text = signature(snapshot_cells(frame), rects)
+            assert any(line.strip() for area in expected_text for line in area), "Blank verified business content"
+            assert signature(capture["frames"][-1]["cells"], rects) == expected_text, \
+                "Verified business content was not present before the capture was sealed"
+            timing = self.match_output(capture["started_ns"], frame, rect, styled, changed_from,
+                                       captured_frames=capture["frames"])
+            assert timing["output_frame_number"] <= capture["sealed_frame_number"]
+            timing["observation"] = {key: capture[key] for key in
+                                     ("sealed_ns", "sealed_frame_number", "rpc_count", "discovery")}
+            self.capture_audit.append(dict(operation=capture["operation"], **timing["observation"]))
+            return timing
+        except BaseException as error:
+            self.failed_attempt(capture, str(error))
+            raise
+
+    def match_output(self, started, frame, rect=None, styled=False, changed_from=None, captured_frames=None):
+        frames = self.frames if captured_frames is None else captured_frames
+        assert frames, "No completed PTY frame"
         if rect is None:
-            rect = [dict(item["rect"], height=1) if "system-status.widget." in item["id"] else item["rect"]
-                    for item in frame["nodes"]
-                    if item["id"].startswith("page/") and item["actionable"]
-                    and item["role"] in ("button", "textbox", "tab", "checkbox")
-                    and item["text"].strip()]
-            if not rect:
-                rect = [item["rect"] for item in frame["nodes"]
-                        if item["id"].startswith("page/") and item["actionable"]
-                        and item["role"] == "terminal" and item["text"].strip()]
-            assert rect, "A business frame requires nonempty interactive application controls"
+            rect = business_rects(frame)
         rects = [rect] if isinstance(rect, dict) else rect
 
         def clipped(cells):
             return tuple(region(cells, area, styled) for area in rects)
 
-        expected = clipped(self.frames[-1]["cells"])
+        expected = clipped(frames[-1]["cells"])
         if not styled:
             assert any(line.strip() for area in expected for line in area), "Blank region cannot prove a business frame"
         if changed_from is not None:
             assert expected != (changed_from,), "Action produced no visible feedback"
-        matches = [item for item in self.frames if item["observed_ns"] >= started
+        matches = [item for item in frames if item["observed_ns"] >= started
                    and clipped(item["cells"]) == expected]
         assert matches, "No complete PTY frame matches the verified business content"
         matched = matches[0]
@@ -376,7 +534,7 @@ class Session:
                                  "rect": rect, "styled": styled,
                                  "content_sha256": hashlib.sha256(json.dumps(expected, ensure_ascii=False).encode()).hexdigest()}}
 
-    def open_app(self, app):
+    def open_app(self, app, timed=True, terminal_marker=None):
         current = self.snapshot()
         label = LABELS.get(app, app)
         home = next((item for item in current["nodes"] if "home.entry." in item["id"]
@@ -397,14 +555,52 @@ class Session:
         target_id = target["id"]
         current = self.until(lambda frame: any(item["id"] == target_id and item["actionable"]
                                              for item in frame["nodes"]))
-        self.frames.clear()
-        started = self.tap(current, target_id)
-        result = self.until(lambda frame: frame["page"] == app and bool(titles(frame))
-                            and any(item["id"].startswith("page/") and item["actionable"] and item["text"].strip()
-                                    for item in frame["nodes"]))
-        return result, self.match_output(started, result)
+        def ready(frame):
+            return (frame["page"] == app and bool(titles(frame))
+                    and any(item["id"].startswith("page/") and item["actionable"] and item["text"].strip()
+                            for item in frame["nodes"])
+                    and (terminal_marker is None or any(item["role"] == "terminal" and terminal_marker in item["text"]
+                                                         for item in frame["nodes"])))
+
+        if not timed:
+            self.tap(current, target_id)
+            return self.until(ready), None
+        key = (app, terminal_marker)
+        template = self.business_templates.get(key)
+        cue = frame_cue(*template) if template else None
+        previous_ids = set(self.new_process_pids)
+
+        def source_ready(frame):
+            return (frame["page"] != app
+                    and any(item["id"] == target_id and item["actionable"] for item in frame["nodes"])
+                    and not any(item["id"].endswith(f"workspace.taskbar.{identifier}")
+                                for identifier in previous_ids for item in frame["nodes"])
+                    and bool(self.frames) and (cue is None or not cue(self.frames[-1])))
+
+        current = self.until(source_ready)
+        activation_context = {"page_before_action": current["page"], "target_id": target_id,
+                              "previous_measured_window_ids_absent": sorted(previous_ids),
+                              "known_business_signature_visible_before_action": False if cue else None}
+        before_pids = {item["pid"] for item in self.resources()["processes"]}
+        capture = self.capture_output(lambda: self.tap(current, target_id), cue, f"new/{app}")
+        result = self.verify_capture(capture, ready)
+        rects = ([next(item["rect"] for item in result["nodes"] if item["role"] == "terminal")]
+                 if terminal_marker is not None else business_rects(result))
+        timing = self.captured_timing(capture, result, rects)
+        self.business_templates[key] = (capture["frames"][-1]["cells"], rects)
+        after_pids = {item["pid"] for item in self.resources()["processes"]}
+        new_pids = sorted(after_pids - before_pids)
+        if not new_pids:
+            self.failed_attempt(capture, "New window has no newly observed process")
+            raise AssertionError("New window has no newly observed process")
+        timing["process_identity"] = {"new_process_pids": new_pids}
+        timing["activation_context"] = activation_context
+        identifier = next(item["id"].rsplit(".", 1)[1] for item in titles(result) if item["selected"])
+        self.new_process_pids[identifier] = new_pids
+        return result, timing
 
     def resources(self):
+        assert not self.capture_active, "Process/resource probes are forbidden during PTY capture"
         records = []
         ancestors = {self.child.pid}
         remaining = {}
@@ -446,6 +642,12 @@ class Session:
             assert result.returncode == 0, result.stderr
             (self.output / f"{self.label}.startup.jsonl").write_bytes(result.stdout)
         finally:
+            (self.output / f"{self.label}.observation.json").write_text(json.dumps({
+                "condition": "zero automation RPC during sealed physical-output capture",
+                "total_control_requests": self.rpc_count,
+                "total_control_response_bytes": self.rpc_response_bytes,
+                "captures": self.capture_audit,
+            }, indent=2) + "\n")
             self.raw.close()
             self.frame_index.close()
             after = termios.tcgetattr(self.slave)
@@ -469,17 +671,41 @@ def launches(binary, output, samples, motion, write, applications=APPLICATIONS, 
                 write(dict(kind="launch", application=app, index=index, session=identifier,
                            mode="first_open_in_shell" if index == 0 else "repeat_new_process",
                            layout="single", size="120x36", **timing, resources=session.resources()))
+                restore_rects = business_rects(current)
+                restore_cue = frame_cue(session.frames[-1]["cells"], restore_rects)
+                expected_pids = set(session.new_process_pids[identifier])
                 session.tap(current, f"workspace.minimize.{identifier}")
                 current = session.until(lambda frame: not any(item["id"].endswith(f"workspace.title.{identifier}")
-                                                              for item in titles(frame)))
-                session.frames.clear()
-                started = session.tap(current, f"workspace.taskbar.{identifier}")
-                current = session.until(lambda frame: frame["page"] == app
-                                        and any(item["id"].endswith(f"workspace.title.{identifier}")
-                                                and item["selected"] for item in titles(frame))
-                                        and any(item["id"].startswith("page/") and item["actionable"]
-                                                for item in frame["nodes"]))
-                timing = session.match_output(started, current)
+                                                              for item in titles(frame))
+                                        and bool(session.frames) and not restore_cue(session.frames[-1]))
+                capture = session.capture_output(
+                    lambda: session.tap(current, f"workspace.taskbar.{identifier}"),
+                    restore_cue, f"restore-visible/{app}")
+                verification_started = time.monotonic_ns()
+                before_rpc = session.rpc_count
+                selected = lambda frame: any(
+                    item["id"].endswith(f"workspace.title.{identifier}") and item["selected"] for item in titles(frame))
+                ready = lambda frame: selected(frame) and frame["page"] == app and any(
+                    item["id"].startswith("page/") and item["actionable"] for item in frame["nodes"])
+                current = session.verify_capture(capture, selected)
+                # Retained content can be visible before fresh viewport/fence
+                # readiness. This check is auxiliary and cannot move the seal.
+                try:
+                    if not ready(current):
+                        current = session.until(ready)
+                    restored_pids = {item["pid"] for item in session.resources()["processes"]}
+                    assert expected_pids <= restored_pids, "Restore did not retain the same process"
+                except BaseException as error:
+                    session.failed_attempt(capture, f"Post-seal auxiliary restore validation failed: {error}")
+                    raise
+                timing = session.captured_timing(capture, current, restore_rects)
+                timing["endpoint_kind"] = "restored_business_content_visible"
+                timing["post_capture_validation"] = {
+                    "current_viewport_actionable": True, "same_process_pids": sorted(expected_pids),
+                    "elapsed_ms": (time.monotonic_ns() - verification_started) / 1e6,
+                    "snapshot_requests": session.rpc_count - before_rpc,
+                    "note": "Post-seal observation only; not an exact AppHost ready time or part of visible latency.",
+                }
                 write(dict(kind="launch", application=app, index=index, session=identifier,
                            mode="restore_existing_process", layout="single", size="120x36", **timing))
                 session.tap(current, f"workspace.close.{identifier}")
@@ -504,18 +730,22 @@ def children(binary, output, samples, motion, write, detailed_trace=False):
         try:
             for index in range(samples):
                 if app == "CommandLine":
-                    current, opened = session.open_app("CommandLine")
-                    started = opened["action_ns"]
-                    current = session.until(lambda frame: any(item["role"] == "terminal"
-                                            and ">>" in item["text"] for item in frame["nodes"]))
+                    current, timing = session.open_app("CommandLine", terminal_marker=">>")
                 else:
-                    current, _ = session.open_app("Editor")
-                    session.frames.clear()
-                    started = session.send(b"\x1b[19~")
-                    current = session.until(lambda frame: any(item["role"] == "terminal"
-                                            and "~" in item["text"] for item in frame["nodes"]))
-                terminal = next(item for item in current["nodes"] if item["role"] == "terminal")
-                timing = session.match_output(started, current, terminal["rect"])
+                    current, _ = session.open_app("Editor", timed=False)
+                    rect = vim_terminal_rect(node(current, "page")["rect"])
+                    before = region(session.frames[-1]["cells"], rect)
+                    cue = lambda candidate: vim_buffer_ready(candidate["cells"], rect, before)
+                    capture = session.capture_output(lambda: session.send(b"\x1b[19~"), cue, "native-ready/Vim")
+                    current = session.verify_capture(capture, lambda frame: any(
+                        item["role"] == "terminal" and "~" in item["text"] for item in frame["nodes"]))
+                    terminal = next(item for item in current["nodes"] if item["role"] == "terminal")
+                    if terminal["rect"] != rect or not vim_buffer_ready(snapshot_cells(current), rect, before):
+                        session.failed_attempt(capture, "Post-capture native Vim buffer validation failed")
+                        raise AssertionError("Post-capture native Vim buffer validation failed")
+                    timing = session.captured_timing(capture, current, vim_ready_rects(rect))
+                    timing["verification"].update(native_endpoint=NATIVE_VIM_ENDPOINT,
+                                                  native_buffer_rect=rect, intro_ignored=True)
                 write(dict(kind="child-ready", application=app, index=index,
                            ready="visible REPL prompt" if app == "CommandLine" else "visible native Vim buffer",
                            **timing, resources=session.resources()))
@@ -538,7 +768,7 @@ def interactions(binary, output, samples, motion, write, single_samples=None, de
         case_samples = single_samples if count == 1 and single_samples is not None else samples
         session = Session(binary, output, f"interact-{count}", width, height, motion, detailed_trace=detailed_trace)
         try:
-            current, _ = session.open_app("Launcher")
+            current, _ = session.open_app("Launcher", timed=False)
             original = titles(current)[0]["id"].rsplit(".", 1)[1]
             if count > 1:
                 session.send(b"\x17v")
@@ -550,6 +780,15 @@ def interactions(binary, output, samples, motion, write, single_samples=None, de
                 session.send(b"\x17s")
                 current = choose(session, "Launcher", "application.launcher")
             current = session.until(lambda frame: len(titles(frame)) == count and frame["page"] == "Launcher")
+            selected_titles = {}
+            if count > 1:
+                initially_selected = next(item["id"] for item in titles(current) if item["selected"])
+                for identifier in [item["id"] for item in titles(current)]:
+                    session.tap(current, identifier)
+                    current = session.until(lambda frame: node(frame, identifier)["selected"])
+                    selected_titles[identifier] = (session.frames[-1]["cells"], [node(current, identifier)["rect"]])
+                session.tap(current, initially_selected)
+                current = session.until(lambda frame: node(frame, initially_selected)["selected"])
             for index in range(case_samples):
                 # Each sample is one physical input, then complete output, then verification.
                 current = session.until(lambda frame: any(item["id"] == "page/launcher.search" and item["actionable"]
@@ -558,40 +797,47 @@ def interactions(binary, output, samples, motion, write, single_samples=None, de
                 session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
                 session.send(b"\x01\x7f")
                 current = session.until(lambda frame: node(frame, "page/launcher.search")["text"].rsplit(":", 1)[-1].strip() in ("", "_"))
+                search_rect = node(current, "page/launcher.search")["rect"]
+                focused_cells = session.frames[-1]["cells"]
                 marker = chr(0x0400 + index % 200)
-                session.frames.clear()
-                started = session.send(marker.encode())
-                current = session.until(lambda frame: marker in node(frame, "page/launcher.search")["text"])
-                timing = session.match_output(started, current, node(current, "page/launcher.search")["rect"])
+                capture = session.capture_output(lambda: session.send(marker.encode()),
+                    lambda candidate: marker in "\n".join(region(candidate["cells"], search_rect)),
+                    f"{count}-window/input")
+                current = session.verify_capture(capture, lambda frame: marker in node(frame, "page/launcher.search")["text"])
+                timing = session.captured_timing(capture, current, search_rect)
                 write(dict(kind="interaction", action="input", index=index, layout=f"{count}-window",
                            size=f"{width}x{height}", **timing))
                 session.send(b"\x01\x7f\t")
                 current = session.until(lambda frame: not node(frame, "page/launcher.search")["focused"])
                 rect = node(current, "page/launcher.search")["rect"]
                 before = region(session.frames[-1]["cells"], rect, True)
-                session.frames.clear()
-                started = session.tap(current, "page/launcher.search")
-                current = session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
-                timing = session.match_output(started, current, rect, True, before)
+                unfocused_cells = session.frames[-1]["cells"]
+                unfocused_state = focus_state(current)
+                capture = session.capture_output(lambda: session.tap(current, "page/launcher.search"),
+                    frame_cue(focused_cells, [rect], True), f"{count}-window/click")
+                current = session.verify_capture(capture, lambda frame: node(frame, "page/launcher.search")["focused"])
+                timing = session.captured_timing(capture, current, rect, True, before)
                 write(dict(kind="interaction", action="click", index=index, layout=f"{count}-window",
                            size=f"{width}x{height}", **timing))
-                rect = node(current, "page")["rect"]
+                rect = search_rect
                 before = region(session.frames[-1]["cells"], rect, True)
-                session.frames.clear()
-                started = session.send(b"\t")
-                current = session.until(lambda frame: not node(frame, "page/launcher.search")["focused"])
-                timing = session.match_output(started, current, rect, True, before)
+                capture = session.capture_output(lambda: session.send(b"\t"),
+                    frame_cue(unfocused_cells, [rect], True), f"{count}-window/focus")
+                current = session.verify_capture(capture, lambda frame:
+                    not node(frame, "page/launcher.search")["focused"] and focus_state(frame) == unfocused_state)
+                timing = session.captured_timing(capture, current, rect, True, before)
+                timing["verification"]["logical_focus_state"] = unfocused_state
                 write(dict(kind="interaction", action="focus", index=index, layout=f"{count}-window",
                            size=f"{width}x{height}", **timing))
                 if count > 1:
                     other = next(item for item in titles(current) if not item["selected"])
                     rect = other["rect"]
                     before = region(session.frames[-1]["cells"], rect, True)
-                    session.frames.clear()
-                    started = session.tap(current, other["id"])
                     identifier = other["id"]
-                    current = session.until(lambda frame: node(frame, identifier)["selected"])
-                    timing = session.match_output(started, current, rect, True, before)
+                    capture = session.capture_output(lambda: session.tap(current, identifier),
+                        frame_cue(*selected_titles[identifier], styled=True), f"{count}-window/pane-focus")
+                    current = session.verify_capture(capture, lambda frame: node(frame, identifier)["selected"])
+                    timing = session.captured_timing(capture, current, rect, True, before)
                     write(dict(kind="interaction", action="pane-focus", index=index,
                                layout=f"{count}-window", size=f"{width}x{height}", **timing))
             write(dict(kind="resources", layout=f"{count}-window", resources=session.resources()))
@@ -679,6 +925,13 @@ def main():
                 "platform": platform.platform(), "python": platform.python_version(),
                 "motion": args.motion, "terminal": "xterm-256color/truecolor",
                 "trace_enabled": args.detailed_trace,
+                "observation_condition": "zero-rpc-sealed-pty-capture-v1",
+                "capture_timeout_seconds": CAPTURE_TIMEOUT_SECONDS,
+                "unknown_signature_discovery_seconds": CAPTURE_TIMEOUT_SECONDS,
+                "native_vim_endpoint": NATIVE_VIM_ENDPOINT,
+                "input_focus_endpoint": FOCUS_ENDPOINT,
+                "restore_endpoint": "Complete business content visible again; viewport/fence readiness is verified after sealing",
+                "resource_sample_timing": "Process-tree points outside capture, after validation; not endpoint CPU/RSS or peak memory",
                 "measurement": "Python monotonic_ns from physical PTY action to the first matching complete Ratatui output tail",
                 "boundary": "Ratatui buffer diff followed by final cursor state and position commands and flush; snapshot verification is excluded",
                 "limitation": "PTY output completion is measured; terminal emulator pixel presentation is not measured",
@@ -691,6 +944,20 @@ def main():
     environment = binary.parent / "build-environment.json"
     if environment.is_file():
         metadata["build_environment"] = json.loads(environment.read_text())
+    metadata["acceptance_eligible"] = (not args.detailed_trace
+        and metadata.get("build_environment", {}).get("acceptance_eligible", True))
+    if args.compare:
+        comparison = json.loads(args.compare.read_text())
+        assert comparison.get("observation_condition") == metadata["observation_condition"], \
+            "Cannot compare different automation observation conditions"
+        assert comparison.get("trace_enabled") == metadata["trace_enabled"], \
+            "Cannot compare different detailed-trace settings"
+        assert comparison.get("native_vim_endpoint") == metadata["native_vim_endpoint"], \
+            "Cannot compare different native Vim ready definitions"
+        assert comparison.get("input_focus_endpoint") == metadata["input_focus_endpoint"], \
+            "Cannot compare different keyboard focus definitions"
+        assert metadata["acceptance_eligible"] and comparison.get("acceptance_eligible"), \
+            "Diagnostic compiler profiles and detailed tracing cannot certify a baseline comparison"
     limits = {}
     for name in ("cpu.max", "memory.max", "cpuset.cpus.effective"):
         path = Path("/sys/fs/cgroup") / name
@@ -725,6 +992,8 @@ def main():
         finally:
             result = report(samples, dict(metadata, elapsed_seconds=round(time.monotonic() - started, 3)))
             result["stage_timings"] = diagnostics(args.output)
+            failures = args.output / "failed-attempts.jsonl"
+            result["failed_attempts"] = [json.loads(line) for line in failures.read_text().splitlines()] if failures.exists() else []
             result["acceptance"] = {}
             for key, stats in result["summaries"].items():
                 if key.startswith("interaction/") or key.endswith("restore_existing_process"):
@@ -736,10 +1005,17 @@ def main():
                 result["acceptance"][key] = {"budget_ms": budget,
                     "passed": stats["p95_ms"] <= budget,
                     "enough_samples": stats["count"] >= (50 if key.startswith("launch/") else 100)}
+                if key.endswith("restore_existing_process"):
+                    result["acceptance"][key]["endpoint_kind"] = "restored_business_content_visible"
+                    result["acceptance"][key]["exact_interactive_readiness_measured"] = False
             (args.output / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
             checks = result["acceptance"].values()
             lines = [f"Requested run completed: {result['completed']} (workflow completion only).", "",
                      f"trace_enabled: {result['trace_enabled']}; normal product logs are retained.", "",
+                     f"Build/trace acceptance_eligible: {result['acceptance_eligible']} (sample-size and budget checks remain separate).", "",
+                     f"Observation condition: {result['observation_condition']}. Failed attempts retained: {len(result['failed_attempts'])}.", "",
+                     "Restore measures business content becoming visible again. Current viewport/fence readiness and same-process checks occur after sealing; their duration is auxiliary.", "",
+                     "Vim uses the first changed empty buffer with complete EOB rows and the Scratch status line, ignoring intro variants. Keyboard focus uses only the search-field style and verifies the logical target afterward.", "",
                      f"Measured budget groups: {len(result['acceptance'])}; "
                      f"enough samples: {sum(item['enough_samples'] for item in checks)}; "
                      f"within P95 budget: {sum(item['passed'] for item in checks)}.", "",
@@ -760,7 +1036,8 @@ def main():
             (args.output / "report.md").write_text("\n".join(lines) + "\n")
     print(json.dumps(result, ensure_ascii=False))
     if args.enforce_budgets:
-        assert result["acceptance"] and all(item["passed"] and item["enough_samples"]
+        assert result["completed"] and not result["failed_attempts"] and result["acceptance_eligible"] \
+            and result["acceptance"] and all(item["passed"] and item["enough_samples"]
                                             for item in result["acceptance"].values()), "Performance budgets failed; see report.json"
 
 
