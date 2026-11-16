@@ -157,6 +157,20 @@ def main():
             key("Left")
             key("Enter")
             current = until(lambda current: current["page"] == "Launcher")
+
+            def window_ids(current):
+                return {node["id"] for node in current["nodes"] if node["role"] == "button"
+                        and "workspace.taskbar." in node["id"] and not node["id"].endswith(".close")}
+
+            launcher_window = node_by(current, lambda node: node["id"] in window_ids(current)
+                                      and node["selected"])["id"]
+
+            def restore_launcher():
+                click(launcher_window)
+                return until(lambda current: current["page"] == "Launcher"
+                    and any(node["id"] == launcher_window and node["selected"] for node in current["nodes"])
+                    and any("launcher.item." in node["id"] and node["actionable"] for node in current["nodes"]))
+
             def toolbar(label):
                 current = snapshot()
                 button = node_by(current, lambda node: node["role"] == "button" and label in node["name"])
@@ -261,14 +275,19 @@ def main():
             assert custom["custom"]["icon"] == "中文x\n★"
             assert custom["custom"]["wait_for_enter"]
             print("PASS: context menu closes outside; name, command and bounded Unicode icon persist")
+            before_command = window_ids(current)
             key("Enter")
             current = until(lambda current: current["page"] == "CommandLine"
                 and "EDITED_LAUNCHER_PTY_OK" in "\n".join(current["lines"])
                 and "Press Enter to return." in "\n".join(current["lines"]))
             assert any(node["role"] == "terminal" for node in current["nodes"])
+            command_windows = window_ids(current) - before_command
+            assert len(command_windows) == 1, "Custom commands require an independent AppHost"
             key("Enter")
-            current = until(lambda current: current["page"] == "Launcher")
-            print("PASS: custom settings persist; output stays in the real PTY until Enter returns")
+            until(lambda current: window_ids(current) == before_command)
+            # Closing the command window leaves the original Launcher in the bottom bar.
+            current = restore_launcher()
+            print("PASS: custom settings persist; Enter closes retained PTY output and the original Launcher restores")
             for code in [0, 9]:
                 toolbar("Organize")
                 toolbar("Add launcher")
@@ -279,10 +298,12 @@ def main():
                 key("F10")
                 toolbar("Done organizing")
                 key("End")
+                before_command = window_ids(snapshot())
                 key("Enter")
-                current = until(lambda current: current["page"] == "Launcher" and marker.exists())
+                until(lambda current: marker.exists() and window_ids(current) == before_command)
                 assert marker.read_text() == "done"
-            print("PASS: the default returns immediately after successful and failed custom commands")
+                current = restore_launcher()
+            print("PASS: default custom commands exit without Enter after success and failure; Launcher restores")
             context_action("Delete")
             key("Escape")
             assert any(entry["id"] == custom_id for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"])

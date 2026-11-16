@@ -116,7 +116,12 @@ def main():
             return next(item for item in current["nodes"] if item["id"].endswith(suffix))
 
         def click(suffix):
-            target = node(suffix)
+            identifier = node(suffix)["id"]
+            current = until(lambda current: any(
+                item["id"] == identifier and item["enabled"] and item["actionable"]
+                for item in current["nodes"]
+            ))
+            target = next(item for item in current["nodes"] if item["id"] == identifier)
             assert target["enabled"] and target["actionable"], target
             return ui("click", "--id", target["id"])
 
