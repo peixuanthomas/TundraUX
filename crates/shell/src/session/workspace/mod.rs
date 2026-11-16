@@ -18,9 +18,12 @@ use workspace_protocol::{
 
 mod chooser;
 mod input;
+mod performance;
 mod render;
 mod taskbar;
 mod windows;
+
+use performance::PerformanceTrace;
 
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
 const STARTING_DELAY: Duration = Duration::from_millis(100);
@@ -125,6 +128,7 @@ struct PointerCapture {
 }
 
 pub(super) struct Workspace {
+    performance: PerformanceTrace,
     image_cell_size: Option<[u16; 2]>,
     text_sizing: bool,
     windows: BTreeMap<SessionId, Window>,
@@ -179,6 +183,7 @@ pub(super) struct Workspace {
 impl Workspace {
     pub(super) fn new(image_cell_size: Option<[u16; 2]>, text_sizing: bool) -> Self {
         Self {
+            performance: PerformanceTrace::new(),
             image_cell_size,
             text_sizing,
             windows: BTreeMap::new(),
@@ -284,16 +289,34 @@ impl Workspace {
         }
     }
 
-    pub(super) fn did_present(&mut self, _state: &ShellSession, _terminal_output_us: u64) {
-        for window in self.windows.values_mut() {
+    pub(super) fn did_present(&mut self, state: &ShellSession, terminal_output_us: u64) {
+        for (&id, window) in &mut self.windows {
             if std::mem::take(&mut window.starting_presenting)
                 && let Some(startup) = &mut window.startup
             {
                 startup.starting_presented = true;
             }
             if let Some(frame) = window.presenting.take() {
+                self.performance.did_present(
+                    id,
+                    frame.sequence,
+                    frame.processed_input_serial,
+                    terminal_output_us,
+                );
                 window.presented = Some(frame);
-                window.startup = None;
+                if let Some(startup) = window.startup.take() {
+                    let accepted = startup.accepted;
+                    let starting_shown = startup.starting_presented;
+                    startup.record_presented(
+                        id,
+                        window.launch.id(),
+                        window.worker,
+                        state.auth_session(),
+                        terminal_output_us,
+                        starting_shown,
+                        accepted,
+                    );
+                }
             }
         }
     }

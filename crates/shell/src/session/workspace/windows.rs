@@ -407,6 +407,7 @@ impl Workspace {
         self.task_catalogs.remove(&id);
         self.deleting_launcher.remove(&id);
         self.windows.remove(&id);
+        self.performance.forget_window(id);
         self.taskbar_order.retain(|&window| window != id);
         if self
             .taskbar_menu
@@ -575,6 +576,7 @@ impl Workspace {
                     .frame
                     .as_ref()
                     .is_some_and(|old| old.modal != frame.modal);
+                self.performance.frame_accepted(id, frame.sequence);
                 window.frame = Some(Arc::new(frame));
                 if let Some(startup) = &mut window.startup
                     && startup.accepted.is_none()
@@ -859,6 +861,7 @@ impl Workspace {
             if let ShellToApp::Input { serial, .. } = &mut message {
                 self.input_serial += 1;
                 *serial = self.input_serial;
+                self.performance.input_sent(id, *serial);
             }
             if matches!(
                 message,
