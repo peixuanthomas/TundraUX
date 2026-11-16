@@ -12,9 +12,8 @@ pub(super) struct PerformanceTrace {
 impl PerformanceTrace {
     pub(super) fn new() -> Self {
         Self {
-            file: std::env::var_os("TUNDRA_PERF_TRACE").and_then(|path| {
-                OpenOptions::new().create(true).append(true).open(path).ok()
-            }),
+            file: std::env::var_os("TUNDRA_PERF_TRACE")
+                .and_then(|path| OpenOptions::new().create(true).append(true).open(path).ok()),
             inputs: BTreeMap::new(),
             accepted: BTreeMap::new(),
             presented: BTreeMap::new(),
@@ -34,6 +33,12 @@ impl PerformanceTrace {
         if self.file.is_some() {
             self.accepted.insert(id, (sequence, Instant::now()));
         }
+    }
+
+    pub(super) fn forget_window(&mut self, id: SessionId) {
+        self.inputs.remove(&id);
+        self.accepted.remove(&id);
+        self.presented.remove(&id);
     }
 
     pub(super) fn did_present(
@@ -67,7 +72,10 @@ impl PerformanceTrace {
             let _ = file.write_all(b"\n");
         }
         if let Some(inputs) = self.inputs.get_mut(&id) {
-            while inputs.front().is_some_and(|(serial, _)| *serial <= processed_serial) {
+            while inputs
+                .front()
+                .is_some_and(|(serial, _)| *serial <= processed_serial)
+            {
                 let (serial, sent) = inputs.pop_front().expect("checked input");
                 let _ = serde_json::to_writer(
                     &mut *file,
@@ -116,7 +124,10 @@ impl WindowStartup {
             },
             runtime_log::LogLevel::Info,
             runtime_log::LogPhase::Succeeded,
-            format!("First window frame output in {:.2} ms", total_us as f64 / 1_000.0),
+            format!(
+                "First window frame output in {:.2} ms",
+                total_us as f64 / 1_000.0
+            ),
         );
         event.message_args = [
             ("total_us".into(), total_us.into()),
