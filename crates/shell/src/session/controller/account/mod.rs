@@ -1061,6 +1061,11 @@ impl ShellSession {
                         .validate_bootstrap_admin(&username, &password, hint.as_deref());
                     Ok::<_, storage::StorageError>((config, validation))
                 },
+                |result| {
+                    result
+                        .as_ref()
+                        .is_ok_and(|(_, validation)| validation.is_ok())
+                },
                 move |state, result| match result {
                     Ok((config, validation)) => {
                         state.replace_storage_config(config);
@@ -1181,6 +1186,7 @@ impl ShellSession {
                         let result = users.complete_personalization(&session, appearance);
                         Ok::<_, storage::StorageError>((config, result, session))
                     },
+                    |result| result.as_ref().is_ok_and(|(_, profile, _)| profile.is_ok()),
                     move |state, result| match result {
                         Ok((config, result, session)) => {
                             state.replace_storage_config(config);

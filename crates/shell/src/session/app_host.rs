@@ -70,6 +70,17 @@ impl InputFences {
     }
 }
 
+impl ShellSession {
+    pub(in crate::session) fn begin_window_close_request(&mut self) -> bool {
+        if self.window_close != WindowClose::Idle {
+            return false;
+        }
+        self.window_close_explicit = false;
+        self.window_close = WindowClose::Checking;
+        true
+    }
+}
+
 struct AppHostSession {
     state: ShellSession,
     platform: Arc<dyn Platform>,
@@ -476,8 +487,7 @@ impl AppHostSession {
     }
 
     fn request_close(&mut self) {
-        if self.state.window_close == WindowClose::Idle {
-            self.state.window_close = WindowClose::Checking;
+        if self.state.begin_window_close_request() {
             self.output.push_back(AppToShell::CloseDeferred);
             self.redraw.request_redraw();
         }
@@ -692,6 +702,7 @@ impl AppHostSession {
         }
         self.check_close();
         if self.state.window_close == WindowClose::Cancelled {
+            self.state.window_close_explicit = false;
             self.state.window_close = WindowClose::Idle;
             self.output.push_back(AppToShell::CloseCancelled);
         }

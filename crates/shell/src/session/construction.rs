@@ -182,6 +182,7 @@ impl ShellSession {
             window_launches: VecDeque::new(),
             window_delete_launcher: None,
             window_close: Default::default(),
+            window_close_explicit: false,
             window_global_request: None,
             window_language_reloaded: None,
             windows_active: false,

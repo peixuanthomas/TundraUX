@@ -487,6 +487,7 @@ impl ShellSession {
                     );
                     (launcher, effect, storage.load_config())
                 },
+                |(launcher, _, _)| launcher.error.is_none(),
                 move |state, (launcher, effect, config)| {
                     let error = launcher.error.clone();
                     state.app.dispatch_at(

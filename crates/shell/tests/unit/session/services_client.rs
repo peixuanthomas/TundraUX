@@ -83,6 +83,120 @@ fn failed_save_cancels_normal_close_and_exposes_the_failure() {
     assert!(!client.has_pending_writes());
 }
 
+fn consume_workspace_job(
+    state: &mut ShellSession,
+    client: &Arc<SessionServicesClient>,
+    work: impl FnOnce() -> io::Result<()>,
+) {
+    let outcome = Arc::new(std::sync::Mutex::new(None));
+    let result = workspace_job_reply(work(), |result| result.is_ok(), &outcome);
+    let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+    let task = state.register_workspace_save();
+    client.completions.lock().unwrap().push(PendingWrite {
+        receiver,
+        session: Some(None),
+        page: Some(state.active_page_id()),
+        task: Some(task),
+        clipboard: None,
+        complete: Some(Box::new(move |state, _| {
+            let result = outcome.lock().unwrap().take().unwrap();
+            state.pages.common.error_message = result.err().map(|error| error.to_string().into());
+        })),
+    });
+    reply.send(result).unwrap();
+    assert!(client.sync_session(state));
+    assert!(!client.has_pending_writes());
+}
+
+#[test]
+fn failed_generic_work_cancels_a_normal_close_and_keeps_its_actual_error() {
+    use super::super::app_host::WindowClose;
+    for close in [WindowClose::Checking, WindowClose::Confirmed] {
+        let mut state = state();
+        let client = SessionServicesClient::for_test(snapshot(None));
+        assert!(state.begin_window_close_request());
+        state.window_close = close;
+        consume_workspace_job(&mut state, &client, || {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "write refused",
+            ))
+        });
+        assert_eq!(state.window_close, WindowClose::Cancelled);
+        assert_eq!(
+            state
+                .pages
+                .common
+                .error_message
+                .as_ref()
+                .unwrap()
+                .render_current(),
+            "write refused"
+        );
+    }
+}
+
+#[test]
+fn successful_generic_work_allows_a_normal_close_to_finish() {
+    use super::super::app_host::WindowClose;
+    let mut state = state();
+    let client = SessionServicesClient::for_test(snapshot(None));
+    assert!(state.begin_window_close_request());
+    state.window_close = WindowClose::Confirmed;
+    consume_workspace_job(&mut state, &client, || Ok(()));
+    assert_eq!(state.window_close, WindowClose::Confirmed);
+    assert!(state.pages.common.error_message.is_none());
+}
+
+#[test]
+fn explicit_close_survives_failure_then_cancel_allows_a_later_normal_close_to_cancel() {
+    use super::super::app_host::WindowClose;
+    let mut state = state();
+    let client = SessionServicesClient::for_test(snapshot(None));
+    assert!(state.begin_window_close_request());
+    let command = |state: &mut ShellSession, command| {
+        state.apply_routed_event_once(
+            RoutedEvent {
+                input: InputEvent::key(InputKey::Enter),
+                target: RoutedTarget::Global,
+                command,
+            },
+            &platform::mock::UnsupportedPlatform,
+            Instant::now(),
+        );
+    };
+    command(&mut state, ShellCommand::ConfirmWindowClose);
+    assert!(state.window_close_explicit);
+    consume_workspace_job(&mut state, &client, || {
+        Err(io::Error::other("write refused"))
+    });
+    assert_eq!(state.window_close, WindowClose::Confirmed);
+    assert!(state.pages.common.error_message.is_some());
+    command(&mut state, ShellCommand::CancelWindowClose);
+    assert_eq!(state.window_close, WindowClose::Cancelled);
+    assert!(!state.window_close_explicit);
+    state.window_close = WindowClose::Idle;
+    assert!(state.begin_window_close_request());
+    consume_workspace_job(&mut state, &client, || {
+        Err(io::Error::other("second write refused"))
+    });
+    assert_eq!(state.window_close, WindowClose::Cancelled);
+}
+
+#[test]
+fn a_new_normal_close_request_clears_a_previous_explicit_choice() {
+    use super::super::app_host::WindowClose;
+    let mut state = state();
+    let client = SessionServicesClient::for_test(snapshot(None));
+    state.window_close_explicit = true;
+    assert!(state.begin_window_close_request());
+    assert!(!state.window_close_explicit);
+    consume_workspace_job(&mut state, &client, || {
+        Err(io::Error::other("write refused"))
+    });
+    assert_eq!(state.window_close, WindowClose::Cancelled);
+}
+
 #[test]
 fn a_closed_page_never_delivers_its_save_to_a_replacement_page() {
     let mut state = state();

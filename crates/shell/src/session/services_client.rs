@@ -7,6 +7,20 @@ use workspace_protocol::{ServiceError, ServiceOperation, ServiceValue, WorkerRol
 
 type Completion = Box<dyn FnOnce(&mut ShellSession, io::Result<ServiceValue>) + Send>;
 
+fn workspace_job_reply<T>(
+    result: T,
+    successful: impl FnOnce(&T) -> bool,
+    outcome: &std::sync::Mutex<Option<T>>,
+) -> Result<ServiceValue, ServiceError> {
+    let success = successful(&result);
+    *outcome.lock().unwrap_or_else(|error| error.into_inner()) = Some(result);
+    if success {
+        Ok(ServiceValue::Empty)
+    } else {
+        Err(ServiceError::Unavailable)
+    }
+}
+
 pub(crate) struct PendingWrite {
     receiver: std::sync::mpsc::Receiver<Result<ServiceValue, ServiceError>>,
     session: Option<Option<String>>,
@@ -102,15 +116,8 @@ impl SessionServicesClient {
                 }
                 continue;
             }
-            if pending.task.is_some()
-                && result.is_err()
-                && matches!(
-                    state.window_close,
-                    super::app_host::WindowClose::Checking
-                        | super::app_host::WindowClose::Confirmed
-                )
-            {
-                state.window_close = super::app_host::WindowClose::Cancelled;
+            if pending.task.is_some() && result.is_err() {
+                state.cancel_window_close_after_workspace_failure();
             }
             if let Some(complete) = pending.complete {
                 if let Some(page) = pending.page {
@@ -369,6 +376,17 @@ impl SessionServicesClient {
 }
 
 impl ShellSession {
+    fn cancel_window_close_after_workspace_failure(&mut self) {
+        if !self.window_close_explicit
+            && matches!(
+                self.window_close,
+                super::app_host::WindowClose::Checking | super::app_host::WindowClose::Confirmed
+            )
+        {
+            self.window_close = super::app_host::WindowClose::Cancelled;
+        }
+    }
+
     pub(in crate::session) fn begin_workspace_draft(&mut self) {
         self.pages.common.workspace_draft = self.pages.common.workspace_draft.wrapping_add(1);
     }
@@ -394,6 +412,7 @@ impl ShellSession {
     pub(in crate::session) fn submit_workspace_job<T: Send + 'static>(
         &mut self,
         work: impl FnOnce() -> T + Send + 'static,
+        successful: impl FnOnce(&T) -> bool + Send + 'static,
         complete: impl FnOnce(&mut Self, T) + Send + 'static,
     ) -> io::Result<()> {
         let client = SessionServicesClient::current()
@@ -412,9 +431,8 @@ impl ShellSession {
         let language = self.language.clone();
         client.submit_job(Box::new(move || {
             let _language = i18n::enter_snapshot(language);
-            *result.lock().unwrap_or_else(|error| error.into_inner()) =
-                Some(SessionServicesClient::in_authorization(revision, work));
-            let _ = reply.send(Ok(ServiceValue::Empty));
+            let value = SessionServicesClient::in_authorization(revision, work);
+            let _ = reply.send(workspace_job_reply(value, successful, &result));
             completion_client.notify_completion();
         }))?;
         let task = Some(self.register_workspace_save());

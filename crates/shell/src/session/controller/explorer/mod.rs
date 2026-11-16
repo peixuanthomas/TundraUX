@@ -672,6 +672,7 @@ impl ShellSession {
                     );
                     explorer
                 },
+                |explorer| explorer.error.is_none(),
                 Self::complete_explorer_workspace_command,
             ) {
                 self.report_explorer_task_error(error.to_string());

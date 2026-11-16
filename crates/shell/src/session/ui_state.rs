@@ -581,6 +581,7 @@ pub struct UiSessionState {
     pub(super) window_launches: VecDeque<WindowRequest>,
     pub(super) window_delete_launcher: Option<workspace_protocol::SessionId>,
     pub(super) window_close: super::app_host::WindowClose,
+    pub(super) window_close_explicit: bool,
     pub(super) window_global_request: Option<ShellCommand>,
     pub(super) window_language_reloaded: Option<String>,
     pub(super) windows_active: bool,

@@ -372,10 +372,12 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::ConfirmWindowClose => {
+                self.window_close_explicit = true;
                 self.window_close = super::super::super::app_host::WindowClose::Confirmed;
                 ShellAction::Redraw
             }
             ShellCommand::CancelWindowClose => {
+                self.window_close_explicit = false;
                 self.window_close = super::super::super::app_host::WindowClose::Cancelled;
                 self.approved_editor_closes.clear();
                 ShellAction::Redraw
