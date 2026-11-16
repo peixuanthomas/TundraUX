@@ -2,8 +2,10 @@ use super::*;
 use crate::msg;
 
 #[test]
-fn identical_english_resources_share_parsed_patterns_across_fallback_bundles() {
+fn identical_english_fallbacks_share_bundle_indices_and_render() {
     let snapshot = LanguageSnapshot::embedded(1);
+    assert!(Arc::ptr_eq(&snapshot.english, &snapshot.embedded));
+    assert_eq!(msg!("notifications-action-ok").render(&snapshot), "OK");
     let embedded = snapshot
         .embedded
         .get_message("notifications-action-ok")
@@ -19,6 +21,24 @@ fn identical_english_resources_share_parsed_patterns_across_fallback_bundles() {
 }
 
 #[test]
+fn empty_disk_english_shares_builtin_bundle_without_changing_current_language() {
+    let snapshot = LanguageSnapshotData {
+        code: "fr-FR".into(),
+        generation: 3,
+        current: vec!["notifications-action-ok = Choisir\n".into()],
+        english: Vec::new(),
+    }
+    .restore_validated()
+    .unwrap();
+    assert!(Arc::ptr_eq(&snapshot.english, &snapshot.embedded));
+    assert!(!Arc::ptr_eq(&snapshot.current, &snapshot.english));
+    assert_eq!(snapshot.code(), "fr-FR");
+    assert_eq!(snapshot.generation(), 3);
+    assert_eq!(msg!("notifications-action-ok").render(&snapshot), "Choisir");
+    assert_eq!(msg!("resources-recovery-ok").render(&snapshot), "OK");
+}
+
+#[test]
 fn shared_resources_keep_fallback_layers_and_snapshot_generations_independent() {
     let mut data = LanguageSnapshotData {
         code: "fr-FR".into(),
@@ -27,6 +47,7 @@ fn shared_resources_keep_fallback_layers_and_snapshot_generations_independent() 
         english: vec!["notifications-action-ok = Customized English\n".into()],
     };
     let current = data.clone().restore_validated().unwrap();
+    assert!(!Arc::ptr_eq(&current.english, &current.embedded));
     assert_eq!(msg!("notifications-action-ok").render(&current), "Choisir");
 
     data.current = vec!["notifications-action-ok = { $missing }\n".into()];
@@ -47,6 +68,7 @@ fn shared_resources_keep_fallback_layers_and_snapshot_generations_independent() 
     let next = data.restore_validated().unwrap();
     assert_eq!(next.code(), DEFAULT_LANGUAGE);
     assert_eq!(next.generation(), 2);
+    assert!(!Arc::ptr_eq(&next.english, &next.embedded));
     assert_eq!(
         msg!("notifications-action-ok").render(&next),
         "Updated English"

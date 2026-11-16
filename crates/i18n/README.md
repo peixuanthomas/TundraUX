@@ -43,7 +43,7 @@ i18n::with_snapshot(&snapshot, || {
 
 Snapshots separately retain the current language, English fallback, built-in English, and minimal emergency resources. Missing messages or formatting failures fall back through these layers; unknown IDs appear as `[message-id]`.
 
-During snapshot construction, identical Fluent text is parsed once and shared by the separate fallback bundles through `Arc<FluentResource>`. Sharing stays within that snapshot, so publishing another language or generation preserves earlier snapshots and disk English overrides.
+During snapshot construction, identical Fluent text is parsed once and shared through `Arc<FluentResource>`. The English and built-in fallback layers also share an `Arc<FluentBundle>` when disk English is empty or its complete text sequence matches the built-in resources. Custom English retains its own bundle and override order. Sharing stays within that snapshot, so publishing another language or generation preserves earlier snapshots.
 
 ## Loading and validation
 

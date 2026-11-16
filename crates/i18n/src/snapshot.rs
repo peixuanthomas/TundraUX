@@ -26,10 +26,10 @@ type Bundle = FluentBundle<Arc<FluentResource>>;
 pub struct LanguageSnapshot {
     code: String,
     generation: u64,
-    current: Bundle,
-    english: Bundle,
-    embedded: Bundle,
-    emergency: Bundle,
+    current: Arc<Bundle>,
+    english: Arc<Bundle>,
+    embedded: Arc<Bundle>,
+    emergency: Arc<Bundle>,
     current_sources: Vec<Source>,
     english_sources: Vec<Source>,
     embedded_sources: Vec<Source>,
@@ -366,12 +366,21 @@ impl LanguageSnapshot {
         }];
         let mut resources = HashMap::new();
         let embedded = make_bundle(DEFAULT_LANGUAGE, &embedded_sources, &[], &mut resources)?;
-        let english = make_bundle(
-            DEFAULT_LANGUAGE,
-            &embedded_sources,
-            &english_sources,
-            &mut resources,
-        )?;
+        let english = if english_sources.is_empty()
+            || english_sources
+                .iter()
+                .map(|source| &source.text)
+                .eq(embedded_sources.iter().map(|source| &source.text))
+        {
+            embedded.clone()
+        } else {
+            make_bundle(
+                DEFAULT_LANGUAGE,
+                &embedded_sources,
+                &english_sources,
+                &mut resources,
+            )?
+        };
         let current = make_bundle(&code, &current_sources, &[], &mut resources)?;
         let emergency = make_bundle(DEFAULT_LANGUAGE, &emergency_sources, &[], &mut resources)?;
         drop(resources);
@@ -487,7 +496,7 @@ fn make_bundle<'a>(
     base: &'a [Source],
     overrides: &'a [Source],
     resources: &mut HashMap<&'a str, Arc<FluentResource>>,
-) -> Result<Bundle, LanguageError> {
+) -> Result<Arc<Bundle>, LanguageError> {
     let language = code.parse().map_err(|_| {
         LanguageError::new(
             LanguageErrorKind::UnknownLanguage,
@@ -528,7 +537,7 @@ fn make_bundle<'a>(
             }
         }
     }
-    Ok(bundle)
+    Ok(Arc::new(bundle))
 }
 
 #[cfg(test)]
