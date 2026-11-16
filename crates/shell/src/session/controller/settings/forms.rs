@@ -3,6 +3,7 @@ use crate::session::*;
 
 impl ShellSession {
     pub(in crate::session) fn open_settings_picker(&mut self, kind: ui::SettingsPickerKind) {
+        self.begin_workspace_draft();
         if !matches!(
             kind,
             ui::SettingsPickerKind::Theme
@@ -428,6 +429,47 @@ impl ShellSession {
         if let Some(timezone) = timezone.clone() {
             config.timezone = timezone;
         }
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let draft = (
+                self.pages.common.workspace_draft,
+                self.pages.settings.settings_state.clone(),
+            );
+            self.defer_workspace_config(config, move |state, result| match result {
+                Ok(config) => {
+                    state.replace_storage_config(config);
+                    if let Some((catalog, loaded)) = candidate {
+                        if state.window_owner.is_app()
+                            && state.language_code() == loaded.snapshot.code()
+                        {
+                            state.window_language_reloaded =
+                                Some(loaded.snapshot.code().to_owned());
+                        }
+                        state.publish_language(catalog, loaded);
+                    }
+                    let same = (
+                        state.pages.common.workspace_draft,
+                        state.pages.settings.settings_state.clone(),
+                    ) == draft;
+                    if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                        if same {
+                            settings.picker = None;
+                        }
+                        settings.status = i18n::msg!("settings-saved-region").into();
+                    }
+                    state.notify_status(i18n::msg!("settings-saved-region"));
+                }
+                Err(error) => {
+                    if let Some((_, loaded)) = candidate {
+                        state.report_language_diagnostics(&loaded.diagnostics);
+                    }
+                    state.set_settings_error(i18n::msg!(
+                        "settings-save-failed",
+                        reason = error.to_string()
+                    ));
+                }
+            });
+            return;
+        }
         if let Err(error) = persist(self, &storage, &config) {
             if candidate.is_some() {
                 self.rollback_failed_language_config(&storage, &previous_config, &config);
@@ -459,6 +501,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn open_settings_weather_location(&mut self) {
+        self.begin_workspace_draft();
         if !self.can_change_global_settings() {
             self.set_settings_error(i18n::msg!("settings-admin-required"));
             return;
@@ -487,6 +530,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn open_settings_file_extensions(&mut self) {
+        self.begin_workspace_draft();
         if !self.can_change_global_settings() {
             self.set_settings_error(i18n::msg!("settings-admin-required"));
             return;
@@ -512,6 +556,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn open_settings_time_sync_server(&mut self) {
+        self.begin_workspace_draft();
         if self.identity_backend == identity::IdentityBackend::Linux {
             self.open_system_time_servers();
             return;
@@ -634,6 +679,32 @@ impl ShellSession {
             }
         };
         config.editor.explorer_open_extensions = extensions;
+        let draft = (
+            self.pages.common.workspace_draft,
+            self.pages.settings.settings_state.clone(),
+        );
+        if self.defer_workspace_config(config.clone(), move |state, result| match result {
+            Ok(config) => {
+                state.replace_storage_config(config);
+                let same = (
+                    state.pages.common.workspace_draft,
+                    state.pages.settings.settings_state.clone(),
+                ) == draft;
+                if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                    if same {
+                        settings.file_extensions_editor = None;
+                    }
+                    settings.status = i18n::msg!("settings-saved-suffixes").into();
+                }
+                state.notify_status(i18n::msg!("settings-saved-suffixes"));
+            }
+            Err(error) => state.set_settings_error(i18n::msg!(
+                "settings-save-failed",
+                reason = error.to_string()
+            )),
+        }) {
+            return;
+        }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {
             self.set_settings_error(i18n::msg!(
                 "settings-save-failed",
@@ -714,6 +785,32 @@ impl ShellSession {
             }
         };
         config.weather_location = (!value.is_empty()).then_some(value);
+        let draft = (
+            self.pages.common.workspace_draft,
+            self.pages.settings.settings_state.clone(),
+        );
+        if self.defer_workspace_config(config.clone(), move |state, result| match result {
+            Ok(config) => {
+                state.replace_storage_config(config);
+                let same = (
+                    state.pages.common.workspace_draft,
+                    state.pages.settings.settings_state.clone(),
+                ) == draft;
+                if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                    if same {
+                        settings.weather_location_editor = None;
+                    }
+                    settings.status = i18n::msg!("settings-saved-weather").into();
+                }
+                state.notify_status(i18n::msg!("settings-saved-weather"));
+            }
+            Err(error) => state.set_settings_error(i18n::msg!(
+                "settings-save-failed",
+                reason = error.to_string()
+            )),
+        }) {
+            return;
+        }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {
             self.set_settings_error(i18n::msg!(
                 "settings-save-failed",

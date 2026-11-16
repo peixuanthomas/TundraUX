@@ -48,11 +48,25 @@ impl ShellSession {
                 storage::LinuxUpdateMode::Release => storage::LinuxUpdateMode::Beta,
                 storage::LinuxUpdateMode::Beta => storage::LinuxUpdateMode::Release,
             };
+            if self.defer_workspace_config(config.clone(), |state, result| match result {
+                Ok(config) => {
+                    state.settings_update_state = SettingsUpdateState {
+                        mode: config.linux_update_mode,
+                        ..Default::default()
+                    };
+                    state.replace_storage_config(config);
+                    state.begin_update_check();
+                }
+                Err(error) => state.set_update_error(error.to_string()),
+            }) {
+                return Ok(None);
+            }
             self.save_settings_config_logged(&storage, &config)?;
-            Ok::<_, storage::StorageError>(config)
+            Ok::<_, storage::StorageError>(Some(config))
         })();
         match result {
-            Ok(config) => {
+            Ok(None) => return,
+            Ok(Some(config)) => {
                 self.settings_update_state = SettingsUpdateState {
                     mode: config.linux_update_mode,
                     ..Default::default()
@@ -348,6 +362,34 @@ impl ShellSession {
             }
         };
         config.time_sync = time_sync;
+        let draft = (
+            self.pages.common.workspace_draft,
+            self.pages.settings.settings_state.clone(),
+        );
+        if self.defer_workspace_config(config.clone(), move |state, result| match result {
+            Ok(config) => {
+                state.replace_storage_config(config);
+                state.apply_time_sync_utc(utc);
+                let same = (
+                    state.pages.common.workspace_draft,
+                    state.pages.settings.settings_state.clone(),
+                ) == draft;
+                if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                    if same {
+                        settings.time_sync_server_editor = None;
+                        settings.time_sync_validation_request_id = None;
+                    }
+                    settings.status = i18n::msg!("settings-saved-time-sync").into();
+                }
+                state.notify_status(i18n::msg!("settings-saved-time-sync"));
+            }
+            Err(error) => state.set_settings_error(i18n::msg!(
+                "settings-save-failed",
+                reason = error.to_string()
+            )),
+        }) {
+            return;
+        }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {
             self.set_settings_error(i18n::msg!(
                 "settings-save-failed",

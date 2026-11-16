@@ -211,6 +211,11 @@ impl Workspace {
         &mut self,
         state: &mut ShellSession,
     ) -> io::Result<bool> {
+        if crate::session_services::SessionServicesClient::current()
+            .is_some_and(|services| !services.is_session_ready(state))
+        {
+            return Ok(false);
+        }
         let mut launches = std::mem::take(&mut state.window_launches);
         let toggle_tasks = std::mem::take(&mut state.window_tasks_requested)
             | std::mem::take(&mut self.toggle_tasks_requested);

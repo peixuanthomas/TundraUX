@@ -2,6 +2,7 @@ use super::*;
 
 impl ShellSession {
     pub(super) fn open_settings_number(&mut self, field: ui::SettingsField) -> bool {
+        self.begin_workspace_draft();
         use ui::SettingsField as Field;
         let config = self.app.storage_config();
         let editor = self.current_editor_config();

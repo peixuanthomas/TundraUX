@@ -2980,6 +2980,7 @@ fn system_status_live_service_home_open_refresh_and_background_close() {
         ShellRuntimeServices {
             window_owner: Default::default(),
             inherited_auth: None,
+            session_snapshot: None,
             language: None,
             terminal_image_support: false,
             explorer: None,

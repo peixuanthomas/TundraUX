@@ -9,6 +9,7 @@
 - Each AppHost runs an application's page controllers, navigation, task ownership, and off-screen rendering. Editors and terminals own their child processes.
 - Session services share configuration, the active profile, system status, and file operation state across windows.
 - Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the account file intact.
+- A background connection owns shared-service I/O. AppHosts build from one authoritative session snapshot, and runtime reads share an immutable cached snapshot. Interactive saves publish successful replies to their original session, page, and draft; pending saves participate in normal close checks.
 - The watchdog supervises the Shell and AppHosts independently and can terminate an unresponsive window and its child processes.
 - Provide local external CLI control, converting automation requests into normal input events.
 

@@ -669,6 +669,23 @@ impl ShellSession {
             ExplorerEffect::PersistConfig(explorer) => match storage.load_config() {
                 Ok(mut config) => {
                     config.explorer = explorer;
+                    if self.defer_workspace_config(config.clone(), |state, result| match result {
+                        Ok(config) => state.replace_storage_config(config),
+                        Err(error) => {
+                            let _ = state.update_explorer_state(|state| {
+                                state.error = Some(
+                                    i18n::msg!(
+                                        "shell-could-not-save-explorer-options-error",
+                                        error = error.to_string()
+                                    )
+                                    .into(),
+                                );
+                                state.message = None;
+                            });
+                        }
+                    }) {
+                        return;
+                    }
                     if let Err(error) = storage.save_config(&config) {
                         let _ = self.update_explorer_state(|state| {
                             state.error = Some(i18n::LocalizedText::from(i18n::msg!(

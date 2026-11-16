@@ -265,10 +265,11 @@ impl ShellSession {
 
     fn save_launcher_order(&mut self, order: Vec<String>, platform: &dyn Platform) {
         self.apply_launcher_command(LauncherCommand::SetOrder(order.clone()), platform);
-        if self
-            .app
-            .launcher_state()
-            .is_some_and(|state| state.error.is_none())
+        if crate::session_services::SessionServicesClient::current().is_none()
+            && self
+                .app
+                .launcher_state()
+                .is_some_and(|state| state.error.is_none())
         {
             self.pages.launcher.order = order;
             self.sync_launcher_viewport();
@@ -459,9 +460,102 @@ impl ShellSession {
             }
             _ => None,
         };
+        if crate::session_services::SessionServicesClient::current().is_some()
+            && !matches!(
+                command,
+                LauncherCommand::RequestLaunch(_)
+                    | LauncherCommand::ConfirmLaunch(_)
+                    | LauncherCommand::Refresh
+            )
+        {
+            let mut launcher = self.app.launcher_state().cloned().expect("launcher loaded");
+            let controller = self.launcher_controller();
+            let auth = self.app.auth_session().cloned();
+            let draft = self.pages.common.workspace_draft;
+            let entry_editor = self.pages.launcher.entry_editor.clone();
+            let run_settings = self.pages.launcher.launcher_run_settings.clone();
+            let command_kind = command.clone();
+            if let Err(error) = self.submit_workspace_job(
+                move || {
+                    let platform = platform::native_platform();
+                    let effect = controller.apply(
+                        &mut launcher,
+                        command,
+                        auth.as_ref(),
+                        platform.as_ref(),
+                        &storage,
+                    );
+                    (launcher, effect, storage.load_config())
+                },
+                move |state, (launcher, effect, config)| {
+                    let error = launcher.error.clone();
+                    state.app.dispatch_at(
+                        app::AppCommand::SetLauncherState(Some(launcher)),
+                        Instant::now(),
+                    );
+                    if let Ok(config) = config {
+                        state.replace_storage_config(config);
+                    }
+                    if state.pages.common.workspace_draft == draft
+                        && state.pages.launcher.entry_editor == entry_editor
+                    {
+                        if let Some(editor) = state.pages.launcher.entry_editor.as_mut() {
+                            editor.error = error.as_ref().map(i18n::LocalizedText::render_current);
+                        }
+                        if error.is_none() {
+                            state.pages.launcher.entry_editor = None;
+                        }
+                    }
+                    if state.pages.common.workspace_draft == draft
+                        && state.pages.launcher.launcher_run_settings == run_settings
+                    {
+                        if let Some(form) = state.pages.launcher.launcher_run_settings.as_mut() {
+                            form.error = error.clone();
+                        }
+                        if error.is_none() {
+                            state.pages.launcher.launcher_run_settings = None;
+                        }
+                    }
+                    if error.is_none() {
+                        if let LauncherCommand::SetOrder(order) = &command_kind {
+                            state.pages.launcher.order.clone_from(order);
+                        }
+                        if let LauncherCommand::EditEntry {
+                            edit: app::launcher::LauncherEntryEdit::WaitForEnter(wait),
+                            ..
+                        } = command_kind
+                            && let Some(menu) = state.pages.launcher.context_menu.as_mut()
+                        {
+                            menu.menu.wait_for_enter = Some(wait);
+                        }
+                    }
+                    let platform = platform::native_platform();
+                    state.finish_launcher_effect(
+                        effect,
+                        launcher_id,
+                        new_session,
+                        platform.as_ref(),
+                    );
+                    state.sync_launcher_viewport();
+                },
+            ) {
+                self.notify_status(error.to_string());
+            }
+            return;
+        }
         let (_, effect) =
             self.app
                 .dispatch_launcher_at(command, platform, &storage, Instant::now());
+        self.finish_launcher_effect(effect, launcher_id, new_session, platform);
+    }
+
+    fn finish_launcher_effect(
+        &mut self,
+        effect: LauncherEffect,
+        launcher_id: Option<String>,
+        new_session: bool,
+        platform: &dyn Platform,
+    ) {
         match effect {
             LauncherEffect::None => {}
             LauncherEffect::OpenTerminalRequested {

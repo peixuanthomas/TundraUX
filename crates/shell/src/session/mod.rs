@@ -94,7 +94,7 @@ mod redraw;
 mod runtime;
 mod screen_keyboard;
 mod screen_saver;
-mod services_client;
+pub(crate) mod services_client;
 mod spring_progress;
 #[cfg(test)]
 #[path = "../../tests/unit/session/tests.rs"]
@@ -121,6 +121,7 @@ pub(in crate::session) struct ShellRuntimeServices {
     settings: ShellSettingsTaskRuntime,
     window_owner: window_launch::WindowOwner,
     inherited_auth: Option<AuthSession>,
+    session_snapshot: Option<Arc<workspace_protocol::ServiceSessionSnapshot>>,
 }
 
 mod tasks;

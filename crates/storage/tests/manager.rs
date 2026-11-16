@@ -161,6 +161,7 @@ fn toml_and_json_documents_round_trip() {
     shortcuts.insert("open_launcher".to_string(), "Ctrl+Space".to_string());
     let config = StorageConfig {
         session_revision: None,
+        session_authorization_revision: None,
         schema_version: SCHEMA_VERSION,
         screen_timeout_seconds: 120,
         automation: storage::AutomationConfig { enabled: true },

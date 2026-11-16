@@ -109,6 +109,7 @@ fn linux_startup(
         ShellRuntimeServices {
             window_owner: Default::default(),
             inherited_auth: None,
+            session_snapshot: None,
             language: None,
             terminal_image_support: images,
             explorer: None,

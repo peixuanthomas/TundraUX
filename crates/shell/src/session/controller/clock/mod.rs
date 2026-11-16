@@ -102,8 +102,8 @@ impl ShellSession {
         snapshot: &time::ClockSnapshot,
         now: Instant,
     ) -> Result<(), i18n::LocalizedText> {
-        if let Some(services) = SessionServicesClient::current() {
-            return self.write_workspace_clock_profile(services, None, true, snapshot, now);
+        if SessionServicesClient::current().is_some() {
+            return Err(i18n::msg!("workspace-services-unavailable").into());
         }
         let storage = self.storage_manager.as_ref().ok_or_else(|| {
             i18n::LocalizedText::from(i18n::msg!("shell-clock-storage-is-unavailable"))
@@ -179,24 +179,40 @@ impl ShellSession {
         previous: ClockScheduler,
         snapshot: &time::ClockSnapshot,
         now: Instant,
-    ) -> Result<(), i18n::LocalizedText> {
-        let result = if let Some(services) = SessionServicesClient::current() {
-            self.write_workspace_clock_profile(services, Some(&previous), false, snapshot, now)
-        } else {
-            self.persist_clock_scheduler_at(snapshot, now)
+        complete: impl FnOnce(&mut Self, Result<(), i18n::LocalizedText>) + Send + 'static,
+    ) {
+        let owner = self.active_page_id();
+        let draft = (
+            self.pages.common.workspace_draft,
+            self.pages.clock.clock_create_state.clone(),
+        );
+        let finish = move |state: &mut Self, result: Result<(), i18n::LocalizedText>| {
+            match &result {
+                Ok(()) => {
+                    state.clock_persist_pending = false;
+                    state.clock_pending_due_summary = None;
+                    state.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
+                }
+                Err(error) => state.report_clock_storage_error(error.clone()),
+            }
+            state.with_page_context(owner, move |state| {
+                if (
+                    state.pages.common.workspace_draft,
+                    state.pages.clock.clock_create_state.clone(),
+                ) == draft
+                {
+                    complete(state, result);
+                }
+            });
         };
-        match result {
-            Ok(()) => {
-                self.clock_persist_pending = false;
-                self.clock_pending_due_summary = None;
-                self.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
-                Ok(())
-            }
-            Err(error) => {
+        if SessionServicesClient::current().is_some() {
+            self.queue_workspace_clock_profile(Some(previous), false, snapshot, now, finish);
+        } else {
+            let result = self.persist_clock_scheduler_at(snapshot, now);
+            if result.is_err() {
                 self.clock_scheduler = Some(previous);
-                self.report_clock_storage_error(error.clone());
-                Err(error)
             }
+            finish(self, result);
         }
     }
 
@@ -352,6 +368,7 @@ impl ShellSession {
             return;
         }
         self.capture_modal_focus_context();
+        self.begin_workspace_draft();
         self.pages.clock.clock_create_state = Some(ClockCreateState::default());
         self.refresh_hit_map();
     }
@@ -556,30 +573,29 @@ impl ShellSession {
                 return;
             }
         };
-        if let Err(error) = self.commit_clock_mutation(previous, &snapshot, now) {
-            if let Some(state) = self.pages.clock.clock_create_state.as_mut() {
-                state.error = Some(i18n::LocalizedText::from(i18n::msg!(
-                    "shell-could-not-save-error",
-                    error = error.clone()
-                )));
+        self.commit_clock_mutation(previous, &snapshot, now, move |state, result| {
+            if let Err(error) = result {
+                if let Some(dialog) = state.pages.clock.clock_create_state.as_mut() {
+                    dialog.error =
+                        Some(i18n::msg!("shell-could-not-save-error", error = error).into());
+                }
+                return;
             }
-            return;
-        }
-
-        self.pages.clock.clock_create_state = None;
-        self.synchronize_overlay_focus();
-        self.pages.clock.clock_selected_entry_id = Some(id);
-        self.pages.common.focused_component = ShellComponent::ClockEntryList;
-        self.sync_clock_window_at(now);
-        self.notify_toast(match kind {
-            ScheduledClockEntryKind::DailyAlarm => {
-                i18n::LocalizedText::from(i18n::msg!("shell-daily-alarm-created"))
-            }
-            ScheduledClockEntryKind::Countdown => {
-                i18n::LocalizedText::from(i18n::msg!("shell-countdown-created"))
-            }
+            state.pages.clock.clock_create_state = None;
+            state.synchronize_overlay_focus();
+            state.pages.clock.clock_selected_entry_id = Some(id);
+            state.pages.common.focused_component = ShellComponent::ClockEntryList;
+            state.sync_clock_window_at(now);
+            state.notify_toast(match kind {
+                ScheduledClockEntryKind::DailyAlarm => {
+                    i18n::LocalizedText::from(i18n::msg!("shell-daily-alarm-created"))
+                }
+                ScheduledClockEntryKind::Countdown => {
+                    i18n::LocalizedText::from(i18n::msg!("shell-countdown-created"))
+                }
+            });
+            state.refresh_hit_map();
         });
-        self.refresh_hit_map();
     }
 
     pub(in crate::session) fn ordered_clock_entry_ids_at(&self, now: Instant) -> Vec<u64> {
@@ -779,22 +795,25 @@ impl ShellSession {
             )));
             return;
         }
-        if self.commit_clock_mutation(previous, &snapshot, now).is_ok() {
-            if let Some(user_id) = self
+        self.commit_clock_mutation(previous, &snapshot, now, move |state, result| {
+            if result.is_err() {
+                return;
+            }
+            if let Some(user_id) = state
                 .app
                 .auth_session()
                 .map(|session| session.user_id.clone())
             {
-                self.notification_dismiss_modal_by_key(&format!(
+                state.notification_dismiss_modal_by_key(&format!(
                     "{CLOCK_DUE_NOTIFICATION_KEY_PREFIX}.{user_id}.{id}"
                 ));
             }
-            self.sync_clock_selection_at(now);
-            self.notify_toast(i18n::LocalizedText::from(i18n::msg!(
+            state.sync_clock_selection_at(now);
+            state.notify_toast(i18n::LocalizedText::from(i18n::msg!(
                 "shell-clock-entry-deleted"
             )));
-            self.refresh_hit_map();
-        }
+            state.refresh_hit_map();
+        });
     }
 
     pub(in crate::session) fn toggle_clock_entry_strong(&mut self, id: u64) {
@@ -813,14 +832,17 @@ impl ShellSession {
             )));
             return;
         };
-        if self.commit_clock_mutation(previous, &snapshot, now).is_ok() {
-            self.notify_toast(if enabled {
+        self.commit_clock_mutation(previous, &snapshot, now, move |state, result| {
+            if result.is_err() {
+                return;
+            }
+            state.notify_toast(if enabled {
                 i18n::LocalizedText::from(i18n::msg!("shell-strong-notification-enabled"))
             } else {
                 i18n::LocalizedText::from(i18n::msg!("shell-strong-notification-disabled"))
             });
-            self.refresh_hit_map();
-        }
+            state.refresh_hit_map();
+        });
     }
 
     pub(in crate::session) fn snooze_clock_alarm(&mut self, id: u64) {
@@ -848,15 +870,17 @@ impl ShellSession {
             .and_then(|scheduler| scheduler.snooze_five_minutes(id, &snapshot, now));
         match result {
             Ok(()) => {
-                if self.commit_clock_mutation(previous, &snapshot, now).is_ok() {
-                    self.notify_toast(i18n::LocalizedText::from(i18n::msg!(
-                        "shell-alarm-snoozed-for-5-minutes"
-                    )));
-                    self.refresh_hit_map();
-                } else if let Some(event) = retry_event {
-                    let _ = self.handle_clock_due_events(vec![event]);
-                    self.refresh_hit_map();
-                }
+                self.commit_clock_mutation(previous, &snapshot, now, move |state, result| {
+                    if result.is_ok() {
+                        state.notify_toast(i18n::LocalizedText::from(i18n::msg!(
+                            "shell-alarm-snoozed-for-5-minutes"
+                        )));
+                        state.refresh_hit_map();
+                    } else if let Some(event) = retry_event {
+                        let _ = state.handle_clock_due_events(vec![event]);
+                        state.refresh_hit_map();
+                    }
+                });
             }
             Err(error) => self.notify_toast(clock_scheduler_error_message(&error)),
         }

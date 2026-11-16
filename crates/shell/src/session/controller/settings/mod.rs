@@ -862,6 +862,33 @@ impl ShellSession {
         };
         config.editor = normalized_editor_config(config.editor);
         config.system_status.normalize();
+        let draft = (
+            self.pages.common.workspace_draft,
+            self.pages.settings.settings_state.clone(),
+        );
+        if self.defer_workspace_config(config.clone(), move |state, result| match result {
+            Ok(config) => {
+                state.replace_storage_config(config);
+                let same = (
+                    state.pages.common.workspace_draft,
+                    state.pages.settings.settings_state.clone(),
+                ) == draft;
+                if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                    if same {
+                        settings.picker = None;
+                        settings.number_editor = None;
+                    }
+                    settings.status = settings_saved_field(field).into();
+                }
+                state.notify_status(settings_saved_field(field));
+            }
+            Err(error) => state.set_settings_error(i18n::msg!(
+                "settings-save-failed",
+                reason = error.to_string()
+            )),
+        }) {
+            return false;
+        }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {
             self.set_settings_error(i18n::msg!(
                 "settings-save-failed",
@@ -920,30 +947,73 @@ impl ShellSession {
             self.set_settings_error(i18n::msg!("settings-login-required"));
             return false;
         };
-        let saved =
-            if let Some(services) = crate::session_services::SessionServicesClient::current() {
-                services
-                    .save_workspace_profile(
-                        self,
-                        revision,
-                        crate::session_services::SessionProfile {
-                            appearance: Some(appearance),
-                            dashboard: None,
-                        },
-                    )
-                    .map_err(|error| error.to_string())
-            } else {
-                UserService::with_debug_policy(storage, self.debug_policy)
-                    .with_backend(self.identity_backend)
-                    .update_user_appearance(&actor, &actor.username, appearance)
-                    .map(|account| {
-                        self.app.dispatch_at(
-                            app::AppCommand::SetActiveAppearance(Some(account.appearance)),
-                            Instant::now(),
-                        );
-                    })
-                    .map_err(|error| error.to_string())
-            };
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let draft = (
+                self.pages.common.workspace_draft,
+                self.pages.settings.settings_state.clone(),
+            );
+            let queued = (|| -> io::Result<()> {
+                let revision = revision
+                    .ok_or_else(|| io::Error::other(i18n::tr!("workspace-services-unavailable")))?;
+                let patch = crate::session_services::SessionProfile {
+                    appearance: Some(appearance.clone()),
+                    dashboard: None,
+                };
+                let operation = workspace_protocol::ServiceOperation::WriteProfile {
+                    revision,
+                    profile: crate::session_services::SessionServicesClient::encode(&patch)?,
+                };
+                self.submit_workspace_write(operation, true, move |state, result| {
+                    match result.and_then(|value| match value {
+                        workspace_protocol::ServiceValue::Versioned { value, .. } => {
+                            serde_json::from_value(value).map_err(io::Error::other)
+                        }
+                        workspace_protocol::ServiceValue::Empty => {
+                            Err(io::ErrorKind::InvalidData.into())
+                        }
+                    }) {
+                        Ok(profile) => {
+                            state.apply_workspace_profile(profile);
+                            let same = (
+                                state.pages.common.workspace_draft,
+                                state.pages.settings.settings_state.clone(),
+                            ) == draft;
+                            if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                                if same {
+                                    settings.picker = None;
+                                    settings.color_editor = None;
+                                    settings.number_editor = None;
+                                    settings.animation_editor = None;
+                                }
+                                settings.status = message.clone();
+                            }
+                            state.notify_status(message);
+                        }
+                        Err(error) => state.set_settings_error(i18n::msg!(
+                            "settings-appearance-save-failed",
+                            reason = error.to_string()
+                        )),
+                    }
+                })
+            })();
+            if let Err(error) = queued {
+                self.set_settings_error(i18n::msg!(
+                    "settings-appearance-save-failed",
+                    reason = error.to_string()
+                ));
+            }
+            return false;
+        }
+        let saved = UserService::with_debug_policy(storage, self.debug_policy)
+            .with_backend(self.identity_backend)
+            .update_user_appearance(&actor, &actor.username, appearance)
+            .map(|account| {
+                self.app.dispatch_at(
+                    app::AppCommand::SetActiveAppearance(Some(account.appearance)),
+                    Instant::now(),
+                );
+            })
+            .map_err(|error| error.to_string());
         match saved {
             Ok(()) => {
                 if let Some(state) = self.pages.settings.settings_state.as_mut() {
@@ -1104,6 +1174,42 @@ impl ShellSession {
         } else {
             None
         };
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            self.defer_workspace_config(config, move |state, result| match result {
+                Ok(config) => {
+                    state.replace_storage_config(config);
+                    if let Some((catalog, loaded)) = candidate {
+                        state.publish_language(catalog, loaded);
+                    }
+                    let category_name = if category == ui::SettingsCategory::Applications {
+                        format!("{application:?}")
+                    } else {
+                        format!("{category:?}")
+                    };
+                    if let Some(settings) = state.pages.settings.settings_state.as_mut() {
+                        settings.status = i18n::msg!(
+                            "settings-restored-category",
+                            category = category_name.clone()
+                        )
+                        .into();
+                    }
+                    state.notify_status(i18n::msg!(
+                        "settings-restored-category",
+                        category = category_name
+                    ));
+                }
+                Err(error) => {
+                    if let Some((_, loaded)) = candidate {
+                        state.report_language_diagnostics(&loaded.diagnostics);
+                    }
+                    state.set_settings_error(i18n::msg!(
+                        "settings-restore-failed",
+                        reason = error.to_string()
+                    ));
+                }
+            });
+            return;
+        }
         if let Err(error) = self.save_settings_config_logged(&storage, &config) {
             if candidate.is_some() {
                 self.rollback_failed_language_config(&storage, &previous_config, &config);

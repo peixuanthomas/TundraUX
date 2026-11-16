@@ -4,6 +4,7 @@ use app::PageInstances;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct CommonPageState {
+    pub(super) workspace_draft: u64,
     pub(super) notification_message_scroll: usize,
     pub(super) overlay_manager: ShellOverlayManager,
     pub(super) table_sorts: std::collections::BTreeMap<String, ui::TableSort>,
@@ -15,6 +16,7 @@ pub(super) struct CommonPageState {
 impl Default for CommonPageState {
     fn default() -> Self {
         Self {
+            workspace_draft: 0,
             notification_message_scroll: 0,
             overlay_manager: ShellOverlayManager::default(),
             table_sorts: Default::default(),

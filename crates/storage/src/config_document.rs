@@ -41,6 +41,8 @@ pub struct StorageConfig {
     /// The shared services revision used for conditional writes; never persisted.
     #[serde(skip)]
     pub session_revision: Option<u64>,
+    #[serde(skip)]
+    pub session_authorization_revision: Option<u64>,
     pub schema_version: u32,
     #[serde(default = "default_screen_timeout_seconds")]
     pub screen_timeout_seconds: u64,
@@ -109,6 +111,7 @@ impl Default for StorageConfig {
     fn default() -> Self {
         Self {
             session_revision: None,
+            session_authorization_revision: None,
             schema_version: SCHEMA_VERSION,
             screen_timeout_seconds: DEFAULT_SCREEN_TIMEOUT_SECONDS,
             automation: AutomationConfig::default(),

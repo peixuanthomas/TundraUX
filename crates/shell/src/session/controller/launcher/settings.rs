@@ -10,6 +10,7 @@ impl ShellSession {
         if !self.can_manage_launcher() {
             return;
         }
+        self.begin_workspace_draft();
         self.pages.launcher.launcher_run_settings = Some(page_state::LauncherRunSettingsState {
             custom: true,
             wait_for_enter: false,
@@ -54,12 +55,15 @@ impl ShellSession {
             arguments.set_value(shell_words::join(&settings.arguments));
             directory.set_value(settings.working_directory.as_deref().unwrap_or_default());
         }
+        let id = item.record.id.clone();
+        let embedded = item.record.terminal.is_some();
+        self.begin_workspace_draft();
         self.pages.launcher.launcher_run_settings = Some(page_state::LauncherRunSettingsState {
             custom: false,
             wait_for_enter: false,
             name: TextInput::new("launcher.custom.name"),
-            id: item.record.id.clone(),
-            embedded: item.record.terminal.is_some(),
+            id,
+            embedded,
             arguments,
             directory,
             selected: 0,
@@ -265,6 +269,9 @@ impl ShellSession {
                 wait_for_enter: state.wait_for_enter,
             };
             self.apply_launcher_command(LauncherCommand::AddCustom(custom), platform);
+            if crate::session_services::SessionServicesClient::current().is_some() {
+                return;
+            }
             if let Some(error) = self
                 .app
                 .launcher_state()
@@ -318,6 +325,9 @@ impl ShellSession {
             LauncherCommand::SetTerminalSettings { id, settings },
             platform,
         );
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            return;
+        }
         if let Some(error) = self
             .app
             .launcher_state()

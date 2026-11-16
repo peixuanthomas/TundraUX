@@ -10,6 +10,9 @@ impl ShellSession {
         platform: &dyn Platform,
     ) {
         self.apply_launcher_command_with_session(command, platform, true);
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            return;
+        }
         if let Some(error) = self
             .app
             .launcher_state()
@@ -212,7 +215,8 @@ impl ShellSession {
                 },
                 platform,
             );
-            if self.storage_manager.is_some()
+            if crate::session_services::SessionServicesClient::current().is_none()
+                && self.storage_manager.is_some()
                 && self
                     .app
                     .launcher_state()
@@ -317,6 +321,7 @@ impl ShellSession {
                 input
             })
             .collect();
+        self.begin_workspace_draft();
         self.pages.launcher.entry_editor = Some(ui::LauncherEntryEditor {
             id,
             action,
@@ -592,6 +597,9 @@ impl ShellSession {
             },
             platform,
         );
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            return;
+        }
         if let Some(error) = self
             .app
             .launcher_state()

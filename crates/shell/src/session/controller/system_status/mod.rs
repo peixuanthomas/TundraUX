@@ -428,6 +428,7 @@ impl ShellSession {
         {
             return;
         }
+        self.begin_workspace_draft();
         self.pages.system_status.profile_draft_revision = self.workspace_profile_revision();
         self.pages.system_status.system_status_dashboard_draft =
             Some(self.system_status_dashboard_config());
@@ -511,32 +512,77 @@ impl ShellSession {
             );
             return;
         };
-        let saved =
-            if let Some(services) = crate::session_services::SessionServicesClient::current() {
-                services
-                    .save_workspace_profile(
-                        self,
-                        self.pages.system_status.profile_draft_revision,
-                        crate::session_services::SessionProfile {
-                            appearance: None,
-                            dashboard: Some(dashboard),
-                        },
-                    )
-                    .map_err(|error| i18n::LocalizedText::from(error.to_string()))
-            } else {
-                UserService::with_debug_policy(storage, self.debug_policy)
-                    .with_backend(self.identity_backend)
-                    .update_user_system_status_dashboard(&actor, &actor.username, dashboard)
-                    .map(|account| {
-                        self.app.dispatch_at(
-                            app::AppCommand::SetActiveSystemStatusDashboard(Some(
-                                account.system_status_dashboard,
-                            )),
-                            Instant::now(),
-                        );
-                    })
-                    .map_err(|error| format_core_error(&error))
-            };
+        if crate::session_services::SessionServicesClient::current().is_some() {
+            let queued = (|| -> io::Result<()> {
+                let revision = self
+                    .pages
+                    .system_status
+                    .profile_draft_revision
+                    .ok_or_else(|| io::Error::other(i18n::tr!("workspace-services-unavailable")))?;
+                let patch = crate::session_services::SessionProfile {
+                    appearance: None,
+                    dashboard: Some(dashboard.clone()),
+                };
+                let operation = workspace_protocol::ServiceOperation::WriteProfile {
+                    revision,
+                    profile: crate::session_services::SessionServicesClient::encode(&patch)?,
+                };
+                let draft = (
+                    self.pages.common.workspace_draft,
+                    self.pages
+                        .system_status
+                        .system_status_dashboard_draft
+                        .clone(),
+                );
+                self.submit_workspace_write(operation, true, move |state, result| {
+                    let result = result
+                        .and_then(|value| match value {
+                            workspace_protocol::ServiceValue::Versioned { value, .. } => {
+                                serde_json::from_value(value).map_err(io::Error::other)
+                            }
+                            workspace_protocol::ServiceValue::Empty => {
+                                Err(io::ErrorKind::InvalidData.into())
+                            }
+                        })
+                        .map(|profile| state.apply_workspace_profile(profile))
+                        .map_err(|error| error.to_string().into());
+                    if (
+                        state.pages.common.workspace_draft,
+                        state
+                            .pages
+                            .system_status
+                            .system_status_dashboard_draft
+                            .clone(),
+                    ) == draft
+                    {
+                        state.finish_system_status_dashboard_save(result);
+                    } else if let Err(error) = result {
+                        state.notify_status(error);
+                    }
+                })
+            })();
+            if let Err(error) = queued {
+                self.finish_system_status_dashboard_save(Err(error.to_string().into()));
+            }
+            return;
+        }
+        let saved = UserService::with_debug_policy(storage, self.debug_policy)
+            .with_backend(self.identity_backend)
+            .update_user_system_status_dashboard(&actor, &actor.username, dashboard)
+            .map(|account| {
+                self.app.dispatch_at(
+                    app::AppCommand::SetActiveSystemStatusDashboard(Some(
+                        account.system_status_dashboard,
+                    )),
+                    Instant::now(),
+                )
+            })
+            .map(|_| ())
+            .map_err(|error| format_core_error(&error));
+        self.finish_system_status_dashboard_save(saved);
+    }
+
+    fn finish_system_status_dashboard_save(&mut self, saved: Result<(), i18n::LocalizedText>) {
         match saved {
             Ok(()) => {
                 self.pages.system_status.system_status_dashboard_draft = None;

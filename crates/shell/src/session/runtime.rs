@@ -1009,6 +1009,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 WindowOwner::Local
             },
             inherited_auth: None,
+            session_snapshot: None,
         },
         None,
     );

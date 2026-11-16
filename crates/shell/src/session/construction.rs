@@ -80,6 +80,7 @@ impl ShellSession {
                 settings: settings_task_runtime,
                 window_owner: Default::default(),
                 inherited_auth: None,
+                session_snapshot: None,
             },
             None,
         )
@@ -124,11 +125,24 @@ impl ShellSession {
             .get(login_selected_user)
             .map(|user| user.username.clone())
             .unwrap_or_default();
-        let mut storage_config = startup
-            .storage_manager
-            .as_ref()
-            .and_then(|storage| storage.load_config().ok())
-            .unwrap_or_default();
+        let mut storage_config = if let Some(snapshot) = &runtime_services.session_snapshot {
+            let (revision, mut config): (_, storage::StorageConfig) =
+                crate::session_services::SessionServicesClient::decode(&snapshot.config)
+                    .expect("AppHost startup configuration was validated");
+            config.session_revision = Some(revision);
+            config.session_authorization_revision = snapshot
+                .authorization
+                .as_ref()
+                .ok()
+                .map(|auth| auth.revision);
+            config
+        } else {
+            startup
+                .storage_manager
+                .as_ref()
+                .and_then(|storage| storage.load_config().ok())
+                .unwrap_or_default()
+        };
         if startup.platform_kind == PlatformKind::Linux {
             storage_config.time_sync.source = storage::TimeSyncSource::OperatingSystem;
             storage_config.time_sync.server_url = None;
@@ -340,7 +354,7 @@ impl ShellSession {
         }
         if state.window_owner.is_app() {
             if let Some(session) = runtime_services.inherited_auth {
-                state.attach_window_profile(session);
+                state.attach_window_profile(session, runtime_services.session_snapshot.as_deref());
             }
         }
         #[cfg(target_os = "linux")]
@@ -367,28 +381,40 @@ impl ShellSession {
         state
     }
 
-    fn attach_window_profile(&mut self, session: AuthSession) {
-        let profile = self
-            .storage_manager
-            .as_ref()
-            .and_then(|storage| storage.load_users().ok())
-            .and_then(|document| {
-                document
-                    .users
-                    .into_iter()
-                    .find(|user| user.id == session.user_id)
-            });
-        if let Some(profile) = profile {
-            self.app.dispatch_at(
-                app::AppCommand::SetActiveAppearance(Some(profile.appearance)),
-                Instant::now(),
-            );
-            self.app.dispatch_at(
-                app::AppCommand::SetActiveSystemStatusDashboard(Some(
-                    profile.system_status_dashboard,
-                )),
-                Instant::now(),
-            );
+    fn attach_window_profile(
+        &mut self,
+        session: AuthSession,
+        snapshot: Option<&workspace_protocol::ServiceSessionSnapshot>,
+    ) {
+        if let Some(snapshot) = snapshot {
+            if let Ok((_, profile)) =
+                crate::session_services::SessionServicesClient::decode(&snapshot.profile)
+            {
+                self.apply_workspace_profile(profile);
+            }
+        } else {
+            let profile = self
+                .storage_manager
+                .as_ref()
+                .and_then(|storage| storage.load_users().ok())
+                .and_then(|document| {
+                    document
+                        .users
+                        .into_iter()
+                        .find(|user| user.id == session.user_id)
+                });
+            if let Some(profile) = profile {
+                self.app.dispatch_at(
+                    app::AppCommand::SetActiveAppearance(Some(profile.appearance)),
+                    Instant::now(),
+                );
+                self.app.dispatch_at(
+                    app::AppCommand::SetActiveSystemStatusDashboard(Some(
+                        profile.system_status_dashboard,
+                    )),
+                    Instant::now(),
+                );
+            }
         }
         self.pages.login.login_username = session.username.clone();
         self.reset_navigation(ShellScreen::Home);

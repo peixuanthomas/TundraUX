@@ -63,6 +63,7 @@ impl ShellSession {
         self.pages.editor.editor_selected_toolbar_action = None;
         self.pages.editor.editor_quick_menu_anchor = None;
         self.pages.editor.editor_cursor_acceleration = None;
+        self.begin_workspace_draft();
         self.pages.editor.editor_settings_dialog = Some(EditorSettingsDialogState {
             interaction: Default::default(),
             draft: self.current_editor_config(),
@@ -196,7 +197,7 @@ impl ShellSession {
             return;
         };
         let editor = normalized_editor_config(dialog.draft);
-        let config = if let Some(storage) = self.storage_manager.as_ref() {
+        let config = if let Some(storage) = self.storage_manager.clone() {
             let mut config = match storage.load_config() {
                 Ok(config) => config,
                 Err(error) => {
@@ -208,6 +209,36 @@ impl ShellSession {
                 }
             };
             config.editor = editor;
+            let draft = (
+                self.pages.common.workspace_draft,
+                self.pages.editor.editor_settings_dialog.clone(),
+            );
+            if self.defer_workspace_config(config.clone(), move |state, result| match result {
+                Ok(config) => {
+                    state.replace_storage_config(config);
+                    state.pages.editor.editor_message =
+                        Some(i18n::msg!("shell-editor-settings-saved").into());
+                    if (
+                        state.pages.common.workspace_draft,
+                        state.pages.editor.editor_settings_dialog.clone(),
+                    ) == draft
+                    {
+                        state.pages.editor.editor_cursor_acceleration = None;
+                        state.pages.editor.editor_settings_dialog = None;
+                    }
+                }
+                Err(error) => {
+                    state.pages.editor.editor_message = Some(
+                        i18n::msg!(
+                            "shell-could-not-save-editor-settings-error",
+                            error = error.to_string()
+                        )
+                        .into(),
+                    )
+                }
+            }) {
+                return;
+            }
             if let Err(error) = storage.save_config(&config) {
                 self.pages.editor.editor_message = Some(i18n::LocalizedText::from(i18n::msg!(
                     "shell-could-not-save-editor-settings-error",

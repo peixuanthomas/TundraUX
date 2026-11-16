@@ -148,6 +148,7 @@ pub(super) fn editor(appearance: &storage::AppearanceConfig) -> SettingsAnimatio
 
 impl ShellSession {
     pub(super) fn open_settings_animation(&mut self) {
+        self.begin_workspace_draft();
         let editor = editor(self.app.active_appearance().unwrap());
         self.pages.settings.profile_draft_revision = self.workspace_profile_revision();
         if let Some(state) = self.pages.settings.settings_state.as_mut() {

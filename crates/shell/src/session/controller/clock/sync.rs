@@ -85,19 +85,22 @@ impl ShellSession {
             && self.app.auth_session().is_some()
         {
             let snapshot = self.app.snapshot().clock;
-            match self.persist_clock_scheduler_at(&snapshot, Instant::now()) {
-                Ok(()) => {
-                    self.clock_persist_pending = false;
-                    self.clock_pending_due_summary = None;
-                    self.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
-                }
-                Err(error) => {
-                    self.clock_persist_pending = true;
-                    self.report_clock_storage_error(error);
+            if crate::session_services::SessionServicesClient::current().is_some() {
+                self.clock_persist_pending = true;
+            } else {
+                match self.persist_clock_scheduler_at(&snapshot, Instant::now()) {
+                    Ok(()) => {
+                        self.clock_persist_pending = false;
+                        self.clock_pending_due_summary = None;
+                        self.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
+                    }
+                    Err(error) => {
+                        self.clock_persist_pending = true;
+                        self.report_clock_storage_error(error);
+                    }
                 }
             }
         }
-
         if self.time_sync_failure_message.is_some() {
             self.time_sync_dialog_visible = false;
             self.time_sync_failure_message = None;

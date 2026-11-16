@@ -16,6 +16,8 @@
 
 `StorageManager` and `StorageLayout` manage document locations and loading, `StorageDescriptor` describes formats, and `StorageLoadReport` returns migration and recovery results. Shell and app workers install a `SessionConfigStore` for their run's configuration path; its shared services process serializes configuration writes and rejects stale revisions. Other paths and standalone tools retain ordinary local storage.
 
+Session configuration reads reuse the worker's latest successful shared snapshot. Its configuration and authorization revisions are in-memory metadata and are never persisted. Interactive callers submit writes in the background and apply their results after persistence; the synchronous storage adapter remains available to background operations.
+
 ## Safe saving and recovery
 
 Documents are read up to a default limit of 1 GiB. Length, modification time, and path identity are checked before and after reading. Each path component rejects symbolic links, junctions, and reparse points; conditional writes use document fingerprints to check for external modifications.

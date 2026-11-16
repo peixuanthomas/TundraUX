@@ -1,49 +1,186 @@
 use super::*;
 use crate::session_services::{
-    SessionProfile, SessionServicesClient, SystemStatusRequests, client::SyncState,
+    SessionProfile, SessionServicesClient, SystemStatusRequests,
+    client::{SyncState, service_error},
 };
-use workspace_protocol::{ServiceOperation, WorkerRole};
+use workspace_protocol::{ServiceError, ServiceOperation, ServiceValue, WorkerRole};
+
+type Completion = Box<dyn FnOnce(&mut ShellSession, io::Result<ServiceValue>) + Send>;
+
+pub(crate) struct PendingWrite {
+    receiver: std::sync::mpsc::Receiver<Result<ServiceValue, ServiceError>>,
+    session: Option<Option<String>>,
+    page: Option<PageInstanceId>,
+    complete: Option<Completion>,
+    task: Option<(u64, Arc<std::sync::atomic::AtomicBool>)>,
+}
+
+impl PendingWrite {
+    pub(crate) fn silent(
+        receiver: std::sync::mpsc::Receiver<Result<ServiceValue, ServiceError>>,
+    ) -> Self {
+        Self {
+            receiver,
+            session: None,
+            page: None,
+            complete: None,
+            task: None,
+        }
+    }
+}
 
 impl SessionServicesClient {
-    pub(crate) fn sync_session(&self, state: &mut ShellSession) {
-        let Ok(mut sync) = self.sync.try_lock() else {
-            return;
+    pub(crate) fn is_session_ready(&self, state: &ShellSession) -> bool {
+        let Ok((_, failed, snapshot)) = self.snapshot() else {
+            return false;
         };
-        let result = self.try_sync_session(state, &mut sync);
-        match result {
-            Ok(()) => sync.failed = false,
+        if failed {
+            return false;
+        }
+        let Ok((_, auth)) = Self::decode::<Option<AuthSession>>(&snapshot.authorization) else {
+            return false;
+        };
+        if auth.as_ref() != state.app.auth_session() {
+            return false;
+        }
+        if auth
+            .as_ref()
+            .is_none_or(|auth| auth.role == UserRole::Guest)
+        {
+            return true;
+        }
+        Self::decode::<SessionProfile>(&snapshot.profile).is_ok_and(|(_, profile)| {
+            profile.appearance == state.app.active_appearance().cloned()
+                && profile.dashboard == state.app.active_system_status_dashboard().cloned()
+        })
+    }
+
+    pub(crate) fn sync_session(&self, state: &mut ShellSession) -> bool {
+        self.acknowledge_updates();
+        let Ok((generation, failed, snapshot)) = self.snapshot() else {
+            return false;
+        };
+        let mut changed = false;
+        let mut completed = Vec::new();
+        if let Ok(mut pending) = self.completions.try_lock() {
+            let mut index = 0;
+            while index < pending.len() {
+                let result = match pending[index].receiver.try_recv() {
+                    Ok(result) => Some(result.map_err(service_error)),
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        Some(Err(service_error(ServiceError::Unavailable)))
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => None,
+                };
+                if let Some(result) = result {
+                    completed.push((pending.remove(index), result));
+                } else {
+                    index += 1;
+                }
+            }
+        }
+        for (pending, result) in completed {
+            if let Some((request, finished)) = &pending.task {
+                finished.store(true, std::sync::atomic::Ordering::Release);
+                state
+                    .tasks
+                    .complete(TaskDomain::WorkspaceServices, *request);
+            }
+            let current = state.app.auth_session().map(|auth| auth.session_id.clone());
+            if pending
+                .session
+                .as_ref()
+                .is_some_and(|session| session != &current)
+            {
+                continue;
+            }
+            if let Some(complete) = pending.complete {
+                if let Some(page) = pending.page {
+                    if state.page_screen(page).is_some() {
+                        state.with_page_context(page, |state| complete(state, result));
+                        changed = true;
+                    } else if let Err(error) = result {
+                        state.notify_status(error.to_string());
+                        changed = true;
+                    }
+                } else {
+                    complete(state, result);
+                    changed = true;
+                }
+            } else if result.is_err() {
+                state.notify_status(i18n::msg!("workspace-services-unavailable"));
+                changed = true;
+            }
+        }
+        let Ok(mut sync) = self.sync.try_lock() else {
+            return changed;
+        };
+        if failed && !sync.failed {
+            state.notify_status(i18n::msg!("workspace-services-unavailable"));
+            changed = true;
+        }
+        sync.failed = failed;
+        sync.generation = generation;
+        match self.try_sync_session(state, &mut sync, &snapshot) {
+            Ok(applied) => changed |= applied,
             Err(_) if !sync.failed => {
                 sync.failed = true;
                 state.notify_status(i18n::msg!("workspace-services-unavailable"));
+                changed = true;
             }
             Err(_) => {}
         }
+        if changed {
+            state.refresh_hit_map();
+        }
+        changed
     }
 
-    fn try_sync_session(&self, state: &mut ShellSession, sync: &mut SyncState) -> io::Result<()> {
+    fn try_sync_session(
+        &self,
+        state: &mut ShellSession,
+        sync: &mut SyncState,
+        snapshot: &workspace_protocol::ServiceSessionSnapshot,
+    ) -> io::Result<bool> {
         let shell = self.worker().role == WorkerRole::Shell;
-        let mut auth: (u64, Option<AuthSession>) =
-            self.read(ServiceOperation::ReadAuthorization)?;
-        if shell {
-            if state.app.auth_session() != auth.1.as_ref() {
-                auth = self.read(ServiceOperation::WriteAuthorization {
+        let auth: (u64, Option<AuthSession>) = Self::decode(&snapshot.authorization)?;
+        if shell && state.app.auth_session() != auth.1.as_ref() {
+            if !sync.pending_authorization {
+                let desired = state.app.auth_session().cloned();
+                let receiver = self.submit(ServiceOperation::WriteAuthorization {
                     revision: auth.0,
-                    policy: Self::encode(&state.app.auth_session())?,
+                    policy: Self::encode(&desired)?,
                 })?;
+                sync.pending_authorization = true;
+                self.completions
+                    .lock()
+                    .map_err(|_| service_error(ServiceError::Unavailable))?
+                    .push(PendingWrite {
+                        receiver,
+                        session: None,
+                        page: None,
+                        complete: Some(Box::new(|_, _| {
+                            if let Some(client) = SessionServicesClient::current()
+                                && let Ok(mut sync) = client.sync.lock()
+                            {
+                                sync.pending_authorization = false;
+                                sync.generation = 0;
+                            }
+                        })),
+                        task: None,
+                    });
             }
-        } else if state.app.auth_session() != auth.1.as_ref() {
-            let current_session = state.app.auth_session().map(|session| &session.session_id);
-            if auth
-                .1
-                .as_ref()
-                .is_some_and(|next| Some(&next.session_id) != current_session)
-            {
-                auth.1 = None;
-            }
-            state.app.dispatch_at(
-                app::AppCommand::SetAuthSession(auth.1.clone()),
-                Instant::now(),
-            );
+            return Ok(false);
+        }
+        let mut changed = false;
+        if !shell && state.app.auth_session() != auth.1.as_ref() {
+            state
+                .app
+                .dispatch_at(app::AppCommand::SetAuthSession(None), Instant::now());
+            state.reset_workspace_clock_profile();
+            sync.auth = Some((auth.0, None));
+            sync.profile = None;
+            return Ok(true);
         }
         if sync
             .auth
@@ -54,9 +191,16 @@ impl SessionServicesClient {
         {
             sync.profile = None;
         }
-        sync.auth = Some(auth);
-
-        let (_, config) = self.read_config()?;
+        sync.auth = Some(auth.clone());
+        let (_, mut config): (_, storage::StorageConfig) = Self::decode(&snapshot.config)?;
+        config.session_revision = Some(
+            snapshot
+                .config
+                .as_ref()
+                .map_err(|error| service_error(error.clone()))?
+                .revision,
+        );
+        config.session_authorization_revision = Some(auth.0);
         if state.app.storage_config() != &config {
             let launcher_previous = (state.app.storage_config().launcher != config.launcher)
                 .then(|| state.app.storage_config().launcher.clone());
@@ -69,99 +213,277 @@ impl SessionServicesClient {
             if let Some(previous) = launcher_previous {
                 state.sync_launcher_entries(&previous);
             }
+            changed = true;
         }
-
-        let local_profile = SessionProfile {
-            appearance: state.app.active_appearance().cloned(),
-            dashboard: state.app.active_system_status_dashboard().cloned(),
-        };
-        let mut profile: (u64, SessionProfile) = self.read(ServiceOperation::ReadProfile)?;
-        if shell
-            && profile.1 == SessionProfile::default()
-            && local_profile.appearance.is_some()
-            && local_profile.dashboard.is_some()
-        {
-            profile = self.read(ServiceOperation::WriteProfile {
-                revision: profile.0,
-                profile: Self::encode(&local_profile)?,
-            })?;
+        if let Ok(profile) = Self::decode::<SessionProfile>(&snapshot.profile) {
+            let local = SessionProfile {
+                appearance: state.app.active_appearance().cloned(),
+                dashboard: state.app.active_system_status_dashboard().cloned(),
+            };
+            if shell
+                && profile.1 == SessionProfile::default()
+                && local.appearance.is_some()
+                && local.dashboard.is_some()
+                && !sync.pending_profile
+            {
+                let receiver = self.submit(Self::authorized(
+                    ServiceOperation::WriteProfile {
+                        revision: profile.0,
+                        profile: Self::encode(&local)?,
+                    },
+                    auth.0,
+                ))?;
+                sync.pending_profile = true;
+                self.completions
+                    .lock()
+                    .map_err(|_| service_error(ServiceError::Unavailable))?
+                    .push(PendingWrite {
+                        receiver,
+                        session: None,
+                        page: None,
+                        complete: Some(Box::new(|_, _| {
+                            if let Some(client) = SessionServicesClient::current()
+                                && let Ok(mut sync) = client.sync.lock()
+                            {
+                                sync.pending_profile = false;
+                            }
+                        })),
+                        task: None,
+                    });
+            }
+            if local != profile.1 && profile.1 != SessionProfile::default() {
+                state.apply_workspace_profile(profile.1.clone());
+                changed = true;
+            }
+            sync.profile = Some(profile);
         }
-        if local_profile != profile.1 && profile.1 != SessionProfile::default() {
-            state.apply_workspace_profile(profile.1.clone());
-        }
-        sync.profile = Some(profile);
-
         if shell {
             if let Some(snapshot) = state.app.system_status_snapshot()
                 && sync.published_system_revision != Some(snapshot.revision)
             {
-                self.request(ServiceOperation::WriteSystemSnapshot {
-                    snapshot: Self::encode(snapshot)?,
-                })?;
-                sync.published_system_revision = Some(snapshot.revision);
+                let revision = snapshot.revision;
+                let receiver = self.submit(Self::authorized(
+                    ServiceOperation::WriteSystemSnapshot {
+                        snapshot: Self::encode(snapshot)?,
+                    },
+                    auth.0,
+                ))?;
+                sync.published_system_revision = Some(revision);
+                self.completions
+                    .lock()
+                    .map_err(|_| service_error(ServiceError::Unavailable))?
+                    .push(PendingWrite::silent(receiver));
             }
-            let (_, requests): (_, SystemStatusRequests) =
-                self.read(ServiceOperation::ReadSystemStatusRequests)?;
+            let (_, requests): (_, SystemStatusRequests) = Self::decode(&snapshot.system_requests)?;
             if requests.active != sync.system_active {
                 let _ = state
                     .settings_task_runtime
                     .set_system_status_active(requests.active);
                 sync.system_active = requests.active;
             }
-            if requests.refresh {
+            if self.take_system_refresh() {
                 let _ = state.settings_task_runtime.refresh_system_status();
             }
-        } else {
-            let (revision, snapshot): (_, Option<app::AppSystemStatusSnapshot>) =
-                self.read(ServiceOperation::ReadSystemSnapshot)?;
-            if revision != sync.system_revision {
-                if let Some(snapshot) = snapshot {
-                    state.apply_system_status_snapshot(snapshot);
-                }
-                sync.system_revision = revision;
+        } else if let Ok((revision, snapshot)) =
+            Self::decode::<Option<app::AppSystemStatusSnapshot>>(&snapshot.system)
+            && revision != sync.system_revision
+        {
+            if let Some(snapshot) = snapshot {
+                changed |= state.apply_system_status_snapshot(snapshot);
             }
+            sync.system_revision = revision;
         }
-        if state.app.explorer_state().is_some() {
+        if state.app.explorer_state().is_some()
+            && let Ok(files) = &snapshot.files
+            && sync.files_revision != Some(files.revision)
+        {
             state
                 .app
                 .refresh_shared_explorer()
                 .map_err(io::Error::other)?;
+            sync.files_revision = Some(files.revision);
+            changed = true;
         }
-        super::clock_workspace::sync_clock_workspace(self, state)?;
-        state.refresh_hit_map();
-        Ok(())
-    }
-
-    pub(super) fn save_workspace_profile(
-        &self,
-        state: &mut ShellSession,
-        revision: Option<u64>,
-        patch: SessionProfile,
-    ) -> io::Result<()> {
-        let mut sync = self
-            .sync
-            .lock()
-            .map_err(|_| io::Error::other(i18n::tr!("workspace-services-unavailable")))?;
-        let revision = revision
-            .ok_or_else(|| io::Error::other(i18n::tr!("workspace-services-unavailable")))?;
-        let profile: (u64, SessionProfile) = self.read(ServiceOperation::WriteProfile {
-            revision,
-            profile: Self::encode(&patch)?,
-        })?;
-        state.apply_workspace_profile(profile.1.clone());
-        sync.profile = Some(profile);
-        Ok(())
+        changed |= super::clock_workspace::sync_clock_workspace(self, state)?;
+        Ok(changed)
     }
 }
 
 impl ShellSession {
+    pub(in crate::session) fn begin_workspace_draft(&mut self) {
+        self.pages.common.workspace_draft = self.pages.common.workspace_draft.wrapping_add(1);
+    }
+
+    fn register_workspace_save(&mut self) -> (u64, Arc<std::sync::atomic::AtomicBool>) {
+        static NEXT_REQUEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let request = NEXT_REQUEST.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let completed = finished.clone();
+        self.register_page_task(
+            TaskDomain::WorkspaceServices,
+            request,
+            TaskClass::Operation,
+            TaskControl::new(
+                || {},
+                move || completed.load(std::sync::atomic::Ordering::Acquire),
+            )
+            .without_history(),
+        );
+        (request, finished)
+    }
+
+    pub(in crate::session) fn submit_workspace_job<T: Send + 'static>(
+        &mut self,
+        work: impl FnOnce() -> T + Send + 'static,
+        complete: impl FnOnce(&mut Self, T) + Send + 'static,
+    ) -> io::Result<()> {
+        let client = SessionServicesClient::current()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        let (_, _, snapshot) = client.snapshot()?;
+        let (revision, authorization): (_, Option<AuthSession>) =
+            SessionServicesClient::decode(&snapshot.authorization)?;
+        let session = self.app.auth_session().map(|auth| auth.session_id.clone());
+        if session.as_deref() != authorization.as_ref().map(|auth| auth.session_id.as_str()) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
+        let outcome = Arc::new(std::sync::Mutex::new(None));
+        let result = outcome.clone();
+        let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+        let completion_client = client.clone();
+        client.submit_job(Box::new(move || {
+            *result.lock().unwrap_or_else(|error| error.into_inner()) =
+                Some(SessionServicesClient::in_authorization(revision, work));
+            let _ = reply.send(Ok(ServiceValue::Empty));
+            completion_client.notify_completion();
+        }))?;
+        let task = Some(self.register_workspace_save());
+        client
+            .completions
+            .lock()
+            .map_err(|_| service_error(ServiceError::Unavailable))?
+            .push(PendingWrite {
+                receiver,
+                session: Some(session),
+                page: Some(self.active_page_id()),
+                complete: Some(Box::new(move |state, _| {
+                    if let Some(result) = outcome
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .take()
+                    {
+                        complete(state, result);
+                    }
+                })),
+                task,
+            });
+        Ok(())
+    }
+
+    pub(super) fn submit_workspace_write(
+        &mut self,
+        operation: ServiceOperation,
+        page: bool,
+        complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
+    ) -> io::Result<()> {
+        let client = SessionServicesClient::current()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        let (_, _, snapshot) = client.snapshot()?;
+        let (revision, authorization): (_, Option<AuthSession>) =
+            SessionServicesClient::decode(&snapshot.authorization)?;
+        let session = self.app.auth_session().map(|auth| auth.session_id.clone());
+        if session.as_deref() != authorization.as_ref().map(|auth| auth.session_id.as_str()) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
+        let track = !matches!(
+            operation,
+            ServiceOperation::WriteClockTime { .. } | ServiceOperation::WriteSystemSnapshot { .. }
+        );
+        let receiver = client.submit(SessionServicesClient::authorized(operation, revision))?;
+        let task = track.then(|| self.register_workspace_save());
+        client
+            .completions
+            .lock()
+            .map_err(|_| service_error(ServiceError::Unavailable))?
+            .push(PendingWrite {
+                receiver,
+                session: Some(session),
+                page: page.then(|| self.active_page_id()),
+                complete: Some(Box::new(complete)),
+                task,
+            });
+        Ok(())
+    }
+
+    pub(in crate::session) fn defer_workspace_config(
+        &mut self,
+        config: storage::StorageConfig,
+        complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
+    ) -> bool {
+        if SessionServicesClient::current().is_none() {
+            return false;
+        }
+        let completion = Arc::new(std::sync::Mutex::new(Some(complete)));
+        let callback = completion.clone();
+        let auth_revision = config.session_authorization_revision;
+        let operation = (|| -> io::Result<ServiceOperation> {
+            let revision = config
+                .session_revision
+                .ok_or_else(|| io::Error::other("configuration was not read"))?;
+            let client = SessionServicesClient::current().expect("services available");
+            let (_, _, snapshot) = client.snapshot()?;
+            if snapshot
+                .authorization
+                .as_ref()
+                .ok()
+                .map(|auth| auth.revision)
+                != auth_revision
+            {
+                return Err(service_error(ServiceError::Forbidden));
+            }
+            Ok(ServiceOperation::WriteConfig {
+                revision,
+                config: SessionServicesClient::encode(&config)?,
+            })
+        })();
+        let result = operation.and_then(|operation| {
+            self.submit_workspace_write(operation, true, move |state, result| {
+                let result = result.and_then(|value| match value {
+                    ServiceValue::Versioned { revision, value } => {
+                        let mut config: storage::StorageConfig = serde_json::from_value(value)?;
+                        config.session_revision = Some(revision);
+                        config.session_authorization_revision = auth_revision;
+                        Ok(config)
+                    }
+                    ServiceValue::Empty => Err(io::ErrorKind::InvalidData.into()),
+                });
+                if let Some(complete) = callback
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .take()
+                {
+                    complete(state, result);
+                }
+            })
+        });
+        if let Err(error) = result {
+            if let Some(complete) = completion
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .take()
+            {
+                complete(self, Err(error));
+            }
+        }
+        true
+    }
+
     pub(super) fn workspace_profile_revision(&self) -> Option<u64> {
         let services = SessionServicesClient::current()?;
         let sync = services.sync.lock().ok()?;
         sync.profile.as_ref().map(|(revision, _)| *revision)
     }
 
-    fn apply_workspace_profile(&mut self, profile: SessionProfile) {
+    pub(super) fn apply_workspace_profile(&mut self, profile: SessionProfile) {
         let now = Instant::now();
         self.app.dispatch_at(
             app::AppCommand::SetActiveAppearance(profile.appearance),

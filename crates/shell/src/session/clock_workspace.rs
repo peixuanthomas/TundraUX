@@ -13,11 +13,15 @@ pub(super) struct WorkspaceClock {
     profile: Option<(String, u64, ClockProfile)>,
     time: Option<u64>,
     publish: Option<ClockAnchor>,
+    publish_pending: bool,
+    pending: bool,
 }
 
 impl ShellSession {
     pub(super) fn reset_workspace_clock_profile(&mut self) {
         self.workspace_clock.profile = None;
+        self.workspace_clock.pending = false;
+        self.workspace_clock.publish_pending = false;
     }
 
     pub(super) fn publish_workspace_clock(&mut self, utc: Option<DateTime<Utc>>) {
@@ -29,61 +33,112 @@ impl ShellSession {
         }
     }
 
-    pub(super) fn write_workspace_clock_profile(
+    pub(super) fn queue_workspace_clock_profile(
         &mut self,
-        client: &SessionServicesClient,
-        previous: Option<&ClockScheduler>,
+        previous: Option<ClockScheduler>,
         reproject: bool,
         snapshot: &time::ClockSnapshot,
         now: Instant,
-    ) -> Result<(), i18n::LocalizedText> {
+        complete: impl FnOnce(&mut Self, Result<(), i18n::LocalizedText>) + Send + 'static,
+    ) {
         let unavailable =
             || i18n::LocalizedText::from(i18n::msg!("workspace-services-unavailable"));
-        let Some((session, revision, stored)) = &mut self.ui.workspace_clock.profile else {
-            return Err(unavailable());
-        };
-        if self
-            .app
-            .auth_session()
-            .is_none_or(|auth| &auth.session_id != session)
-        {
-            return Err(unavailable());
-        }
-        let Some(scheduler) = self.ui.clock_scheduler.as_ref() else {
-            return Err(unavailable());
-        };
-        let profile = match previous.filter(|_| !reproject) {
-            Some(previous) => scheduler.export_profile_mutation(previous, stored, snapshot, now),
-            None => scheduler.export_profile(snapshot, now),
-        };
-        let updated = SharedClockProfile {
-            profile,
-            alarm_dates: previous
-                .map(|previous| scheduler.changed_alarm_dates(previous))
-                .unwrap_or_default(),
-        };
-        let (next_revision, ()): (_, ()) = client
-            .read(ServiceOperation::WriteClockProfile {
+        let result = (|| {
+            let (session, revision, stored) = self
+                .workspace_clock
+                .profile
+                .as_ref()
+                .ok_or_else(unavailable)?;
+            if self.workspace_clock.pending
+                || self
+                    .app
+                    .auth_session()
+                    .is_none_or(|auth| &auth.session_id != session)
+            {
+                return Err(unavailable());
+            }
+            let scheduler = self.clock_scheduler.clone().ok_or_else(unavailable)?;
+            let profile = match previous.as_ref().filter(|_| !reproject) {
+                Some(previous) => {
+                    scheduler.export_profile_mutation(previous, stored, snapshot, now)
+                }
+                None => scheduler.export_profile(snapshot, now),
+            };
+            let updated = SharedClockProfile {
+                profile,
+                alarm_dates: previous
+                    .as_ref()
+                    .map(|previous| scheduler.changed_alarm_dates(previous))
+                    .unwrap_or_default(),
+            };
+            let operation = ServiceOperation::WriteClockProfile {
                 revision: *revision,
                 profile: SessionServicesClient::encode(&updated)
                     .map_err(|error| error.to_string())?,
-            })
-            .map_err(|error| error.to_string())?;
-        *revision = next_revision;
-        *stored = updated.profile;
-        Ok(())
+            };
+            Ok((operation, scheduler, updated))
+        })();
+        if let Some(previous) = previous {
+            self.clock_scheduler = Some(previous);
+        }
+        let (operation, scheduler, updated) = match result {
+            Ok(result) => result,
+            Err(error) => {
+                complete(self, Err(error));
+                return;
+            }
+        };
+        self.workspace_clock.pending = true;
+        let completion = Arc::new(std::sync::Mutex::new(Some(complete)));
+        let callback = completion.clone();
+        let queued = self.submit_workspace_write(operation, false, move |state, result| {
+            state.workspace_clock.pending = false;
+            let result = result
+                .and_then(|value| match value {
+                    workspace_protocol::ServiceValue::Versioned { revision, .. } => Ok(revision),
+                    workspace_protocol::ServiceValue::Empty => {
+                        Err(io::ErrorKind::InvalidData.into())
+                    }
+                })
+                .map(|revision| {
+                    if let Some((_, current_revision, stored)) = &mut state.workspace_clock.profile
+                    {
+                        *current_revision = revision;
+                        *stored = updated.profile;
+                    }
+                    state.clock_scheduler = Some(scheduler);
+                })
+                .map_err(|error| i18n::LocalizedText::from(error.to_string()));
+            if let Some(complete) = callback
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .take()
+            {
+                complete(state, result);
+            }
+        });
+        if let Err(error) = queued {
+            self.workspace_clock.pending = false;
+            if let Some(complete) = completion
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .take()
+            {
+                complete(self, Err(error.to_string().into()));
+            }
+        }
     }
 
     pub(super) fn advance_workspace_clock(
         &mut self,
-        client: &SessionServicesClient,
+        _client: &SessionServicesClient,
         snapshot: &time::ClockSnapshot,
         now: Instant,
     ) -> bool {
-        if self.ui.workspace_clock.profile.is_none() {
+        if self.workspace_clock.profile.is_none() || self.workspace_clock.pending {
             return false;
         }
-        let Some(scheduler) = self.ui.clock_scheduler.as_mut() else {
+        let Some(scheduler) = self.clock_scheduler.as_mut() else {
             return false;
         };
         let previous = scheduler.clone();
@@ -92,33 +147,55 @@ impl ShellSession {
         if due.is_empty() && !reproject {
             return false;
         }
-        if let Err(error) =
-            self.write_workspace_clock_profile(client, Some(&previous), reproject, snapshot, now)
-        {
-            self.clock_scheduler = Some(previous);
-            self.report_clock_storage_error(error);
-            return true;
-        }
-        self.clock_persist_pending = false;
-        self.sync_clock_selection_at(now);
-        let _ = self.handle_clock_due_events(due);
-        self.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
-        self.refresh_hit_map();
-        true
+        self.queue_workspace_clock_profile(
+            Some(previous),
+            reproject,
+            snapshot,
+            now,
+            move |state, result| {
+                if let Err(error) = result {
+                    state.report_clock_storage_error(error);
+                    return;
+                }
+                state.clock_persist_pending = false;
+                state.sync_clock_selection_at(Instant::now());
+                let _ = state.handle_clock_due_events(due);
+                state.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
+                state.refresh_hit_map();
+            },
+        );
+        false
     }
 }
 
 pub(super) fn sync_clock_workspace(
     client: &SessionServicesClient,
     state: &mut ShellSession,
-) -> io::Result<()> {
+) -> io::Result<bool> {
+    let previous_profile = state
+        .workspace_clock
+        .profile
+        .as_ref()
+        .map(|(session, revision, _)| (session.clone(), *revision));
+    let previous_time = state.workspace_clock.time;
     let shell = client.worker().role == WorkerRole::Shell;
     if shell {
-        if let Some(anchor) = state.workspace_clock.publish {
-            client.request(ServiceOperation::WriteClockTime {
-                anchor: SessionServicesClient::encode(&anchor)?,
-            })?;
-            state.workspace_clock.publish = None;
+        if let Some(anchor) = state.workspace_clock.publish
+            && !state.workspace_clock.publish_pending
+        {
+            state.submit_workspace_write(
+                ServiceOperation::WriteClockTime {
+                    anchor: SessionServicesClient::encode(&anchor)?,
+                },
+                false,
+                move |state, result| {
+                    state.workspace_clock.publish_pending = false;
+                    if result.is_ok() && state.workspace_clock.publish == Some(anchor) {
+                        state.workspace_clock.publish = None;
+                    }
+                },
+            )?;
+            state.workspace_clock.publish_pending = true;
         }
     } else if state.window_owner == WindowOwner::App(WindowApplication::Clock) {
         let (revision, anchor): (_, Option<ClockAnchor>) =
@@ -136,7 +213,13 @@ pub(super) fn sync_clock_workspace(
             }
         }
     } else {
-        return Ok(());
+        return Ok(previous_profile
+            != state
+                .workspace_clock
+                .profile
+                .as_ref()
+                .map(|(session, revision, _)| (session.clone(), *revision))
+            || previous_time != state.workspace_clock.time);
     }
     let Some(auth) = state
         .app
@@ -147,7 +230,13 @@ pub(super) fn sync_clock_workspace(
         state.clock_scheduler = None;
         state.clock_profile_pending_sync = None;
         state.pages.clock.clock_create_state = None;
-        return Ok(());
+        return Ok(previous_profile
+            != state
+                .workspace_clock
+                .profile
+                .as_ref()
+                .map(|(session, revision, _)| (session.clone(), *revision))
+            || previous_time != state.workspace_clock.time);
     };
     let session = auth.session_id.clone();
     if state
@@ -159,6 +248,9 @@ pub(super) fn sync_clock_workspace(
         state.workspace_clock.profile = None;
         state.clock_scheduler = None;
         state.pages.clock.clock_create_state = None;
+    }
+    if state.workspace_clock.pending {
+        return Ok(previous_time != state.workspace_clock.time);
     }
     let (
         revision,
@@ -173,11 +265,23 @@ pub(super) fn sync_clock_workspace(
         .as_ref()
         .is_some_and(|(_, old, _)| *old == revision)
     {
-        return Ok(());
+        return Ok(previous_profile
+            != state
+                .workspace_clock
+                .profile
+                .as_ref()
+                .map(|(session, revision, _)| (session.clone(), *revision))
+            || previous_time != state.workspace_clock.time);
     }
     if !state.time_sync_attempted && !profile.entries.is_empty() {
         state.clock_profile_pending_sync = Some(profile);
-        return Ok(());
+        return Ok(previous_profile
+            != state
+                .workspace_clock
+                .profile
+                .as_ref()
+                .map(|(session, revision, _)| (session.clone(), *revision))
+            || previous_time != state.workspace_clock.time);
     }
     state.clock_profile_pending_sync = None;
     let snapshot = state.app.snapshot().clock;
@@ -196,5 +300,11 @@ pub(super) fn sync_clock_workspace(
     state.workspace_clock.profile = Some((session, revision, profile));
     state.sync_clock_selection_at(now);
     state.resolve_notification_alert(CLOCK_STORAGE_ALERT_KEY);
-    Ok(())
+    Ok(previous_profile
+        != state
+            .workspace_clock
+            .profile
+            .as_ref()
+            .map(|(session, revision, _)| (session.clone(), *revision))
+        || previous_time != state.workspace_clock.time)
 }

@@ -68,6 +68,21 @@ impl AppHostSession {
         let launch: WindowLaunch = serde_json::from_value(init.launch)?;
         let application = launch.application();
         let auth: Option<AuthSession> = init.profile.map(serde_json::from_value).transpose()?;
+        let (_, _, session_snapshot) = services.snapshot()?;
+        let (_, authoritative_auth): (_, Option<AuthSession>) =
+            SessionServicesClient::decode(&session_snapshot.authorization)?;
+        if authoritative_auth != auth {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
+        SessionServicesClient::decode::<storage::StorageConfig>(&session_snapshot.config)?;
+        if auth
+            .as_ref()
+            .is_some_and(|auth| auth.role != UserRole::Guest)
+        {
+            SessionServicesClient::decode::<crate::session_services::SessionProfile>(
+                &session_snapshot.profile,
+            )?;
+        }
         let platform: Arc<dyn Platform> = Arc::from(platform::native_platform());
         let mut startup = ShellStartupState::clean(platform.kind(), platform.capabilities());
         startup.storage_manager = Some(StorageManager::from_layout(
@@ -122,6 +137,7 @@ impl AppHostSession {
                 ),
                 window_owner: WindowOwner::App(application),
                 inherited_auth: auth,
+                session_snapshot: Some(session_snapshot),
             },
             Some(&mut timings.language_load_us),
         );
@@ -173,7 +189,7 @@ impl AppHostSession {
             theme_reloader: UserThemeReloader::new(storage, now),
             redraw,
             watchdog,
-            next_service_sync: now,
+            next_service_sync: now + SERVICE_TICK,
             last_background_poll: now - HOST_TICK,
             last_storage_config_revision,
             status_dirty: true,

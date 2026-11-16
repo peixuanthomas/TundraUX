@@ -1,126 +1,205 @@
 use super::state::ServiceState;
-use crate::process_host::WorkerConnection;
-use platform::shell_control::{LocalConnection, LocalListener};
+use crate::process_host::{WorkerConnection, event_loop};
+use platform::shell_control::{AsyncLocalConnection, AsyncLocalListener};
 use std::collections::HashMap;
 use std::io;
-use std::time::{Duration, Instant};
-use workspace_protocol::transport::Framed;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use workspace_protocol::{
     MAX_SERVICE_FRAME_BYTES, PROTOCOL_VERSION, ServiceClientMessage, ServiceHostMessage,
     ServiceReply, SupervisorToWorker, WorkerId, WorkerToSupervisor,
+    transport::{encode_message, read_payload},
 };
 
-struct Peer {
-    wire: Framed<LocalConnection>,
-    pid: u32,
-    worker: Option<WorkerId>,
-    accepted: Instant,
-    last_request: Option<u64>,
-}
+type Allowed = Arc<Mutex<HashMap<WorkerId, u32>>>;
 
 pub(crate) fn run_session_services(
     connection: &'static WorkerConnection,
     _watchdog: watchdog::ProcessWatchdog,
 ) -> io::Result<()> {
-    let platform = platform::native_platform();
+    let platform: Arc<dyn platform::Platform> = Arc::from(platform::native_platform());
     let storage = storage::StorageManager::open_from_platform(platform.as_ref())
         .map_err(io::Error::other)?
         .manager;
-    let mut state = ServiceState::new(storage).map_err(io::Error::other)?;
-    let listener = LocalListener::bind(
-        connection
-            .endpoint()
-            .ok_or_else(|| io::Error::other("missing workspace services endpoint"))?,
-    )?;
-    let mut allowed = HashMap::<WorkerId, u32>::new();
-    let mut peers = Vec::<Peer>::new();
+    let state = Arc::new(Mutex::new(
+        ServiceState::new(storage).map_err(io::Error::other)?,
+    ));
+    let runtime = event_loop::runtime();
+    let listener = {
+        let _entered = runtime.enter();
+        AsyncLocalListener::bind(
+            connection
+                .endpoint()
+                .ok_or_else(|| io::Error::other("missing workspace services endpoint"))?,
+        )?
+    };
+    let allowed = Allowed::default();
+    let accept = runtime.spawn(accept_peers(
+        listener,
+        allowed.clone(),
+        state.clone(),
+        platform,
+        connection.worker(),
+    ));
     connection.send(WorkerToSupervisor::Ready)?;
-    loop {
+    let result = 'service: loop {
+        let generation = event_loop::generation();
         while let Some(message) = connection.try_recv()? {
             match message {
                 SupervisorToWorker::RegisterWorker { worker, pid } => {
-                    allowed.insert(worker, pid);
-                    state.register(worker);
+                    state
+                        .lock()
+                        .map_err(|_| io::Error::other("services state poisoned"))?
+                        .register(worker);
+                    allowed
+                        .lock()
+                        .map_err(|_| io::Error::other("services registry poisoned"))?
+                        .insert(worker, pid);
                     connection.send(WorkerToSupervisor::Registered { worker })?;
                 }
                 SupervisorToWorker::UnregisterWorker { worker } => {
-                    allowed.remove(&worker);
-                    state.unregister(worker);
-                    peers.retain(|peer| peer.worker != Some(worker));
+                    allowed
+                        .lock()
+                        .map_err(|_| io::Error::other("services registry poisoned"))?
+                        .remove(&worker);
+                    state
+                        .lock()
+                        .map_err(|_| io::Error::other("services state poisoned"))?
+                        .unregister(worker);
                 }
                 SupervisorToWorker::Close | SupervisorToWorker::Exit => {
                     connection.send(WorkerToSupervisor::Exiting { code: 0 })?;
-                    return Ok(());
+                    break 'service Ok(());
                 }
                 _ => {}
             }
         }
-        for _ in 0..16 {
-            match listener.accept() {
-                Ok(stream) => {
-                    if peers.len() >= allowed.len().saturating_mul(2).max(8) {
-                        continue;
-                    }
-                    let Ok(pid) = stream.peer_pid() else { continue };
-                    if !allowed.values().any(|allowed_pid| *allowed_pid == pid) {
-                        continue;
-                    }
-                    peers.push(Peer {
-                        wire: Framed::new(stream, MAX_SERVICE_FRAME_BYTES),
-                        pid,
-                        worker: None,
-                        accepted: Instant::now(),
-                        last_request: None,
-                    });
-                }
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
-                Err(error) => return Err(error),
-            }
+        if connection.shutdown_requested() {
+            break Ok(());
         }
-        peers.retain_mut(|peer| {
-            if peer.worker.is_none() && peer.accepted.elapsed() > Duration::from_secs(2) {
-                return false;
-            }
-            let Ok(messages) = peer.wire.poll::<ServiceClientMessage>() else {
-                return false;
-            };
-            for message in messages {
-                let reply = match message {
-                    ServiceClientMessage::Hello(hello)
-                        if peer.worker.is_none()
-                            && hello.protocol == PROTOCOL_VERSION
-                            && hello.pid == peer.pid
-                            && allowed.get(&hello.worker) == Some(&peer.pid) =>
-                    {
-                        peer.worker = Some(hello.worker);
-                        ServiceHostMessage::Welcome {
-                            worker: connection.worker(),
-                        }
-                    }
-                    ServiceClientMessage::Request(request) if peer.worker.is_some() => {
-                        let worker = peer.worker.unwrap();
-                        if allowed.get(&worker) != Some(&peer.pid) {
-                            return false;
-                        }
-                        if peer.last_request.is_some_and(|last| request.id <= last) {
-                            return false;
-                        }
-                        peer.last_request = Some(request.id);
-                        ServiceHostMessage::Reply(ServiceReply {
-                            id: request.id,
-                            result: state.execute(worker, request.operation, platform.as_ref()),
-                        })
-                    }
-                    _ => return false,
-                };
-                if peer.wire.queue(&reply).is_err() {
-                    return false;
-                }
-            }
-            true
-        });
+        if accept.is_finished() {
+            break Err(io::Error::other("services listener stopped"));
+        }
         connection.progress()?;
-        std::thread::sleep(Duration::from_millis(5));
+        event_loop::wait_since(generation, Duration::from_millis(100));
+    };
+    accept.abort();
+    result
+}
+
+async fn accept_peers(
+    listener: AsyncLocalListener,
+    allowed: Allowed,
+    state: Arc<Mutex<ServiceState>>,
+    platform: Arc<dyn platform::Platform>,
+    services_worker: WorkerId,
+) -> io::Result<()> {
+    let permits = Arc::new(tokio::sync::Semaphore::new(64));
+    loop {
+        let stream = match listener.accept().await {
+            Ok(stream) => stream,
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
+            Err(error) => return Err(error),
+        };
+        let pid = stream.peer_pid()?;
+        if !allowed
+            .lock()
+            .map_err(|_| io::Error::other("services registry poisoned"))?
+            .values()
+            .any(|allowed| *allowed == pid)
+        {
+            continue;
+        }
+        let Ok(permit) = permits.clone().try_acquire_owned() else {
+            continue;
+        };
+        let allowed = allowed.clone();
+        let state = state.clone();
+        let platform = platform.clone();
+        tokio::spawn(async move {
+            let _permit = permit;
+            let _ = serve_peer(stream, pid, allowed, state, platform, services_worker).await;
+        });
+    }
+}
+
+async fn serve_peer(
+    connection: AsyncLocalConnection,
+    pid: u32,
+    allowed: Allowed,
+    state: Arc<Mutex<ServiceState>>,
+    platform: Arc<dyn platform::Platform>,
+    services_worker: WorkerId,
+) -> io::Result<()> {
+    let mut stream = connection.into_inner();
+    let bytes = tokio::time::timeout(
+        Duration::from_secs(2),
+        read_payload(&mut stream, MAX_SERVICE_FRAME_BYTES),
+    )
+    .await
+    .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))??;
+    let hello: ServiceClientMessage =
+        event_loop::codec(move || serde_json::from_slice(&bytes).map_err(io::Error::other)).await?;
+    let ServiceClientMessage::Hello(hello) = hello else {
+        return Err(io::ErrorKind::PermissionDenied.into());
+    };
+    if hello.protocol != PROTOCOL_VERSION
+        || hello.pid != pid
+        || allowed
+            .lock()
+            .map_err(|_| io::Error::other("services registry poisoned"))?
+            .get(&hello.worker)
+            != Some(&pid)
+    {
+        return Err(io::ErrorKind::PermissionDenied.into());
+    }
+    let welcome = encode_message(
+        &ServiceHostMessage::Welcome {
+            worker: services_worker,
+        },
+        MAX_SERVICE_FRAME_BYTES,
+    )?;
+    stream.write_all(&welcome).await?;
+    let mut last_request = None;
+    loop {
+        let bytes = tokio::time::timeout(
+            Duration::from_secs(10),
+            read_payload(&mut stream, MAX_SERVICE_FRAME_BYTES),
+        )
+        .await
+        .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))??;
+        let allowed = allowed.clone();
+        let state = state.clone();
+        let platform = platform.clone();
+        let (id, bytes) = event_loop::codec(move || {
+            let ServiceClientMessage::Request(request) = serde_json::from_slice(&bytes)? else {
+                return Err(io::ErrorKind::InvalidData.into());
+            };
+            if last_request.is_some_and(|last| request.id <= last)
+                || allowed
+                    .lock()
+                    .map_err(|_| io::Error::other("services registry poisoned"))?
+                    .get(&hello.worker)
+                    != Some(&pid)
+            {
+                return Err(io::ErrorKind::PermissionDenied.into());
+            }
+            let result = state
+                .lock()
+                .map_err(|_| io::Error::other("services state poisoned"))?
+                .execute(hello.worker, request.operation, platform.as_ref());
+            let bytes = encode_message(
+                &ServiceHostMessage::Reply(ServiceReply {
+                    id: request.id,
+                    result,
+                }),
+                MAX_SERVICE_FRAME_BYTES,
+            )?;
+            Ok((request.id, bytes))
+        })
+        .await?;
+        last_request = Some(id);
+        stream.write_all(&bytes).await?;
     }
 }

@@ -3,39 +3,63 @@ use crate::process_host::WorkerConnection;
 use app::explorer::{
     ExplorerError, ExplorerSharedOperations, ExplorerSharedRequest, ExplorerSharedSnapshot,
 };
-use platform::shell_control::LocalConnection;
 use serde::{Serialize, de::DeserializeOwned};
 use std::io;
-use std::sync::{Arc, Mutex, OnceLock, TryLockError};
-use std::time::{Duration, Instant};
-use workspace_protocol::transport::Framed;
+use std::sync::{
+    Arc, Mutex, OnceLock,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::time::Duration;
 use workspace_protocol::{
-    ServiceClientMessage, ServiceError, ServiceHostMessage, ServiceOperation, ServiceRequest,
-    ServiceValue, WorkerId,
+    ServiceDomain, ServiceError, ServiceOperation, ServiceSessionSnapshot, ServiceValue, WorkerId,
 };
 
 static CLIENT: OnceLock<Arc<SessionServicesClient>> = OnceLock::new();
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(200);
+thread_local! {
+    static JOB_AUTHORIZATION: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_millis(200);
+pub(super) type Reply = Result<ServiceValue, ServiceError>;
 
-struct ClientWire {
-    framed: Framed<LocalConnection>,
-    next_id: u64,
+pub(super) struct Request {
+    pub operation: ServiceOperation,
+    pub reply: mpsc::SyncSender<Reply>,
+}
+
+pub(super) struct SnapshotState {
+    pub snapshot: Arc<ServiceSessionSnapshot>,
+    pub generation: u64,
+    pub failed: bool,
+}
+
+pub(super) struct Shared {
+    pub snapshot: Mutex<Option<SnapshotState>>,
+    pub updated: AtomicBool,
+    pub system_refresh: AtomicBool,
 }
 
 #[derive(Default)]
 pub(crate) struct SyncState {
     pub auth: Option<(u64, Option<identity::AuthSession>)>,
     pub profile: Option<(u64, SessionProfile)>,
+    pub generation: u64,
     pub system_revision: u64,
+    pub files_revision: Option<u64>,
     pub published_system_revision: Option<u64>,
     pub failed: bool,
     pub system_active: bool,
+    pub pending_authorization: bool,
+    pub pending_profile: bool,
 }
 
 pub(crate) struct SessionServicesClient {
     worker: WorkerId,
-    wire: Mutex<ClientWire>,
+    commands: tokio::sync::mpsc::Sender<Request>,
+    shared: Arc<Shared>,
+    jobs: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
     pub sync: Mutex<SyncState>,
+    pub(crate) completions: Mutex<Vec<crate::session::services_client::PendingWrite>>,
 }
 
 impl std::fmt::Debug for SessionServicesClient {
@@ -49,16 +73,38 @@ impl std::fmt::Debug for SessionServicesClient {
 
 impl SessionServicesClient {
     pub(crate) fn connect(connection: &'static WorkerConnection) -> io::Result<Arc<Self>> {
-        let client = Arc::new(Self {
-            worker: connection.worker(),
-            wire: Mutex::new(ClientWire {
-                framed: connection.connect_services()?,
-                next_id: 0,
-            }),
-            sync: Mutex::new(SyncState::default()),
+        let (commands, receiver) = tokio::sync::mpsc::channel(64);
+        let shared = Arc::new(Shared {
+            snapshot: Mutex::new(None),
+            updated: AtomicBool::new(false),
+            system_refresh: AtomicBool::new(false),
         });
-        client.read_config()?;
-        Ok(client)
+        let (ready, initial) = mpsc::sync_channel(1);
+        let (jobs, job_queue) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(32);
+        std::thread::Builder::new()
+            .name("workspace-services-operations".into())
+            .spawn(move || {
+                while let Ok(job) = job_queue.recv() {
+                    job();
+                }
+            })?;
+        crate::process_host::event_loop::runtime().spawn(super::client_worker::run(
+            connection,
+            receiver,
+            shared.clone(),
+            ready,
+        ));
+        initial
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| service_error(ServiceError::Unavailable))??;
+        Ok(Arc::new(Self {
+            worker: connection.worker(),
+            commands,
+            shared,
+            jobs,
+            sync: Mutex::new(SyncState::default()),
+            completions: Mutex::new(Vec::new()),
+        }))
     }
 
     pub(crate) fn install(self: &Arc<Self>) {
@@ -75,53 +121,107 @@ impl SessionServicesClient {
     pub(crate) fn current() -> Option<&'static Arc<Self>> {
         CLIENT.get()
     }
-
     pub(crate) fn worker(&self) -> WorkerId {
         self.worker
     }
 
-    pub(crate) fn request(&self, operation: ServiceOperation) -> io::Result<ServiceValue> {
-        let started = Instant::now();
-        let mut wire = loop {
-            match self.wire.try_lock() {
-                Ok(wire) => break wire,
-                Err(TryLockError::Poisoned(_)) => {
-                    return Err(service_error(ServiceError::Unavailable));
-                }
-                Err(TryLockError::WouldBlock) if started.elapsed() < REQUEST_TIMEOUT => {
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-                Err(TryLockError::WouldBlock) => {
-                    return Err(service_error(ServiceError::Unavailable));
-                }
-            }
-        };
-        wire.next_id += 1;
-        let id = wire.next_id;
-        wire.framed
-            .queue(&ServiceClientMessage::Request(ServiceRequest {
-                id,
-                operation,
-            }))?;
-        loop {
-            for message in wire.framed.poll::<ServiceHostMessage>()? {
-                if let ServiceHostMessage::Reply(reply) = message
-                    && reply.id == id
-                {
-                    return reply.result.map_err(service_error);
-                }
-            }
-            if started.elapsed() >= REQUEST_TIMEOUT {
-                return Err(service_error(ServiceError::Unavailable));
-            }
-            std::thread::sleep(Duration::from_millis(1));
+    pub(crate) fn snapshot(&self) -> io::Result<(u64, bool, Arc<ServiceSessionSnapshot>)> {
+        let state = self
+            .shared
+            .snapshot
+            .lock()
+            .map_err(|_| service_error(ServiceError::Unavailable))?;
+        let state = state
+            .as_ref()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        Ok((state.generation, state.failed, state.snapshot.clone()))
+    }
+
+    pub(crate) fn has_updates(&self) -> bool {
+        self.shared.updated.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn acknowledge_updates(&self) {
+        self.shared.updated.store(false, Ordering::Release);
+    }
+
+    pub(crate) fn notify_completion(&self) {
+        self.shared.updated.store(true, Ordering::Release);
+        crate::process_host::event_loop::wake();
+    }
+
+    pub(crate) fn take_system_refresh(&self) -> bool {
+        self.shared.system_refresh.swap(false, Ordering::AcqRel)
+    }
+
+    pub(crate) fn submit(&self, operation: ServiceOperation) -> io::Result<mpsc::Receiver<Reply>> {
+        let (reply, receiver) = mpsc::sync_channel(1);
+        self.commands
+            .try_send(Request { operation, reply })
+            .map_err(|_| service_error(ServiceError::Unavailable))?;
+        Ok(receiver)
+    }
+
+    pub(crate) fn submit_job(&self, job: Box<dyn FnOnce() + Send>) -> io::Result<()> {
+        self.jobs
+            .try_send(job)
+            .map_err(|_| service_error(ServiceError::Unavailable))
+    }
+
+    pub(crate) fn in_authorization<T>(revision: u64, work: impl FnOnce() -> T) -> T {
+        JOB_AUTHORIZATION.with(|current| {
+            let previous = current.replace(Some(revision));
+            let result = work();
+            current.set(previous);
+            result
+        })
+    }
+
+    pub(crate) fn authorized(
+        operation: ServiceOperation,
+        authorization_revision: u64,
+    ) -> ServiceOperation {
+        ServiceOperation::Authorized {
+            authorization_revision,
+            operation: Box::new(operation),
         }
+    }
+
+    /// Blocking adapter for storage and file-operation workers. UI writes use submit.
+    pub(crate) fn request(&self, operation: ServiceOperation) -> io::Result<ServiceValue> {
+        self.submit(operation)?
+            .recv_timeout(REQUEST_TIMEOUT)
+            .map_err(|_| service_error(ServiceError::Unavailable))?
+            .map_err(service_error)
+    }
+
+    pub(crate) fn decode<T: DeserializeOwned>(domain: &ServiceDomain) -> io::Result<(u64, T)> {
+        let version = domain
+            .as_ref()
+            .map_err(|error| service_error(error.clone()))?;
+        serde_json::from_value(version.value.clone())
+            .map(|value| (version.revision, value))
+            .map_err(io::Error::other)
     }
 
     pub(crate) fn read<T: DeserializeOwned>(
         &self,
         operation: ServiceOperation,
     ) -> io::Result<(u64, T)> {
+        let (_, _, snapshot) = self.snapshot()?;
+        let cached = match &operation {
+            ServiceOperation::ReadAuthorization => Some(&snapshot.authorization),
+            ServiceOperation::ReadConfig => Some(&snapshot.config),
+            ServiceOperation::ReadProfile => Some(&snapshot.profile),
+            ServiceOperation::ReadClockProfile => Some(&snapshot.clock_profile),
+            ServiceOperation::ReadClockTime => Some(&snapshot.clock_time),
+            ServiceOperation::ReadFileOperations => Some(&snapshot.files),
+            ServiceOperation::ReadSystemSnapshot => Some(&snapshot.system),
+            _ => None,
+        };
+        if let Some(domain) = cached {
+            return Self::decode(domain);
+        }
         match self.request(operation)? {
             ServiceValue::Versioned { revision, value } => serde_json::from_value(value)
                 .map(|value| (revision, value))
@@ -135,9 +235,23 @@ impl SessionServicesClient {
     }
 
     pub(crate) fn read_config(&self) -> io::Result<(u64, storage::StorageConfig)> {
-        let (revision, mut config): (_, storage::StorageConfig) =
-            self.read(ServiceOperation::ReadConfig)?;
+        let (_, _, snapshot) = self.snapshot()?;
+        let (revision, mut config): (_, storage::StorageConfig) = Self::decode(&snapshot.config)?;
         config.session_revision = Some(revision);
+        config.session_authorization_revision = Some(
+            snapshot
+                .authorization
+                .as_ref()
+                .map_err(|error| service_error(error.clone()))?
+                .revision,
+        );
+        if JOB_AUTHORIZATION.with(|revision| {
+            revision
+                .get()
+                .is_some_and(|revision| Some(revision) != config.session_authorization_revision)
+        }) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
         Ok((revision, config))
     }
 
@@ -146,12 +260,27 @@ impl SessionServicesClient {
         active: Option<bool>,
         refresh: bool,
     ) -> io::Result<()> {
-        self.request(ServiceOperation::RequestSystemStatus { active, refresh })
-            .map(|_| ())
+        let (_, _, snapshot) = self.snapshot()?;
+        let revision = snapshot
+            .authorization
+            .as_ref()
+            .map_err(|error| service_error(error.clone()))?
+            .revision;
+        let receiver = self.submit(Self::authorized(
+            ServiceOperation::RequestSystemStatus { active, refresh },
+            revision,
+        ))?;
+        self.completions
+            .lock()
+            .map_err(|_| service_error(ServiceError::Unavailable))?
+            .push(crate::session::services_client::PendingWrite::silent(
+                receiver,
+            ));
+        Ok(())
     }
 }
 
-fn service_error(error: ServiceError) -> io::Error {
+pub(crate) fn service_error(error: ServiceError) -> io::Error {
     let message = match error {
         ServiceError::Conflict => i18n::render_current(&i18n::msg!("workspace-services-conflict")),
         ServiceError::Forbidden => {
@@ -173,9 +302,7 @@ impl storage::SessionConfigStore for SessionServicesClient {
     fn load_config(&self) -> Result<storage::StorageConfig, storage::StorageError> {
         self.read_config()
             .map(|(_, config)| config)
-            .map_err(|error| storage::StorageError::Platform {
-                message: error.to_string(),
-            })
+            .map_err(storage_error)
     }
 
     fn save_config(&self, config: &storage::StorageConfig) -> Result<(), storage::StorageError> {
@@ -183,15 +310,25 @@ impl storage::SessionConfigStore for SessionServicesClient {
             let revision = config
                 .session_revision
                 .ok_or_else(|| io::Error::other("configuration was not read"))?;
-            self.request(ServiceOperation::WriteConfig {
-                revision,
-                config: Self::encode(config)?,
-            })?;
+            let auth_revision = config
+                .session_authorization_revision
+                .ok_or_else(|| io::Error::other("authorization was not read"))?;
+            self.request(Self::authorized(
+                ServiceOperation::WriteConfig {
+                    revision,
+                    config: Self::encode(config)?,
+                },
+                auth_revision,
+            ))?;
             Ok(())
         };
-        save().map_err(|error| storage::StorageError::Platform {
-            message: error.to_string(),
-        })
+        save().map_err(storage_error)
+    }
+}
+
+fn storage_error(error: io::Error) -> storage::StorageError {
+    storage::StorageError::Platform {
+        message: error.to_string(),
     }
 }
 
@@ -201,14 +338,24 @@ impl ExplorerSharedOperations for SessionServicesClient {
         request: ExplorerSharedRequest,
     ) -> Result<ExplorerSharedSnapshot, ExplorerError> {
         let read = || -> io::Result<ExplorerSharedSnapshot> {
-            let operation = if matches!(request, ExplorerSharedRequest::Snapshot) {
-                ServiceOperation::ReadFileOperations
-            } else {
+            if matches!(request, ExplorerSharedRequest::Snapshot) {
+                return self
+                    .read(ServiceOperation::ReadFileOperations)
+                    .map(|(_, value)| value);
+            }
+            let (_, _, snapshot) = self.snapshot()?;
+            let revision = snapshot
+                .authorization
+                .as_ref()
+                .map_err(|error| service_error(error.clone()))?
+                .revision;
+            self.read(Self::authorized(
                 ServiceOperation::UpdateFileOperations {
                     operation: Self::encode(&request)?,
-                }
-            };
-            self.read(operation).map(|(_, snapshot)| snapshot)
+                },
+                revision,
+            ))
+            .map(|(_, value)| value)
         };
         read().map_err(|error| ExplorerError::InvalidOperation(error.to_string()))
     }

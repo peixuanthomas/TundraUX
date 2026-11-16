@@ -20,6 +20,7 @@ pub(in crate::session) enum TaskDomain {
     AutoAdmin,
     CommandLine,
     Script,
+    WorkspaceServices,
 }
 
 impl TaskDomain {
@@ -36,6 +37,7 @@ impl TaskDomain {
             Self::AutoAdmin => "auto-admin",
             Self::CommandLine => "command-line",
             Self::Script => "script",
+            Self::WorkspaceServices => "settings",
             Self::ManagementQuery | Self::ManagementDraft | Self::ManagementOperation => {
                 "management"
             }
@@ -73,7 +75,7 @@ impl TaskControl {
             record_history: true,
         }
     }
-    fn without_history(mut self) -> Self {
+    pub(in crate::session) fn without_history(mut self) -> Self {
         self.record_history = false;
         self
     }
