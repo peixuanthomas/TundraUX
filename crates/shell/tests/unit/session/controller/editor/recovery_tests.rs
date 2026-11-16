@@ -6,7 +6,7 @@ fn recovery_failures_back_off_without_marking_the_draft_saved() {
         let root = std::env::temp_dir().join(format!(
             "tundra-editor-recovery-retry-{}-{}",
             std::process::id(),
-            tasks::next_editor_task_id()
+            crate::session::controller::editor::tasks::next_editor_task_id()
         ));
         std::fs::create_dir_all(&root).unwrap();
         let root = std::fs::canonicalize(root).unwrap();
