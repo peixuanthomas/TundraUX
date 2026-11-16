@@ -9,15 +9,18 @@ use crate::{
 };
 use fluent_bundle::{FluentArgs, FluentResource, concurrent::FluentBundle};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     fmt,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
-type Bundle = FluentBundle<FluentResource>;
+type Bundle = FluentBundle<Arc<FluentResource>>;
 
 /// All resources are owned. Rendering never reads files, consults environment, or mutates locale state.
 pub struct LanguageSnapshot {
@@ -357,17 +360,21 @@ impl LanguageSnapshot {
         english_sources: Vec<Source>,
         embedded_sources: Vec<Source>,
     ) -> Result<Self, LanguageError> {
-        let embedded = make_bundle(DEFAULT_LANGUAGE, &embedded_sources, &[])?;
-        let english = make_bundle(DEFAULT_LANGUAGE, &embedded_sources, &english_sources)?;
-        let current = make_bundle(&code, &current_sources, &[])?;
-        let emergency = make_bundle(
+        let emergency_sources = [Source {
+            path: "<emergency>".into(),
+            text: include_str!("emergency.ftl").to_owned(),
+        }];
+        let mut resources = HashMap::new();
+        let embedded = make_bundle(DEFAULT_LANGUAGE, &embedded_sources, &[], &mut resources)?;
+        let english = make_bundle(
             DEFAULT_LANGUAGE,
-            &[Source {
-                path: "<emergency>".into(),
-                text: include_str!("emergency.ftl").to_owned(),
-            }],
-            &[],
+            &embedded_sources,
+            &english_sources,
+            &mut resources,
         )?;
+        let current = make_bundle(&code, &current_sources, &[], &mut resources)?;
+        let emergency = make_bundle(DEFAULT_LANGUAGE, &emergency_sources, &[], &mut resources)?;
+        drop(resources);
         Ok(Self {
             code,
             generation,
@@ -475,7 +482,12 @@ fn sources_from_files(files: &[(&str, &str)]) -> Vec<Source> {
         .collect()
 }
 
-fn make_bundle(code: &str, base: &[Source], overrides: &[Source]) -> Result<Bundle, LanguageError> {
+fn make_bundle<'a>(
+    code: &str,
+    base: &'a [Source],
+    overrides: &'a [Source],
+    resources: &mut HashMap<&'a str, Arc<FluentResource>>,
+) -> Result<Bundle, LanguageError> {
     let language = code.parse().map_err(|_| {
         LanguageError::new(
             LanguageErrorKind::UnknownLanguage,
@@ -488,14 +500,21 @@ fn make_bundle(code: &str, base: &[Source], overrides: &[Source]) -> Result<Bund
     bundle.add_builtins().expect("new bundle has no functions");
     for (sources, override_entries) in [(base, false), (overrides, true)] {
         for source in sources {
-            let resource =
-                FluentResource::try_new(source.text.clone()).map_err(|(_, errors)| {
-                    LanguageError::new(
-                        LanguageErrorKind::Syntax,
-                        Some(source.path.clone()),
-                        format!("Invalid Fluent syntax: {errors:?}"),
-                    )
-                })?;
+            let resource = if let Some(resource) = resources.get(source.text.as_str()) {
+                resource.clone()
+            } else {
+                let resource = Arc::new(FluentResource::try_new(source.text.clone()).map_err(
+                    |(_, errors)| {
+                        LanguageError::new(
+                            LanguageErrorKind::Syntax,
+                            Some(source.path.clone()),
+                            format!("Invalid Fluent syntax: {errors:?}"),
+                        )
+                    },
+                )?);
+                resources.insert(source.text.as_str(), resource.clone());
+                resource
+            };
             if override_entries {
                 bundle.add_resource_overriding(resource);
             } else {
@@ -511,6 +530,10 @@ fn make_bundle(code: &str, base: &[Source], overrides: &[Source]) -> Result<Bund
     }
     Ok(bundle)
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/snapshot.rs"]
+mod tests;
 
 fn diagnostic_write(
     path: &Path,

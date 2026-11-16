@@ -43,6 +43,8 @@ i18n::with_snapshot(&snapshot, || {
 
 Snapshots separately retain the current language, English fallback, built-in English, and minimal emergency resources. Missing messages or formatting failures fall back through these layers; unknown IDs appear as `[message-id]`.
 
+During snapshot construction, identical Fluent text is parsed once and shared by the separate fallback bundles through `Arc<FluentResource>`. Sharing stays within that snapshot, so publishing another language or generation preserves earlier snapshots and disk English overrides.
+
 ## Loading and validation
 
 Strict loading checks manifests, Fluent syntax, duplicate IDs, references and cycles, functions, and English argument contracts. `NUMBER` is supported. Missing translations are recorded in loading diagnostics and fall back to English.
