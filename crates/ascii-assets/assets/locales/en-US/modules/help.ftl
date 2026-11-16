@@ -7,9 +7,9 @@ ui-help-nav-help = Help
 ui-help-nav-windows = Open Windows
 ui-help-workspace-focus = Focus the window in that direction
 ui-help-workspace-layout = Cycle split layouts
-ui-help-workspace-maximize = Maximize or restore the window
+ui-help-workspace-maximize = Show only the current window and minimize the other panes.
 ui-help-workspace-kill = Force kill the window. Unsaved work may be lost.
-ui-help-workspace-send = Send Ctrl+B to the focused window
+ui-help-workspace-send = Send Ctrl+W to the focused window outside native editing areas.
 ui-help-nav-tabs = Next area
 ui-help-nav-activate = Activate
 
@@ -138,3 +138,5 @@ ui-help-logs-source = Switch between UX and Linux logs
 ui-help-home-edit = Edit Home / finish editing
 ui-help-home-reorder = Move selected icon in edit mode
 ui-help-home-edit-cancel = Cancel drag / finish editing
+
+ui-help-workspace-native = Editors, Vim and terminals keep their own Ctrl+W; use the window Split button there.

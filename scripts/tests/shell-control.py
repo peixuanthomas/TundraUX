@@ -125,7 +125,7 @@ def main():
                     text = "\n".join(current["lines"]).replace(" ", "")
                     assert all(name.replace(" ", "") in text for name in home_names)
                 else:
-                    assert "108x20" in "\n".join(current["lines"]).replace(" ", "")
+                    assert "108×20" in "\n".join(current["lines"]).replace(" ", "")
                     assert not any(node["actionable"] for node in current["nodes"])
             print("PASS: Home fits at 108x20; undersized terminals show the shared minimum and recover")
             packages = node_by(current, lambda node: node["role"] == "button" and "Packages" in node["name"])

@@ -774,6 +774,10 @@ impl AppHostSession {
                 });
             }
         }
+        frame.ctrl_w_passthrough = !frame.modal
+            && (!frame.native_escape.is_empty()
+                || self.state.active_screen() == ShellScreen::Editor
+                    && self.state.pages.editor.editor_focus == ui::EditorFocus::Canvas);
         Ok(Some(frame))
     }
 

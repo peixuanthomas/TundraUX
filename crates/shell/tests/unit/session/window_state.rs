@@ -1,113 +1,109 @@
 use super::*;
-use crate::InputModifiers;
+
+fn area() -> WorkspaceLayout {
+    WorkspaceLayout::new(
+        ratatui::layout::Rect::new(0, 0, 217, 39),
+        ratatui::layout::Rect::new(0, 1, 217, 37),
+        &[],
+        &[],
+        None,
+        None,
+    )
+}
 
 #[test]
 fn opening_replaces_focused_slot_and_background_stays_explicit() {
+    let (a, b, c) = (SessionId(1), SessionId(2), SessionId(3));
     let mut windows = WindowSelection::default();
-    let [a, b, c] = [SessionId(1), SessionId(2), SessionId(3)];
     windows.open(a);
-    windows.show(b);
-    windows.switch(a);
+    windows.split(a, WorkspaceSplitMode::LeftRight);
+    windows.open(b);
     windows.open(c);
-    assert_eq!(windows.visible(2), [c, b]);
-    assert_eq!(windows.focused(), Some(c));
-    assert!(!windows.includes(a));
-
-    windows.minimize(c);
-    assert_eq!(windows.visible(2), [b]);
-    assert_eq!(windows.focused(), Some(b));
-    assert_eq!(windows.visible(4), [b]);
+    assert_eq!(windows.visible(), vec![a, c]);
+    assert!(!windows.includes(b));
+    windows.focus(a);
+    windows.switch(b);
+    assert_eq!(windows.visible(), vec![b, c]);
 }
 
 #[test]
-fn taskbar_restores_minimized_windows_in_their_original_order_when_they_fit() {
+fn minimizing_merges_the_empty_region_and_restoring_uses_its_previous_slot() {
+    let (a, b) = (SessionId(1), SessionId(2));
     let mut windows = WindowSelection::default();
-    let [a, b, c] = [SessionId(1), SessionId(2), SessionId(3)];
     windows.open(a);
-    windows.show(b);
-    windows.show(c);
+    windows.split(a, WorkspaceSplitMode::LeftRight);
+    windows.open(b);
     windows.minimize(a);
-    windows.minimize(b);
-    assert_eq!(windows.visible(3), [c]);
-    windows.activate(a, 3);
-    windows.activate(b, 3);
-    assert_eq!(windows.visible(3), [a, b, c]);
+    assert_eq!(windows.visible(), vec![b]);
+    windows.activate(a, &area());
+    assert_eq!(windows.visible(), vec![a, b]);
+}
+
+#[test]
+fn cancel_split_preserves_other_windows_and_fullscreen_discards_the_split() {
+    let (a, b) = (SessionId(1), SessionId(2));
+    let mut windows = WindowSelection::default();
+    windows.open(a);
+    windows.split(a, WorkspaceSplitMode::LeftRight);
+    windows.open(b);
+    let previous = windows.tree.clone();
+    windows.split(b, WorkspaceSplitMode::TopBottom);
+    assert!(windows.cancel_add());
+    assert_eq!(windows.tree, previous);
     assert_eq!(windows.focused(), Some(b));
+    windows.fullscreen(a);
+    assert_eq!(windows.visible(), vec![a]);
+    windows.activate(b, &area());
+    assert_eq!(windows.visible(), vec![b]);
 }
 
 #[test]
-fn taskbar_with_a_full_split_replaces_only_the_focused_slot() {
-    let mut windows = WindowSelection::default();
-    let [a, b, c] = [SessionId(1), SessionId(2), SessionId(3)];
-    windows.open(a);
-    windows.show(b);
-    windows.minimize(a);
-    windows.show(c);
-    windows.activate(a, 2);
-    assert_eq!(windows.visible(2), [b, a]);
-    assert_eq!(windows.focused(), Some(a));
-    assert!(!windows.includes(c));
-}
-
-#[test]
-fn resize_restores_automatically_hidden_windows_and_keeps_focus() {
-    let mut windows = WindowSelection::default();
-    let [a, b, c] = [SessionId(1), SessionId(2), SessionId(3)];
-    windows.open(a);
-    windows.show(b);
-    windows.show(c);
-    assert_eq!(windows.visible(0), []);
-    assert_eq!(windows.visible(1), [c]);
-    assert_eq!(windows.visible(2), [a, c]);
-    assert_eq!(windows.visible(3), [a, b, c]);
-    assert_eq!(windows.focused(), Some(c));
-}
-
-#[test]
-fn maximize_and_add_restore_the_other_slots() {
-    let mut windows = WindowSelection::default();
-    let [a, b, c] = [SessionId(1), SessionId(2), SessionId(3)];
-    windows.open(a);
-    windows.show(b);
-    windows.toggle_maximized(a);
-    assert_eq!(windows.visible(3), [a]);
-    windows.toggle_maximized(a);
-    assert_eq!(windows.visible(3), [a, b]);
-    windows.add_from_home();
-    assert_eq!(windows.visible(3), []);
-    windows.open(c);
-    assert_eq!(windows.visible(3), [a, b, c]);
-}
-
-#[test]
-fn double_prefix_sends_one_press_and_lowercase_x_cannot_kill() {
+fn window_prefix_uses_ctrl_w_and_letter_directions_and_never_repeats_a_split() {
     let mut prefix = WindowPrefix::default();
-    let ctrl_b = KeyInput::with_modifiers(InputKey::Char('b'), InputModifiers::CTRL);
-    assert_eq!(prefix.route(&ctrl_b), WindowShortcut::Consume);
+    let key = |label: &str| {
+        if let Some(letter) = label.strip_prefix("Ctrl+") {
+            KeyInput::with_modifiers(
+                InputKey::Char(letter.chars().next().unwrap()),
+                crate::InputModifiers::CTRL,
+            )
+        } else if let crate::InputEvent::Key(key) = crate::InputEvent::from_key_label(label) {
+            key
+        } else {
+            unreachable!()
+        }
+    };
+    assert_eq!(prefix.route(&key("Ctrl+b")), WindowShortcut::Pass);
+    assert_eq!(prefix.route(&key("Ctrl+w")), WindowShortcut::Consume);
     assert_eq!(
-        prefix.route(&ctrl_b.clone().repeated()),
+        prefix.route(&key("v")),
+        WindowShortcut::Split(WorkspaceSplitMode::LeftRight)
+    );
+    assert_eq!(prefix.route(&key("s")), WindowShortcut::Pass);
+    for (label, command) in [
+        ("s", WindowShortcut::Split(WorkspaceSplitMode::TopBottom)),
+        ("h", WindowShortcut::MoveFocus(-1, 0)),
+        ("l", WindowShortcut::MoveFocus(1, 0)),
+        ("j", WindowShortcut::MoveFocus(0, 1)),
+        ("k", WindowShortcut::MoveFocus(0, -1)),
+        ("o", WindowShortcut::Maximize),
+    ] {
+        prefix.route(&key("Ctrl+w"));
+        assert_eq!(prefix.route(&key(label)), command);
+    }
+    prefix.route(&key("Ctrl+w"));
+    assert_eq!(
+        prefix.route(&key("Ctrl+w")),
+        WindowShortcut::SendPrefix(key("Ctrl+w"))
+    );
+    prefix.route(&key("Ctrl+w"));
+    assert_eq!(prefix.route(&key("x")), WindowShortcut::Pass);
+    prefix.route(&key("Ctrl+w"));
+    assert_eq!(prefix.route(&key("X")), WindowShortcut::Kill);
+    assert_eq!(
+        prefix.route(&key("Ctrl+w").repeated()),
         WindowShortcut::Consume
     );
-    assert_eq!(
-        prefix.route(&ctrl_b.clone().released()),
-        WindowShortcut::Consume
-    );
-    assert_eq!(
-        prefix.route(&ctrl_b),
-        WindowShortcut::SendPrefix(ctrl_b.clone())
-    );
-    assert_eq!(
-        prefix.route(&ctrl_b.clone().released()),
-        WindowShortcut::Consume
-    );
-    assert_eq!(prefix.route(&ctrl_b), WindowShortcut::Consume);
-    assert_eq!(
-        prefix.route(&KeyInput::new(InputKey::Char('x'))),
-        WindowShortcut::Pass
-    );
-    assert_eq!(prefix.route(&ctrl_b), WindowShortcut::Consume);
-    assert_eq!(
-        prefix.route(&KeyInput::new(InputKey::Char('X'))),
-        WindowShortcut::Kill
-    );
+    prefix.route(&key("Ctrl+w"));
+    assert_eq!(prefix.route(&key("Esc")), WindowShortcut::Consume);
+    assert_eq!(prefix.route(&key("v")), WindowShortcut::Pass);
 }

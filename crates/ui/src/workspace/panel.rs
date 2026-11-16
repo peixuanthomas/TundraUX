@@ -17,7 +17,6 @@ use super::WorkspaceSplitMode;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceAction {
     Dismiss,
-    Add,
     SetMode(WorkspaceSplitMode),
     Select(SessionId),
     Switch(SessionId),
@@ -34,10 +33,8 @@ impl WorkspaceAction {
     pub fn id(self) -> String {
         match self {
             Self::Dismiss => "workspace.dismiss".into(),
-            Self::Add => "workspace.add".into(),
             Self::SetMode(WorkspaceSplitMode::LeftRight) => "workspace.left-right".into(),
             Self::SetMode(WorkspaceSplitMode::TopBottom) => "workspace.top-bottom".into(),
-            Self::SetMode(WorkspaceSplitMode::Grid) => "workspace.grid".into(),
             Self::Select(id) => format!("workspace.select.{id}"),
             Self::Switch(id) => format!("workspace.switch.{id}"),
             Self::Show(id) => format!("workspace.show.{id}"),
@@ -64,9 +61,10 @@ pub struct WorkspaceWindowViewModel {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkspacePanelViewModel {
     pub windows: Vec<WorkspaceWindowViewModel>,
+    pub query: String,
+    pub editing: crate::components::TextEditState,
     pub focused: Option<SessionId>,
     pub selected: Option<SessionId>,
-    pub mode: WorkspaceSplitMode,
     pub size_needed: Size,
     pub capacity: usize,
     pub blocked: bool,
@@ -80,6 +78,7 @@ pub struct WorkspacePanelViewModel {
 pub struct WorkspacePanel {
     pub area: Rect,
     pub list: Rect,
+    pub search: Rect,
     pub scroll: usize,
     pub max_scroll: usize,
     pub hits: Vec<(WorkspaceAction, Rect)>,
@@ -105,11 +104,8 @@ impl WorkspacePanel {
                     .find(|window| Some(window.id) == model.focused)
             })
             .or_else(|| model.windows.first());
-        let mode_buttons = mode_buttons(model.mode);
         let window_buttons = selected.map(window_buttons).unwrap_or_default();
-        let mode_bar = action_bar(&mode_buttons);
         let window_bar = action_bar(&window_buttons);
-        let mode_rows = mode_bar.height(body_width);
         let window_rows = window_bar.height(body_width);
         let summary = if model.blocked {
             workspace_resize_message(model.size_needed)
@@ -117,17 +113,15 @@ impl WorkspacePanel {
             i18n::tr!("ui-workspace-capacity", capacity = model.capacity)
         };
         let summary = crate::management_wrapped_lines(&summary, body_width);
-        let body_rows = model.windows.len().max(1).saturating_add(summary.len());
+        let body_rows = model.windows.len().max(1).saturating_add(summary.len() + 2);
         let height = available.height.min(
             u16::try_from(body_rows)
                 .unwrap_or(u16::MAX)
-                .saturating_add(mode_rows)
                 .saturating_add(window_rows)
                 .saturating_add(7),
         );
         let area = centered_rect(available, width, height);
-        // Keep selected-window actions ahead of layout actions in a short terminal.
-        let footer_rows = (mode_rows + window_rows).min(height.saturating_sub(3));
+        let footer_rows = window_rows.min(height.saturating_sub(3));
         let close = Key::Escape.label();
         let dialog = DialogLayout::with_min_body(area, footer_rows, Some(&close), 2);
         let summary_rows = u16::try_from(summary.len())
@@ -139,6 +133,8 @@ impl WorkspacePanel {
             dialog.body.width,
             dialog.body.height - summary_rows,
         );
+        let (search, rows) = crate::components::selection_search_areas(list);
+        list = rows;
         let viewport_len = usize::from(list.height);
         let max_scroll = model.windows.len().saturating_sub(viewport_len);
         let scroll = model.scroll.min(max_scroll);
@@ -153,14 +149,7 @@ impl WorkspacePanel {
             dialog.footer.width,
             window_height,
         );
-        let mode_area = Rect::new(
-            dialog.footer.x,
-            dialog.footer.y,
-            dialog.footer.width,
-            dialog.footer.height - window_height,
-        );
-        let mut buttons = place_buttons(mode_buttons, &mode_bar, mode_area);
-        buttons.extend(place_buttons(window_buttons, &window_bar, window_area));
+        let mut buttons = place_buttons(window_buttons, &window_bar, window_area);
         if max_scroll > 0 && list.height >= 2 {
             buttons.extend([
                 (
@@ -198,6 +187,7 @@ impl WorkspacePanel {
         Self {
             area,
             list,
+            search,
             scroll,
             max_scroll,
             hits,
@@ -243,6 +233,11 @@ pub fn render_workspace_panel(
             panel.summary.len() as u16,
         ),
     );
+    model
+        .editing
+        .input("workspace.windows.search", &model.query)
+        .with_placeholder(i18n::tr!("ui-workspace-search"))
+        .render_borderless_frame(frame, panel.search, &theme);
     let state = PanelInteraction {
         focused: model.action_focus,
         hovered: model.hovered,
@@ -250,7 +245,12 @@ pub fn render_workspace_panel(
     };
     if model.windows.is_empty() {
         frame.render_widget(
-            Paragraph::new(i18n::tr!("ui-workspace-no-windows")).style(theme.muted_style()),
+            Paragraph::new(if model.query.is_empty() {
+                i18n::tr!("ui-workspace-no-windows")
+            } else {
+                i18n::tr!("management-empty")
+            })
+            .style(theme.muted_style()),
             panel.list,
         );
     }
@@ -564,33 +564,6 @@ impl PanelInteraction {
             .hovered(self.hovered == Some(action))
             .active(self.pressed == Some(action))
     }
-}
-
-fn mode_buttons(current: WorkspaceSplitMode) -> Vec<PanelButton> {
-    let mut buttons = vec![
-        PanelButton::new(WorkspaceAction::Add, i18n::tr!("ui-workspace-add"))
-            .emphasis(ButtonEmphasis::Primary),
-    ];
-    buttons.extend(
-        [
-            (WorkspaceSplitMode::Grid, i18n::tr!("ui-workspace-grid")),
-            (
-                WorkspaceSplitMode::TopBottom,
-                i18n::tr!("ui-workspace-top-bottom"),
-            ),
-            (
-                WorkspaceSplitMode::LeftRight,
-                i18n::tr!("ui-workspace-left-right"),
-            ),
-        ]
-        .into_iter()
-        .map(|(mode, label)| {
-            let mut button = PanelButton::new(WorkspaceAction::SetMode(mode), label);
-            button.current = current == mode;
-            button
-        }),
-    );
-    buttons
 }
 
 fn window_buttons(window: &WorkspaceWindowViewModel) -> Vec<PanelButton> {

@@ -1,6 +1,6 @@
 ui-workspace-title = Windows
-ui-workspace-left-right = Side by side
-ui-workspace-top-bottom = Stacked
+ui-workspace-left-right = Split left/right
+ui-workspace-top-bottom = Split top/bottom
 ui-workspace-grid = Grid
 ui-workspace-add = Add window
 ui-workspace-switch = Switch to
@@ -65,5 +65,11 @@ watchdog-cli-target-missing = The selected managed process is no longer availabl
 watchdog-cli-protocol = The watchdog returned an incompatible reply.
 watchdog-cli-request-refused = The watchdog could not complete the request.
 watchdog-cli-output-error = Could not write the watchdog result. { $reason }
+
+ui-workspace-minimized-windows = Minimized windows
+
+ui-workspace-start-application = Start a new application
+
+ui-workspace-choose-application = Choose an application
 
 ui-workspace-search = Search…

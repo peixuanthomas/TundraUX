@@ -1,6 +1,6 @@
 ui-workspace-title = 窗口管理
-ui-workspace-left-right = 左右
-ui-workspace-top-bottom = 上下
+ui-workspace-left-right = 左右分屏
+ui-workspace-top-bottom = 上下分屏
 ui-workspace-grid = 网格
 ui-workspace-add = 新增窗口
 ui-workspace-switch = 切换
@@ -65,5 +65,11 @@ watchdog-cli-target-missing = 指定的受管进程已不可用。请重新运�
 watchdog-cli-protocol = watchdog 返回了不兼容的回复。
 watchdog-cli-request-refused = watchdog 无法完成请求。
 watchdog-cli-output-error = 无法输出 watchdog 结果。{ $reason }
+
+ui-workspace-minimized-windows = 已最小化窗口
+
+ui-workspace-start-application = 启动新应用
+
+ui-workspace-choose-application = 选择应用
 
 ui-workspace-search = 搜索…

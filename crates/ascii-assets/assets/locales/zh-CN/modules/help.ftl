@@ -7,9 +7,9 @@ ui-help-nav-help = 帮助
 ui-help-nav-windows = 打开窗口列表
 ui-help-workspace-focus = 聚焦该方向的窗口
 ui-help-workspace-layout = 切换分屏布局
-ui-help-workspace-maximize = 最大化或还原窗口
+ui-help-workspace-maximize = 仅显示当前窗口，并将其他分屏窗口最小化。
 ui-help-workspace-kill = 强制终止当前窗口。未保存的内容可能丢失。
-ui-help-workspace-send = 向当前窗口发送 Ctrl+B
+ui-help-workspace-send = 在非原生编辑区域向当前窗口发送一次 Ctrl+W。
 ui-help-nav-tabs = 下一个区域
 ui-help-nav-activate = 执行
 
@@ -138,3 +138,5 @@ ui-help-logs-source = 切换 UX / Linux 日志
 ui-help-home-edit = 编辑主界面 / 完成编辑
 ui-help-home-reorder = 在编辑模式下移动选中图标
 ui-help-home-edit-cancel = 取消拖拽 / 完成编辑
+
+ui-help-workspace-native = 编辑器、Vim 和终端保留原生 Ctrl+W；在这些区域使用窗口分屏按钮。

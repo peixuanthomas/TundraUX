@@ -4,6 +4,8 @@ mod layout;
 mod panel;
 mod split_menu;
 mod taskbar;
+mod tree;
+pub use tree::WorkspaceTree;
 
 pub use chrome::{
     WorkspaceWindowAction, WorkspaceWindowButtonsState, WorkspaceWindowControls,

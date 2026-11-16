@@ -28,14 +28,6 @@ impl WorkspaceTaskbarItem {
         }
     }
 
-    pub(super) fn marker(&self) -> &'static str {
-        if self.minimized && !self.unresponsive && !self.closing {
-            "− "
-        } else {
-            self.status_marker()
-        }
-    }
-
     pub(super) fn label(&self) -> String {
         let title = one_line(&self.title);
         let status = if self.unresponsive {

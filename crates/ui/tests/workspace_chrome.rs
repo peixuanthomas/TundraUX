@@ -18,12 +18,8 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
     let terminal = Rect::new(0, 0, 108, 20);
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
     for (language, names, restore) in [
-        (
-            "en-US",
-            ["Minimize", "Full screen", "Split", "Close window"],
-            "Restore",
-        ),
-        ("zh-CN", ["最小化", "全屏", "分屏", "关闭窗口"], "还原"),
+        ("en-US", ["Minimize", "Split", "Close window"], "Restore"),
+        ("zh-CN", ["最小化", "分屏", "关闭窗口"], "还原"),
     ] {
         let language = i18n::LanguageSnapshot::load(&assets, language, 1)
             .unwrap()
@@ -35,7 +31,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             &[(ID, MIN_CONTENT_SIZE)],
             &[ID],
             Some(ID),
-            WorkspaceSplitMode::Grid,
+            Some(&ui::WorkspaceTree::Window(ID)),
         )
         .panes[0];
         let context = RenderContext::from_theme(
@@ -53,7 +49,6 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
                     &pane,
                     "日志 e\u{0301}",
                     true,
-                    false,
                     WorkspaceWindowButtonsState::default(),
                     &context,
                 );
@@ -68,7 +63,6 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
         assert!(snapshot.lines[1].contains("日志 e\u{0301}"));
         let actions = [
             WorkspaceWindowAction::Minimize,
-            WorkspaceWindowAction::ToggleMaximize,
             WorkspaceWindowAction::SplitMenu,
             WorkspaceWindowAction::Close,
         ];
@@ -99,7 +93,6 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
                     &pane,
                     "日志",
                     true,
-                    true,
                     WorkspaceWindowButtonsState {
                         close_disabled: true,
                         ..Default::default()
@@ -110,7 +103,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             })
             .unwrap();
         let restored = restored.unwrap();
-        assert!(restored.lines[1].contains(restore));
+        assert!(!restored.lines[1].contains(restore));
         assert!(restored.nodes.iter().any(|node| {
             node.id.ends_with(&WorkspaceWindowAction::Close.id(ID))
                 && !node.enabled
@@ -127,7 +120,6 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
                     &compact,
                     "日志",
                     true,
-                    false,
                     WorkspaceWindowButtonsState::default(),
                     &context,
                 );
@@ -135,8 +127,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             })
             .unwrap();
         let snapshot = snapshot.unwrap();
-        for ((action, name), glyph) in actions.into_iter().zip(names).zip(["−", "□", "◫", "×"])
-        {
+        for ((action, name), glyph) in actions.into_iter().zip(names).zip(["−", "◫", "×"]) {
             let node = snapshot
                 .nodes
                 .iter()
@@ -253,60 +244,55 @@ fn taskbar_keeps_minimized_windows_reachable_and_leaves_neighboring_status_cells
 }
 
 #[test]
-fn split_menu_is_anchored_and_limits_clicks_to_its_visible_items() {
+fn split_menu_is_anchored_and_disabled_actions_remain_visible() {
     let bounds = Rect::new(1, 2, 106, 16);
     let anchor = Rect::new(80, 1, 14, 1);
-    let mut model = WorkspaceSplitMenuViewModel {
-        mode: WorkspaceSplitMode::TopBottom,
-        windows: windows(12),
+    let model = WorkspaceSplitMenuViewModel {
+        window: ID,
+        left_right: true,
+        top_bottom: false,
+        fullscreen: true,
         ..Default::default()
     };
-    let first = WorkspaceSplitMenu::new(bounds, anchor, &model);
-    assert_eq!(first.area.intersection(bounds), first.area);
-    assert_eq!(first.area.y, anchor.bottom());
-    assert!(first.area.right() <= bounds.right());
-    assert_eq!(first.hit_at((anchor.x, anchor.y)), None);
-    assert!(first.max_scroll > 0);
-    let bottom = Rect::new(anchor.x, bounds.bottom() - 1, anchor.width, 1);
-    let above = WorkspaceSplitMenu::new(bounds, bottom, &model);
-    assert_eq!(above.area.bottom(), bottom.y);
-    model.scroll = first.max_scroll;
-    let last = WorkspaceSplitMenu::new(bounds, anchor, &model);
+    let menu = WorkspaceSplitMenu::new(bounds, anchor, &model);
+    assert_eq!(menu.area.intersection(bounds), menu.area);
+    assert_eq!(menu.area.y, anchor.bottom());
     assert!(
-        !last
+        !menu
             .hits
             .iter()
-            .any(|(action, _)| *action == WorkspaceAction::Show(SessionId(12)))
+            .any(|(action, _)| *action == WorkspaceAction::SetMode(WorkspaceSplitMode::TopBottom))
     );
-    assert!(
-        last.hits
-            .iter()
-            .any(|(action, _)| *action == WorkspaceAction::Show(SessionId(11)))
-    );
-    for (action, rect) in &last.hits {
-        assert_eq!(rect.intersection(last.area), *rect);
-        assert_eq!(last.hit_at((rect.x, rect.y)), Some(*action));
+    for (action, rect) in &menu.hits {
+        assert_eq!(rect.intersection(menu.area), *rect);
+        assert_eq!(menu.hit_at((rect.x, rect.y)), Some(*action));
     }
     let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
     let mut snapshot = None;
     terminal
         .draw(|frame| {
             let capture = FrameCapture::begin(frame.area(), "workspace");
-            render_workspace_split_menu(frame, &last, &model, &RenderContext::default());
+            render_workspace_split_menu(frame, &menu, &model, &RenderContext::default());
             snapshot = Some(capture.finish(frame.buffer_mut()));
         })
         .unwrap();
     let snapshot = snapshot.unwrap();
-    assert!(snapshot.nodes.iter().any(|node| {
-        node.id
-            .ends_with(&WorkspaceAction::SetMode(WorkspaceSplitMode::TopBottom).id())
-            && node.actionable
-            && node.selected
-    }));
-    assert!(snapshot.nodes.iter().any(|node| {
-        node.id
-            .ends_with(&WorkspaceAction::Show(SessionId(12)).id())
-            && !node.enabled
-            && !node.actionable
-    }));
+    for (axis, enabled) in [
+        (WorkspaceSplitMode::LeftRight, true),
+        (WorkspaceSplitMode::TopBottom, false),
+    ] {
+        let node = snapshot
+            .nodes
+            .iter()
+            .find(|node| node.id.ends_with(&WorkspaceAction::SetMode(axis).id()))
+            .unwrap();
+        assert_eq!(node.enabled, enabled);
+        assert_eq!(node.actionable, enabled);
+    }
+    assert!(
+        snapshot
+            .nodes
+            .iter()
+            .any(|node| node.id.ends_with(&WorkspaceAction::Maximize(ID).id()) && node.actionable)
+    );
 }

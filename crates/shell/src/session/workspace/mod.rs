@@ -16,6 +16,7 @@ use workspace_protocol::{
     WorkerRole, WorkerToSupervisor,
 };
 
+mod chooser;
 mod input;
 mod render;
 mod taskbar;
@@ -101,7 +102,8 @@ pub(super) struct Workspace {
     text_sizing: bool,
     windows: BTreeMap<SessionId, Window>,
     selection: WindowSelection,
-    mode: WorkspaceSplitMode,
+    chooser: Option<chooser::WindowChooser>,
+    split_launch: Option<(SessionId, SessionId)>,
     generation: LayoutGeneration,
     layout: WorkspaceLayout,
     width: u16,
@@ -151,16 +153,10 @@ impl Workspace {
             text_sizing,
             windows: BTreeMap::new(),
             selection: Default::default(),
-            mode: WorkspaceSplitMode::default(),
+            chooser: None,
+            split_launch: None,
             generation: LayoutGeneration(0),
-            layout: WorkspaceLayout::new(
-                Rect::default(),
-                Rect::default(),
-                &[],
-                &[],
-                None,
-                WorkspaceSplitMode::default(),
-            ),
+            layout: WorkspaceLayout::new(Rect::default(), Rect::default(), &[], &[], None, None),
             width: 0,
             height: 0,
             input_focus: None,
@@ -291,22 +287,26 @@ impl Workspace {
 
     pub(super) fn external_snapshot_ready(&self) -> bool {
         self.input_fences.is_empty()
-            && self.layout.panes.iter().all(|pane| {
-                let window = &self.windows[&pane.id];
-                window
-                    .frame
-                    .as_ref()
-                    .is_some_and(|frame| frame.layout == self.generation)
-                    || window.state == ProcessState::Unresponsive
-                    || matches!(window.state, ProcessState::ForceStopping)
-                    || matches!(
-                        window.close,
-                        CloseProgress::Cleaning(_)
-                            | CloseProgress::Waiting
-                            | CloseProgress::Exiting
-                    )
-                    || window.status.unresponsive
-            })
+            && self
+                .layout
+                .panes
+                .iter()
+                .filter_map(|pane| self.windows.get(&pane.id))
+                .all(|window| {
+                    window
+                        .frame
+                        .as_ref()
+                        .is_some_and(|frame| frame.layout == self.generation)
+                        || window.state == ProcessState::Unresponsive
+                        || matches!(window.state, ProcessState::ForceStopping)
+                        || matches!(
+                            window.close,
+                            CloseProgress::Cleaning(_)
+                                | CloseProgress::Waiting
+                                | CloseProgress::Exiting
+                        )
+                        || window.status.unresponsive
+                })
     }
 
     pub(super) fn focused_page(&self) -> Option<&str> {
@@ -365,12 +365,16 @@ impl Workspace {
     }
 
     pub(super) fn animating(&self) -> bool {
-        self.layout.panes.iter().any(|pane| {
-            self.windows[&pane.id]
-                .frame
-                .as_ref()
-                .is_some_and(|frame| frame.animation_running)
-        })
+        self.layout
+            .panes
+            .iter()
+            .filter_map(|pane| self.windows.get(&pane.id))
+            .any(|window| {
+                window
+                    .frame
+                    .as_ref()
+                    .is_some_and(|frame| frame.animation_running)
+            })
     }
 
     pub(super) fn cursor_shape(&self) -> Option<CursorShape> {
@@ -397,14 +401,36 @@ impl Workspace {
             .iter()
             .map(|(&id, window)| (id, window.status.minimum))
             .collect::<Vec<_>>();
-        let capacity = WorkspaceLayout::capacity(bounds, available, &minimums, self.mode);
         let focused = self.selection.focused();
-        let visible = self.selection.visible(capacity);
-        let layout =
-            WorkspaceLayout::new(bounds, available, &minimums, &visible, focused, self.mode);
+        let visible = self.selection.visible();
+        let mut layout = WorkspaceLayout::new(
+            bounds,
+            available,
+            &minimums,
+            &visible,
+            focused,
+            self.selection.tree.as_ref(),
+        );
+        if self.chooser.is_some() && !layout.panes.iter().any(|pane| pane.id == SessionId(0)) {
+            self.cancel_chooser();
+            layout = WorkspaceLayout::new(
+                bounds,
+                available,
+                &minimums,
+                &self.selection.visible(),
+                self.selection.focused(),
+                self.selection.tree.as_ref(),
+            );
+        }
         let dimensions_changed = self.width != bounds.width
             || self.height != bounds.height
             || self.layout.available != available;
+        if dimensions_changed {
+            self.prefix.clear();
+            if let Some(chooser) = &mut self.chooser {
+                chooser.list.cancel_pointer();
+            }
+        }
         if modal || dimensions_changed {
             self.close_split_menu();
             self.taskbar_menu = None;
@@ -457,6 +483,7 @@ impl Workspace {
             self.layout = layout;
             self.input_focus = input_focus;
         }
+        self.refresh_chooser_area();
         let mut updated = false;
         for (&id, window) in &mut self.windows {
             let pane = self.layout.panes.iter().find(|pane| pane.id == id);

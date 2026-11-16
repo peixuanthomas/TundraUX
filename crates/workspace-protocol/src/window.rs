@@ -186,6 +186,8 @@ pub struct WindowFrame {
     pub controls: Vec<ControlNode>,
     pub masks: Vec<Rect>,
     pub native_escape: Vec<Rect>,
+    #[serde(default)]
+    pub ctrl_w_passthrough: bool,
     pub modal: bool,
 }
 
@@ -205,6 +207,7 @@ impl WindowFrame {
             controls: Vec::new(),
             masks: Vec::new(),
             native_escape: Vec::new(),
+            ctrl_w_passthrough: false,
             modal: false,
         }
     }

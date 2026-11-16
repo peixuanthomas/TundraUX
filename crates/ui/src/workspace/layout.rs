@@ -3,17 +3,16 @@ use workspace_protocol::{MIN_CONTENT_SIZE, SessionId, Size};
 
 use crate::{MIN_SHELL_TERMINAL_HEIGHT, MIN_SHELL_TERMINAL_WIDTH};
 
-use super::chrome::WorkspaceWindowControls;
+use super::{WorkspaceTree, chrome::WorkspaceWindowControls};
 
 const PANE_FRAME: u16 = 2;
 const PANE_GAP: usize = 1;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WorkspaceSplitMode {
+    #[default]
     LeftRight,
     TopBottom,
-    #[default]
-    Grid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +31,7 @@ impl WorkspacePaneLayout {
             .then(|| Self::new(id, area))
     }
 
-    fn new(id: SessionId, area: Rect) -> Self {
+    pub fn new(id: SessionId, area: Rect) -> Self {
         let content = area.inner(Margin::new(1, 1));
         let top = Rect::new(content.x, area.y, content.width, 1);
         let controls = WorkspaceWindowControls::new(top);
@@ -51,64 +50,113 @@ impl WorkspacePaneLayout {
 pub struct WorkspaceLayout {
     pub available: Rect,
     pub capacity: usize,
+    pub columns: usize,
+    pub rows: usize,
     pub blocked: bool,
     pub size_needed: Size,
     pub panes: Vec<WorkspacePaneLayout>,
 }
 
 impl WorkspaceLayout {
-    /// All live windows, including background windows, contribute their content minimum.
-    /// Visible IDs are supplied in their established display order.
     pub fn new(
         terminal: Rect,
         available: Rect,
         windows: &[(SessionId, Size)],
         visible: &[SessionId],
         focused: Option<SessionId>,
-        mode: WorkspaceSplitMode,
+        tree: Option<&WorkspaceTree>,
     ) -> Self {
-        let limits = Limits::new(terminal, available, windows, mode);
-        let capacity = limits.capacity();
-        let count = visible.len().min(capacity);
-        let focused = focused.filter(|id| visible.contains(id));
-        let mut panes = Vec::with_capacity(count);
-        if count == 1 {
-            panes.push(WorkspacePaneLayout::new(
-                focused.unwrap_or(visible[0]),
-                available,
-            ));
-        } else if count > 1 {
-            let mut visible = visible[..count].to_vec();
-            if let Some(focused) = focused
-                && !visible.contains(&focused)
-            {
-                visible[count - 1] = focused;
-            }
-            let (rows, columns) = limits.grid(count);
-            for (row, ids) in visible.chunks(columns).enumerate() {
-                let (y, height) = split_span(available.y, available.height, rows, row);
-                for (column, &id) in ids.iter().enumerate() {
-                    let (x, width) = split_span(available.x, available.width, ids.len(), column);
-                    panes.push(WorkspacePaneLayout::new(id, Rect::new(x, y, width, height)));
+        let limits = Limits::new(terminal, available, windows);
+        let mut result = Self {
+            available,
+            capacity: limits.capacity(),
+            columns: limits.columns,
+            rows: limits.rows,
+            blocked: !limits.single_fits,
+            size_needed: limits.size_needed,
+            panes: Vec::new(),
+        };
+        if result.blocked {
+            return result;
+        }
+        if let Some(tree) = tree {
+            // At most four leaves: examine stable subsets while retaining the focused app.
+            for count in (1..=visible.len()).rev() {
+                let mut found = None;
+                for mask in 1u32..(1u32 << visible.len()) {
+                    if mask.count_ones() as usize != count {
+                        continue;
+                    }
+                    let ids = visible
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, id)| (mask & (1 << i) != 0).then_some(*id))
+                        .collect::<Vec<_>>();
+                    if focused.is_some_and(|id| visible.contains(&id) && !ids.contains(&id)) {
+                        continue;
+                    }
+                    if let Some(candidate) = tree.retain(&ids)
+                        && result.fits(&candidate)
+                    {
+                        found = Some(candidate);
+                        break;
+                    }
+                }
+                if let Some(tree) = found {
+                    place(&tree, available, &mut result.panes);
+                    break;
                 }
             }
         }
-        Self {
-            available,
-            capacity,
-            blocked: capacity == 0,
-            size_needed: limits.size_needed,
-            panes,
-        }
+        result
     }
 
-    pub fn capacity(
-        terminal: Rect,
-        available: Rect,
-        windows: &[(SessionId, Size)],
-        mode: WorkspaceSplitMode,
-    ) -> usize {
-        Limits::new(terminal, available, windows, mode).capacity()
+    pub fn capacity(terminal: Rect, available: Rect, windows: &[(SessionId, Size)]) -> usize {
+        Limits::new(terminal, available, windows).capacity()
+    }
+
+    pub fn fits(&self, tree: &WorkspaceTree) -> bool {
+        let (columns, rows) = tree.dimensions();
+        !self.blocked && columns <= self.columns && rows <= self.rows && tree.ids().len() <= 4
+    }
+
+    pub fn can_split(&self, tree: &WorkspaceTree, id: SessionId, axis: WorkspaceSplitMode) -> bool {
+        let mut next = tree.clone();
+        self.panes.iter().any(|pane| pane.id == id)
+            && next.split(id, SessionId(0), axis)
+            && self.fits(&next)
+    }
+}
+
+fn place(tree: &WorkspaceTree, area: Rect, panes: &mut Vec<WorkspacePaneLayout>) {
+    match tree {
+        WorkspaceTree::Window(id) => panes.push(WorkspacePaneLayout::new(*id, area)),
+        WorkspaceTree::Split {
+            axis,
+            first,
+            second,
+        } => {
+            let (a, b) = match axis {
+                WorkspaceSplitMode::LeftRight => {
+                    let (x, width) = split_span(area.x, area.width, 2, 0);
+                    let (x2, width2) = split_span(area.x, area.width, 2, 1);
+                    (
+                        Rect::new(x, area.y, width, area.height),
+                        Rect::new(x2, area.y, width2, area.height),
+                    )
+                }
+                WorkspaceSplitMode::TopBottom => {
+                    let (y, height) = split_span(area.y, area.height, 2, 0);
+                    let (y2, height2) = split_span(area.y, area.height, 2, 1);
+                    (
+                        Rect::new(area.x, y, area.width, height),
+                        Rect::new(area.x, y2, area.width, height2),
+                    )
+                }
+            };
+            place(first, a, panes);
+            place(second, b, panes);
+        }
     }
 }
 
@@ -120,12 +168,7 @@ struct Limits {
 }
 
 impl Limits {
-    fn new(
-        terminal: Rect,
-        available: Rect,
-        windows: &[(SessionId, Size)],
-        mode: WorkspaceSplitMode,
-    ) -> Self {
+    fn new(terminal: Rect, available: Rect, windows: &[(SessionId, Size)]) -> Self {
         let minimum = windows
             .iter()
             .fold(MIN_CONTENT_SIZE, |minimum, (_, size)| Size {
@@ -148,11 +191,7 @@ impl Limits {
         let frame_height = usize::from(minimum.height) + usize::from(PANE_FRAME);
         let rows = (usize::from(available.height) + PANE_GAP) / (frame_height + PANE_GAP);
         let columns = (usize::from(available.width) + PANE_GAP) / (frame_width + PANE_GAP);
-        let (rows, columns) = match mode {
-            WorkspaceSplitMode::LeftRight => (rows.min(1), columns.min(2)),
-            WorkspaceSplitMode::TopBottom => (rows.min(2), columns.min(1)),
-            WorkspaceSplitMode::Grid => (rows, columns),
-        };
+        let (rows, columns) = (rows.min(2), columns.min(2));
         Self {
             size_needed,
             single_fits: terminal.width >= MIN_SHELL_TERMINAL_WIDTH
@@ -170,14 +209,6 @@ impl Limits {
         } else {
             0
         }
-    }
-
-    fn grid(&self, count: usize) -> (usize, usize) {
-        (1..=self.columns.min(count))
-            .map(|columns| (count.div_ceil(columns), columns))
-            .filter(|(rows, _)| *rows <= self.rows)
-            .min_by_key(|&(rows, columns)| (rows.abs_diff(columns), rows * columns - count, rows))
-            .expect("window count fits the grid")
     }
 }
 

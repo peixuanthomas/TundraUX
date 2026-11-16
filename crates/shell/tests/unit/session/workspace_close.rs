@@ -22,6 +22,15 @@ fn window(minimum: Size) -> Window {
     }
 }
 
+fn show(workspace: &mut Workspace, id: SessionId) {
+    if let Some(source) = workspace.selection.focused() {
+        workspace
+            .selection
+            .split(source, WorkspaceSplitMode::LeftRight);
+    }
+    workspace.selection.open(id);
+}
+
 fn shell_state() -> ShellSession {
     ShellSession::new_for_home_mode(ShellLaunchConfig::default(), (108, 20), ShellHomeMode::User)
 }
@@ -50,18 +59,10 @@ fn closing_window_keeps_reported_minimum_until_guardian_removal() {
     assert_eq!(window.close, CloseProgress::Exiting);
     assert_eq!(window.status.minimum, minimum);
     assert_eq!(
-        WorkspaceLayout::capacity(
-            bounds,
-            content,
-            &[(id, window.status.minimum)],
-            WorkspaceSplitMode::Grid
-        ),
+        WorkspaceLayout::capacity(bounds, content, &[(id, window.status.minimum)]),
         0,
     );
-    assert_eq!(
-        WorkspaceLayout::capacity(bounds, content, &[], WorkspaceSplitMode::Grid),
-        1,
-    );
+    assert_eq!(WorkspaceLayout::capacity(bounds, content, &[]), 1,);
 }
 
 #[test]
@@ -73,7 +74,7 @@ fn exited_window_frame_and_taskbar_hits_do_not_survive_until_redraw() {
         workspace
             .windows
             .insert(id, window(WindowStatus::default().minimum));
-        workspace.selection.show(id);
+        show(&mut workspace, id);
     }
     let bounds = Rect::new(0, 0, 240, 20);
     workspace.relayout(bounds, Rect::new(0, 1, 240, 18), false);
@@ -172,11 +173,13 @@ fn ordinary_open_reuses_the_exact_application_and_preserves_split_add() {
         workspace.windows.insert(id, app);
         workspace.selection.open(id);
     }
-    workspace.selection.add_from_home();
+    workspace
+        .selection
+        .split(script, WorkspaceSplitMode::LeftRight);
     workspace
         .open_requested(WindowLaunch::Editor, false, None)
         .unwrap();
-    assert_eq!(workspace.selection.visible(2), vec![script, editor]);
+    assert_eq!(workspace.selection.visible(), vec![script, editor]);
     assert_eq!(workspace.selection.focused(), Some(editor));
     assert_eq!(workspace.windows.len(), 2);
 
@@ -194,7 +197,7 @@ fn taskbar_context_moves_only_the_taskbar_order() {
     for id in [first, second] {
         workspace.windows.insert(id, window(Size::new(106, 16)));
         workspace.taskbar_order.push(id);
-        workspace.selection.show(id);
+        show(&mut workspace, id);
     }
     workspace.relayout(Rect::new(0, 0, 220, 20), Rect::new(0, 1, 220, 18), false);
     let area = Rect::new(0, 19, 110, 1);
@@ -248,7 +251,7 @@ fn taskbar_context_moves_only_the_taskbar_order() {
     }
     assert!(workspace.taskbar_menu.is_none());
     assert_eq!(workspace.taskbar_order, vec![second, first]);
-    assert_eq!(workspace.selection.visible(2), vec![first, second]);
+    assert_eq!(workspace.selection.visible(), vec![first, second]);
     assert_eq!(workspace.selection.focused(), Some(second));
 }
 
@@ -259,7 +262,7 @@ fn stale_window_list_keyboard_focus_does_not_restore_an_exited_window() {
     workspace
         .windows
         .insert(id, window(WindowStatus::default().minimum));
-    workspace.selection.show(id);
+    show(&mut workspace, id);
     workspace.panel = Some(WorkspacePanelViewModel {
         selected: Some(id),
         action_focus: Some(Action::Switch(id)),
@@ -281,12 +284,35 @@ fn stale_window_list_keyboard_focus_does_not_restore_an_exited_window() {
 }
 
 #[test]
+fn unmatched_window_search_cannot_activate_a_stale_selection_before_redraw() {
+    let mut workspace = Workspace::new(None, false);
+    let (background, active) = (SessionId(1), SessionId(2));
+    for id in [background, active] {
+        workspace.windows.insert(id, window(Size::new(106, 16)));
+        workspace.selection.open(id);
+    }
+    workspace.panel = Some(WorkspacePanelViewModel {
+        selected: Some(background),
+        ..Default::default()
+    });
+    let mut state = shell_state();
+    workspace
+        .input(&InputEvent::Paste("no matching window".into()), &mut state)
+        .unwrap();
+    workspace
+        .input(&InputEvent::key(InputKey::Enter), &mut state)
+        .unwrap();
+    assert_eq!(workspace.selection.focused(), Some(active));
+    assert!(workspace.panel.is_some());
+}
+
+#[test]
 fn a_blocked_window_keeps_close_controls_and_unfreezes_its_confirmation_on_resize() {
     let mut state = shell_state();
     let id = SessionId(1);
     let mut workspace = Workspace::new(None, false);
     workspace.windows.insert(id, window(Size::new(130, 25)));
-    workspace.selection.show(id);
+    show(&mut workspace, id);
     let small = Rect::new(0, 0, 108, 20);
     let small_content = Rect::new(0, 1, 108, 18);
     workspace.relayout(small, small_content, false);
@@ -341,4 +367,158 @@ fn a_blocked_window_keeps_close_controls_and_unfreezes_its_confirmation_on_resiz
         workspace.windows[&id].close,
         CloseProgress::Confirmation { .. }
     ));
+}
+
+#[test]
+fn split_chooser_cancellation_and_resize_restore_only_the_pending_region() {
+    let mut state = shell_state();
+    let id = SessionId(1);
+    let mut workspace = Workspace::new(None, false);
+    workspace.windows.insert(id, window(Size::new(106, 16)));
+    workspace.selection.open(id);
+    let bounds = Rect::new(0, 0, 217, 39);
+    workspace.relayout(bounds, Rect::new(0, 1, 217, 37), false);
+    let previous = workspace.selection.tree.clone();
+    workspace.begin_split(id, WorkspaceSplitMode::LeftRight, &state);
+    assert!(workspace.chooser.is_some());
+    assert_eq!(workspace.layout.panes[0].id, id);
+    assert_eq!(workspace.layout.panes[1].id, SessionId(0));
+    assert!(!workspace.animating());
+    assert!(!workspace.external_snapshot_ready());
+    let mut frame = WindowFrame::new(workspace.generation, Size::new(106, 35));
+    frame.animation_running = true;
+    workspace.windows.get_mut(&id).unwrap().frame = Some(frame);
+    assert!(workspace.animating());
+    assert!(workspace.external_snapshot_ready());
+    workspace
+        .input(&InputEvent::key(InputKey::Escape), &mut state)
+        .unwrap();
+    assert_eq!(workspace.selection.tree, previous);
+    assert_eq!(workspace.selection.focused(), Some(id));
+    workspace.relayout(bounds, Rect::new(0, 1, 217, 37), false);
+    workspace.begin_split(id, WorkspaceSplitMode::TopBottom, &state);
+    workspace.relayout(Rect::new(0, 0, 108, 20), Rect::new(0, 1, 108, 18), false);
+    assert!(workspace.chooser.is_none());
+    assert_eq!(workspace.selection.tree, previous);
+}
+
+#[cfg(unix)]
+#[test]
+fn editor_and_terminal_ctrl_w_is_sent_to_the_app_without_arming_the_prefix() {
+    let mut state = shell_state();
+    let id = SessionId(1);
+    let mut workspace = Workspace::new(None, false);
+    let path = std::env::temp_dir().join(format!(
+        "tundra-prefix-{}-{}.sock",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let listener = platform::shell_control::LocalListener::bind(path.to_str().unwrap()).unwrap();
+    let connection = platform::shell_control::LocalConnection::connect(
+        path.to_str().unwrap(),
+        std::process::id(),
+    )
+    .unwrap();
+    let peer = listener.accept().unwrap();
+    let mut app = window(Size::new(106, 16));
+    app.stream = Some(WindowConnection::new(
+        connection,
+        workspace_protocol::MAX_WINDOW_FRAME_BYTES,
+    ));
+    workspace.windows.insert(id, app);
+    workspace.selection.open(id);
+    workspace.relayout(Rect::new(0, 0, 217, 39), Rect::new(0, 1, 217, 37), false);
+    let mut frame = WindowFrame::new(
+        LayoutGeneration(workspace.generation.0.saturating_sub(1)),
+        Size::new(215, 35),
+    );
+    frame.ctrl_w_passthrough = true;
+    workspace.windows.get_mut(&id).unwrap().frame = Some(frame);
+    workspace
+        .input(
+            &InputEvent::key_with_modifiers(InputKey::Char('w'), crate::InputModifiers::CTRL),
+            &mut state,
+        )
+        .unwrap();
+    workspace
+        .input(&InputEvent::from_key_label("v"), &mut state)
+        .unwrap();
+    assert!(workspace.chooser.is_none());
+    assert_eq!(workspace.selection.visible(), vec![id]);
+    assert_eq!(
+        workspace.windows[&id]
+            .queued
+            .iter()
+            .filter(|message| matches!(message, ShellToApp::Input { .. }))
+            .count(),
+        2
+    );
+    drop(workspace);
+    drop(peer);
+    drop(listener);
+    if path.exists() {
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[test]
+fn background_exit_during_selection_does_not_cancel_the_pending_split() {
+    let state = shell_state();
+    let (active, background) = (SessionId(1), SessionId(2));
+    let mut workspace = Workspace::new(None, false);
+    for id in [background, active] {
+        workspace.windows.insert(id, window(Size::new(106, 16)));
+        workspace.selection.open(id);
+    }
+    workspace.relayout(Rect::new(0, 0, 217, 39), Rect::new(0, 1, 217, 37), false);
+    workspace.begin_split(active, WorkspaceSplitMode::LeftRight, &state);
+    workspace.remove(background);
+    assert!(workspace.chooser.is_some());
+    assert!(workspace.selection.visible().contains(&SessionId(0)));
+    workspace.remove(active);
+    assert!(workspace.chooser.is_none());
+    assert!(workspace.selection.visible().is_empty());
+}
+
+#[test]
+fn directional_focus_does_not_jump_diagonally_across_a_t_layout() {
+    let (left, top, bottom) = (SessionId(1), SessionId(2), SessionId(3));
+    let mut workspace = Workspace::new(None, false);
+    let mut state = shell_state();
+    let navigate = |workspace: &mut Workspace, state: &mut ShellSession, direction: char| {
+        workspace
+            .input(
+                &InputEvent::key_with_modifiers(InputKey::Char('w'), crate::InputModifiers::CTRL),
+                state,
+            )
+            .unwrap();
+        workspace
+            .input(&InputEvent::key(InputKey::Char(direction)), state)
+            .unwrap();
+    };
+    for id in [left, top, bottom] {
+        workspace.windows.insert(id, window(Size::new(106, 16)));
+    }
+    workspace.selection.open(left);
+    workspace
+        .selection
+        .split(left, WorkspaceSplitMode::LeftRight);
+    workspace.selection.open(top);
+    workspace
+        .selection
+        .split(top, WorkspaceSplitMode::TopBottom);
+    workspace.selection.open(bottom);
+    workspace.selection.focus(left);
+    workspace.relayout(Rect::new(0, 0, 217, 39), Rect::new(0, 1, 217, 37), false);
+    navigate(&mut workspace, &mut state, 'j');
+    assert_eq!(workspace.selection.focused(), Some(left));
+    navigate(&mut workspace, &mut state, 'l');
+    assert_eq!(workspace.selection.focused(), Some(top));
+    navigate(&mut workspace, &mut state, 'j');
+    assert_eq!(workspace.selection.focused(), Some(bottom));
+    navigate(&mut workspace, &mut state, 'h');
+    assert_eq!(workspace.selection.focused(), Some(left));
 }

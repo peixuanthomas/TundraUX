@@ -105,14 +105,19 @@ fn workspace_navigation() -> PageHelpSection {
     section(
         i18n::tr!("ui-workspace-title"),
         vec![
-            row("Ctrl+B, W", i18n::tr!("ui-help-nav-windows")),
-            row("Ctrl+B, B", i18n::tr!("ui-workspace-background")),
-            row("Ctrl+B, ←→↑↓", i18n::tr!("ui-help-workspace-focus")),
-            row("Ctrl+B, L", i18n::tr!("ui-help-workspace-layout")),
-            row("Ctrl+B, Z", i18n::tr!("ui-help-workspace-maximize")),
-            row("Ctrl+B, Q", i18n::tr!("ui-workspace-close")),
-            row("Ctrl+B, Shift+X", i18n::tr!("ui-help-workspace-kill")),
-            row("Ctrl+B, Ctrl+B", i18n::tr!("ui-help-workspace-send")),
+            row("Ctrl+W, W", i18n::tr!("ui-help-nav-windows")),
+            row("Ctrl+W, B", i18n::tr!("ui-workspace-background")),
+            row(
+                "Ctrl+W, h/j/k/l / ←→↑↓",
+                i18n::tr!("ui-help-workspace-focus"),
+            ),
+            row("Ctrl+W, v", i18n::tr!("ui-workspace-left-right")),
+            row("Ctrl+W, s", i18n::tr!("ui-workspace-top-bottom")),
+            row("Ctrl+W", i18n::tr!("ui-help-workspace-native")),
+            row("Ctrl+W, o", i18n::tr!("ui-help-workspace-maximize")),
+            row("Ctrl+W, Q", i18n::tr!("ui-workspace-close")),
+            row("Ctrl+W, Shift+X", i18n::tr!("ui-help-workspace-kill")),
+            row("Ctrl+W, Ctrl+W", i18n::tr!("ui-help-workspace-send")),
         ],
     )
 }

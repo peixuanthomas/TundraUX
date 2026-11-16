@@ -17,44 +17,33 @@ const MIN_TITLE_WIDTH: u32 = 16;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceWindowAction {
     Minimize,
-    ToggleMaximize,
     SplitMenu,
     Close,
 }
 
 impl WorkspaceWindowAction {
-    const ALL: [Self; 4] = [
-        Self::Minimize,
-        Self::ToggleMaximize,
-        Self::SplitMenu,
-        Self::Close,
-    ];
+    const ALL: [Self; 3] = [Self::Minimize, Self::SplitMenu, Self::Close];
 
     pub fn id(self, window: SessionId) -> String {
         let name = match self {
             Self::Minimize => "minimize",
-            Self::ToggleMaximize => "maximize",
             Self::SplitMenu => "split",
             Self::Close => "close",
         };
         format!("workspace.{name}.{window}")
     }
 
-    fn label(self, maximized: bool) -> String {
+    fn label(self) -> String {
         match self {
             Self::Minimize => i18n::tr!("ui-workspace-minimize"),
-            Self::ToggleMaximize if maximized => i18n::tr!("ui-workspace-restore"),
-            Self::ToggleMaximize => i18n::tr!("ui-workspace-maximize"),
             Self::SplitMenu => i18n::tr!("ui-workspace-split"),
             Self::Close => i18n::tr!("ui-workspace-close"),
         }
     }
 
-    fn glyph(self, maximized: bool) -> &'static str {
+    fn glyph(self) -> &'static str {
         match self {
             Self::Minimize => "−",
-            Self::ToggleMaximize if maximized => "⧉",
-            Self::ToggleMaximize => "□",
             Self::SplitMenu => "◫",
             Self::Close => "×",
         }
@@ -64,7 +53,6 @@ impl WorkspaceWindowAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkspaceWindowControls {
     pub minimize: Rect,
-    pub maximize: Rect,
     pub split: Rect,
     pub close: Rect,
 }
@@ -76,24 +64,22 @@ impl WorkspaceWindowControls {
 
     pub(super) fn new(top: Rect) -> Self {
         let mut widths = WorkspaceWindowAction::ALL.map(|action| {
-            let width =
-                terminal_width(&action.label(false)).max(terminal_width(&action.label(true)));
+            let width = terminal_width(&action.label());
             u16::try_from(width).unwrap_or(u16::MAX).saturating_add(4)
         });
         let buttons_width = widths.iter().map(|width| u32::from(*width)).sum::<u32>();
         if buttons_width + u32::from(Self::GAPS_WIDTH) + MIN_TITLE_WIDTH > u32::from(top.width) {
-            widths = [COMPACT_BUTTON_WIDTH; 4];
+            widths = [COMPACT_BUTTON_WIDTH; 3];
         }
         let mut right = top.right();
         widths.reverse();
-        let [close, split, maximize, minimize] = widths.map(|width| {
+        let [close, split, minimize] = widths.map(|width| {
             let x = right - width;
             right = x.saturating_sub(BUTTON_GAP);
             Rect::new(x, top.y, width, 1)
         });
         Self {
             minimize,
-            maximize,
             split,
             close,
         }
@@ -102,7 +88,6 @@ impl WorkspaceWindowControls {
     pub fn rect(self, action: WorkspaceWindowAction) -> Rect {
         match action {
             WorkspaceWindowAction::Minimize => self.minimize,
-            WorkspaceWindowAction::ToggleMaximize => self.maximize,
             WorkspaceWindowAction::SplitMenu => self.split,
             WorkspaceWindowAction::Close => self.close,
         }
@@ -128,7 +113,6 @@ pub fn render_workspace_pane_frame(
     pane: &WorkspacePaneLayout,
     title: &str,
     focused: bool,
-    maximized: bool,
     interaction: WorkspaceWindowButtonsState,
     context: &RenderContext,
 ) {
@@ -175,8 +159,8 @@ pub fn render_workspace_pane_frame(
     }
     for action in WorkspaceWindowAction::ALL {
         let area = pane.controls.rect(action);
-        let label = action.label(maximized);
-        let glyph = action.glyph(maximized);
+        let label = action.label();
+        let glyph = action.glyph();
         let text = if terminal_width(&label) + terminal_width(glyph) + 2 <= usize::from(area.width)
         {
             format!("{glyph} {label}")

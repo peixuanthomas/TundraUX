@@ -223,6 +223,15 @@ impl Workspace {
                 self.open_requested(launch, new_session, state.auth_session())?;
             }
         }
+        if self
+            .chooser
+            .as_ref()
+            .is_some_and(|chooser| chooser.awaiting_launcher)
+            && state.interactive_overlays().is_empty()
+            && state.window_launches.is_empty()
+        {
+            self.cancel_chooser();
+        }
         state.windows_active = self.active();
         Ok(redraw)
     }
@@ -264,11 +273,15 @@ impl Workspace {
             return false;
         };
         self.cancel_capture();
-        self.selection.restore(id, self.layout.capacity);
+        self.selection.restore(id, &self.layout);
         true
     }
 
-    fn open(&mut self, launch: WindowLaunch, auth: Option<&AuthSession>) -> io::Result<SessionId> {
+    pub(super) fn open(
+        &mut self,
+        launch: WindowLaunch,
+        auth: Option<&AuthSession>,
+    ) -> io::Result<SessionId> {
         // The watchdog can receive an older window ID after logout and login.
         static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
         let id = SessionId(NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
@@ -288,6 +301,9 @@ impl Workspace {
                 application: launch.id().into(),
             })?;
         self.cancel_capture();
+        if let Some(chooser) = self.chooser.take() {
+            self.split_launch = Some((chooser.source, id));
+        }
         self.selection.open(id);
         self.taskbar_order.push(id);
         self.windows.insert(
@@ -313,6 +329,19 @@ impl Workspace {
     }
 
     pub(super) fn remove(&mut self, id: SessionId) {
+        if self
+            .chooser
+            .as_ref()
+            .is_some_and(|chooser| chooser.source == id)
+        {
+            self.cancel_chooser();
+        }
+        if let Some(chooser) = &mut self.chooser {
+            chooser
+                .list
+                .commands
+                .retain(|command| command.id.as_str() != format!("window.{id}"));
+        }
         let focused = self.selection.focused() == Some(id);
         self.input_fences.remove(&id);
         self.input_recipients.remove(&id);
@@ -352,6 +381,12 @@ impl Workspace {
             menu.hits.retain(|(action, _)| *action != Action::Show(id));
         }
         self.selection.remove(id);
+        if let Some((source, launch)) = self.split_launch
+            && launch == id
+        {
+            self.selection.focus(source);
+            self.split_launch = None;
+        }
         if self.split_window == Some(id) {
             self.close_split_menu();
         }
@@ -491,6 +526,9 @@ impl Workspace {
                     .as_ref()
                     .is_some_and(|old| old.modal != frame.modal);
                 window.frame = Some(frame);
+                if self.split_launch.is_some_and(|(_, launch)| launch == id) {
+                    self.split_launch = None;
+                }
                 if modal_changed
                     && self.capture.is_some_and(|capture| match capture.target {
                         PointerTarget::Pane(target)
@@ -591,6 +629,13 @@ impl Workspace {
                 window.launch_error = true;
                 window.close = CloseProgress::Cleaning(Instant::now());
                 self.input_fences.remove(&id);
+                if let Some((source, launch)) = self.split_launch
+                    && launch == id
+                {
+                    self.selection.minimize(id);
+                    self.selection.focus(source);
+                    self.split_launch = None;
+                }
                 report_launch_failure(state, reason);
             }
             AppToShell::ShellAction(HostAction::Logout) => {
@@ -670,7 +715,7 @@ impl Workspace {
         window.close = CloseProgress::Requested(Instant::now());
         window.queued.push_back(ShellToApp::RequestClose);
         if self.selection.focused() != Some(id) {
-            self.selection.activate(id, self.layout.capacity);
+            self.selection.activate(id, &self.layout);
         }
         self.panel = None;
         self.close_split_menu();

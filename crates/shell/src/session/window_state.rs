@@ -1,14 +1,14 @@
 use crate::{InputKey, InputPhase, KeyInput};
-use std::collections::HashSet;
+use std::collections::HashMap;
+use ui::{WorkspaceLayout, WorkspaceSplitMode, WorkspaceTree};
 use workspace_protocol::SessionId;
 
 #[derive(Default)]
 pub(super) struct WindowSelection {
-    requested: Vec<SessionId>,
-    minimized: HashSet<SessionId>,
+    pub(super) tree: Option<WorkspaceTree>,
+    saved: HashMap<SessionId, WorkspaceTree>,
     focused: Option<SessionId>,
-    maximized: Option<SessionId>,
-    adding: bool,
+    pending_source: Option<SessionId>,
 }
 
 impl WindowSelection {
@@ -17,139 +17,130 @@ impl WindowSelection {
     }
 
     pub(super) fn includes(&self, id: SessionId) -> bool {
-        self.requested.contains(&id) && !self.minimized.contains(&id)
+        self.tree
+            .as_ref()
+            .is_some_and(|tree| tree.ids().contains(&id))
     }
 
-    pub(super) fn maximized(&self) -> Option<SessionId> {
-        self.maximized
-    }
-
-    pub(super) fn visible(&self, capacity: usize) -> Vec<SessionId> {
-        if capacity == 0 || self.adding {
-            return Vec::new();
-        }
-        if let Some(id) = self.maximized {
-            return vec![id];
-        }
-        let mut visible = self
-            .requested
-            .iter()
-            .copied()
-            .filter(|id| !self.minimized.contains(id))
-            .take(capacity)
-            .collect::<Vec<_>>();
-        if let Some(focused) = self.focused
-            && !visible.contains(&focused)
-        {
-            visible.pop();
-            visible.push(focused);
-        }
-        visible
+    pub(super) fn visible(&self) -> Vec<SessionId> {
+        self.tree.as_ref().map_or_else(Vec::new, WorkspaceTree::ids)
     }
 
     pub(super) fn open(&mut self, id: SessionId) {
-        if self.adding {
-            self.show(id);
+        if self.pending_source.take().is_some() {
+            self.tree
+                .as_mut()
+                .expect("pending split")
+                .replace(SessionId(0), id);
+            self.saved.remove(&id);
+            self.focused = Some(id);
         } else {
             self.switch(id);
         }
     }
 
     pub(super) fn switch(&mut self, id: SessionId) {
-        self.adding = false;
+        self.cancel_add();
         if !self.includes(id) {
-            if self.minimized.remove(&id) {
-                self.requested.retain(|&window| window != id);
-            }
-            if let Some(slot) = self
-                .requested
-                .iter_mut()
-                .find(|slot| Some(**slot) == self.focused)
-            {
-                *slot = id;
+            if let Some(tree) = &mut self.tree {
+                if let Some(focused) = self.focused {
+                    self.saved.insert(focused, tree.clone());
+                    tree.replace(focused, id);
+                } else {
+                    *tree = WorkspaceTree::Window(id);
+                }
             } else {
-                self.requested.push(id);
+                self.tree = Some(WorkspaceTree::Window(id));
             }
-        }
-        if self.maximized.is_some() {
-            self.maximized = Some(id);
         }
         self.focused = Some(id);
     }
 
-    pub(super) fn activate(&mut self, id: SessionId, capacity: usize) {
-        if self.requested.len() - self.minimized.len() < capacity.max(1) {
-            self.minimized.remove(&id);
+    pub(super) fn activate(&mut self, id: SessionId, layout: &WorkspaceLayout) {
+        if !self.includes(id)
+            && let (Some(tree), Some(previous)) = (&self.tree, self.saved.get(&id))
+            && let Some(restored) = tree.restore(previous, id)
+            && layout.fits(&restored)
+        {
+            self.tree = Some(restored);
+            self.saved.remove(&id);
         }
         self.switch(id);
     }
 
-    pub(super) fn restore(&mut self, id: SessionId, capacity: usize) {
-        if self.adding {
-            self.show(id);
+    pub(super) fn restore(&mut self, id: SessionId, layout: &WorkspaceLayout) {
+        if self.pending_source.is_some() {
+            self.open(id);
         } else {
-            self.activate(id, capacity);
+            self.activate(id, layout);
         }
     }
 
     pub(super) fn focus(&mut self, id: SessionId) {
-        if self.includes(id) {
+        if self.includes(id) && id != SessionId(0) {
             self.focused = Some(id);
         }
     }
 
-    pub(super) fn show(&mut self, id: SessionId) {
-        self.adding = false;
-        self.maximized = None;
-        self.minimized.remove(&id);
-        if !self.includes(id) {
-            self.requested.push(id);
+    pub(super) fn split(&mut self, id: SessionId, axis: WorkspaceSplitMode) -> bool {
+        if self
+            .tree
+            .as_mut()
+            .is_some_and(|tree| tree.split(id, SessionId(0), axis))
+        {
+            self.pending_source = Some(id);
+            self.focused = Some(id);
+            true
+        } else {
+            false
         }
-        self.focused = Some(id);
-    }
-
-    pub(super) fn add_from_home(&mut self) {
-        self.adding = true;
     }
 
     pub(super) fn cancel_add(&mut self) -> bool {
-        std::mem::take(&mut self.adding)
+        let Some(source) = self.pending_source.take() else {
+            return false;
+        };
+        self.tree = self
+            .tree
+            .as_ref()
+            .and_then(|tree| tree.without(SessionId(0)));
+        self.focus(source);
+        true
     }
 
     pub(super) fn minimize(&mut self, id: SessionId) {
-        let Some(index) = self.requested.iter().position(|candidate| *candidate == id) else {
+        if !self.includes(id) {
+            return;
+        }
+        self.cancel_add();
+        let Some(tree) = &self.tree else {
             return;
         };
-        self.minimized.insert(id);
-        if self.maximized == Some(id) {
-            self.maximized = None;
-        }
+        let ids = tree.ids();
+        let Some(index) = ids.iter().position(|candidate| *candidate == id) else {
+            return;
+        };
+        self.saved.insert(id, tree.clone());
+        self.tree = tree.without(id);
         if self.focused == Some(id) {
-            self.focused = self.requested[index + 1..]
+            self.focused = ids[index + 1..]
                 .iter()
-                .chain(self.requested[..index].iter().rev())
+                .chain(ids[..index].iter().rev())
                 .copied()
-                .find(|candidate| !self.minimized.contains(candidate));
+                .next();
         }
     }
 
     pub(super) fn remove(&mut self, id: SessionId) {
         self.minimize(id);
-        self.minimized.remove(&id);
-        self.requested.retain(|&window| window != id);
+        self.saved.remove(&id);
     }
 
-    pub(super) fn restore_split(&mut self) {
-        self.maximized = None;
-    }
-
-    pub(super) fn toggle_maximized(&mut self, id: SessionId) {
-        if self.maximized == Some(id) {
-            self.maximized = None;
-        } else {
-            self.switch(id);
-            self.maximized = Some(id);
-        }
+    pub(super) fn fullscreen(&mut self, id: SessionId) {
+        self.pending_source = None;
+        self.saved.clear();
+        self.tree = Some(WorkspaceTree::Window(id));
+        self.focused = Some(id);
     }
 }
 
@@ -160,7 +151,7 @@ pub(super) enum WindowShortcut {
     SendPrefix(KeyInput),
     Background,
     Panel,
-    Layout,
+    Split(ui::WorkspaceSplitMode),
     Maximize,
     MoveFocus(i16, i16),
     Close,
@@ -177,7 +168,7 @@ impl WindowPrefix {
 
     pub(super) fn route(&mut self, key: &KeyInput) -> WindowShortcut {
         let prefix =
-            key.modifiers.is_control_only() && matches!(key.key, InputKey::Char('b' | 'B'));
+            key.modifiers.is_control_only() && matches!(key.key, InputKey::Char('w' | 'W'));
         if key.phase != InputPhase::Press {
             return if prefix || self.0.is_some() {
                 WindowShortcut::Consume
@@ -201,15 +192,16 @@ impl WindowPrefix {
         match key.key {
             InputKey::Char('b' | 'B') => WindowShortcut::Background,
             InputKey::Char('w' | 'W') => WindowShortcut::Panel,
-            InputKey::Char('l' | 'L') => WindowShortcut::Layout,
-            InputKey::Char('z' | 'Z') => WindowShortcut::Maximize,
+            InputKey::Char('v' | 'V') => WindowShortcut::Split(ui::WorkspaceSplitMode::LeftRight),
+            InputKey::Char('s' | 'S') => WindowShortcut::Split(ui::WorkspaceSplitMode::TopBottom),
+            InputKey::Char('o' | 'O') => WindowShortcut::Maximize,
             InputKey::Char('q' | 'Q') => WindowShortcut::Close,
             InputKey::Char('X') => WindowShortcut::Kill,
             InputKey::Char('x') if key.modifiers.shift => WindowShortcut::Kill,
-            InputKey::Left => WindowShortcut::MoveFocus(-1, 0),
-            InputKey::Right => WindowShortcut::MoveFocus(1, 0),
-            InputKey::Up => WindowShortcut::MoveFocus(0, -1),
-            InputKey::Down => WindowShortcut::MoveFocus(0, 1),
+            InputKey::Left | InputKey::Char('h' | 'H') => WindowShortcut::MoveFocus(-1, 0),
+            InputKey::Right | InputKey::Char('l' | 'L') => WindowShortcut::MoveFocus(1, 0),
+            InputKey::Up | InputKey::Char('k' | 'K') => WindowShortcut::MoveFocus(0, -1),
+            InputKey::Down | InputKey::Char('j' | 'J') => WindowShortcut::MoveFocus(0, 1),
             InputKey::Escape => WindowShortcut::Consume,
             _ => WindowShortcut::Pass,
         }

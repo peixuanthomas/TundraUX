@@ -1,4 +1,5 @@
 use super::*;
+use crate::session::window_launch::WindowApplication;
 
 impl Workspace {
     pub(in crate::session) fn input(
@@ -12,6 +13,7 @@ impl Workspace {
             self.close_split_menu();
             self.taskbar_menu = None;
             self.prefix.clear();
+            self.cancel_chooser();
             self.last_pointer = None;
             self.pointer_hovered = false;
             return Ok(false);
@@ -23,23 +25,68 @@ impl Workspace {
             self.prefix.clear();
             return Ok(false);
         }
+        if self.chooser.is_some() {
+            self.chooser_input(input, state)?;
+            return Ok(true);
+        }
         if self.taskbar_menu.is_some() {
             self.handle_taskbar_menu(input, state)?;
             return Ok(true);
         }
-        if let InputEvent::Key(key) = input {
-            let command = self.prefix.route(key);
-            if command != WindowShortcut::Pass {
-                self.shortcut(command)?;
+        if let InputEvent::Mouse(mouse) = input
+            && let Some(panel) = &mut self.panel
+        {
+            let search = WorkspacePanel::new(self.layout.available, panel).search;
+            if search.contains(mouse.coordinates().into()) {
+                panel
+                    .editing
+                    .handle_event(&mut panel.query, input.clone(), search);
                 return Ok(true);
             }
+        }
+        if let InputEvent::Paste(value) = input
+            && let Some(panel) = &mut self.panel
+        {
+            panel.editing.handle_event(
+                &mut panel.query,
+                InputEvent::Paste(value.clone()),
+                Rect::default(),
+            );
+            panel.scroll = 0;
+            panel.action_focus = None;
+            return Ok(true);
+        }
+        if let InputEvent::Key(key) = input {
             if self.panel.is_some() || self.wait_for.is_some() {
                 self.overlay_key(key)?;
                 return Ok(true);
             }
             if self.split_window.is_some() {
-                self.split_key(key);
+                self.split_key(key, state);
                 return Ok(true);
+            }
+            let application_owns_key = self
+                .input_focus
+                .and_then(|id| self.windows.get(&id))
+                .is_some_and(|window| {
+                    window.frame.as_ref().map_or_else(
+                        || {
+                            matches!(
+                                window.launch.application(),
+                                WindowApplication::Editor | WindowApplication::CommandLine
+                            )
+                        },
+                        |frame| frame.modal || frame.ctrl_w_passthrough,
+                    )
+                });
+            if application_owns_key {
+                self.prefix.clear();
+            } else {
+                let command = self.prefix.route(key);
+                if command != WindowShortcut::Pass {
+                    self.shortcut(command, state)?;
+                    return Ok(true);
+                }
             }
             if self.layout.blocked {
                 return Ok(true);
@@ -84,7 +131,7 @@ impl Workspace {
         Ok(self.has_overlay() || self.layout.blocked)
     }
 
-    fn shortcut(&mut self, shortcut: WindowShortcut) -> io::Result<()> {
+    fn shortcut(&mut self, shortcut: WindowShortcut, state: &ShellSession) -> io::Result<()> {
         let focused = self.selection.focused();
         match shortcut {
             WindowShortcut::Pass | WindowShortcut::Consume => {}
@@ -111,16 +158,14 @@ impl Workspace {
                     self.cancel_capture();
                 }
             }
-            WindowShortcut::Layout => {
-                self.mode = match self.mode {
-                    WorkspaceSplitMode::Grid => WorkspaceSplitMode::LeftRight,
-                    WorkspaceSplitMode::LeftRight => WorkspaceSplitMode::TopBottom,
-                    WorkspaceSplitMode::TopBottom => WorkspaceSplitMode::Grid,
-                };
+            WindowShortcut::Split(axis) => {
+                if let Some(id) = focused {
+                    self.begin_split(id, axis, state);
+                }
             }
             WindowShortcut::Maximize => {
                 if let Some(id) = focused {
-                    self.selection.toggle_maximized(id);
+                    self.selection.fullscreen(id);
                     self.close_split_menu();
                 }
             }
@@ -156,6 +201,16 @@ impl Workspace {
             .iter()
             .filter_map(|pane| {
                 let (px, py) = center(pane.content);
+                let overlaps = if x != 0 {
+                    pane.content.y < current.content.bottom()
+                        && current.content.y < pane.content.bottom()
+                } else {
+                    pane.content.x < current.content.right()
+                        && current.content.x < pane.content.right()
+                };
+                if !overlaps {
+                    return None;
+                }
                 let primary = (px - cx) * i32::from(x) + (py - cy) * i32::from(y);
                 let cross = ((px - cx) * i32::from(y) + (py - cy) * i32::from(x)).abs();
                 (primary > 0).then_some(((cross, primary), pane.id))
@@ -341,7 +396,7 @@ impl Workspace {
                         if let PointerTarget::Pane(id) = capture.target {
                             self.send_mouse(id, mouse)?;
                         } else if button == PointerButton::Left {
-                            self.activate_pointer(capture.target)?;
+                            self.activate_pointer(capture.target, state)?;
                         }
                     } else if let PointerTarget::Pane(id) = capture.target {
                         self.enqueue(
@@ -390,8 +445,10 @@ impl Workspace {
                         .is_some_and(|menu| menu.area.contains(point.into()))
                     {
                         match direction {
-                            ScrollDirection::Up => self.apply_split_action(Action::ScrollUp),
-                            ScrollDirection::Down => self.apply_split_action(Action::ScrollDown),
+                            ScrollDirection::Up => self.apply_split_action(Action::ScrollUp, state),
+                            ScrollDirection::Down => {
+                                self.apply_split_action(Action::ScrollDown, state)
+                            }
                             _ => {}
                         }
                     }
@@ -451,19 +508,18 @@ impl Workspace {
         Ok(())
     }
 
-    fn activate_pointer(&mut self, target: PointerTarget) -> io::Result<()> {
+    fn activate_pointer(&mut self, target: PointerTarget, state: &ShellSession) -> io::Result<()> {
         match target {
             PointerTarget::Pane(_) => {}
             PointerTarget::PaneFrame(id) => self.selection.focus(id),
             PointerTarget::WindowButton(id, action) => match action {
                 WorkspaceWindowAction::Minimize => self.selection.minimize(id),
-                WorkspaceWindowAction::ToggleMaximize => self.selection.toggle_maximized(id),
                 WorkspaceWindowAction::SplitMenu => {
                     self.selection.focus(id);
                     self.panel_key_focus = true;
                     self.split_window = Some(id);
                     self.split_model = WorkspaceSplitMenuViewModel {
-                        focused: Some(Action::SetMode(self.mode)),
+                        focused: Some(Action::SetMode(WorkspaceSplitMode::LeftRight)),
                         ..Default::default()
                     };
                 }
@@ -472,7 +528,7 @@ impl Workspace {
             PointerTarget::Taskbar(action) => self.apply_taskbar_action(action),
             PointerTarget::Overlay(action) => {
                 if self.split_window.is_some() {
-                    self.apply_split_action(action);
+                    self.apply_split_action(action, state);
                 } else {
                     self.apply_action(action)?;
                 }
@@ -498,7 +554,7 @@ impl Workspace {
         match action {
             WorkspaceTaskbarAction::Activate(id) => {
                 if self.windows.contains_key(&id) {
-                    self.selection.activate(id, self.layout.capacity);
+                    self.selection.activate(id, &self.layout);
                 }
             }
             WorkspaceTaskbarAction::Close(id) => self.request_close(id),
@@ -513,7 +569,7 @@ impl Workspace {
         }
     }
 
-    fn split_key(&mut self, key: &KeyInput) {
+    fn split_key(&mut self, key: &KeyInput, state: &ShellSession) {
         if key.phase != InputPhase::Press || key.has_non_shift_modifier() {
             return;
         }
@@ -526,7 +582,7 @@ impl Workspace {
                         menu.hits.iter().any(|(candidate, _)| *candidate == action)
                     })
                 {
-                    self.apply_split_action(action);
+                    self.apply_split_action(action, state);
                 }
             }
             InputKey::Up | InputKey::Down | InputKey::Tab | InputKey::BackTab => {
@@ -539,28 +595,16 @@ impl Workspace {
         }
     }
 
-    fn apply_split_action(&mut self, action: Action) {
+    fn apply_split_action(&mut self, action: Action, state: &ShellSession) {
         match action {
-            Action::SetMode(mode) => {
-                self.mode = mode;
-                self.selection.restore_split();
-                self.split_model.focused = Some(action);
+            Action::SetMode(axis) => {
+                if let Some(id) = self.split_window {
+                    self.begin_split(id, axis, state);
+                }
             }
-            Action::Add => {
-                self.selection.add_from_home();
+            Action::Maximize(id) if self.windows.contains_key(&id) => {
+                self.selection.fullscreen(id);
                 self.close_split_menu();
-            }
-            Action::Show(id) => {
-                if self.windows.contains_key(&id) {
-                    self.selection.show(id);
-                    self.close_split_menu();
-                }
-            }
-            Action::ScrollUp => self.split_model.scroll = self.split_model.scroll.saturating_sub(1),
-            Action::ScrollDown => {
-                if let Some(menu) = &self.split_menu {
-                    self.split_model.scroll = (self.split_model.scroll + 1).min(menu.max_scroll);
-                }
             }
             Action::Dismiss => self.close_split_menu(),
             _ => {}
@@ -568,7 +612,33 @@ impl Workspace {
     }
 
     fn overlay_key(&mut self, key: &KeyInput) -> io::Result<()> {
-        if key.phase != InputPhase::Press || key.has_non_shift_modifier() {
+        if key.phase != InputPhase::Press {
+            return Ok(());
+        }
+        if self.wait_for.is_none()
+            && let Some(panel) = &mut self.panel
+            && (matches!(
+                key.key,
+                InputKey::Char(_)
+                    | InputKey::Space
+                    | InputKey::Backspace
+                    | InputKey::Delete
+                    | InputKey::Left
+                    | InputKey::Right
+                    | InputKey::Home
+                    | InputKey::End
+            ))
+        {
+            panel.editing.handle_event(
+                &mut panel.query,
+                InputEvent::Key(key.clone()),
+                Rect::default(),
+            );
+            panel.scroll = 0;
+            panel.action_focus = None;
+            return Ok(());
+        }
+        if key.has_non_shift_modifier() {
             return Ok(());
         }
         self.panel_key_focus = true;
@@ -589,7 +659,17 @@ impl Workspace {
             if let Some(action) = focus.or_else(|| {
                 self.panel
                     .as_ref()
-                    .and_then(|panel| panel.selected.map(Action::Switch))
+                    .and_then(|panel| {
+                        panel.selected.filter(|id| {
+                            self.windows.get(id).is_some_and(|window| {
+                                ui::components::selection_matches(
+                                    &panel.query,
+                                    [window.launch.title().as_str()],
+                                )
+                            })
+                        })
+                    })
+                    .map(Action::Switch)
             }) {
                 return self.apply_action(action);
             }
@@ -610,7 +690,22 @@ impl Workspace {
             return Ok(());
         }
         if matches!(key.key, InputKey::Up | InputKey::Down) && !self.windows.is_empty() {
-            let ids = self.windows.keys().copied().collect::<Vec<_>>();
+            let ids = self
+                .windows
+                .iter()
+                .filter(|(_, window)| {
+                    self.panel.as_ref().is_some_and(|panel| {
+                        ui::components::selection_matches(
+                            &panel.query,
+                            [window.launch.title().as_str()],
+                        )
+                    })
+                })
+                .map(|(&id, _)| id)
+                .collect::<Vec<_>>();
+            if ids.is_empty() {
+                return Ok(());
+            }
             let panel = self.panel.as_mut().expect("window panel");
             let current = panel
                 .selected
@@ -666,20 +761,12 @@ impl Workspace {
                     };
                 }
             }
-            Action::Add => {
-                self.panel = None;
-                self.selection.add_from_home();
-            }
-            Action::SetMode(mode) => {
-                self.panel = None;
-                self.mode = mode;
-            }
             Action::Switch(id) if self.windows.contains_key(&id) => {
                 self.selection.switch(id);
                 self.panel = None;
             }
             Action::Show(id) if self.windows.contains_key(&id) => {
-                self.selection.show(id);
+                self.selection.activate(id, &self.layout);
                 self.panel = None;
             }
             Action::Background(id) => {
@@ -687,7 +774,7 @@ impl Workspace {
                 self.panel = None;
             }
             Action::Maximize(id) if self.windows.contains_key(&id) => {
-                self.selection.toggle_maximized(id);
+                self.selection.fullscreen(id);
                 self.panel = None;
             }
             Action::Close(id) => self.request_close(id),

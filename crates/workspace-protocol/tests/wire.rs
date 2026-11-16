@@ -273,3 +273,21 @@ impl Write for ScriptedIo {
         Ok(())
     }
 }
+
+#[test]
+fn window_frame_ctrl_w_passthrough_is_additive_and_round_trips() {
+    let mut frame = workspace_protocol::WindowFrame::new(
+        workspace_protocol::LayoutGeneration(1),
+        workspace_protocol::Size::new(2, 2),
+    );
+    frame.ctrl_w_passthrough = true;
+    let mut encoded = serde_json::to_value(&frame).unwrap();
+    let decoded: workspace_protocol::WindowFrame = serde_json::from_value(encoded.clone()).unwrap();
+    assert!(decoded.ctrl_w_passthrough);
+    encoded
+        .as_object_mut()
+        .unwrap()
+        .remove("ctrl_w_passthrough");
+    let decoded: workspace_protocol::WindowFrame = serde_json::from_value(encoded).unwrap();
+    assert!(!decoded.ctrl_w_passthrough);
+}

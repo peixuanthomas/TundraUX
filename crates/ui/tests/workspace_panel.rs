@@ -3,9 +3,8 @@ use std::sync::Arc;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use ui::{
     ColorCapability, RenderCapabilities, RenderContext, TundraTheme, WorkspaceAction,
-    WorkspaceCloseWait, WorkspacePanel, WorkspacePanelViewModel, WorkspaceSplitMode,
-    WorkspaceWindowViewModel, automation::FrameCapture, render_workspace_close_wait,
-    render_workspace_panel,
+    WorkspaceCloseWait, WorkspacePanel, WorkspacePanelViewModel, WorkspaceWindowViewModel,
+    automation::FrameCapture, render_workspace_close_wait, render_workspace_panel,
 };
 use workspace_protocol::{SessionId, Size};
 
@@ -34,7 +33,8 @@ fn model() -> WorkspacePanelViewModel {
         ],
         focused: Some(ACTIVE),
         selected: Some(BACKGROUND),
-        mode: WorkspaceSplitMode::Grid,
+        query: String::new(),
+        editing: Default::default(),
         size_needed: Size::new(160, 26),
         capacity: 0,
         blocked: true,

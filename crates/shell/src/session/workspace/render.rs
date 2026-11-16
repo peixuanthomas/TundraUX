@@ -32,10 +32,20 @@ impl Workspace {
                 context,
             );
         }
-        for pane in &self.layout.panes {
+        for pane in self
+            .layout
+            .panes
+            .iter()
+            .filter(|pane| pane.id != SessionId(0))
+        {
             self.render_pane_frame(frame, pane, context, controls_blocked);
         }
-        for pane in &self.layout.panes {
+        for pane in self
+            .layout
+            .panes
+            .iter()
+            .filter(|pane| pane.id != SessionId(0))
+        {
             let window = &self.windows[&pane.id];
             let focused = Some(pane.id) == self.selection.focused();
             if let Some(capture) = capture {
@@ -150,7 +160,6 @@ impl Workspace {
             pane,
             &self.windows[&pane.id].launch.title(),
             self.selection.focused() == Some(pane.id),
-            self.selection.maximized() == Some(pane.id),
             interaction,
             context,
         );
@@ -246,6 +255,10 @@ impl Workspace {
             PointerTarget::Overlay(action) => Some(action),
             _ => None,
         });
+        if self.chooser.is_some() {
+            self.render_chooser(frame, context, capture);
+            return;
+        }
         if let Some(id) = self.wait_for
             && let Some(window) = self.windows.get(&id)
         {
@@ -284,8 +297,17 @@ impl Workspace {
                     closing: window.close != CloseProgress::Idle,
                 })
                 .collect();
+            model.windows.retain(|window| {
+                ui::components::selection_matches(&model.query, [window.title.as_str()])
+            });
+            if !model
+                .windows
+                .iter()
+                .any(|window| Some(window.id) == model.selected)
+            {
+                model.selected = model.windows.first().map(|window| window.id);
+            }
             model.focused = self.selection.focused();
-            model.mode = self.mode;
             model.size_needed = self.layout.size_needed;
             model.capacity = self.layout.capacity;
             model.blocked = self.layout.blocked;
@@ -338,12 +360,11 @@ impl Workspace {
             self.close_split_menu();
             return;
         };
-        self.split_model.mode = self.mode;
-        self.split_model.windows = self
-            .taskbar_items(self.windows.keys().copied())
-            .into_iter()
-            .filter(|item| item.id != id && item.minimized)
-            .collect();
+        self.split_model.window = id;
+        self.split_model.left_right = self.can_split(id, WorkspaceSplitMode::LeftRight);
+        self.split_model.top_bottom = self.can_split(id, WorkspaceSplitMode::TopBottom);
+        self.split_model.fullscreen =
+            self.selection.visible().len() > 1 && self.windows[&id].close == CloseProgress::Idle;
         let menu = WorkspaceSplitMenu::new(
             self.layout.available,
             pane.controls.split,
@@ -359,7 +380,6 @@ impl Workspace {
         {
             self.cancel_capture();
         }
-        self.split_model.scroll = menu.scroll;
         self.split_model.hovered = self
             .last_pointer
             .filter(|_| self.pointer_hovered)
@@ -386,5 +406,6 @@ impl Workspace {
             || self.wait_for.is_some()
             || self.split_window.is_some()
             || self.taskbar_menu.is_some()
+            || self.chooser.is_some()
     }
 }
