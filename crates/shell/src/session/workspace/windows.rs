@@ -107,26 +107,32 @@ impl Workspace {
             let Some(stream) = &mut window.stream else {
                 continue;
             };
-            while let Some(message) = window.queued.front_mut() {
-                match stream.queue(message) {
+            while let Some(message) = window.queued.pop_front() {
+                let initializes = matches!(message, ShellToApp::Init(_));
+                match stream.try_queue_owned(message) {
                     Ok(()) => {
-                        if matches!(message, ShellToApp::Init(_))
-                            && let Some(startup) = &mut window.startup
-                        {
+                        if initializes && let Some(startup) = &mut window.startup {
                             startup.init_queued = Some(Instant::now());
                         }
-                        window.queued.pop_front();
                     }
-                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-                    Err(error) if error.kind() == io::ErrorKind::InvalidInput => {
-                        if let ShellToApp::Init(init) = message
-                            && init.language.take().is_some()
-                        {
-                            continue;
-                        }
+                    Err((error, message)) if error.kind() == io::ErrorKind::WouldBlock => {
+                        window.queued.push_front(message);
                         break;
                     }
-                    Err(_) => break,
+                    Err((error, mut message)) if error.kind() == io::ErrorKind::InvalidInput => {
+                        if let ShellToApp::Init(init) = &mut message
+                            && init.language.take().is_some()
+                        {
+                            window.queued.push_front(message);
+                            continue;
+                        }
+                        window.queued.push_front(message);
+                        break;
+                    }
+                    Err((_, message)) => {
+                        window.queued.push_front(message);
+                        break;
+                    }
                 }
             }
             if window.queued.is_empty()

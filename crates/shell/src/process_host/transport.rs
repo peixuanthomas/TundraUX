@@ -406,7 +406,11 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
     }
 
     pub fn queue_owned(&mut self, message: Send) -> io::Result<()> {
-        self.outgoing.push(message).map_err(|(error, _)| error)
+        self.try_queue_owned(message).map_err(|(error, _)| error)
+    }
+
+    pub fn try_queue_owned(&mut self, message: Send) -> Result<(), (io::Error, Send)> {
+        self.outgoing.push(message)
     }
 
     pub fn pending_write(&self) -> bool {
