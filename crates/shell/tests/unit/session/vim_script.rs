@@ -24,6 +24,17 @@ fn until(
 }
 
 #[test]
+fn inactive_vim_poll_does_not_request_redraw() {
+    let mut state = ShellSession::new_for_home_mode(
+        ShellLaunchConfig::default(),
+        (120, 36),
+        ShellHomeMode::User,
+    );
+    let mut adapter = EditorVimHost::new(default_editor_watchdog().unwrap());
+    assert!(!adapter.poll(&mut state, &platform::mock::UnsupportedPlatform));
+}
+
+#[test]
 #[ignore = "requires bundled real Vim, PTY and local channel access"]
 fn script_export_owner_and_readonly_restore_survive_another_active_vim_document() {
     let directory = TestDirectory(std::env::temp_dir().join(format!(
@@ -140,13 +151,15 @@ fn script_export_owner_and_readonly_restore_survive_another_active_vim_document(
     });
     assert_eq!(state.editor_vim_script_export, Some(owner));
     let deadline = Instant::now() + Duration::from_secs(10);
+    let mut changed = false;
     while state.pages.editor.get(owner).unwrap().script.vim_pending {
-        adapter
+        changed |= adapter
             .poll_inner(&mut state, &platform::mock::UnsupportedPlatform)
             .unwrap();
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(10));
     }
+    assert!(changed);
     assert_eq!(state.active_page_id(), other);
     assert!(state.pages.editor.get(owner).unwrap().script.vim_suspended);
     assert!(!state.pages.editor.get(other).unwrap().script.vim_suspended);

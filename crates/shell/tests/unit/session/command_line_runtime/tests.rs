@@ -530,7 +530,8 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
     let descendant_pid = fixture.start_descendant(&second);
     hosts.hosts.insert(second_id, second);
 
-    hosts.sync_tasks(&mut state);
+    assert!(hosts.sync_tasks(&mut state));
+    assert!(!hosts.sync_tasks(&mut state));
     for id in [first_id, second_id] {
         assert_eq!(
             state.tasks.owner(
@@ -584,7 +585,7 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
         now + Duration::from_millis(20),
     );
     assert_eq!(state.command_line_close_request, Some((second_id, false)));
-    hosts.process_close_request(&mut state);
+    assert!(hosts.process_close_request(&mut state));
     let modal = state
         .to_notification_view_model()
         .expect("close confirmation");
@@ -721,10 +722,11 @@ fn nonrunning_terminal_returns_without_confirmation_and_stale_confirmation_is_ig
     };
     hosts.hosts.insert(first_id, failed);
     state.request_command_line_close();
-    hosts.process_close_request(&mut state);
+    assert!(hosts.process_close_request(&mut state));
     assert_eq!(state.active_screen(), crate::ShellScreen::Home);
     assert!(state.to_notification_view_model().is_none());
     assert!(hosts.hosts.is_empty());
+    assert!(!hosts.process_close_request(&mut state));
 
     state.enter_screen(crate::ShellScreen::CommandLine);
     let replacement_id = state.active_page_id();

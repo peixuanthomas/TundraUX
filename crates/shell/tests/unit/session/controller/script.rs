@@ -512,6 +512,29 @@ fn unsaved_launch_waits_for_the_original_documents_save_picker() {
 }
 
 #[test]
+fn script_poll_requests_redraw_for_export_cleanup_and_cancelled_save_launch() {
+    let mut state = session();
+    let mut hosts =
+        crate::session::script_host::ScriptHosts::new(default_editor_watchdog().unwrap());
+    let platform = platform::mock::UnsupportedPlatform;
+    state.pages.editor.script.vim_pending = true;
+    state.pages.editor.script.vim_suspended = true;
+    state.pages.editor.script.state.status = ScriptStatus::Finished;
+    assert!(hosts.poll(&mut state, &platform));
+    assert!(!state.pages.editor.script.vim_pending);
+    assert!(!state.pages.editor.script.vim_suspended);
+    assert!(!hosts.poll(&mut state, &platform));
+
+    state.pages.editor.script.pending_launch = Some(false);
+    state.pages.editor.script.save_requested = true;
+    state.pages.editor.script.state.status = ScriptStatus::Saving;
+    assert!(hosts.poll(&mut state, &platform));
+    assert!(state.pages.editor.script.pending_launch.is_none());
+    assert_eq!(state.pages.editor.script.state.status, ScriptStatus::Idle);
+    assert!(!hosts.poll(&mut state, &platform));
+}
+
+#[test]
 fn expression_is_sent_only_after_explicit_execution_and_tracks_current_page() {
     let mut state = session();
     saved_script(&mut state);

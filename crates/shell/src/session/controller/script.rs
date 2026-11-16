@@ -274,20 +274,20 @@ impl ShellSession {
         self.poll_script_launch(platform);
     }
 
-    pub(in crate::session) fn poll_script_launch(&mut self, platform: &dyn Platform) {
+    pub(in crate::session) fn poll_script_launch(&mut self, platform: &dyn Platform) -> bool {
         let Some(debug) = self.pages.editor.script.pending_launch else {
-            return;
+            return false;
         };
         if self.pages.editor.script.vim_pending {
-            return;
+            return false;
         }
         if self.pages.editor.editor_save_state.is_some()
             || self.pages.editor.editor_load_state.is_some()
         {
-            return;
+            return false;
         }
         let Some(editor) = self.app.editor_state() else {
-            return;
+            return false;
         };
         if editor.is_dirty() || editor.document.path.is_none() {
             if self.pages.editor.script.save_requested {
@@ -295,13 +295,14 @@ impl ShellSession {
                     self.pages.editor.script.pending_launch = None;
                     self.pages.editor.script.state.status = ScriptStatus::Idle;
                     self.pages.editor.script.vim_suspended = false;
+                    return true;
                 }
-                return;
+                return false;
             }
             self.pages.editor.script.save_requested = true;
             self.pages.editor.script.state.status = ScriptStatus::Saving;
             self.apply_editor_command(app::editor::EditorCommand::RequestSave, platform);
-            return;
+            return true;
         }
         let result = app::script::build_launch_spec(
             editor.document.path.as_ref().unwrap(),
@@ -321,7 +322,7 @@ impl ShellSession {
                     })
                 {
                     self.fail_script(i18n::msg!("script-external-change").into());
-                    return;
+                    return true;
                 }
                 let id = self.active_page_id_for_editor();
                 let session_id = self.pages.editor.script.state.session_id;
@@ -342,6 +343,7 @@ impl ShellSession {
             Ok(_) => self.fail_script(i18n::msg!("script-bash-required").into()),
             Err(error) => self.fail_script(error),
         }
+        true
     }
 
     fn active_page_id_for_editor(&self) -> PageInstanceId {

@@ -104,11 +104,19 @@ impl EditorVimHost {
     pub(super) fn poll(&mut self, state: &mut ShellSession, platform: &dyn Platform) -> bool {
         let before = state.editor_vim_terminal.clone();
         let before_install = state.editor_vim_install.clone();
-        if let Err(error) = self.poll_inner(state, platform) {
-            self.fail(state, error);
-        }
+        let before_unresponsive = self.unresponsive;
+        let changed = match self.poll_inner(state, platform) {
+            Ok(changed) => changed,
+            Err(error) => {
+                self.fail(state, error);
+                true
+            }
+        };
         self.sync_focus(state);
-        before != state.editor_vim_terminal || before_install != state.editor_vim_install
+        changed
+            || before != state.editor_vim_terminal
+            || before_install != state.editor_vim_install
+            || before_unresponsive != self.unresponsive
     }
 
     pub(super) fn observe_window_focus(&mut self, state: &ShellSession, focused: bool) {
@@ -125,9 +133,14 @@ impl EditorVimHost {
         }
     }
 
-    fn poll_inner(&mut self, state: &mut ShellSession, platform: &dyn Platform) -> io::Result<()> {
+    fn poll_inner(
+        &mut self,
+        state: &mut ShellSession,
+        platform: &dyn Platform,
+    ) -> io::Result<bool> {
+        let mut changed = false;
         if self.poll_install(state)? {
-            return Ok(());
+            return Ok(false);
         }
         let visible = state.content_screen() == ShellScreen::Editor;
         let enabled = state.editor_vim_enabled() && !state.pages.editor.script.vim_suspended;
@@ -144,7 +157,7 @@ impl EditorVimHost {
                         && std::env::var_os("TUNDRA_VIM").is_none() =>
                 {
                     self.start_install(state, platform)?;
-                    return Ok(());
+                    return Ok(true);
                 }
                 Err(error) => return Err(error),
             };
@@ -182,9 +195,10 @@ impl EditorVimHost {
             self.probe = None;
             self.last_probe = self.started_at;
             self.unresponsive = false;
+            changed = true;
         }
         if self.host.is_none() {
-            return Ok(());
+            return Ok(changed);
         }
         self.host
             .as_ref()
@@ -222,6 +236,7 @@ impl EditorVimHost {
             self.selected = Some(state.content_page_id());
             self.suspended = false;
             self.mirrored.clear();
+            changed = true;
         }
         if visible && enabled && !self.suspended {
             let mut imported = false;
@@ -233,6 +248,7 @@ impl EditorVimHost {
                         self.host.as_mut().unwrap().open_buffer(buffer)?;
                         self.imported.insert(id);
                         imported = true;
+                        changed = true;
                     }
                 }
             }
@@ -280,7 +296,7 @@ impl EditorVimHost {
         if std::mem::take(&mut state.editor_vim_close_requested) {
             self.host.as_mut().unwrap().request_close(false)?;
         }
-        self.finish_saves(state)?;
+        changed |= self.finish_saves(state)?;
         let poll = self.host.as_mut().unwrap().poll()?;
         if state.window_owner.is_app() && poll.exit.is_none() {
             self.poll_responsiveness(&poll.ping_ids)?;
@@ -301,13 +317,14 @@ impl EditorVimHost {
         }
         if !self.suspended {
             if self.import.is_none() {
-                self.synchronize(state, &poll.state.buffers);
+                changed |= self.synchronize(state, &poll.state.buffers);
                 for number in &poll.state.removed_buffers {
                     if let Some(page) = self.pages.remove(number) {
                         self.imported.remove(&page);
                         self.policies.remove(&page);
                         self.mirrored.remove(number);
                         state.request_page_close_after_editor_check(page, true);
+                        changed = true;
                     }
                 }
                 if let Some(&page) = self.pages.get(&poll.state.active_buffer)
@@ -318,10 +335,12 @@ impl EditorVimHost {
                 {
                     state.activate_editor_document_page(page);
                     self.selected = Some(page);
+                    changed = true;
                 }
             }
             for request in poll.save_requests {
                 self.begin_save(state, platform, request)?;
+                changed = true;
             }
         } else {
             for request in poll.save_requests {
@@ -360,7 +379,7 @@ impl EditorVimHost {
             state.editor_vim_script_export = None;
             self.import = None;
             self.pending_input.clear();
-            return Ok(());
+            return Ok(true);
         }
         if self.export.is_some_and(|id| poll.state.last_command >= id) && self.saves.is_empty() {
             self.export = None;
@@ -385,7 +404,7 @@ impl EditorVimHost {
                     ),
                     ui::NotificationTone::Error,
                 );
-                return Ok(());
+                return Ok(true);
             }
             if poll.state.buffers.iter().any(|buffer| {
                 buffer.encoding.to_ascii_lowercase().starts_with("utf-16") && !buffer.bom
@@ -398,7 +417,7 @@ impl EditorVimHost {
                     i18n::msg!("shell-vim-unsupported-editor-bom"),
                     ui::NotificationTone::Error,
                 );
-                return Ok(());
+                return Ok(true);
             }
             self.suspended = true;
             if let Some(owner) = self.script_export_owner.take() {
@@ -414,7 +433,7 @@ impl EditorVimHost {
             } else {
                 self.suspended = false;
             }
-            return Ok(());
+            return Ok(true);
         }
         if visible && enabled && !self.suspended {
             if state.editor_vim_terminal.is_none()
@@ -432,7 +451,7 @@ impl EditorVimHost {
         } else {
             state.editor_vim_terminal = None;
         }
-        Ok(())
+        Ok(changed)
     }
 
     fn poll_responsiveness(&mut self, received: &[u64]) -> io::Result<()> {
@@ -501,7 +520,8 @@ impl EditorVimHost {
         }
     }
 
-    fn synchronize(&mut self, state: &mut ShellSession, buffers: &[VimBuffer]) {
+    fn synchronize(&mut self, state: &mut ShellSession, buffers: &[VimBuffer]) -> bool {
+        let mut changed = false;
         let original = state.content_page_id();
         for buffer in buffers {
             if !self.pages.contains_key(&buffer.number) {
@@ -560,10 +580,12 @@ impl EditorVimHost {
             }
             state.with_page_context(page, |session| mirror_buffer(session, buffer));
             self.mirrored.insert(buffer.number, identity);
+            changed = true;
         }
         if state.editor_document_pages().contains(&original) {
             state.activate_editor_document_page(original);
         }
+        changed
     }
 
     fn begin_save(
@@ -684,7 +706,7 @@ impl EditorVimHost {
         Ok(())
     }
 
-    fn finish_saves(&mut self, state: &mut ShellSession) -> io::Result<()> {
+    fn finish_saves(&mut self, state: &mut ShellSession) -> io::Result<bool> {
         let mut finished = Vec::new();
         for (&id, save) in &mut self.saves {
             let result = state
@@ -716,6 +738,7 @@ impl EditorVimHost {
                 finished.push((id, result));
             }
         }
+        let changed = !finished.is_empty();
         for (id, result) in finished {
             self.host
                 .as_mut()
@@ -723,7 +746,7 @@ impl EditorVimHost {
                 .respond_save(id, result.map(|path| SaveResult { path }))?;
             self.saves.remove(&id);
         }
-        Ok(())
+        Ok(changed)
     }
 
     fn fail(&mut self, state: &mut ShellSession, error: io::Error) {

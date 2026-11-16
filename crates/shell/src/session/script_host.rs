@@ -54,6 +54,8 @@ impl ScriptHosts {
                     && !state.pages.editor.script.state.status.is_active()
                     && state.editor_vim_terminal.is_none()
                 {
+                    changed |= state.pages.editor.script.vim_suspended
+                        || state.pages.editor.script.vim_pending;
                     state.pages.editor.script.vim_suspended = false;
                     state.pages.editor.script.vim_pending = false;
                 }
@@ -63,6 +65,7 @@ impl ScriptHosts {
                     .editor_state()
                     .and_then(|editor| editor.document.path.clone())
                 {
+                    changed |= !changes.is_empty();
                     state
                         .pages
                         .editor
@@ -70,7 +73,7 @@ impl ScriptHosts {
                         .state
                         .remap_breakpoints(&path, &changes);
                 }
-                state.poll_script_launch(platform);
+                changed |= state.poll_script_launch(platform);
             });
         }
         while let Some((page, command)) = state.script_requests.pop_front() {
@@ -215,6 +218,7 @@ impl ScriptHosts {
                 if host.fingerprints.iter().any(|(path, expected)| {
                     platform::document_fingerprint(path).ok().as_ref() != Some(expected)
                 }) {
+                    changed = true;
                     state.with_page_context(page, |state| {
                         state.fail_script(i18n::msg!("script-external-change").into())
                     });
@@ -222,6 +226,7 @@ impl ScriptHosts {
                 }
             }
             if host.cancel.load(Ordering::Acquire) {
+                changed = true;
                 match host.session.stop() {
                     Ok(()) => {
                         state.with_page_context(page, |state| {
@@ -243,6 +248,7 @@ impl ScriptHosts {
                 match host.session.poll() {
                     Ok(events) => events,
                     Err(error) => {
+                        changed = true;
                         fail(state, page, error);
                         host.cancel.store(true, Ordering::Release);
                         Vec::new()

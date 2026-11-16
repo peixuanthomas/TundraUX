@@ -705,14 +705,16 @@ impl CommandLineHosts {
         first_error.map_or(Ok(()), Err)
     }
 
-    fn sync_tasks(&mut self, state: &mut super::ShellSession) {
+    fn sync_tasks(&mut self, state: &mut super::ShellSession) -> bool {
         use super::{TaskClass, TaskControl, TaskDomain, TaskOwner};
+        let mut changed = false;
         self.tasks.retain(|id, task| {
             if self.hosts.get(id).is_some_and(CommandLineHost::is_running) {
                 return true;
             }
             task.finished.store(true, Ordering::Relaxed);
             state.tasks.complete(TaskDomain::CommandLine, task.request);
+            changed = true;
             false
         });
         for (id, host) in &self.hosts {
@@ -743,7 +745,9 @@ impl CommandLineHosts {
                     finished,
                 },
             );
+            changed = true;
         }
+        changed
     }
 
     pub(super) fn poll(
@@ -752,6 +756,7 @@ impl CommandLineHosts {
         platform: &dyn Platform,
         accent: ratatui::style::Color,
     ) -> (bool, CommandLineHostEvent) {
+        let mut changed = false;
         let visible_before = (state.content_screen() == crate::ShellScreen::CommandLine)
             .then(|| self.visible_host(state).view_model());
         let cancelled = self
@@ -762,6 +767,7 @@ impl CommandLineHosts {
             .collect::<Vec<_>>();
         for id in cancelled {
             if let Some(host) = self.hosts.get_mut(&id) {
+                changed = true;
                 match host.try_terminate() {
                     Ok(()) => state.close_page_instance(id),
                     Err(error) => state.notify_alert_with_tone(
@@ -808,6 +814,7 @@ impl CommandLineHosts {
                 .hosts
                 .entry(id)
                 .or_insert_with(|| CommandLineHost::new(self.watchdog.clone()));
+            changed |= matches!(host.state, CommandLineHostState::Inactive);
             if matches!(host.state, CommandLineHostState::Inactive)
                 && let Some(area) = state.command_line_input_area()
             {
@@ -837,7 +844,10 @@ impl CommandLineHosts {
         let mut completed = Vec::new();
         let mut shell_event = CommandLineHostEvent::None;
         for (id, host) in &mut self.hosts {
-            match host.poll() {
+            let was_running = host.is_running();
+            let event = host.poll();
+            changed |= was_running != host.is_running();
+            match event {
                 CommandLineHostEvent::None => {}
                 CommandLineHostEvent::ExitToCaller => completed.push(*id),
                 CommandLineHostEvent::PanicRequested => {
@@ -865,8 +875,8 @@ impl CommandLineHosts {
             host.set_focused(focused_id == Some(*id));
         }
 
-        self.process_close_request(state);
-        self.sync_tasks(state);
+        changed |= self.process_close_request(state);
+        changed |= self.sync_tasks(state);
         if state.content_screen() == crate::ShellScreen::CommandLine {
             if let Some(host) = self.hosts.get_mut(&state.content_page_id())
                 && let Some(area) = state.command_line_input_area()
@@ -876,23 +886,23 @@ impl CommandLineHosts {
         }
         let visible_after = (state.content_screen() == crate::ShellScreen::CommandLine)
             .then(|| self.visible_host(state).view_model());
-        (visible_before != visible_after, shell_event)
+        (changed || visible_before != visible_after, shell_event)
     }
 
-    fn process_close_request(&mut self, state: &mut super::ShellSession) {
+    fn process_close_request(&mut self, state: &mut super::ShellSession) -> bool {
         let Some((id, confirmed)) = state.command_line_close_request.take() else {
-            return;
+            return false;
         };
         if state.active_page_id() != id
             || state.active_screen() != crate::ShellScreen::CommandLine
             || (!confirmed && !state.interactive_overlays().is_empty())
         {
-            return;
+            return false;
         }
         let running = self.hosts.get(&id).is_some_and(CommandLineHost::is_running);
         if running && !confirmed {
             state.show_command_line_close_confirmation(id);
-            return;
+            return true;
         }
         if let Some(host) = self.hosts.get_mut(&id)
             && let Err(error) = host.try_terminate()
@@ -904,10 +914,11 @@ impl CommandLineHosts {
                 ),
                 ui::NotificationTone::Error,
             );
-            return;
+            return true;
         }
         self.hosts.remove(&id);
         state.close_page_instance(id);
+        true
     }
 
     pub(super) fn handle_input(
