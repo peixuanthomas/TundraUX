@@ -409,6 +409,67 @@ class NewAppSourceTests(CaptureFixture):
         self.assertEqual(timing["process_identity"]["new_process_pids"], [2])
 
 
+class MouseFocusPreparationTests(unittest.TestCase):
+    def test_keyboard_padding_style_is_not_cached_as_mouse_focus_after_clear(self):
+        rect = {"x": 0, "y": 0, "width": 16, "height": 1}
+
+        def cells(focused, keyboard):
+            text = ("Search: " + ("_" if focused else "")).ljust(16)
+            return (tuple((char, ("accent" if focused and keyboard and index > 8 else "text",))
+                          for index, char in enumerate(text)),)
+
+        class Fixture:
+            def __init__(self):
+                self.focused = self.keyboard = False
+                self.frames = [{"cells": cells(False, False)}]
+                self.pending = []
+                self.actions = []
+                self.stale_text_rejections = 0
+
+            def until(self, predicate):
+                for _ in range(10):
+                    if self.pending:
+                        self.frames.append({"cells": self.pending.pop(0)})
+                    text = "Search: " + ("_" if self.focused else "")
+                    frame = {"width": 16, "height": 1, "lines": [text], "nodes": [{
+                        "id": "page/launcher.search", "role": "textbox", "actionable": True,
+                        "focused": self.focused, "text": text, "rect": rect}]}
+                    if predicate(frame):
+                        return frame
+                    self.stale_text_rejections += 1
+                raise AssertionError("Preparation never aligned its snapshot and VT state")
+
+            def tap(self, frame, identifier):
+                self.actions.append("mouse")
+                previous = self.frames[-1]["cells"]
+                self.focused, self.keyboard = True, False
+                self.pending = [previous, cells(True, False)]
+
+            def send(self, value):
+                self.actions.append(value)
+                previous = self.frames[-1]["cells"]
+                self.keyboard = True
+                if value == b"\t":
+                    self.focused = False
+                self.pending = [previous, cells(self.focused, True)]
+
+        session = Fixture()
+        with patch.object(performance.time, "sleep") as sleep:
+            current = performance.prepare_mouse_search(session)
+            sleep.assert_not_called()
+        prepared = session.frames[-1]
+        mouse = cells(True, False)
+        keyboard = cells(True, True)
+        self.assertEqual(performance.region(mouse, rect), performance.region(keyboard, rect))
+        self.assertNotEqual(performance.region(mouse, rect, True), performance.region(keyboard, rect, True))
+        self.assertEqual(prepared["cells"], mouse)
+        self.assertTrue(performance.frame_cue(mouse, [rect], True)(prepared))
+        self.assertFalse(performance.frame_cue(keyboard, [rect], True)(prepared))
+        self.assertTrue(current["nodes"][0]["focused"])
+        self.assertEqual(session.actions, ["mouse", b"\x01\x7f", b"\t", "mouse"])
+        self.assertGreaterEqual(session.stale_text_rejections, 2)
+
+
 class ReportConditionTests(unittest.TestCase):
     def test_incompatible_comparisons_are_rejected_before_any_process_starts(self):
         with tempfile.TemporaryDirectory(prefix="tundra-report-condition-") as folder:

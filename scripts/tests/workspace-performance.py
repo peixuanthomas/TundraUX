@@ -223,7 +223,35 @@ def snapshot_cells(frame):
 
 def frame_cue(cells, rects, styled=False):
     expected = signature(cells, rects, styled)
-    return lambda candidate: signature(candidate["cells"], rects, styled) == expected
+    def matches(candidate):
+        return signature(candidate["cells"], rects, styled) == expected
+    matches.description = {"rects": rects, "styled": styled,
+                           "sha256": hashlib.sha256(json.dumps(expected, ensure_ascii=False).encode()).hexdigest()}
+    return matches
+
+
+def search_state_observed(session, frame, focused):
+    field = node(frame, "page/launcher.search")
+    if not field["actionable"] or field["focused"] != focused or not session.frames:
+        return False
+    if field["text"].rsplit(":", 1)[-1].strip() not in ("", "_"):
+        return False
+    return region(session.frames[-1]["cells"], field["rect"]) == region(snapshot_cells(frame), field["rect"])
+
+
+def prepare_mouse_search(session):
+    current = session.until(lambda frame: any(item["id"] == "page/launcher.search" and item["actionable"]
+                                             for item in frame["nodes"]))
+    session.tap(current, "page/launcher.search")
+    session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
+    session.send(b"\x01\x7f")
+    session.until(lambda frame: search_state_observed(session, frame, True))
+    # Empty keyboard input can change only the padding foreground. Observe a
+    # complete unfocused frame, then a real mouse-focused frame before caching.
+    session.send(b"\t")
+    current = session.until(lambda frame: search_state_observed(session, frame, False))
+    session.tap(current, "page/launcher.search")
+    return session.until(lambda frame: search_state_observed(session, frame, True))
 
 
 def vim_terminal_rect(page_rect):
@@ -436,7 +464,8 @@ class Session:
         self.frames.clear()
         before_rpc = self.rpc_count
         capture = {"operation": operation, "started_ns": None, "frames": (),
-                   "timeout_seconds": self.capture_timeout, "discovery": cue is None}
+                   "timeout_seconds": self.capture_timeout, "discovery": cue is None,
+                   "cue_signature": getattr(cue, "description", None)}
         self.capture_active = True
         try:
             capture["started_ns"] = action()
@@ -791,12 +820,7 @@ def interactions(binary, output, samples, motion, write, single_samples=None, de
                 current = session.until(lambda frame: node(frame, initially_selected)["selected"])
             for index in range(case_samples):
                 # Each sample is one physical input, then complete output, then verification.
-                current = session.until(lambda frame: any(item["id"] == "page/launcher.search" and item["actionable"]
-                                                          for item in frame["nodes"]))
-                session.tap(current, "page/launcher.search")
-                session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
-                session.send(b"\x01\x7f")
-                current = session.until(lambda frame: node(frame, "page/launcher.search")["text"].rsplit(":", 1)[-1].strip() in ("", "_"))
+                current = prepare_mouse_search(session)
                 search_rect = node(current, "page/launcher.search")["rect"]
                 focused_cells = session.frames[-1]["cells"]
                 marker = chr(0x0400 + index % 200)
@@ -808,7 +832,7 @@ def interactions(binary, output, samples, motion, write, single_samples=None, de
                 write(dict(kind="interaction", action="input", index=index, layout=f"{count}-window",
                            size=f"{width}x{height}", **timing))
                 session.send(b"\x01\x7f\t")
-                current = session.until(lambda frame: not node(frame, "page/launcher.search")["focused"])
+                current = session.until(lambda frame: search_state_observed(session, frame, False))
                 rect = node(current, "page/launcher.search")["rect"]
                 before = region(session.frames[-1]["cells"], rect, True)
                 unfocused_cells = session.frames[-1]["cells"]
