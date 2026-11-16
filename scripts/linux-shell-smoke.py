@@ -235,6 +235,21 @@ def selected_window(frame):
                 if "workspace.title." in item["id"] and item["selected"])
 
 
+def ready_control_position(master, output, child, cli, env, frame, identifier):
+    def owner(snapshot):
+        return next((item["id"] for item in snapshot["nodes"]
+                     if "workspace.title." in item["id"] and item["selected"]), None)
+
+    expected_owner = owner(frame)
+    current = wait_for_snapshot(master, output, child, cli, env,
+                                f"Control {identifier} is not ready in its original window",
+                                lambda current: current["page"] == frame["page"]
+                                and owner(current) == expected_owner
+                                and any(item["id"] == identifier and item["enabled"]
+                                        and item["actionable"] for item in current["nodes"]))
+    return control_position(current, identifier)
+
+
 def restore_window(master, output, child, cli, env, identifier, page, exited=None):
     # Independent child AppHosts do not restore their caller when they exit.
     def ready(frame):
@@ -253,7 +268,7 @@ def restore_window(master, output, child, cli, env, identifier, page, exited=Non
     if not ready(frame):
         item = next(item for item in frame["nodes"]
                     if item["id"].endswith(f"workspace.taskbar.{identifier}") and item["actionable"])
-        x, y = control_position(frame, item["id"])
+        x, y = ready_control_position(master, output, child, cli, env, frame, item["id"])
         os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
     return wait_for_snapshot(master, output, child, cli, env, f"{page} window did not restore", ready)
 
@@ -270,7 +285,7 @@ def open_home_entry(master, output, child, cli, env, label, page):
         read_available(master, output, 0.05)
     else:
         raise SystemExit(f"Home entry {label!r} is unavailable: {frame}\n" + output_diagnostic(output))
-    x, y = control_position(frame, entry["id"])
+    x, y = ready_control_position(master, output, child, cli, env, frame, entry["id"])
     os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
@@ -284,7 +299,7 @@ def open_home_entry(master, output, child, cli, env, label, page):
 def check_status_details(master, output, child, cli, env):
     frame = control_snapshot(master, output, child, cli, env)
     page = frame["page"]
-    x, y = control_position(frame, "chrome/shell.status")
+    x, y = ready_control_position(master, output, child, cli, env, frame, "chrome/shell.status")
     os.write(master, f"\x1b[<0;{x};{y}M".encode())
     read_available(master, output, 0.1)
     frame = control_snapshot(master, output, child, cli, env)
@@ -408,7 +423,7 @@ def check_management_menu(master: int, slave: int, output: bytearray, child: sub
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 22, 108, 0, 0))
     os.kill(child.pid, signal.SIGWINCH)
     frame, more = more_button(108, 22, timeout=5.0)
-    more_x, more_y = control_position(frame, more["id"])
+    more_x, more_y = ready_control_position(master, output, child, cli, env, frame, more["id"])
     press_more = f"\x1b[<0;{more_x};{more_y}M".encode()
     release_more = f"\x1b[<0;{more_x};{more_y}m".encode()
     offset = len(output)
@@ -547,7 +562,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
         current = control_snapshot(master, output, child, cli, env)
         identifier = next(node["id"] for node in current["nodes"]
                           if any(node["id"].endswith("/" + suffix) for suffix in suffixes))
-        x, y = control_position(current, identifier)
+        x, y = ready_control_position(master, output, child, cli, env, current, identifier)
         os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
         deadline = time.monotonic() + 0.7
         while time.monotonic() < deadline:
@@ -560,7 +575,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
     positions = {}
     for letter in "asd":
         identifier = f"keyboard/screen-keyboard.letter.{letter}"
-        x, y = control_position(current, identifier)
+        x, y = ready_control_position(master, output, child, cli, env, current, identifier)
         rect = next(node["rect"] for node in current["nodes"] if node["id"] == identifier)
         positions[letter] = x, y, min(x + 1, rect["x"] + rect["width"])
     os.write(master, b"printf 'RAPID_%s\\n' ")
@@ -888,7 +903,7 @@ def check_system_settings_environment(master, output, child, cli, env):
         raise SystemExit(f"OS settings did not reach {page} with {markers}: {frame}\n" + output_diagnostic(output))
 
     frame = open_home_entry(master, output, child, cli, env, "Settings", "Settings")
-    control_position(frame, "page/settings.operating-system")
+    ready_control_position(master, output, child, cli, env, frame, "page/settings.operating-system")
     os.write(master, b"\x1b[19~")
     wait_page("Management", "Unavailable in this environment")
     os.write(master, b"\x1bOS")
@@ -904,10 +919,10 @@ def check_system_settings_environment(master, output, child, cli, env):
     frame = wait_for_snapshot(master, output, child, cli, env, "F4 did not return from OS details",
                               lambda frame: frame["page"] == "Management"
                               and not any(item["id"].startswith("modal/") for item in frame["nodes"]))
-    x, y = control_position(frame, "chrome/shell.back")
+    x, y = ready_control_position(master, output, child, cli, env, frame, "chrome/shell.back")
     os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
     frame = wait_page("Settings")
-    control_position(frame, "page/settings.operating-system")
+    ready_control_position(master, output, child, cli, env, frame, "page/settings.operating-system")
     os.write(master, b"\x1b")
     wait_page("Home")
     print("PASS: unsupported OS settings shows an environment limit and F4 explains systemd requirements without authorization")
@@ -940,7 +955,7 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
             item = next((item for item in frame["nodes"]
                          if item["id"].endswith(identifier) and item["actionable"]), None)
             if item is not None and (page is None or frame["page"] == page):
-                x, y = control_position(frame, item["id"])
+                x, y = ready_control_position(master, output, child, cli, env, frame, item["id"])
                 os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
                 return
             if time.monotonic() >= deadline:
@@ -1506,8 +1521,8 @@ def main() -> int:
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Home did not settle after input validation")
 
-        back_x, back_y = control_position(
-            control_snapshot(master, output, child, cli, env), "chrome/shell.back"
+        back_x, back_y = ready_control_position(
+            master, output, child, cli, env, control_snapshot(master, output, child, cli, env), "chrome/shell.back"
         )
         pointer_offset = len(output)
         os.write(master, f"\x1b[<35;{back_x};{back_y}M".encode())
