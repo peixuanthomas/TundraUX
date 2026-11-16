@@ -62,6 +62,7 @@ Shell validates the configured language and its English fallback during the star
 Shell caches the exported language data for each language generation. New AppHosts restore shared translation bundles alongside loading static assets; unavailable or mismatched language data follows the same disk recovery path as before.
 
 Worker entry connects to the guardian before loading language bundles. AppHosts use the Shell snapshot when constructing the session; early failures retain the lazy embedded diagnostic fallback.
+After an AppHost welcomes the Shell, its current viewport and initialization join the bounded background sender in the same event-loop turn, before the next terminal draw or wait.
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 

@@ -104,46 +104,10 @@ impl Workspace {
         let mut received = Vec::new();
         for id in ids {
             let window = self.windows.get_mut(&id).expect("live window");
+            flush_window_requests(window);
             let Some(stream) = &mut window.stream else {
                 continue;
             };
-            while let Some(message) = window.queued.pop_front() {
-                let initializes = matches!(message, ShellToApp::Init(_));
-                match stream.try_queue_owned(message) {
-                    Ok(()) => {
-                        if initializes && let Some(startup) = &mut window.startup {
-                            startup.init_queued = Some(Instant::now());
-                        }
-                    }
-                    Err((error, message)) if error.kind() == io::ErrorKind::WouldBlock => {
-                        window.queued.push_front(message);
-                        break;
-                    }
-                    Err((error, mut message)) if error.kind() == io::ErrorKind::InvalidInput => {
-                        if let ShellToApp::Init(init) = &mut message
-                            && init.language.take().is_some()
-                        {
-                            window.queued.push_front(message);
-                            continue;
-                        }
-                        window.queued.push_front(message);
-                        break;
-                    }
-                    Err((_, message)) => {
-                        window.queued.push_front(message);
-                        break;
-                    }
-                }
-            }
-            if window.queued.is_empty()
-                && let Some(message) = &window.view_requested
-            {
-                match stream.queue(message) {
-                    Ok(()) => window.view_requested = None,
-                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(_) => window.view_requested = None,
-                }
-            }
             if window.input_blocked
                 && !stream.write_backpressured()
                 && window.queued.len() < MAX_MESSAGES / 2
@@ -542,6 +506,7 @@ impl Workspace {
                     if let Some(viewport) = window.viewport.clone() {
                         window.queued.insert(1, viewport);
                     }
+                    flush_window_requests(window);
                 }
             }
             AppToShell::Welcome { .. } => self.force(id)?,
@@ -885,6 +850,49 @@ impl Workspace {
             true
         } else {
             false
+        }
+    }
+}
+
+fn flush_window_requests(window: &mut Window) {
+    let Some(stream) = &mut window.stream else {
+        return;
+    };
+    while let Some(message) = window.queued.pop_front() {
+        let initializes = matches!(message, ShellToApp::Init(_));
+        match stream.try_queue_owned(message) {
+            Ok(()) => {
+                if initializes && let Some(startup) = &mut window.startup {
+                    startup.init_queued = Some(Instant::now());
+                }
+            }
+            Err((error, message)) if error.kind() == io::ErrorKind::WouldBlock => {
+                window.queued.push_front(message);
+                break;
+            }
+            Err((error, mut message)) if error.kind() == io::ErrorKind::InvalidInput => {
+                if let ShellToApp::Init(init) = &mut message
+                    && init.language.take().is_some()
+                {
+                    window.queued.push_front(message);
+                    continue;
+                }
+                window.queued.push_front(message);
+                break;
+            }
+            Err((_, message)) => {
+                window.queued.push_front(message);
+                break;
+            }
+        }
+    }
+    if window.queued.is_empty()
+        && let Some(message) = &window.view_requested
+    {
+        match stream.queue(message) {
+            Ok(()) => window.view_requested = None,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+            Err(_) => window.view_requested = None,
         }
     }
 }

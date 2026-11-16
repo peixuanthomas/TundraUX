@@ -69,6 +69,72 @@ pub(super) fn connected_window(
     (app, peer, listener)
 }
 
+#[test]
+fn welcome_sends_latest_initialization_without_another_workspace_poll() {
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let id = SessionId(1);
+    let worker = WorkerId {
+        run: workspace_protocol::RunId(1),
+        role: WorkerRole::App(id),
+        generation: workspace_protocol::ProcessGeneration(3),
+    };
+    let (mut app, peer, _listener) = connected_window(Size::new(106, 16));
+    app.worker = Some(worker);
+    app.init = Some(WindowInit {
+        launch: serde_json::Value::Null,
+        profile: None,
+        language: None,
+        size: Size::new(106, 16),
+        layout: LayoutGeneration(1),
+        focused: false,
+        image_cell_size: None,
+        text_sizing: false,
+    });
+    let viewport = ShellToApp::Viewport {
+        layout: LayoutGeneration(9),
+        size: Some(Size::new(118, 32)),
+        visible: true,
+        focused: true,
+    };
+    app.viewport = Some(viewport.clone());
+    let catalog = ShellToApp::TaskCatalog {
+        ids: vec!["existing-task".into()],
+    };
+    app.queued.push_back(catalog.clone());
+    workspace.windows.insert(id, app);
+    workspace
+        .receive(id, AppToShell::Welcome { worker }, &mut state)
+        .unwrap();
+    let mut peer = peer.into_inner();
+    let messages = crate::process_host::event_loop::runtime().block_on(async {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            let mut messages = Vec::new();
+            for _ in 0..3 {
+                let bytes = workspace_protocol::transport::read_payload(
+                    &mut peer,
+                    workspace_protocol::MAX_WINDOW_FRAME_BYTES,
+                )
+                .await
+                .unwrap();
+                messages.push(serde_json::from_slice::<ShellToApp>(&bytes).unwrap());
+            }
+            messages
+        })
+        .await
+        .unwrap()
+    });
+    let ShellToApp::Init(init) = &messages[0] else {
+        panic!("initialization must precede viewport and controls");
+    };
+    assert_eq!(init.layout, LayoutGeneration(9));
+    assert_eq!(init.size, Size::new(118, 32));
+    assert!(init.focused);
+    assert!(init.language.is_some());
+    assert_eq!(messages[1], viewport);
+    assert_eq!(messages[2], catalog);
+}
+
 fn show(workspace: &mut Workspace, id: SessionId) {
     if let Some(source) = workspace.selection.focused() {
         workspace
