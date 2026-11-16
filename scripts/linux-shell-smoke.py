@@ -235,6 +235,26 @@ def selected_window(frame):
                 if "workspace.title." in item["id"] and item["selected"])
 
 
+def wait_for_terminal_prompt(master, output, child, cli, env, directory=None, window=None):
+    username = pwd.getpwuid(os.geteuid()).pw_name
+
+    def ready(frame):
+        if frame["page"] != "CommandLine" or (window is not None and selected_window(frame) != window):
+            return False
+        terminal = next((node for node in frame["nodes"] if node["role"] == "terminal"
+                         and node["enabled"] and node["actionable"] and node["focused"]), None)
+        if terminal is None:
+            return False
+        prompt = next((line.strip() for line in reversed(terminal["text"].splitlines())
+                       if line.strip()), "")
+        if directory is not None:
+            return prompt == f"○ {username}@{directory} >>"
+        return prompt.startswith(f"○ {username}@/") and prompt.endswith(" >>")
+
+    return wait_for_snapshot(master, output, child, cli, env,
+                             f"Command Line did not show a ready prompt for {directory}", ready)
+
+
 def ready_control_position(master, output, child, cli, env, frame, identifier):
     def owner(snapshot):
         return next((item["id"] for item in snapshot["nodes"]
@@ -572,6 +592,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
     # Send the next clicks in one burst, including held movement inside each
     # keycap. The real CLI must receive every letter, including the repeated s.
     current = control_snapshot(master, output, child, cli, env)
+    terminal_window = selected_window(current)
     positions = {}
     for letter in "asd":
         identifier = f"keyboard/screen-keyboard.letter.{letter}"
@@ -592,7 +613,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
         raise SystemExit("rapid keyboard clicks lost letters:\n" + output_diagnostic(output[offset:]))
     if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("rapid keyboard command did not complete")
-    current = control_snapshot(master, output, child, cli, env)
+    current = wait_for_terminal_prompt(master, output, child, cli, env, window=terminal_window)
     columns, rows = os.get_terminal_size(master)
     if any("Clipboard unavailable:" in line for line in
            current["lines"] + painted_screen_lines(output, columns, rows)):
@@ -614,6 +635,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
         raise SystemExit("terminal stopped accepting commands after Paste")
     if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("command after Paste did not complete")
+    wait_for_terminal_prompt(master, output, child, cli, env, window=terminal_window)
     print("PASS: rapid screen-keyboard clicks with small held movements, repeated unavailable-clipboard clicks and subsequent terminal command")
 
 
@@ -630,6 +652,7 @@ def check_crash_screen(master: int, output: bytearray, child: subprocess.Popen, 
     os.write(master, b"\r")
     if not wait_for_output(master, output, b" >>", child, 10.0, offset, ignore_spaces=True):
         raise SystemExit("embedded CLI did not start for crash-page test")
+    wait_for_terminal_prompt(master, output, child, cli, env)
     offset = len(output)
     os.write(master, b"/debug test-watchdog-panic\r")
     for marker in (b"PANIC", b"Reason:", b"Version:", b"Component:", b"Location:", b"Full report:", b"R: Restart | Q: Exit"):
@@ -1353,8 +1376,7 @@ def main() -> int:
         username = pwd.getpwuid(os.geteuid()).pw_name
         if not wait_for_output(master, output, f"{username}@/".encode(), child, 10.0, prompt_offset):
             raise SystemExit("embedded CLI did not show an absolute-path prompt; rebuild both shell and cli")
-        frame = wait_for_snapshot(master, output, child, cli, env, "Command Line window did not become ready",
-                                  lambda frame: frame["page"] == "CommandLine")
+        frame = wait_for_terminal_prompt(master, output, child, cli, env)
         launcher_terminal = selected_window(frame)
         # Command Line's live cursor can keep painting. Drain through the entry
         # animation rather than requiring the entire terminal to become silent.
@@ -1368,19 +1390,26 @@ def main() -> int:
         check_status_details(master, output, child, cli, env)
         command_directory = isolated / "command path 中文 $; ' [x]"
         command_directory.mkdir()
+        cd_offset = len(output)
         os.write(master, ("cd " + shlex.quote(str(command_directory)) + "\r").encode())
-        if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, prompt_offset, ignore_spaces=True):
-            raise SystemExit("embedded CLI could not change directory:\n" + output_diagnostic(output[prompt_offset:]))
-        if not wait_for_output(master, output, "●".encode(), child, 5.0, prompt_offset):
+        if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, cd_offset, ignore_spaces=True):
+            raise SystemExit("embedded CLI could not change directory:\n" + output_diagnostic(output[cd_offset:]))
+        if not wait_for_output(master, output, "●".encode(), child, 5.0, cd_offset):
             raise SystemExit("successful cd did not render a completed command marker")
+        wait_for_terminal_prompt(master, output, child, cli, env, command_directory, launcher_terminal)
         help_offset = len(output)
         os.write(master, b"/help\r")
-        if not wait_for_output(master, output, b"Usage: tundra-cli", child, 5.0, help_offset, ignore_spaces=True):
-            raise SystemExit("embedded CLI did not run the prefixed UX help command")
+        for marker in (b"Usage: tundra-cli", b"Use <command> --help for subcommands and options.", "●".encode()):
+            if not wait_for_output(master, output, marker, child, 5.0, help_offset, ignore_spaces=True):
+                frame = control_snapshot(master, output, child, cli, env)
+                raise SystemExit(f"embedded CLI help omitted {marker!r}: {json.dumps(frame, ensure_ascii=False)}\n"
+                                 + output_diagnostic(output[help_offset:]))
+        wait_for_terminal_prompt(master, output, child, cli, env, command_directory, launcher_terminal)
         failure_offset = len(output)
         os.write(master, b"invalid-command\r")
         if not wait_for_output(master, output, "×".encode(), child, 5.0, failure_offset):
             raise SystemExit("invalid command did not render a failure marker")
+        wait_for_terminal_prompt(master, output, child, cli, env, command_directory, launcher_terminal)
         # Resize to get a full frame: incremental updates can omit the unchanged
         # username and path prefix, so raw output alone cannot verify that prompt.
         prompt_offset = len(output)
@@ -1446,15 +1475,17 @@ def main() -> int:
         resize_deadline = time.monotonic() + 0.5
         while time.monotonic() < resize_deadline:
             read_available(master, output, 0.05)
+        frame = wait_for_terminal_prompt(master, output, child, cli, env, command_directory)
+        explorer_terminal = selected_window(frame)
         cwd_offset = len(output)
         os.write(master, b"printf 'EXPLORER_CWD=%s\\n' \"$PWD\"\r")
         expected_cwd = f"EXPLORER_CWD={command_directory}".encode()
         if not wait_for_output(master, output, expected_cwd, child, 5.0, cwd_offset, ignore_spaces=True):
             raise SystemExit("Explorer terminal child had the wrong working directory:\n" + output_diagnostic(output[cwd_offset:]))
+        if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, cwd_offset, ignore_spaces=True):
+            raise SystemExit("Explorer working-directory command did not complete:\n" + output_diagnostic(output[cwd_offset:]))
+        wait_for_terminal_prompt(master, output, child, cli, env, command_directory, explorer_terminal)
         explorer_offset = len(output)
-        frame = wait_for_snapshot(master, output, child, cli, env, "Explorer terminal window did not become ready",
-                                  lambda frame: frame["page"] == "CommandLine")
-        explorer_terminal = selected_window(frame)
         os.write(master, b"exit\r")
         restore_window(master, output, child, cli, env, explorer_window, "Explorer", explorer_terminal)
         if not wait_for_painted_text(master, output, "Quick access", child):
