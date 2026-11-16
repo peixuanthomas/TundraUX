@@ -133,12 +133,29 @@ class ShellPty:
         self.keys("<Esc>" + ":" + command + "<Enter>")
 
     def terminal_area(self):
-        snapshot = shell_smoke.control_snapshot(
-            self.master, self.output, self.child, self.cli, self.env, timeout=15,
-        )
+        snapshot = self.snapshot()
         terminals = [node for node in snapshot["nodes"] if node["role"] == "terminal"]
         assert len(terminals) == 1, terminals
         return terminals[0]["rect"]
+
+    def snapshot(self):
+        return shell_smoke.control_snapshot(
+            self.master, self.output, self.child, self.cli, self.env, timeout=15,
+        )
+
+    def until_snapshot(self, predicate, timeout=15):
+        deadline = time.monotonic() + timeout
+        last = None
+        while time.monotonic() < deadline:
+            last = self.snapshot()
+            if predicate(last):
+                return last
+            self.drain(0.03)
+        raise AssertionError(f"UI condition timed out on {last and last['page']}:\n{self.screen()}")
+
+    def tap(self, frame, identifier):
+        x, y = shell_smoke.control_position(frame, identifier)
+        self.send(f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
 
     def close(self):
         if self.closed:
@@ -196,6 +213,23 @@ def main():
         start.write_text(BASE)
         shell = ShellPty(binary, root, args.vim)
         checks = 0
+        explorer_id = editor_id = None
+
+        def focused_window(frame):
+            return next(node["id"].rsplit(".", 1)[1] for node in frame["nodes"]
+                        if "workspace.title." in node["id"] and node["selected"])
+
+        def restore_explorer():
+            current = shell.until_snapshot(lambda frame: frame["page"] == "Home" and not any(
+                node["id"].endswith(f"workspace.taskbar.{editor_id}") for node in frame["nodes"]))
+            target = next(node for node in current["nodes"]
+                          if node["id"].endswith(f"workspace.taskbar.{explorer_id}"))
+            shell.tap(current, target["id"])
+            shell.until_snapshot(lambda frame: frame["page"] == "Explorer"
+                                 and focused_window(frame) == explorer_id
+                                 and any(node["id"].startswith("page/") and node["actionable"]
+                                         for node in frame["nodes"]))
+            shell.wait("Quick access")
 
         def open_file(name, content=BASE):
             path = files / (name + ".txt")
@@ -214,6 +248,7 @@ def main():
             print("PASS:", name, flush=True)
 
         def editor_from_explorer(path):
+            nonlocal editor_id
             shell.send(b"\x1b[15~")
             shell.send(b"\x06")
             shell.send(b"\x01")
@@ -222,6 +257,13 @@ def main():
             shell.send(b"\r")
             shell.wait("Editor")
             shell.wait(path.read_text().splitlines()[0])
+            current = shell.until_snapshot(lambda frame: frame["page"] == "Editor"
+                                           and any(node["id"].startswith("page/") and node["actionable"]
+                                                   for node in frame["nodes"]))
+            new_editor = focused_window(current)
+            assert new_editor != editor_id, "A closed Editor must not be reused"
+            editor_id = new_editor
+            shell.send(F8)
             shell.wait(VIM_READY)
 
         try:
@@ -238,11 +280,13 @@ def main():
             shell.wait("Home")
             shell.send(b"\x1b[H\r")
             shell.wait("00-start.txt")
+            explorer_id = focused_window(shell.until_snapshot(lambda frame: frame["page"] == "Explorer"))
             shell.send(b"\r")
             shell.wait("Editor")
             shell.wait(BASE.splitlines()[0])
             shell.send(F8)
             shell.wait(VIM_READY)
+            editor_id = focused_window(shell.snapshot())
             shell.ex("set showmode showcmd ruler laststatus=2 noswapfile")
 
             case("line-end-delete", "$x", BASE.replace("gamma", "gamm", 1))
@@ -444,7 +488,7 @@ def main():
 
             # Native :q! protects other hidden dirty buffers, so isolate this scenario.
             shell.ex("qall!")
-            shell.wait("Quick access")
+            restore_explorer()
             path = files / "zz-quit-discard.txt"
             path.write_text(BASE)
             editor_from_explorer(path)
@@ -452,14 +496,14 @@ def main():
             shell.ex("quit")
             shell.wait("E37")
             shell.ex("quit!")
-            shell.wait("Quick access")
+            restore_explorer()
             assert path.read_text() == BASE
             path = files / "zz-write-quit.txt"
             path.write_text(BASE)
             editor_from_explorer(path)
             shell.keys("gg0iSAVED-<Esc>")
             shell.ex("wq")
-            shell.wait("Quick access")
+            restore_explorer()
             assert_file(shell, path, "SAVED-" + BASE)
             checks += 1
             print("PASS: :q refuses a dirty buffer; :q! discards; :wq saves and exits", flush=True)
@@ -487,10 +531,18 @@ def main():
             if "No terminal graphics response" in shell.screen():
                 shell.send(b"\r")
                 shell.wait("No terminal graphics response", present=False)
-            shell.send(b"\x1b[F\x1b[D\x1b[D\r")
-            shell.wait("Home > Launcher")
-            shell.send(b"\x1b[H")
-            shell.send(b"\x1b[C")
+            current = shell.until_snapshot(lambda frame: frame["page"] == "Home" and any(
+                "home.entry." in node["id"] and node["name"] == "Launcher" and node["actionable"]
+                for node in frame["nodes"]))
+            launcher = next(node for node in current["nodes"]
+                            if "home.entry." in node["id"] and node["name"] == "Launcher")
+            shell.tap(current, launcher["id"])
+            current = shell.until_snapshot(lambda frame: frame["page"] == "Launcher" and any(
+                node["id"].startswith("page/launcher.item.") and node["name"] == "Editor"
+                and node["actionable"] for node in frame["nodes"]))
+            editor = next(node for node in current["nodes"]
+                          if node["id"].startswith("page/launcher.item.") and node["name"] == "Editor")
+            shell.tap(current, editor["id"])
             shell.send(b"\r")
             shell.wait("GUI-RECOVERY")
             shell.send(b"\x13")

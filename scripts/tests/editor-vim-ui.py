@@ -129,7 +129,9 @@ def main():
             until(lambda current: current["page"] == "Home")
             key("Home")
             key("Enter")
-            until(lambda current: current["page"] == "Explorer")
+            current = until(lambda current: current["page"] == "Explorer")
+            explorer_id = next(node["id"].rsplit(".", 1)[1] for node in current["nodes"]
+                               if "workspace.title." in node["id"] and node["selected"])
             key("l", "--modifiers", "ctrl")
             key("a", "--modifiers", "ctrl")
             ui("text", str(files))
@@ -137,7 +139,9 @@ def main():
             current = until(lambda current: any(node["role"] == "listitem" and "sample.txt" in node["text"] for node in current["nodes"]))
             row = next(node for node in current["nodes"] if node["role"] == "listitem" and "sample.txt" in node["text"])
             ui("click", "--id", row["id"], "--double")
-            until(lambda current: current["page"] == "Editor")
+            current = until(lambda current: current["page"] == "Editor")
+            editor_id = next(node["id"].rsplit(".", 1)[1] for node in current["nodes"]
+                             if "workspace.title." in node["id"] and node["selected"])
             screen_contains(smoke.BASE.splitlines()[0])
             key("F8")
             if missing_engine:
@@ -149,6 +153,8 @@ def main():
                 assert document.read_text() == smoke.BASE
                 print("PASS: missing engine opens the real installation dialog and progress bar; pointer cancellation preserves the document", flush=True)
                 key("F8")
+                until(lambda current: "Vim could not continue" in "\n".join(current["lines"]))
+                ui("click", "--id", "chrome/shell.status")
                 screen_contains("has not been published yet")
                 assert document.read_text() == smoke.BASE
                 print("PASS: an unpublished engine is reported without changing the document", flush=True)
@@ -238,7 +244,15 @@ def main():
             ex("quit")
             screen_contains("E37")
             ex("quit!")
-            until(lambda current: current["page"] == "Explorer")
+            current = until(lambda current: current["page"] == "Home" and not any(
+                node["id"].endswith(f"workspace.taskbar.{editor_id}") for node in current["nodes"]))
+            explorer = next(node for node in current["nodes"]
+                            if node["id"].endswith(f"workspace.taskbar.{explorer_id}"))
+            ui("click", "--id", explorer["id"])
+            until(lambda current: current["page"] == "Explorer" and any(
+                node["id"].endswith(f"workspace.title.{explorer_id}") and node["selected"]
+                for node in current["nodes"]) and any(
+                node["id"].startswith("page/") and node["actionable"] for node in current["nodes"]))
             assert path.read_text() == smoke.BASE
             print("PASS: :q rejects unsaved changes and :q! discards them", flush=True)
             print("PASS: 8 Vim workflows through tundra-cli ui", flush=True)

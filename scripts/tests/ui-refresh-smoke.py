@@ -84,6 +84,8 @@ def run_case(binary, language, color, motion, sizes, samples):
             return next(item for item in frame["nodes"] if item["id"] == identifier)
 
         def tap(frame, identifier):
+            frame = until(lambda current: any(item["id"] == identifier and item["actionable"]
+                                              for item in current["nodes"]))
             x, y = smoke.control_position(frame, identifier)
             send(f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
 
@@ -185,13 +187,15 @@ def run_case(binary, language, color, motion, sizes, samples):
                 tap(current, keyboard["id"])
                 current = until(lambda frame: not frame["animation_running"] and
                                 any(item["id"] == "keyboard/screen-keyboard.letter.a"
-                                    for item in frame["nodes"]))
+                                    for item in frame["nodes"]) and
+                                node(frame, "page/launcher.search")["actionable"])
                 assert_header(current)
                 assert node(current, "page/launcher.search")["actionable"]
                 toggle = next(item for item in current["nodes"] if item["id"].endswith("/screen-keyboard.toggle"))
                 tap(current, toggle["id"])
                 current = until(lambda frame: not frame["animation_running"] and
-                                any(item["id"].endswith("/input.keyboard") for item in frame["nodes"]))
+                                any(item["id"].endswith("/input.keyboard") for item in frame["nodes"]) and
+                                node(frame, "page/launcher.search")["actionable"])
                 assert_header(current, keyboard["id"])
                 wide = "中文e\u0301😀"
                 send(b"\x1b[200~" + wide.encode() + b"\x1b[201~")
