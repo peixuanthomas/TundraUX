@@ -153,6 +153,10 @@ Per-window input queues stop admitting new application input when their bounded 
 
 Restoring an existing window creates no startup sample. Page-specific background work can continue after the first frame.
 
+`app-startup-presented` is a separate event recorded after successful terminal output. Its `total_us` runs from sending `SpawnApp` through that output; `accepted_us` retains the earlier acceptance measurement, `accepted_to_present_us` measures the remaining Shell wait, and `terminal_output_us` includes composition, terminal diffing, and output for that draw. `starting_shown` records whether a Starting placeholder was actually output before the first application frame. These fields measure output completion, not a terminal emulator's pixel presentation.
+
+Set `TUNDRA_PERF_TRACE=/absolute/path/trace.jsonl` for optional per-frame and per-input diagnostics. `input-presented` records Shell input enqueue to successful output using only the Shell's monotonic clock. Frame sequence and processed input serial identify the correspondence; `input_to_accepted_us` and `accepted_to_present_us` split that duration when the accepted frame is still available. The trace excludes input contents and is disabled by default.
+
 ## Build and validation
 
 ```sh
