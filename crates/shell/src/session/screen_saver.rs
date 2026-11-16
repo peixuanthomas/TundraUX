@@ -1,3 +1,4 @@
+use super::window_launch::WindowOwner;
 use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,9 @@ impl ShellSession {
     }
 
     pub(super) fn advance_screen_saver_at(&mut self, now: Instant) {
+        if matches!(self.window_owner, WindowOwner::App(_)) {
+            return;
+        }
         if !self.screen_saver.active && self.screen_saver_poll_timeout(now, Duration::MAX).is_zero()
         {
             self.screen_saver.active = true;

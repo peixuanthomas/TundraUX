@@ -5,7 +5,7 @@
 ## Main responsibilities
 
 - Initialize identity, assets, storage, system services, and the terminal, and complete first-time setup and startup.
-- The Shell manages global input, window layout and focus, and the terminal display.
+- The Shell manages global input, window layout and focus, the terminal display, and idle weather. AppHosts leave idle weather to the Shell so waking does not consume the next dialog key.
 - Each AppHost runs an application's page controllers, navigation, task ownership, and off-screen rendering. Editors and terminals own their child processes.
 - Session services share configuration, the active profile, system status, and file operation state across windows.
 - Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the account file intact.

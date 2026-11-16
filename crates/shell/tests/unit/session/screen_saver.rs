@@ -67,6 +67,22 @@ fn every_page_enters_weather_at_the_configured_boundary_and_keeps_its_page() {
 }
 
 #[test]
+fn app_windows_leave_idle_weather_to_the_shell_and_keep_dialog_input() {
+    let now = Instant::now();
+    let mut state = session(now, 30);
+    state.window_owner =
+        WindowOwner::App(crate::session::window_launch::WindowApplication::Settings);
+    state.set_navigation_path(vec![ShellScreen::Settings]);
+    state.apply_input_at(InputEvent::key(InputKey::F(1)), now);
+    assert!(!state.interactive_overlays().is_empty());
+    let deadline = now + Duration::from_secs(30);
+    state.apply_input_at(InputEvent::Tick, deadline);
+    assert!(!state.screen_saver_active());
+    state.apply_input_at(InputEvent::key(InputKey::Escape), deadline);
+    assert!(state.interactive_overlays().is_empty());
+}
+
+#[test]
 fn never_disables_weather_and_only_actual_activity_restarts_the_timer() {
     let now = Instant::now();
     let mut disabled = session(now, 0);
