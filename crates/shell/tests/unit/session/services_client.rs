@@ -298,3 +298,16 @@ fn a_snapshot_for_another_session_cannot_authenticate_the_current_window() {
     assert!(client.sync_session(&mut state));
     assert!(state.app.auth_session().is_none());
 }
+
+#[test]
+fn the_linux_time_policy_does_not_make_an_unchanged_snapshot_dirty() {
+    let mut state = state();
+    state.identity_backend = identity::IdentityBackend::Linux;
+    let client = SessionServicesClient::for_test(snapshot(None));
+    client.sync_session(&mut state);
+    assert_eq!(
+        state.app.storage_config().time_sync.source,
+        storage::TimeSyncSource::OperatingSystem
+    );
+    assert!(!client.sync_session(&mut state));
+}

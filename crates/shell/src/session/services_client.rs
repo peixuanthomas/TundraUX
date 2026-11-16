@@ -236,6 +236,10 @@ impl SessionServicesClient {
                 .revision,
         );
         config.session_authorization_revision = Some(auth.0);
+        if state.identity_backend == identity::IdentityBackend::Linux {
+            config.time_sync.source = storage::TimeSyncSource::OperatingSystem;
+            config.time_sync.server_url = None;
+        }
         if state.app.storage_config() != &config {
             let launcher_previous = (state.app.storage_config().launcher != config.launcher)
                 .then(|| state.app.storage_config().launcher.clone());
