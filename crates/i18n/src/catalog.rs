@@ -1,5 +1,5 @@
 use crate::{LanguageError, LanguageErrorKind, RepairDiagnostic, RepairKind};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -24,7 +24,7 @@ pub fn canonical_language_code(code: &str) -> Result<String, LanguageError> {
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LanguageOption {
     pub code: String,
     pub native_name: String,
@@ -63,9 +63,10 @@ pub(crate) fn parse_manifest(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LanguageCatalog {
     options: Vec<LanguageOption>,
+    #[serde(skip)]
     pub diagnostics: Vec<RepairDiagnostic>,
 }
 

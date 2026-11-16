@@ -20,6 +20,18 @@ pub(super) struct PreparedLanguage {
     pub catalog: i18n::LanguageCatalog,
     pub diagnostics: Vec<i18n::RepairDiagnostic>,
 }
+
+pub(super) enum InitialLanguage {
+    Prepared(PreparedLanguage),
+    FromShell(serde_json::Value),
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct WindowLanguage {
+    snapshot: i18n::LanguageSnapshotData,
+    catalog: i18n::LanguageCatalog,
+}
+
 impl PreparedLanguage {
     pub fn load(root: &std::path::Path, code: &str) -> Self {
         let mut loaded = i18n::LanguageSnapshot::load_startup(root, code, 1);
@@ -32,6 +44,19 @@ impl PreparedLanguage {
             diagnostics: loaded.diagnostics,
         }
     }
+
+    pub(super) fn restore_from_shell(data: serde_json::Value, code: &str) -> Option<Self> {
+        let WindowLanguage { snapshot, catalog } = serde_json::from_value(data).ok()?;
+        if i18n::canonicalize_locale(code).ok()? != snapshot.code {
+            return None;
+        }
+        Some(Self {
+            snapshot: Arc::new(snapshot.restore_validated().ok()?),
+            catalog,
+            diagnostics: Vec::new(),
+        })
+    }
+
     pub fn update_from(&mut self, state: &ShellSession) {
         self.snapshot = state.language.clone();
         self.catalog = state.language_catalog.clone();
@@ -40,6 +65,13 @@ impl PreparedLanguage {
 }
 
 impl ShellSession {
+    pub(super) fn export_window_language(&self) -> serde_json::Result<serde_json::Value> {
+        serde_json::to_value(WindowLanguage {
+            snapshot: self.language.export(),
+            catalog: self.language_catalog.clone(),
+        })
+    }
+
     pub fn language_code(&self) -> &str {
         self.language.code()
     }

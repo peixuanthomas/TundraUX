@@ -582,6 +582,7 @@ pub struct UiSessionState {
     pub(super) window_delete_launcher: Option<workspace_protocol::SessionId>,
     pub(super) window_close: super::app_host::WindowClose,
     pub(super) window_global_request: Option<ShellCommand>,
+    pub(super) window_language_reloaded: Option<String>,
     pub(super) windows_active: bool,
     pub(super) window_task_ids: HashSet<String>,
     pub(super) window_task_action: Option<(String, bool)>,

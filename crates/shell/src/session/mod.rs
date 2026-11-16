@@ -103,7 +103,7 @@ mod ui_state;
 
 use command_line_runtime::*;
 use controller::*;
-use localization::PreparedLanguage;
+use localization::{InitialLanguage, PreparedLanguage};
 use motion_effects::*;
 use presentation::*;
 use redraw::*;
@@ -113,7 +113,7 @@ use ui_state::*;
 pub use ui_state::{ShellSession, UiSessionState};
 
 pub(in crate::session) struct ShellRuntimeServices {
-    language: Option<PreparedLanguage>,
+    language: Option<InitialLanguage>,
     terminal_image_support: bool,
     explorer: Option<ShellExplorerTaskRuntime>,
     diagnostics: Option<ShellDiagnosticsTaskRuntime>,

@@ -133,15 +133,21 @@ impl ShellSession {
             storage_config.time_sync.source = storage::TimeSyncSource::OperatingSystem;
             storage_config.time_sync.server_url = None;
         }
-        let prepared_language = runtime_services.language.unwrap_or_else(|| {
-            let started = language_load_us.as_ref().map(|_| Instant::now());
-            let prepared =
-                PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language);
-            if let (Some(duration), Some(started)) = (language_load_us, started) {
-                *duration = started.elapsed().as_micros() as u64;
-            }
-            prepared
-        });
+        let language_started = language_load_us.as_ref().map(|_| Instant::now());
+        let prepared_language = runtime_services
+            .language
+            .and_then(|language| match language {
+                InitialLanguage::Prepared(language) => Some(language),
+                InitialLanguage::FromShell(data) => {
+                    PreparedLanguage::restore_from_shell(data, &storage_config.language)
+                }
+            })
+            .unwrap_or_else(|| {
+                PreparedLanguage::load(ascii_assets.store().root(), &storage_config.language)
+            });
+        if let (Some(duration), Some(started)) = (language_load_us, language_started) {
+            *duration = started.elapsed().as_micros() as u64;
+        }
         let language_catalog = prepared_language.catalog;
         let language = prepared_language.snapshot;
         let _language = i18n::enter_snapshot(language.clone());
@@ -171,6 +177,7 @@ impl ShellSession {
             window_delete_launcher: None,
             window_close: Default::default(),
             window_global_request: None,
+            window_language_reloaded: None,
             windows_active: false,
             window_task_ids: HashSet::new(),
             window_task_action: None,

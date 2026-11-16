@@ -445,6 +445,9 @@ impl ShellSession {
         }
         self.replace_storage_config(config);
         if let Some((catalog, loaded)) = candidate {
+            if self.window_owner.is_app() && self.language_code() == loaded.snapshot.code() {
+                self.window_language_reloaded = Some(loaded.snapshot.code().to_owned());
+            }
             self.publish_language(catalog, loaded);
         }
         if let Some(state) = self.pages.settings.settings_state.as_mut() {

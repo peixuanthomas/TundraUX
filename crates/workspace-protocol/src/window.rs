@@ -112,6 +112,7 @@ pub enum AppToShell {
 #[serde(rename_all = "snake_case")]
 pub enum ShellAction {
     SettingsChanged,
+    LanguageReloaded { code: String },
     ClockChanged,
     Logout,
     Restart,
@@ -126,6 +127,8 @@ pub enum ShellAction {
 pub struct WindowInit {
     pub launch: Value,
     pub profile: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<Value>,
     pub size: Size,
     pub layout: LayoutGeneration,
     pub focused: bool,

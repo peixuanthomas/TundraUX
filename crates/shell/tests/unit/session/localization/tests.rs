@@ -84,6 +84,8 @@ fn fixture() -> Fixture {
 #[test]
 fn same_language_selection_reloads_disk_and_keeps_retained_messages() {
     let mut f = fixture();
+    f.state.window_owner =
+        window_launch::WindowOwner::App(window_launch::WindowApplication::Settings);
     f.state
         .save_region_picker_value(Some("zh-Hans".into()), None);
     assert_eq!(f.state.language_code(), "zh-CN");
@@ -104,6 +106,19 @@ fn same_language_selection_reloads_disk_and_keeps_retained_messages() {
     f.state.save_region_picker_value(Some("zh-CN".into()), None);
     assert!(f.state.language.generation() > generation);
     assert_eq!(f.state.language.render(&message), "重载成功");
+    assert_eq!(f.state.window_language_reloaded.as_deref(), Some("zh-CN"));
+    let exported = f.state.export_window_language().unwrap();
+    assert!(PreparedLanguage::restore_from_shell(exported.clone(), "en-US").is_none());
+    let restored = PreparedLanguage::restore_from_shell(exported, "zh-Hans").unwrap();
+    assert_eq!(
+        restored.snapshot.generation(),
+        f.state.language.generation()
+    );
+    assert_eq!(restored.snapshot.render(&message), "重载成功");
+    assert_eq!(
+        restored.catalog.options(),
+        f.state.language_catalog.options()
+    );
 }
 
 #[test]

@@ -19,6 +19,8 @@ Window frames also carry styled Markdown headings as text and geometry. The rece
 
 `AppStarted` carries guardian-side spawn and readiness durations. AppHost attaches optional local startup durations to its first frame for Shell's startup log.
 
+Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration.
+
 Configuration, profile, and authorization writes include the revision the caller read. File paths carried by `NativePath` use Unix bytes or Windows UTF-16 code units so they round trip even when they cannot be represented as UTF-8.
 
 Validation: `cargo test --locked -p workspace-protocol`.

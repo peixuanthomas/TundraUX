@@ -72,17 +72,8 @@ impl LanguageSnapshotData {
     /// Validate supplied text and rebuild bundles entirely in memory.
     pub fn restore(&self) -> Result<LanguageSnapshot, LanguageError> {
         let code = canonical_language_code(&self.code)?;
-        let sources = |tier: &str, text: &[String]| {
-            text.iter()
-                .enumerate()
-                .map(|(index, text)| Source {
-                    path: PathBuf::from(format!("<memory>/{tier}/{index}.ftl")),
-                    text: text.clone(),
-                })
-                .collect::<Vec<_>>()
-        };
-        let current = sources("current", &self.current);
-        let mut english = sources("english", &self.english);
+        let current = memory_sources("current", self.current.iter().cloned());
+        let mut english = memory_sources("english", self.english.iter().cloned());
         let embedded = embedded_sources();
         resource::validate(&english, Some(&embedded), true)?;
         let existing = resource::identifiers(&english);
@@ -100,6 +91,18 @@ impl LanguageSnapshotData {
         }
         resource::validate(&current, Some(&english), true)?;
         LanguageSnapshot::from_sources(code, self.generation, current, english, embedded)
+    }
+
+    /// Rebuild bundles from `LanguageSnapshot::export` received from a trusted process.
+    /// Use `restore` for other inputs, which need reference and argument validation.
+    pub fn restore_validated(self) -> Result<LanguageSnapshot, LanguageError> {
+        LanguageSnapshot::from_sources(
+            canonical_language_code(&self.code)?,
+            self.generation,
+            memory_sources("current", self.current),
+            memory_sources("english", self.english),
+            embedded_sources(),
+        )
     }
 }
 
@@ -449,6 +452,17 @@ impl LanguageSnapshot {
 
 fn embedded_sources() -> Vec<Source> {
     sources_from_files(EMBEDDED_FILES)
+}
+
+fn memory_sources(tier: &str, texts: impl IntoIterator<Item = String>) -> Vec<Source> {
+    texts
+        .into_iter()
+        .enumerate()
+        .map(|(index, text)| Source {
+            path: PathBuf::from(format!("<memory>/{tier}/{index}.ftl")),
+            text,
+        })
+        .collect()
 }
 
 fn sources_from_files(files: &[(&str, &str)]) -> Vec<Source> {

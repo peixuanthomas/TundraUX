@@ -105,7 +105,7 @@ impl AppHostSession {
             startup,
             ascii_assets,
             ShellRuntimeServices {
-                language: None,
+                language: init.language.map(InitialLanguage::FromShell),
                 terminal_image_support: init.image_cell_size.is_some(),
                 explorer,
                 diagnostics,
@@ -610,6 +610,12 @@ impl AppHostSession {
         if before.app.storage_config() != self.state.app.storage_config() {
             self.output
                 .push_back(AppToShell::ShellAction(HostAction::SettingsChanged));
+        }
+        if let Some(code) = self.state.window_language_reloaded.take() {
+            self.output
+                .push_back(AppToShell::ShellAction(HostAction::LanguageReloaded {
+                    code,
+                }));
         }
         if let Some(manifest) = self.state.update_apply_manifest() {
             self.output

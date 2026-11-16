@@ -88,7 +88,7 @@ tundra-cli ui wake
 
 See the [UI control guide](crates/cli/docs/ui-control.md) for click, input, scrolling, and automation examples.
 
-To inspect new app-window startup timings, run `tundra-cli logs query --module ux.workspace --format jsonl`. See the [Shell timing fields](crates/shell/README.md#app-startup-timings).
+New app windows reuse the language resources Shell validates during the startup animation. To inspect their startup timings, run `tundra-cli logs query --module ux.workspace --format jsonl`. See the [Shell timing fields](crates/shell/README.md#app-startup-timings).
 
 ## Documentation
 

@@ -37,6 +37,7 @@ i18n::with_snapshot(&snapshot, || {
 - `msg!` retains a message ID and typed arguments; `tr!` formats immediately.
 - `enter_snapshot` returns a thread-bound RAII guard. Scopes can nest and are isolated between threads.
 - `current_snapshot()` clones the current thread's snapshot; background helpers can transfer language resources through `export()` / `restore()`.
+- An authenticated peer can rebuild bundles from an exported snapshot with `restore_validated()` and reuse the sender's reference and argument checks. The serialized language catalog carries language choices. The discovering process reports its diagnostics.
 - `String` and `&str` always represent raw text when converted to `LocalizedText` and are not translated.
 - Rendering reads only memory, without disk access or log writes.
 

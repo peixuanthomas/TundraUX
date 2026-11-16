@@ -22,21 +22,22 @@ fn snapshot_data_preserves_custom_language_and_english_without_files() {
     let serialized = toml::to_string(&data).unwrap();
     let data: LanguageSnapshotData = toml::from_str(&serialized).unwrap();
     drop(fixture);
-    let restored = data.restore().unwrap();
-    assert_eq!(restored.code(), "fr-FR");
-    assert_eq!(restored.generation(), 42);
-    assert_eq!(
-        msg!("test-wire", name = "Ada").render(&restored),
-        "Bonjour Ada"
-    );
-    assert_eq!(
-        msg!("test-wire-fallback").render(&restored),
-        "Customized English"
-    );
-    assert_eq!(
-        msg!("notifications-action-ok").render(&restored),
-        msg!("notifications-action-ok").render(&LanguageSnapshot::embedded(0))
-    );
+    for restored in [data.restore().unwrap(), data.restore_validated().unwrap()] {
+        assert_eq!(restored.code(), "fr-FR");
+        assert_eq!(restored.generation(), 42);
+        assert_eq!(
+            msg!("test-wire", name = "Ada").render(&restored),
+            "Bonjour Ada"
+        );
+        assert_eq!(
+            msg!("test-wire-fallback").render(&restored),
+            "Customized English"
+        );
+        assert_eq!(
+            msg!("notifications-action-ok").render(&restored),
+            msg!("notifications-action-ok").render(&LanguageSnapshot::embedded(0))
+        );
+    }
 }
 
 #[test]

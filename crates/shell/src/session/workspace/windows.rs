@@ -101,7 +101,7 @@ impl Workspace {
             let Some(stream) = &mut window.stream else {
                 continue;
             };
-            while let Some(message) = window.queued.front() {
+            while let Some(message) = window.queued.front_mut() {
                 match stream.queue(message) {
                     Ok(()) => {
                         if matches!(message, ShellToApp::Init(_))
@@ -112,6 +112,14 @@ impl Workspace {
                         window.queued.pop_front();
                     }
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+                    Err(error) if error.kind() == io::ErrorKind::InvalidInput => {
+                        if let ShellToApp::Init(init) = message
+                            && init.language.take().is_some()
+                        {
+                            continue;
+                        }
+                        break;
+                    }
                     Err(_) => break,
                 }
             }
@@ -300,6 +308,7 @@ impl Workspace {
         let init = WindowInit {
             launch: serde_json::to_value(&launch)?,
             profile: auth.map(serde_json::to_value).transpose()?,
+            language: None,
             size: workspace_protocol::MIN_CONTENT_SIZE,
             layout: self.generation,
             focused: false,
@@ -492,6 +501,7 @@ impl Workspace {
                     if let Some(ShellToApp::Viewport { size, .. }) = window.viewport {
                         init.size = size.unwrap_or(init.size);
                     }
+                    init.language = Some(state.export_window_language()?);
                     window.queued.push_front(ShellToApp::Init(init));
                     if let Some(viewport) = window.viewport.clone() {
                         window.queued.insert(1, viewport);
@@ -699,6 +709,14 @@ impl Workspace {
                 window.close = CloseProgress::Cleaning(Instant::now());
             }
             AppToShell::ShellAction(HostAction::SettingsChanged) => {}
+            AppToShell::ShellAction(HostAction::LanguageReloaded { code }) => {
+                if window.launch.application() == super::window_launch::WindowApplication::Settings
+                    && state.language_code() == code
+                    && let Ok((catalog, loaded)) = state.prepare_language(&code)
+                {
+                    state.publish_language(catalog, loaded);
+                }
+            }
             AppToShell::ShellAction(HostAction::ClockChanged) => {
                 if let Some(auth) = state.auth_session().cloned() {
                     state.load_clock_for_session(&auth);

@@ -212,9 +212,13 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         .and_then(|storage| storage.load_config().ok())
         .map(|config| config.language)
         .unwrap_or_else(|| "en-US".into());
-    let mut language_runtime =
-        PreparedLanguage::load(ascii_assets.store().root(), &configured_language);
-    let _startup_language = i18n::enter_snapshot(language_runtime.snapshot.clone());
+    let language_root = ascii_assets.store().root().to_path_buf();
+    let language_worker = shell_watchdog
+        .task_group("startup-language")
+        .spawn_thread(TaskSpec::one_shot(TaskId::from_static("load")), move || {
+            PreparedLanguage::load(&language_root, &configured_language)
+        })
+        .map_err(io::Error::other)?;
     // Storage is initialized at this point, but login has not opened yet.
     // Keep this single service runtime alive across lockscreen/session cycles.
     let (system_services, _system_snapshots) = system_services::SystemServicesRuntime::start(
@@ -242,6 +246,11 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
             initial_startup.app_config.border_color,
         )
     })?;
+    let mut language_runtime = language_worker
+        .join()
+        .map_err(io::Error::other)?
+        .ok_or(io::ErrorKind::Interrupted)?;
+    let _startup_language = i18n::enter_snapshot(language_runtime.snapshot.clone());
     let terminal_graphics_probe = terminal_graphics_receiver.recv().unwrap_or_else(|_| {
         ui::TerminalGraphicsProbe::no_response(
             "terminal graphics detection worker stopped without returning a result",
@@ -979,7 +988,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         startup,
         ascii_assets,
         ShellRuntimeServices {
-            language: Some(language_runtime.clone()),
+            language: Some(InitialLanguage::Prepared(language_runtime.clone())),
             terminal_image_support: launcher_icons.is_some(),
             explorer: explorer_task_runtime,
             diagnostics: diagnostics_task_runtime,
