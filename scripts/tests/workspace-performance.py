@@ -54,6 +54,7 @@ class Screen:
         self.foreground = self.background = None
         self.attributes = set()
         self.saw_rgb = False
+        self.await_cursor_position = False
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.pending = ""
 
@@ -71,14 +72,19 @@ class Screen:
                     if match is None:
                         break
                     raw, _, command = match.groups()
-                    if raw == "?25" and command in "hl":
+                    if raw == "?25" and command == "l":
                         tails.append(tuple(tuple(row) for row in self.cells))
+                    elif raw == "?25" and command == "h":
+                        self.await_cursor_position = True
                     if re.fullmatch(r"[0-9;]*", raw):
                         values = [int(value or "0") for value in raw.split(";")]
                         amount = values[0] or 1
                         if command in "Hf":
                             self.y = amount - 1
                             self.x = ((values[1] if len(values) > 1 else 1) or 1) - 1
+                            if self.await_cursor_position:
+                                tails.append(tuple(tuple(row) for row in self.cells))
+                                self.await_cursor_position = False
                         elif command == "G":
                             self.x = amount - 1
                         elif command == "d":

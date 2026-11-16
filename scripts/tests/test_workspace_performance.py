@@ -26,6 +26,13 @@ class FrameBoundaryTests(unittest.TestCase):
         self.assertEqual(frames[0][0][1][1], ((2, 1, 2, 3), None, ()))
         self.assertEqual(frames[0][0][2][1], (None, None, ()))
 
+    def test_visible_cursor_frame_waits_for_its_final_position(self):
+        screen = performance.Screen(8, 2)
+        self.assertEqual(screen.feed(b"ready\x1b[?25h"), [])
+        frames = screen.feed(b"\x1b[1;6H")
+        self.assertEqual(len(frames), 1)
+        self.assertEqual((screen.x, screen.y), (5, 0))
+
     def test_unicode_and_cursor_diffs_survive_chunk_boundaries(self):
         screen = performance.Screen(8, 2)
         data = "\x1b[1;1H中Ω\x1b[2;3Hok\x1b[?25l".encode()
