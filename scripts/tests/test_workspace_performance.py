@@ -66,6 +66,20 @@ class FrameBoundaryTests(unittest.TestCase):
             "rect": {"x": 0, "y": 0, "width": 6, "height": 1}}]}
         self.assertEqual(session.match_output(90, frame)["output_ns"], 100)
 
+    def test_live_metric_values_do_not_delay_interactive_dashboard(self):
+        session = performance.Session.__new__(performance.Session)
+        screen = performance.Screen(8, 3)
+        first = screen.feed(b"\x1b[1;1HCPU\x1b[2;1HLoading\x1b[3;1HRefresh\x1b[?25l")[0]
+        later = screen.feed(b"\x1b[2;1H50%    \x1b[?25l")[0]
+        session.frames = [{"observed_ns": 100, "byte_offset": 50, "cells": first},
+                          {"observed_ns": 200, "byte_offset": 70, "cells": later}]
+        frame = {"number": 2, "page": "SystemStatus", "nodes": [{
+            "id": "page/system-status.widget.Cpu", "actionable": True, "role": "button", "text": "CPU\n50%",
+            "rect": {"x": 0, "y": 0, "width": 8, "height": 2}}, {
+            "id": "page/refresh", "actionable": True, "role": "button", "text": "Refresh",
+            "rect": {"x": 0, "y": 2, "width": 8, "height": 1}}]}
+        self.assertEqual(session.match_output(90, frame)["output_ns"], 100)
+
 
 if __name__ == "__main__":
     unittest.main()

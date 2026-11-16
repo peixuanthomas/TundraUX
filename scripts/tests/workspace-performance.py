@@ -336,7 +336,8 @@ class Session:
     def match_output(self, started, frame, rect=None, styled=False, changed_from=None):
         assert self.frames, "No completed PTY frame"
         if rect is None:
-            rect = [item["rect"] for item in frame["nodes"]
+            rect = [dict(item["rect"], height=1) if "system-status.widget." in item["id"] else item["rect"]
+                    for item in frame["nodes"]
                     if item["id"].startswith("page/") and item["actionable"]
                     and item["role"] in ("button", "textbox", "tab", "checkbox")
                     and item["text"].strip()]
