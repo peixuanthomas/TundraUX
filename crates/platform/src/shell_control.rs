@@ -12,10 +12,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(windows)]
 use windows::Listener;
 
+mod asynchronous;
 #[cfg(windows)]
 mod windows;
-mod asynchronous;
-pub use asynchronous::{AsyncLocalConnection, AsyncLocalListener};
+pub use asynchronous::{AsyncLocalConnection, AsyncLocalListener, AsyncLocalStream};
 
 const MAX_CLIENTS: usize = 16;
 const IO_CHUNK: usize = 8192;

@@ -1,8 +1,10 @@
-use interprocess::local_socket::{
-    ListenerOptions,
-    tokio::{RecvHalf, SendHalf, Stream, prelude::*},
-};
+#[cfg(unix)]
+use interprocess::local_socket::ListenerOptions;
+use interprocess::local_socket::tokio::{Stream, prelude::*};
 use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 pub struct AsyncLocalListener(interprocess::local_socket::tokio::Listener);
 
@@ -35,11 +37,50 @@ impl AsyncLocalListener {
     pub async fn accept(&self) -> io::Result<AsyncLocalConnection> {
         let stream = self.0.accept().await?;
         check_user(&stream)?;
-        Ok(AsyncLocalConnection(stream))
+        Ok(AsyncLocalConnection(AsyncLocalStream(stream)))
     }
 }
 
-pub struct AsyncLocalConnection(Stream);
+pub struct AsyncLocalConnection(AsyncLocalStream);
+
+pub struct AsyncLocalStream(Stream);
+
+impl AsyncRead for AsyncLocalStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().0).poll_read(cx, bytes)
+    }
+}
+
+impl AsyncWrite for AsyncLocalStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.get_mut().0).poll_write(cx, bytes)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().0).poll_shutdown(cx)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for AsyncLocalStream {
+    fn drop(&mut self) {
+        let Stream::NamedPipe(pipe) = &self.0;
+        // A stopped peer must not leave interprocess's linger pool waiting on unread bytes.
+        pipe.inner().assume_flushed();
+    }
+}
 
 impl AsyncLocalConnection {
     pub async fn connect(endpoint: &str, expected_pid: u32) -> io::Result<Self> {
@@ -59,7 +100,7 @@ impl AsyncLocalConnection {
         };
         let stream = Stream::connect(name).await?;
         check_user(&stream)?;
-        let connection = Self(stream);
+        let connection = Self(AsyncLocalStream(stream));
         if connection.peer_pid()? != expected_pid {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
@@ -70,6 +111,7 @@ impl AsyncLocalConnection {
         #[cfg(not(target_os = "macos"))]
         return self
             .0
+            .0
             .peer_creds()?
             .pid()
             .map(|pid| pid as u32)
@@ -77,7 +119,7 @@ impl AsyncLocalConnection {
         #[cfg(target_os = "macos")]
         {
             use std::os::fd::AsRawFd;
-            let Stream::UdSocket(stream) = &self.0;
+            let Stream::UdSocket(stream) = &self.0.0;
             let mut pid: libc::pid_t = 0;
             let mut len = size_of_val(&pid) as libc::socklen_t;
             // SAFETY: the descriptor and initialized output buffers remain valid for this call.
@@ -97,15 +139,15 @@ impl AsyncLocalConnection {
         }
     }
 
-    pub fn split(self) -> (RecvHalf, SendHalf) {
-        self.0.split()
+    pub fn split(self) -> (ReadHalf<AsyncLocalStream>, WriteHalf<AsyncLocalStream>) {
+        tokio::io::split(self.0)
     }
 
-    pub fn into_inner(self) -> Stream {
+    pub fn into_inner(self) -> AsyncLocalStream {
         self.0
     }
 
-    pub fn from_inner(stream: Stream) -> Self {
+    pub fn from_inner(stream: AsyncLocalStream) -> Self {
         Self(stream)
     }
 }

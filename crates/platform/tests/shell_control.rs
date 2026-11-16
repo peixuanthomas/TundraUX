@@ -7,6 +7,46 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[test]
+fn async_connection_rejects_an_unexpected_server_process() {
+    use platform::shell_control::{AsyncLocalConnection, AsyncLocalListener};
+    let root = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    let endpoint = root
+        .path()
+        .join("async.sock")
+        .to_string_lossy()
+        .into_owned();
+    #[cfg(windows)]
+    let endpoint = format!(
+        "tundra-async-test-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let listener = {
+        let _runtime = runtime.enter();
+        AsyncLocalListener::bind(&endpoint).unwrap()
+    };
+    let result = runtime.block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            AsyncLocalConnection::connect(&endpoint, std::process::id() + 1),
+        )
+        .await
+        .unwrap()
+    });
+    assert!(matches!(result, Err(error) if error.kind() == io::ErrorKind::PermissionDenied));
+    drop(listener);
+    drop(root);
+}
+
 fn server() -> (tempfile::TempDir, Server) {
     let root = tempfile::tempdir().unwrap();
     let server = Server::start(&root.path().join("control")).unwrap();
