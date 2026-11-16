@@ -37,10 +37,27 @@ def main():
     def key(value, modifiers=()):
         return control("key", key=value, modifiers=list(modifiers))
 
+    def at_path(frame, path):
+        return any(item["id"].startswith("page/explorer.breadcrumb.")
+                   and item["text"].strip() == path.name for item in frame["nodes"])
+
     def navigate(path):
+        session.until(lambda frame: any(
+            item["id"] == "page/explorer.address.edit" and item["actionable"]
+            for item in frame["nodes"]
+        ))
         key("l", ("ctrl",))
+        session.until(lambda frame: any(
+            item["id"] == "page/explorer.address.input" and item["role"] == "textbox"
+            and item["actionable"] for item in frame["nodes"]
+        ))
         control("text", text=str(path))
         key("enter")
+        frame = session.until(lambda frame: at_path(frame, path))
+        (args.output / f"clipboard-navigation-{path.name}.json").write_text(
+            json.dumps(frame, ensure_ascii=False, indent=2) + "\n"
+        )
+        print(f"PASS: Explorer navigation verified: {path}", flush=True)
 
     def select_file(name):
         frame = session.until(lambda frame: any(
@@ -88,7 +105,8 @@ def main():
                 frame = key(command, ("ctrl",))
                 assert ("Copied selection." if command == "c" else "Cut selection.") in text(frame), frame
             completed = time.monotonic_ns()
-            click(second)
+            frame = click(second)
+            assert at_path(frame, target), "Paste target window is not in the verified target directory"
             paste_started = time.monotonic_ns()
             key("v", ("ctrl",))
             session.until(lambda _: (target / name).is_file()
