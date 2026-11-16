@@ -475,6 +475,29 @@ impl ShellSession {
         }
     }
 
+    pub(in crate::session) fn complete_explorer_workspace_command(
+        &mut self,
+        explorer: ExplorerState,
+    ) {
+        let error = explorer.error.clone();
+        let message = explorer.message.clone();
+        let _ = self.update_explorer_state(|current| {
+            if current.current_location == explorer.current_location {
+                current.all_entries = explorer.all_entries;
+                current.listing_warning_count = explorer.listing_warning_count;
+                current.apply_projection();
+            }
+            current.error = explorer.error;
+            current.message = explorer.message;
+        });
+        let _ = self.app.refresh_shared_explorer();
+        if let Some(error) = error {
+            self.report_explorer_task_error(error);
+        } else if let Some(message) = message {
+            self.notify_status(message);
+        }
+    }
+
     pub(in crate::session) fn apply_explorer_command(
         &mut self,
         command: ExplorerCommand,
@@ -635,8 +658,6 @@ impl ShellSession {
             let Some(mut explorer) = self.app.explorer_state().cloned() else {
                 return;
             };
-            let original_path = explorer.current_path.clone();
-            let refresh = matches!(command, ExplorerCommand::Undo | ExplorerCommand::Rename(_));
             let controller = self.app.explorer_controller();
             let auth = self.app.auth_session().cloned();
             if let Err(error) = self.submit_workspace_job(
@@ -651,30 +672,7 @@ impl ShellSession {
                     );
                     explorer
                 },
-                move |state, explorer| {
-                    if refresh
-                        && state
-                            .app
-                            .explorer_state()
-                            .is_some_and(|current| current.current_path == original_path)
-                    {
-                        state.app.dispatch_at(
-                            app::AppCommand::SetExplorerState(Some(explorer.clone())),
-                            Instant::now(),
-                        );
-                    } else {
-                        let _ = state.update_explorer_state(|current| {
-                            current.error = explorer.error.clone();
-                            current.message = explorer.message.clone();
-                        });
-                    }
-                    let _ = state.app.refresh_shared_explorer();
-                    if let Some(error) = explorer.error {
-                        state.report_explorer_task_error(error);
-                    } else if let Some(message) = explorer.message {
-                        state.notify_status(message);
-                    }
-                },
+                Self::complete_explorer_workspace_command,
             ) {
                 self.report_explorer_task_error(error.to_string());
             }

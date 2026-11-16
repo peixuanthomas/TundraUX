@@ -6284,6 +6284,82 @@ fn explorer_routing_test_state() -> ShellSession {
     state
 }
 
+#[test]
+fn delayed_explorer_rename_and_undo_keep_new_search_sort_and_selection() {
+    use app::explorer::{ExplorerSelectionMode, ExplorerSortDirection, ExplorerSortField};
+
+    for (undo, query) in [(false, "second"), (true, "txt")] {
+        let (mut state, platform, _guard) = explorer_terminal_test_fixture();
+        let storage = StorageManager::open(platform.app_paths().unwrap())
+            .unwrap()
+            .manager;
+        let controller = state.app.explorer_controller();
+        let auth = state.app.auth_session().cloned();
+        let mut submitted = state.app.explorer_state().unwrap().clone();
+        submitted.select_index(0, ExplorerSelectionMode::Replace);
+        let directory = submitted.current_path.clone();
+        if undo {
+            controller.apply(
+                &mut submitted,
+                ExplorerCommand::Rename("renamed.txt".into()),
+                auth.as_ref(),
+                &platform,
+                &storage,
+            );
+            assert!(submitted.error.is_none());
+        }
+        state.replace_explorer_state(Some(submitted.clone()));
+
+        // The worker retains the submission snapshot while the page accepts new input.
+        for command in [
+            ExplorerCommand::Search(query.into()),
+            ExplorerCommand::SetSort(ExplorerSortField::Name),
+            ExplorerCommand::SelectIndex(0),
+        ] {
+            state
+                .app
+                .dispatch_explorer_at(command, &platform, &storage, Instant::now());
+        }
+        assert_eq!(
+            state.app.explorer_state().unwrap().selected_path(),
+            Some(directory.join("second.txt"))
+        );
+
+        controller.apply(
+            &mut submitted,
+            if undo {
+                ExplorerCommand::Undo
+            } else {
+                ExplorerCommand::Rename("renamed.txt".into())
+            },
+            auth.as_ref(),
+            &platform,
+            &storage,
+        );
+        assert!(submitted.error.is_none());
+        state.complete_explorer_workspace_command(submitted);
+
+        let live = state.app.explorer_state().unwrap();
+        assert_eq!(live.query, query);
+        assert_eq!(live.sort_field, ExplorerSortField::Name);
+        assert_eq!(live.sort_direction, ExplorerSortDirection::Descending);
+        assert_eq!(live.selected_path(), Some(directory.join("second.txt")));
+        assert_eq!(
+            live.effective_selected_paths(),
+            [directory.join("second.txt")]
+        );
+        assert_eq!(live.entries[0].name, "second.txt");
+        assert_eq!(live.entries.len(), if undo { 2 } else { 1 });
+        assert_eq!(directory.join("first.txt").exists(), undo);
+        assert_eq!(directory.join("renamed.txt").exists(), !undo);
+        assert!(
+            live.all_entries
+                .iter()
+                .any(|entry| { entry.name == if undo { "first.txt" } else { "renamed.txt" } })
+        );
+    }
+}
+
 fn explorer_terminal_test_fixture() -> (
     ShellSession,
     platform::mock::MockPlatform,
