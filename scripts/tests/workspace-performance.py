@@ -377,8 +377,11 @@ class Session:
                           and item["name"] == label)
         else:
             target = home
+        target_id = target["id"]
+        current = self.until(lambda frame: any(item["id"] == target_id and item["actionable"]
+                                             for item in frame["nodes"]))
         self.frames.clear()
-        started = self.tap(current, target["id"])
+        started = self.tap(current, target_id)
         result = self.until(lambda frame: frame["page"] == app and bool(titles(frame))
                             and any(item["id"].startswith("page/") and item["actionable"] and item["text"].strip()
                                     for item in frame["nodes"]))
@@ -434,8 +437,8 @@ class Session:
             assert after == self.before, "Shell failed to restore terminal attributes"
 
 
-def launches(binary, output, samples, motion, write):
-    for app in APPLICATIONS:
+def launches(binary, output, samples, motion, write, applications=APPLICATIONS):
+    for app in applications:
         session = Session(binary, output, f"launch-{app}", motion=motion)
         seen = set()
         try:
@@ -634,6 +637,8 @@ def main():
     parser.add_argument("--interaction-samples", type=int, default=100)
     parser.add_argument("--child-samples", type=int, default=10)
     parser.add_argument("--phase", choices=("launch", "interaction", "child", "all"), default="all")
+    parser.add_argument("--application", choices=APPLICATIONS, action="append",
+                        help="Limit new-window series to these applications; other phases are unchanged")
     parser.add_argument("--motion", choices=("full", "reduced"), default="full")
     parser.add_argument("--compare", type=Path)
     parser.add_argument("--enforce-budgets", action="store_true")
@@ -652,6 +657,7 @@ def main():
                 "boundary": "Ratatui buffer diff followed by Crossterm Hide/Show cursor and flush; snapshot verification is excluded",
                 "limitation": "PTY output completion is measured; terminal emulator pixel presentation is not measured",
                 "requested_phase": args.phase, "completed": False,
+                "applications_requested": args.application or list(APPLICATIONS),
                 "launch_samples_requested": args.launch_samples,
                 "child_samples_requested": args.child_samples,
                 "interaction_samples_requested_per_type": args.interaction_samples}
@@ -667,7 +673,8 @@ def main():
             raw.flush()
         try:
             if args.phase in ("launch", "all"):
-                launches(binary, args.output, args.launch_samples, args.motion, write)
+                launches(binary, args.output, args.launch_samples, args.motion, write,
+                         args.application or APPLICATIONS)
             if args.phase in ("interaction", "all"):
                 interactions(binary, args.output, args.interaction_samples, args.motion, write)
             if args.phase in ("child", "all"):
