@@ -113,6 +113,24 @@ The report includes the executable path, size and modification time, platform, P
 
 Scheduler unit tests cover completed transitions, reduced motion, idle deadlines, and skipped frames after slow output. PTY silence alone does not prove that the runtime has no idle animation timer. Weather/rainbow retain 30 FPS; active UI transitions use 60 FPS, and one-character busy indicators advance every 80ms.
 
+### Workspace performance acceptance
+
+Use the same Linux Release build environment, bundled Vim, full-motion setting, and terminal capabilities for baseline and final measurements. Stop unrelated compilation while sampling:
+
+```sh
+python3 -B -m unittest discover -s scripts/tests -p test_workspace_performance.py
+python3 scripts/tests/workspace-performance.py /absolute/baseline/tundra-shell --output /tmp/tundra-perf-before
+python3 scripts/tests/workspace-performance.py target/release/tundra-shell --output /tmp/tundra-perf-after --compare /tmp/tundra-perf-before/report.json
+```
+
+The script creates isolated HOME/XDG directories and uses raw PTY actions. For Launcher, Settings, Explorer, Clock, empty Editor, and System Status it records 50 independent AppHosts per application, validates distinct window IDs, and separates the first opening in that Shell, subsequent new processes, and restoring the same process. It records 100 valid samples per interaction type (typing, click, keyboard focus, and, where available, pane focus) in one-window, two-window, and 217×39 four-window layouts. Command Line's visible REPL prompt and Vim's first native buffer are separate child-ready series. `--phase` and the sample-count options support a short harness check; reduced-count runs do not certify acceptance.
+
+Both endpoints use Python's monotonic clock. The end is the first matching complete PTY frame: Ratatui emits all changed cells before Crossterm's final cursor Hide/Show and flush. Automation snapshots locate controls and verify the resulting business content afterward; their response time is excluded. Blank regions and unchanged feedback fail validation. The measurement covers terminal output completion, not terminal-emulator pixel presentation. It includes PTY and host scheduling, and may include more time than the Shell's internal input-to-output interval.
+
+Each output directory preserves `samples.jsonl`, raw `*.pty` streams, application startup logs, optional Shell timing traces, build identity, P50/P95/P99 summaries, process-tree CPU/RSS point samples, and a readable `report.md`. Existing `app-startup.total_us` ends at frame acceptance; `app-startup-presented` ends after output. The performance trace is enabled only for this benchmark. Runtime input contents are not included in that trace. CPU totals exclude exited workers and RSS is a point sample, not an asserted peak.
+
+Acceptance targets are new built-in application action-to-first-business-frame P95 ≤100ms and ordinary interaction feedback P95 ≤50ms. Report each measured series and any failing scene rather than treating a hidden Starting label as readiness. The first-open series has one sample per isolated Shell in this run and must be reported separately from the larger repeated-new-process series.
+
 ## Real Vim regression tests
 
 Ordinary workspace tests skip ignored cases that require a complete Vim. After building the engine, run them explicitly:
