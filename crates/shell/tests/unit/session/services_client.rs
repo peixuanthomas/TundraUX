@@ -256,3 +256,45 @@ fn an_unchanged_unavailable_domain_does_not_repeat_feedback_or_redraw() {
     assert!(client.sync_session(&mut state));
     assert!(!client.sync_session(&mut state));
 }
+
+#[test]
+fn an_authorization_update_for_the_same_session_keeps_the_window_authenticated() {
+    let mut state = state();
+    let mut auth = AuthSession {
+        source: identity::IdentitySource::LocalAccount,
+        session_id: "same".into(),
+        user_id: "same".into(),
+        username: "same".into(),
+        role: UserRole::User,
+        started_at_epoch_ms: 1,
+    };
+    state.app.dispatch_at(
+        app::AppCommand::SetAuthSession(Some(auth.clone())),
+        Instant::now(),
+    );
+    auth.role = UserRole::Admin;
+    let client = SessionServicesClient::for_test(snapshot(Some(&auth)));
+    assert!(client.sync_session(&mut state));
+    assert_eq!(state.app.auth_session(), Some(&auth));
+}
+
+#[test]
+fn a_snapshot_for_another_session_cannot_authenticate_the_current_window() {
+    let mut state = state();
+    let mut auth = AuthSession {
+        source: identity::IdentitySource::LocalAccount,
+        session_id: "old".into(),
+        user_id: "same".into(),
+        username: "same".into(),
+        role: UserRole::User,
+        started_at_epoch_ms: 1,
+    };
+    state.app.dispatch_at(
+        app::AppCommand::SetAuthSession(Some(auth.clone())),
+        Instant::now(),
+    );
+    auth.session_id = "new".into();
+    let client = SessionServicesClient::for_test(snapshot(Some(&auth)));
+    assert!(client.sync_session(&mut state));
+    assert!(state.app.auth_session().is_none());
+}

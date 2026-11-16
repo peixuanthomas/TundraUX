@@ -199,13 +199,23 @@ impl SessionServicesClient {
         }
         let mut changed = false;
         if !shell && state.app.auth_session() != auth.1.as_ref() {
-            state
-                .app
-                .dispatch_at(app::AppCommand::SetAuthSession(None), Instant::now());
-            state.reset_workspace_clock_profile();
-            sync.auth = Some((auth.0, None));
-            sync.profile = None;
-            return Ok(true);
+            let current = state.app.auth_session().map(|auth| &auth.session_id);
+            let next = auth
+                .1
+                .as_ref()
+                .filter(|next| Some(&next.session_id) == current)
+                .cloned();
+            state.app.dispatch_at(
+                app::AppCommand::SetAuthSession(next.clone()),
+                Instant::now(),
+            );
+            if next.is_none() {
+                state.reset_workspace_clock_profile();
+                sync.auth = Some((auth.0, None));
+                sync.profile = None;
+                return Ok(true);
+            }
+            changed = true;
         }
         if sync
             .auth
