@@ -645,6 +645,20 @@ impl AppHostSession {
         if self.close_status == WindowClose::Confirmed {
             return Ok(());
         }
+        let busy = self.state.tasks.has_running()
+            || self.state.auto_admin_running()
+            || self.command_lines.has_running_processes()
+            || self.vim.running()
+            || self.scripts.running();
+        let running_operations = self.state.tasks.has_running_operations();
+        let awaiting_approval = self.state.auto_admin.waiting_for_approval();
+        let unresponsive = self.vim.unresponsive();
+        changed |= self.last_status.as_ref().is_none_or(|status| {
+            status.busy != busy
+                || status.running_operations != running_operations
+                || status.awaiting_approval != awaiting_approval
+                || status.unresponsive != unresponsive
+        });
         if changed {
             self.redraw.request_redraw();
         }
@@ -679,16 +693,12 @@ impl AppHostSession {
         });
         let status = WindowStatus {
             minimum,
-            busy: self.state.tasks.has_running()
-                || self.state.auto_admin_running()
-                || self.command_lines.has_running_processes()
-                || self.vim.running()
-                || self.scripts.running(),
+            busy,
             dirty,
             task_ids: self.state.tasks.window_task_ids(),
-            running_operations: self.state.tasks.has_running_operations(),
-            awaiting_approval: self.state.auto_admin.waiting_for_approval(),
-            unresponsive: self.vim.unresponsive(),
+            running_operations,
+            awaiting_approval,
+            unresponsive,
         };
         if self.last_status.as_ref() != Some(&status) {
             self.last_status = Some(status.clone());
