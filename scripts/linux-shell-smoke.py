@@ -847,7 +847,9 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
         return next((item for item in frame["nodes"] if item["id"].endswith(identifier)), {})
 
     def painted(frame):
-        return "".join(frame["lines"]).replace(" ", "")
+        # Wrapped dialog messages include the surrounding frame in snapshots.
+        return "".join(char for line in frame["lines"] for char in line
+                       if char != " " and not "\u2500" <= char <= "\u257f")
 
     def tap_control(identifier, page=None):
         deadline = time.monotonic() + 5.0
