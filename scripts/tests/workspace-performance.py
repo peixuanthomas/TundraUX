@@ -285,7 +285,8 @@ class Session:
                     self.drain()
                 if connection in ready:
                     chunk = connection.recv(256 * 1024)
-                    assert chunk, "Shell closed control connection"
+                    if not chunk:
+                        raise ConnectionResetError("Shell closed control connection")
                     reply += chunk
                 assert self.child.poll() is None, f"Shell exited: {self.child.returncode}"
             assert b"\n" in reply, "Shell control timed out"
@@ -299,7 +300,13 @@ class Session:
     def snapshot(self):
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            snapshot = self.control({"command": "snapshot"})
+            try:
+                snapshot = self.control({"command": "snapshot"})
+            except (ConnectionResetError, BrokenPipeError, FileNotFoundError, ConnectionRefusedError):
+                files = list(Path(self.env["XDG_CACHE_HOME"]).rglob("shell-control/*.json"))
+                if files:
+                    self.info = json.loads(files[-1].read_text())
+                snapshot = None
             if snapshot is not None:
                 return snapshot
             self.drain(.005)
@@ -533,10 +540,11 @@ def interactions(binary, output, samples, motion, write):
             current = session.until(lambda frame: len(titles(frame)) == count and frame["page"] == "Launcher")
             for index in range(samples):
                 # Each sample is one physical input, then complete output, then verification.
-                current = session.snapshot()
+                current = session.until(lambda frame: any(item["id"] == "page/launcher.search" and item["actionable"]
+                                                          for item in frame["nodes"]))
                 session.tap(current, "page/launcher.search")
                 session.until(lambda frame: node(frame, "page/launcher.search")["focused"])
-                session.send(b"\x15")
+                session.send(b"\x01\x7f")
                 current = session.until(lambda frame: node(frame, "page/launcher.search")["text"].rsplit(":", 1)[-1].strip() in ("", "_"))
                 marker = chr(0x0400 + index % 200)
                 session.frames.clear()
@@ -545,7 +553,7 @@ def interactions(binary, output, samples, motion, write):
                 timing = session.match_output(started, current, node(current, "page/launcher.search")["rect"])
                 write(dict(kind="interaction", action="input", index=index, layout=f"{count}-window",
                            size=f"{width}x{height}", **timing))
-                session.send(b"\x15\t")
+                session.send(b"\x01\x7f\t")
                 current = session.until(lambda frame: not node(frame, "page/launcher.search")["focused"])
                 rect = node(current, "page/launcher.search")["rect"]
                 before = region(session.frames[-1]["cells"], rect, True)
