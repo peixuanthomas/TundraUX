@@ -19,6 +19,12 @@ impl RuntimeAsciiAssets {
         Ok(Self::from_store(AsciiAssetStore::load_default()?))
     }
 
+    pub fn load_default_without_images() -> Result<Self, AssetError> {
+        Ok(Self::from_store(
+            AsciiAssetStore::load_default_without_images()?,
+        ))
+    }
+
     pub fn load_theme(theme_id: &str) -> Result<Self, AssetError> {
         Ok(Self::from_store(AsciiAssetStore::load_theme(theme_id)?))
     }

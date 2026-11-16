@@ -32,6 +32,7 @@ pub struct AsciiAssetStore {
     home_icons: HomeIconCatalog,
     launcher_icons: ArtSet,
     image_assets: BTreeMap<String, Vec<u8>>,
+    load_images: bool,
     clock_font: ClockFontAsset,
     text_arts: BTreeMap<String, TextArt>,
 }
@@ -65,6 +66,15 @@ impl AsciiAssetStore {
         Self::load_theme(DEFAULT_THEME_ID)
     }
 
+    /// Loads every catalog, font and text asset for a host that cannot display images.
+    pub fn load_default_without_images() -> Result<Self, AssetError> {
+        Self::load_with_resolver_and_images(
+            AssetResolver::from_env_or_current_exe()?,
+            DEFAULT_THEME_ID,
+            false,
+        )
+    }
+
     pub fn load_theme(theme_id: &str) -> Result<Self, AssetError> {
         Self::load_with_resolver(AssetResolver::from_env_or_current_exe()?, theme_id)
     }
@@ -74,11 +84,23 @@ impl AsciiAssetStore {
     }
 
     pub fn load_with_resolver(resolver: AssetResolver, theme_id: &str) -> Result<Self, AssetError> {
+        Self::load_with_resolver_and_images(resolver, theme_id, true)
+    }
+
+    fn load_with_resolver_and_images(
+        resolver: AssetResolver,
+        theme_id: &str,
+        load_images: bool,
+    ) -> Result<Self, AssetError> {
         let banners = load_art_set(&resolver, theme_id, "banner", "banner.toml")?;
         let explorer_icons = load_explorer_icons(&resolver, theme_id)?;
         let home_icons = load_home_icon_catalog(&resolver, theme_id)?;
         let launcher_icons = load_launcher_icons(&resolver, theme_id)?;
-        let image_assets = load_image_assets(&resolver, theme_id, &home_icons, &launcher_icons)?;
+        let image_assets = if load_images {
+            load_image_assets(&resolver, theme_id, &home_icons, &launcher_icons)?
+        } else {
+            BTreeMap::new()
+        };
         let clock_font = load_clock_font(&resolver, theme_id)?;
         let mut text_arts = BTreeMap::new();
         for (key, relative_path) in REQUIRED_TEXT_ARTS {
@@ -94,13 +116,18 @@ impl AsciiAssetStore {
             home_icons,
             launcher_icons,
             image_assets,
+            load_images,
             clock_font,
             text_arts,
         })
     }
 
     pub fn reload(&mut self) -> Result<(), AssetError> {
-        *self = Self::load_with_resolver(self.resolver.clone(), &self.theme_id)?;
+        *self = Self::load_with_resolver_and_images(
+            self.resolver.clone(),
+            &self.theme_id,
+            self.load_images,
+        )?;
         Ok(())
     }
 

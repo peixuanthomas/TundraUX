@@ -137,6 +137,63 @@ fn home_icon_loading_rejects_a_missing_declared_image() {
 }
 
 #[test]
+fn image_free_store_keeps_all_text_resources_and_does_not_require_png_files() {
+    let complete = AsciiAssetStore::load_with_root(CANONICAL_ASSETS_DIR, DEFAULT_THEME_ID).unwrap();
+    let root = TemporaryAssetRoot::copy_of(Path::new(CANONICAL_ASSETS_DIR));
+    for relative_path in complete.image_assets.keys() {
+        fs::remove_file(root.path.join("themes/default").join(relative_path)).unwrap();
+    }
+    let mut text = AsciiAssetStore::load_with_resolver_and_images(
+        AssetResolver::new(&root.path).unwrap(),
+        DEFAULT_THEME_ID,
+        false,
+    )
+    .unwrap();
+    assert_eq!(text.banners, complete.banners);
+    assert_eq!(text.explorer_icons, complete.explorer_icons);
+    assert_eq!(text.home_icons, complete.home_icons);
+    assert_eq!(text.launcher_icons, complete.launcher_icons);
+    assert_eq!(text.clock_font, complete.clock_font);
+    assert_eq!(text.text_arts, complete.text_arts);
+    assert_eq!(text.max_asset_dimensions(), complete.max_asset_dimensions());
+    assert!(text.home_icon_image_bytes("explorer").is_none());
+    assert!(
+        text.launcher_icon_image_bytes("builtin.command-line")
+            .is_none()
+    );
+    assert!(text.home_icon_image_path("explorer").is_none());
+    text.reload().unwrap();
+    assert!(text.image_assets.is_empty());
+    assert!(matches!(
+        AsciiAssetStore::load_with_root(&root.path, DEFAULT_THEME_ID),
+        Err(AssetError::MissingAsset { .. }),
+    ));
+}
+
+#[test]
+fn image_free_store_still_requires_complete_catalogs_fonts_and_text() {
+    let root = TemporaryAssetRoot::copy_of(Path::new(CANONICAL_ASSETS_DIR));
+    for relative_path in [
+        "launcher_icons.toml",
+        "weathr/render/clock_font.toml",
+        "weathr/world/house.txt",
+    ] {
+        let path = root.path.join("themes/default").join(relative_path);
+        let original = fs::read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert!(matches!(
+            AsciiAssetStore::load_with_resolver_and_images(
+                AssetResolver::new(&root.path).unwrap(),
+                DEFAULT_THEME_ID,
+                false,
+            ),
+            Err(AssetError::MissingAsset { .. }),
+        ));
+        fs::write(path, original).unwrap();
+    }
+}
+
+#[test]
 fn explorer_icon_loading_rejects_missing_icons_without_hardcoded_fallbacks() {
     let root = TemporaryAssetRoot::copy_of(Path::new(CANONICAL_ASSETS_DIR));
     let icon_path = root.path.join("themes/default/explorer_icons.toml");

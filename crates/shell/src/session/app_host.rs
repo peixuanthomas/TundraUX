@@ -165,7 +165,12 @@ impl AppHostSession {
         });
         let settings_config = system_services_config_for_startup(&startup);
         let resources_started = Instant::now();
-        let ascii_assets = ui::RuntimeAsciiAssets::load_default().map_err(asset_io_error)?;
+        let ascii_assets = if init.image_cell_size.is_some() {
+            ui::RuntimeAsciiAssets::load_default()
+        } else {
+            ui::RuntimeAsciiAssets::load_default_without_images()
+        }
+        .map_err(asset_io_error)?;
         timings.resources_us = resources_started.elapsed().as_micros() as u64;
         let (language, language_restore_us) = language_ready
             .map(|(receiver, _task)| receiver.recv())

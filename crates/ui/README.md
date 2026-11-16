@@ -30,6 +30,8 @@ All live windows contribute to the minimum content size, including those in the 
 
 App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane. AppHost attaches frame sequence numbers, input tracing serials, confirmed input fences, and first-frame startup timings after UI capture.
 
+AppHosts without terminal image support load complete ASCII catalogs and fonts while omitting unused PNG bytes. Hosts with image support retain the full asset set, including when their current appearance uses ASCII icons.
+
 Shell can compose a retained app frame at a new pane size, clipping from the top left and filling newly exposed space with the canvas color. Images keep the same clipping. Retained controls are non-actionable and the old cursor is hidden. Initial window startup uses a blank canvas for 100ms before showing the localized busy indicator; reduced motion keeps that indicator static.
 
 ## Shared controls
