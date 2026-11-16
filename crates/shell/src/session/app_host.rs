@@ -1123,101 +1123,109 @@ pub fn run_app_host(
         .saturating_sub(timings.resources_us);
     let mut startup = Some(timings);
     let mut first_poll_done = false;
-    for message in pending {
-        host.receive(message)?;
-    }
+    let execution = (|| -> io::Result<bool> {
+        for message in pending {
+            host.receive(message)?;
+        }
 
-    let mut outgoing_blocked = false;
-    loop {
-        let generation = crate::process_host::event_loop::generation();
-        connection.progress()?;
-        while let Some(command) = connection.try_recv()? {
-            if matches!(
-                command,
-                SupervisorToWorker::Close | SupervisorToWorker::Exit
-            ) {
-                host.shutdown()?;
-                return Ok(());
-            }
-        }
-        let now = Instant::now();
-        if !outgoing_blocked {
-            for message in stream.poll()? {
-                host.receive(message)?;
-            }
-            host.poll(now)?;
-        }
-        if let Some(timings) = &mut startup
-            && !first_poll_done
-        {
-            timings.first_poll_us = now.elapsed().as_micros() as u64;
-            first_poll_done = true;
-        }
-        let was_blocked = outgoing_blocked;
-        outgoing_blocked = false;
-        while let Some(message) = host.output.pop_front() {
-            if let Err(error) = stream.queue(&message) {
-                if error.kind() == io::ErrorKind::WouldBlock {
-                    host.output.push_front(message);
-                    outgoing_blocked = true;
-                    break;
-                }
-                return Err(error);
-            }
-        }
-        if was_blocked && !outgoing_blocked {
-            continue;
-        }
-        if host.close_status == WindowClose::Confirmed
-            && !host.services.has_pending_writes()
-            && host.output.is_empty()
-            && !stream.pending_write()
-        {
-            connection.send(WorkerToSupervisor::AppClosing)?;
-            stream.queue(&AppToShell::CloseStarted)?;
-            flush_app_messages(&mut stream)?;
-            host.shutdown()?;
-            stream.queue(&AppToShell::Closed)?;
-            return flush_app_messages(&mut stream);
-        }
-        if host.output.is_empty() {
-            let draw_started = startup.as_ref().map(|_| Instant::now());
-            let frame = host.frame(now)?;
-            let rendered = frame.is_some();
-            if let Some(mut frame) = frame {
-                if let (Some(mut timings), Some(draw_started)) = (startup.take(), draw_started) {
-                    let frame_ready = Instant::now();
-                    timings.first_frame_ready_us =
-                        frame_ready.duration_since(session_ready).as_micros() as u64;
-                    timings.first_draw_us =
-                        frame_ready.duration_since(draw_started).as_micros() as u64;
-                    frame.startup_timings = Some(timings);
-                }
-                stream.queue_owned(AppToShell::Frame(frame))?;
-            }
-            if rendered || host.frozen || !host.visible {
-                for serial in host.input_fences.drain_confirmed() {
-                    host.output.push_back(AppToShell::InputFence { serial });
+        let mut outgoing_blocked = false;
+        loop {
+            let generation = crate::process_host::event_loop::generation();
+            connection.progress()?;
+            while let Some(command) = connection.try_recv()? {
+                if matches!(
+                    command,
+                    SupervisorToWorker::Close | SupervisorToWorker::Exit
+                ) {
+                    return Ok(false);
                 }
             }
-        }
-        if !host.output.is_empty() && !outgoing_blocked {
-            continue;
-        }
-        let now = Instant::now();
-        let timeout = if outgoing_blocked {
-            let timeout = host.next_service_sync.saturating_duration_since(now);
-            if timeout.is_zero() {
-                watchdog::WORKER_PROGRESS_INTERVAL
+            let now = Instant::now();
+            if !outgoing_blocked {
+                for message in stream.poll()? {
+                    host.receive(message)?;
+                }
+                host.poll(now)?;
+            }
+            if let Some(timings) = &mut startup
+                && !first_poll_done
+            {
+                timings.first_poll_us = now.elapsed().as_micros() as u64;
+                first_poll_done = true;
+            }
+            let was_blocked = outgoing_blocked;
+            outgoing_blocked = false;
+            while let Some(message) = host.output.pop_front() {
+                if let Err(error) = stream.queue(&message) {
+                    if error.kind() == io::ErrorKind::WouldBlock {
+                        host.output.push_front(message);
+                        outgoing_blocked = true;
+                        break;
+                    }
+                    return Err(error);
+                }
+            }
+            if was_blocked && !outgoing_blocked {
+                continue;
+            }
+            if host.close_status == WindowClose::Confirmed
+                && !host.services.has_pending_writes()
+                && host.output.is_empty()
+                && !stream.pending_write()
+            {
+                connection.send(WorkerToSupervisor::AppClosing)?;
+                stream.queue(&AppToShell::CloseStarted)?;
+                flush_app_messages(&mut stream)?;
+                return Ok(true);
+            }
+            if host.output.is_empty() {
+                let draw_started = startup.as_ref().map(|_| Instant::now());
+                let frame = host.frame(now)?;
+                let rendered = frame.is_some();
+                if let Some(mut frame) = frame {
+                    if let (Some(mut timings), Some(draw_started)) = (startup.take(), draw_started)
+                    {
+                        let frame_ready = Instant::now();
+                        timings.first_frame_ready_us =
+                            frame_ready.duration_since(session_ready).as_micros() as u64;
+                        timings.first_draw_us =
+                            frame_ready.duration_since(draw_started).as_micros() as u64;
+                        frame.startup_timings = Some(timings);
+                    }
+                    stream.queue_owned(AppToShell::Frame(frame))?;
+                }
+                if rendered || host.frozen || !host.visible {
+                    for serial in host.input_fences.drain_confirmed() {
+                        host.output.push_back(AppToShell::InputFence { serial });
+                    }
+                }
+            }
+            if !host.output.is_empty() && !outgoing_blocked {
+                continue;
+            }
+            let now = Instant::now();
+            let timeout = if outgoing_blocked {
+                let timeout = host.next_service_sync.saturating_duration_since(now);
+                if timeout.is_zero() {
+                    watchdog::WORKER_PROGRESS_INTERVAL
+                } else {
+                    timeout.min(watchdog::WORKER_PROGRESS_INTERVAL)
+                }
             } else {
-                timeout.min(watchdog::WORKER_PROGRESS_INTERVAL)
-            }
-        } else {
-            host.poll_timeout(now)
-                .min(watchdog::WORKER_PROGRESS_INTERVAL)
-        };
-        crate::process_host::event_loop::wait_since(generation, timeout);
+                host.poll_timeout(now)
+                    .min(watchdog::WORKER_PROGRESS_INTERVAL)
+            };
+            crate::process_host::event_loop::wait_since(generation, timeout);
+        }
+    })();
+    let shutdown = host.shutdown();
+    let closed = execution?;
+    shutdown?;
+    if closed {
+        stream.queue(&AppToShell::Closed)?;
+        flush_app_messages(&mut stream)?;
     }
+    Ok(())
 }
 
 fn flush_app_messages(stream: &mut crate::process_host::AppWindowConnection) -> io::Result<()> {
@@ -1241,3 +1249,7 @@ fn flush_app_messages(stream: &mut crate::process_host::AppWindowConnection) -> 
 #[cfg(test)]
 #[path = "../../tests/unit/session/app_host.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/session/app_host_shutdown.rs"]
+mod shutdown_tests;

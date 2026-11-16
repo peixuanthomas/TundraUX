@@ -7,6 +7,7 @@
 - Initialize identity, assets, storage, system services, and the terminal, and complete first-time setup and startup.
 - The Shell manages global input, window layout and focus, the terminal display, and idle weather. AppHosts leave idle weather to the Shell so waking does not consume the next dialog key.
 - Each AppHost runs an application's page controllers, navigation, task ownership, and off-screen rendering. Editors and terminals own their child processes.
+- After initialization, AppHost performs its recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded editor drafts remain discarded.
 - Session services share configuration, the active profile, system status, and file operation state across windows.
 - Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the account file intact.
 - A background connection owns shared-service I/O. AppHosts build from one authoritative session snapshot, and runtime reads share an immutable cached snapshot. Interactive saves publish successful replies to their original session, page, and draft; pending saves participate in normal close checks. A failed background save cancels an ordinary close and retains its specific error. An explicit Stop and close choice applies only to that close request.
