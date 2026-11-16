@@ -626,6 +626,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn clock_entry_capacity_at(&self, now: Instant) -> usize {
+        let _language = i18n::enter_snapshot(self.language.clone());
         let (width, height) = self.terminal_size;
         let area = Rect::new(0, 0, width, height);
         let main = match self.shell_layout_for(area) {

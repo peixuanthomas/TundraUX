@@ -82,6 +82,45 @@ fn fixture() -> Fixture {
 }
 
 #[test]
+fn clock_entry_capacity_measures_session_labels_and_restores_the_ambient_language() {
+    let mut f = fixture();
+    f.state.terminal_size = (108, 30);
+    let english = f.state.language.clone();
+    let chinese = Arc::new(
+        i18n::LanguageSnapshotData {
+            code: "zh-CN".into(),
+            generation: 2,
+            current: vec![
+                "ui-clock-touch-new = N 新建一个闹钟或倒计时\nui-clock-touch-manage = M 管理已保存的提醒事项\n"
+                    .into(),
+            ],
+            english: Vec::new(),
+        }
+        .restore_validated()
+        .unwrap(),
+    );
+    f.state.language = chinese.clone();
+    let _ambient = i18n::enter_snapshot(english.clone());
+    let now = Instant::now();
+    let bounds = Rect::new(0, 0, 108, 30);
+    let main = match f.state.shell_layout_for(bounds) {
+        ui::ShellLayout::Full { main, .. } | ui::ShellLayout::Compact(main) => main,
+    };
+    let model = f
+        .state
+        .to_clock_view_model_at(&f.state.app.snapshot().clock, now);
+    let ambient = ui::clock_page_layout(main, &model);
+    let localized = i18n::with_snapshot(&chinese, || ui::clock_page_layout(main, &model));
+    assert!(localized.new_button.width > ambient.new_button.width);
+    assert!(localized.entry_capacity < ambient.entry_capacity);
+    assert_eq!(
+        f.state.clock_entry_capacity_at(now),
+        localized.entry_capacity
+    );
+    assert!(Arc::ptr_eq(&i18n::current_snapshot(), &english));
+}
+
+#[test]
 fn same_language_selection_reloads_disk_and_keeps_retained_messages() {
     let mut f = fixture();
     f.state.window_owner =
