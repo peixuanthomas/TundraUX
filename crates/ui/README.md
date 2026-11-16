@@ -20,11 +20,13 @@ Pages render only the content in `ShellFrameLayout.main` and their own overlays.
 
 The global title bar exposes Tasks for logged-in non-guest users, including running and awaiting-approval status. Title and status bars each use one row; Tasks, Help, Back, the clock, and the screen-keyboard entry share their actual render and hit-test geometry.
 
-Each app window has a complete frame. Its top edge shows the title and buttons for minimizing, toggling full screen, splitting, and closing. The split button opens a menu anchored at the window for selecting a layout, adding a new app, or bringing a background app into the split. The bottom window bar uses the left side of the status row. Each entry has separate title and minus targets for restoring and closing the window. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
+Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
-Window controls and menus share their painting and hit-test geometry. At the 108×20 terminal minimum, the global title and status rows and the four window edges leave a 106×16 content area for an app. A one-cell gap separates split windows. Left/right and top/bottom layouts fit two panes when space permits. Grid capacity grows with the terminal, and the last row distributes its width among the windows it holds.
+The bottom window bar uses the left side of the status row. Each entry has separate title and minus targets for restoring and closing the window. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
 
-All live windows contribute to the minimum content size, including those in the background. If the workspace cannot fit, the focused window keeps its controls and shows a resize notice. The advanced window panel opens with Ctrl+B then W and can close or force-kill windows while the workspace is too small. F1 help lists the keyboard controls.
+`WorkspaceTree` stores incremental splits, allowing each axis once per path and at most four panes in a 2×2 grid. T layouts preserve the untouched pane. Size-driven hiding projects this topology without discarding it; growing the terminal restores the hidden panes. At the 108×20 minimum, a single app has 106×16 content cells. Complete frames and one-cell gaps require 217×20 for left/right, 108×39 for top/bottom, and 217×39 for four panes.
+
+All live windows contribute to the minimum content size, including those in the background. If the workspace cannot fit, the focused window keeps its controls and shows a resize notice. The advanced window panel opens with Ctrl+W then W and can close or force-kill windows while the workspace is too small. F1 help lists the keyboard controls.
 
 App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane.
 
@@ -52,6 +54,8 @@ form.render_frame(frame, area, context);
 Enter moves to the next field and submits from the last field; Space or a tap toggles a switch; Ctrl+Enter submits directly; F10 activates the default submit button. When rebuilding a form, use `interaction_state()` and `with_interaction()` to preserve scroll and drag positions. `ManagementForm` is a compatibility name.
 
 ### Lists and page layouts
+
+`SelectionList` and `SelectionListItem` reuse the command palette with configurable titles, placeholders, grouped rows, and stable option IDs. `selection_matches` and `selection_search_areas` provide the common filtering and header geometry for specialized Settings, form-choice, and dashboard pickers. Search opens focused above the list; disabled and empty results cannot activate hidden values. Theme previews and the timezone map remain available. Action menus do not add search.
 
 - `DataTable` provides a separate header band, full-row selection and pointer feedback, sorting, and column-width calculation.
 - `SidebarWorkspaceLayout` provides a padded navigation surface, list, and detail columns, switching to top navigation and a vertical layout in narrow windows.

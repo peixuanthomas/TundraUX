@@ -54,7 +54,10 @@ python3 scripts/build-vim.py --output target/debug/vim
 python3 scripts/linux-shell-smoke.py target/debug/tundra-shell
 TUNDRA_PTY_CHECK_CRASH=1 python3 scripts/linux-shell-smoke.py target/debug/tundra-shell
 python3 scripts/tests/shell-control.py target/debug/tundra-shell
+python3 scripts/tests/workspace-splits.py target/debug/tundra-shell
 ```
+
+The workspace split script checks two-stage Ctrl+W input, cancellation, T layouts, four-pane limits, disabled actions, resize recovery, full screen, minimized-instance reuse, and native terminal Ctrl+W.
 
 These scripts use isolated XDG directories and real PTYs to check initial setup, file workflows, mouse and keyboard input, Command Line, external UI control, crash reports, and terminal restoration. `TUNDRA_PTY_MOUSE_EVENT_COUNT` adjusts the number of events in the mouse-event flood test.
 

@@ -101,11 +101,11 @@ Compositing order:
 5. Animations and effects for the current frame;
 6. Floating Toast and the on-screen keyboard.
 
-Esc first dismisses a modal or menu. On an ordinary app page Esc minimizes its window. Vim and command terminals process Esc natively. The top-right Back button returns from local subpages. A window's Close button and Ctrl+B, Q ask about unsaved documents or running operations before cleanup.
+Esc first dismisses a modal or menu. On an ordinary app page Esc minimizes its window. Vim and command terminals process Esc natively. The top-right Back button returns from local subpages. A window's Close button and Ctrl+W, Q ask about unsaved documents or running operations before cleanup.
 
-The window's Split button opens a menu with layout choices, background windows, and Add window. The bottom bar switches to a running window or restores a minimized one. A restore uses the previous split position when it fits and the focused slot when the split is full.
+The window's Split button offers left/right, top/bottom, and full screen. A split keeps the source app left/top and opens a searchable app/window selector in the new pane; cancel removes the pending pane. Full screen minimizes the other panes and clears the split. Ctrl+W then v/s splits outside editor canvases and native terminals, which preserve their own Ctrl+W. The bottom bar switches to a running window or restores a minimized one. A restore uses the previous split position when it fits and the focused slot when the split is full.
 
-Splits add one cell of space between adjacent frames. Windows hidden by a resize return when room permits. Minimized windows wait in the bottom bar until restored. The workspace compares the minimum of every running app before routing application input. If that minimum does not fit, the selected frame and window controls stay available. A close that needs an app confirmation displays a Shell prompt until there is room for the original confirmation.
+The requested topology is a binary split tree with each axis once per path and at most four panes. Splits add one cell of space between adjacent frames. Windows hidden by a resize return when room permits. Minimized windows wait in the bottom bar until restored. The workspace compares the minimum of every running app before routing application input. If that minimum does not fit, the selected frame and window controls stay available. A close that needs an app confirmation displays a Shell prompt until there is room for the original confirmation.
 
 Clicking the status message area, when shown, opens the full text. The dialog retains the content from the moment of the click and supports scrolling. The clock button remains separate from the bottom window bar.
 
@@ -121,7 +121,7 @@ Clicking the status message area, when shown, opens the full text. The dialog re
 
 Before suspend, save editor recovery data and leave full-screen mode. On resume, reestablish the terminal, platform session, and size.
 
-If the Shell stops reporting progress for five seconds, the watchdog terminates the run and restores the terminal. Use Ctrl+B, Shift+X, the advanced window list, or the watchdog CLI to force kill an unresponsive AppHost. An AppHost remains registered until the watchdog reaps its process and cleans up its resources. If the Shell catches a panic and reaches the standalone panic page, R restarts and Q, Esc or Ctrl+C exits.
+If the Shell stops reporting progress for five seconds, the watchdog terminates the run and restores the terminal. Use Ctrl+W, Shift+X, the advanced window list, or the watchdog CLI to force kill an unresponsive AppHost. An AppHost remains registered until the watchdog reaps its process and cleans up its resources. If the Shell catches a panic and reaches the standalone panic page, R restarts and Q, Esc or Ctrl+C exits.
 
 ## Common shortcuts
 

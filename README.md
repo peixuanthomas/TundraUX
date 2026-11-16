@@ -14,7 +14,7 @@ TundraUX3 brings system tools, files, editors, and everyday utilities into one t
 - **Development tools:** run programs in an embedded terminal and debug Bash scripts with breakpoints, stepping, variables, and call stacks.
 - **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output.
 - **Personal workspace:** search Launcher by name or command, organize custom entries, choose themes and languages, and use the built-in clock and weather apps.
-- **Independent app windows:** use each window's frame to minimize, enter full screen, split, or close it. Restore background apps from the bottom window bar and arrange them in equal splits or a grid. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
+- **Independent app windows:** use each window's frame to minimize, split, or close it; full screen is in the Split menu. Restore background apps from the bottom window bar and split the current pane incrementally into at most a 2×2 grid. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
 - **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, using TundraUX3's Glacier Night blue palette.
 
 | Platform | Main support |
@@ -27,7 +27,7 @@ TundraUX3 brings system tools, files, editors, and everyday utilities into one t
 
 Use an interactive terminal of at least **108 columns × 20 rows**. Mouse and touch input require a terminal that forwards pointer events.
 
-Each window has **Minimize, Full screen, Split, and Close** buttons on its top edge. Opening a running app restores its window. Right-click its Launcher icon or bottom-bar entry and choose **New session** to start another window. Click a bottom-bar title to restore the specific window or its minus button to close it. The Split menu chooses a layout and adds an app. Esc minimizes an ordinary app after dismissing its dialog or menu. Native terminals and Vim retain Esc. Use **Ctrl+B, then B** to minimize them. The same prefix followed by **W** opens advanced window management, **Q** closes normally, and uppercase **X** kills immediately. Available panes follow the terminal size and the largest minimum reported by any running app, including background apps. Background apps are cleaned up when TundraUX3 exits.
+Each window has **Minimize, Split, and Close** buttons. Split left/right or top/bottom, then search the new pane's selector to restore a minimized app or start a new session. Cancel restores the previous layout. Full screen in that menu minimizes the other panes. Use **Ctrl+W, then v/s** to split and **h/j/k/l** after the prefix to focus neighbors; editors, Vim, and embedded terminals retain their native Ctrl+W and use the window buttons. The limit is a 2×2 grid, with unavailable directions shown disabled. Selection dialogs across the app have a top search field. Restore running apps from the bottom bar; its separate minus button closes a window normally. All living apps still contribute to the minimum dimensions, and background apps are cleaned up on exit.
 
 ### Run a Linux portable build
 

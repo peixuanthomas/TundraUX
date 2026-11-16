@@ -57,26 +57,33 @@ Logged-in non-guest users can open Tasks from the global title bar. Background q
 
 ## Windows
 
-Every app has a frame with its title and **Minimize**, **Full screen** or **Restore**, **Split**, and **Close** controls. Click a title in the bottom bar to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully. A minimized window returns to its previous position when the split has room. When the split is full, restoring it uses the focused slot.
+Every app has **Minimize**, **Split**, and **Close** controls. Split offers **Left/right**, **Top/bottom**, and **Full screen**. A split keeps the current app on the left or top and opens a searchable app selector in the new region. Choose a minimized window or start a new session from the Home/Launcher catalog. Cancel rolls back only that split. Unavailable directions remain visible and disabled.
 
-**Split** opens a menu beside the window. Choose side by side, stacked, or grid, then choose a background window or **Add window** to open another app from Home. The side-by-side and stacked layouts fit two windows. Grid adjusts to the available cells. A regular app launch uses the focused slot and moves the previous app to the background.
+Split the focused pane incrementally: three-window T layouts are supported, with a maximum of four panes in a 2×2 grid. Each path can split once in each direction. Full screen keeps only the chosen window, minimizes the other panes, and clears the previous split. Closing or minimizing merges the empty region; restoring a window uses its previous place when possible, otherwise it replaces the focused pane.
 
-| After Ctrl+B | Action |
+Click a title in the bottom bar to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
+
+| After Ctrl+W | Action |
 | --- | --- |
-| B | Move the focused window to the background |
-| W | Open the advanced window list and process controls |
-| L | Cycle the layout |
-| Z | Maximize the focused window or restore its split |
-| Arrow keys | Focus a neighboring window |
-| Q | Close the focused window |
-| Shift+X | Force kill the focused window |
-| Ctrl+B again | Send one Ctrl+B to the focused application |
+| v / s | Split left/right / top/bottom |
+| h/j/k/l or arrows | Focus a neighboring pane |
+| o | Full screen: keep only the focused pane |
+| b / w | Minimize / searchable window list |
+| q / Shift+X | Normal close / force kill |
+| Ctrl+W again | Send one literal Ctrl+W outside native editing areas |
+| Esc | Cancel the prefix |
+
+The old Ctrl+B prefix is removed. The ordinary editor canvas, native Vim, and embedded terminals retain their original Ctrl+W handling; use their window Split button. Shell-owned dialogs receive input before workspace shortcuts. Press/release and repeat handling prevent a held key from creating multiple splits.
+
+Selection dialogs share a top search field, case-insensitive filtering, stable option identities, and an empty-result state. This includes window/app selection, all Settings pickers, dashboard component and size pickers, and form choices. Right-click and More action menus retain their compact layout.
 
 Esc first dismisses an active dialog or menu. On an ordinary application page, it moves the window to the background. Vim and embedded terminal input handle their own Esc. The global Back control can return from a subpage.
 
 Closing a window prompts for unsaved changes or running tasks. If cleanup still runs after two seconds, the Shell offers **Keep waiting** and **Force kill**. A force kill goes directly to the watchdog.
 
 The terminal minimum is 108 × 20 cells. The global title and bottom bars each occupy one row, and a window frame reserves one cell on each edge. Built-in app content can use the remaining 106 × 16 cells. Resizing temporarily hides windows that no longer fit. A minimized window stays in the bottom bar until restored. When a running app's minimum exceeds the terminal size, window controls remain available and app content is paused. Enlarge the terminal if a normal close needs to display a save or task confirmation.
+
+With the default minimum, left/right needs 217×20, top/bottom 108×39, and a full 2×2 grid 217×39 terminal cells.
 
 Embedded terminals can raise their window minimum while running. The workspace uses the largest reported dimensions across all live windows, including the background. A window leaves this calculation when the watchdog confirms it has exited.
 
