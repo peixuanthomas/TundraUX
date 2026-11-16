@@ -652,17 +652,38 @@ def check_permission_draft(master, slave, output, child, path, cli, env):
     column = screen[recursive_row].index("[ ]")
     if screen_after(b" ")[recursive_row][column:column + 3] != "[x]":
         raise SystemExit("physical Space did not enable recursive draft selection")
+
+    def discard_confirmation_visible(frame):
+        discard = next((item for item in frame["nodes"]
+                        if item["id"].startswith("modal/notification.")
+                        and item["id"].endswith(".action.discard")
+                        and item["enabled"] and item["actionable"]), None)
+        if discard is None or frame["page"] != "Management":
+            return False
+        notification = discard["id"].removesuffix(".action.discard")
+        return (any(item["id"] == notification + ".action.stay"
+                    and item["enabled"] and item["actionable"] for item in frame["nodes"])
+                and any("The changes in this form have not been applied." in line
+                        for line in frame["lines"]))
+
     offset = len(output)
     os.write(master, b"\x1b")
-    if not wait_for_output(master, output, b"Discard unsaved changes?", child, 5.0, offset, ignore_spaces=True):
+    deadline = time.monotonic() + 5.0
+    while True:
         frame = control_snapshot(master, output, child, cli, env)
-        screen = painted_screen_lines(bytes(output[repaint:]), 116, 41)
-        raise SystemExit("changed permission draft did not request discard confirmation; snapshot: "
-                         + json.dumps(frame, ensure_ascii=False)
-                         + "\npainted screen:\n" + "\n".join(screen)
-                         + "\nPTY output:\n" + output_diagnostic(output))
+        if discard_confirmation_visible(frame):
+            break
+        if time.monotonic() >= deadline:
+            screen = painted_screen_lines(bytes(output[repaint:]), 116, 41)
+            raise SystemExit("changed permission draft did not request discard confirmation; snapshot: "
+                             + json.dumps(frame, ensure_ascii=False)
+                             + "\npainted screen:\n" + "\n".join(screen)
+                             + "\nPTY output:\n" + output_diagnostic(output))
+        read_available(master, output, 0.05)
     if screen_after(b"\x1b")[recursive_row][column:column + 3] != "[x]":
         raise SystemExit("cancelling discard lost the permission draft")
+    if discard_confirmation_visible(control_snapshot(master, output, child, cli, env)):
+        raise SystemExit("cancelling discard left its confirmation open")
     screen_after(b"\x1b")
     screen_after(b"\r")
     offset = len(output)
