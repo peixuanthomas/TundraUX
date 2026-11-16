@@ -24,6 +24,52 @@ pub(super) enum WindowClose {
     Cancelled,
 }
 
+#[derive(Default)]
+struct InputFences {
+    pending: VecDeque<ClipboardInputFence>,
+    processed: u64,
+    confirmed: u64,
+}
+
+struct ClipboardInputFence {
+    serial: u64,
+    clipboard: u64,
+}
+
+impl InputFences {
+    fn observe_input(&mut self, serial: u64) {
+        self.processed = self.processed.max(serial);
+    }
+
+    fn receive(&mut self, serial: u64, clipboard: u64) {
+        self.observe_input(serial);
+        self.pending
+            .push_back(ClipboardInputFence { serial, clipboard });
+    }
+
+    fn confirm_ready(&mut self, mut complete: impl FnMut(u64) -> bool) -> bool {
+        let mut confirmed = self.confirmed;
+        for fence in &self.pending {
+            if !complete(fence.clipboard) {
+                break;
+            }
+            confirmed = confirmed.max(fence.serial);
+        }
+        let changed = self.confirmed != confirmed;
+        self.confirmed = confirmed;
+        changed
+    }
+
+    fn drain_confirmed(&mut self) -> impl Iterator<Item = u64> + '_ {
+        let count = self
+            .pending
+            .iter()
+            .take_while(|fence| fence.serial <= self.confirmed)
+            .count();
+        self.pending.drain(..count).map(|fence| fence.serial)
+    }
+}
+
 struct AppHostSession {
     state: ShellSession,
     platform: Arc<dyn Platform>,
@@ -51,9 +97,8 @@ struct AppHostSession {
     last_status: Option<WindowStatus>,
     pending_explorer_selection: Option<PathBuf>,
     output: VecDeque<AppToShell>,
-    input_fences: Vec<u64>,
+    input_fences: InputFences,
     frame_sequence: u64,
-    processed_input_serial: u64,
 }
 
 impl AppHostSession {
@@ -202,9 +247,8 @@ impl AppHostSession {
             last_status: None,
             pending_explorer_selection: select,
             output: VecDeque::new(),
-            input_fences: Vec::new(),
+            input_fences: InputFences::default(),
             frame_sequence: 0,
-            processed_input_serial: 0,
         };
         if let Some([width, height]) = init.image_cell_size {
             host.command_lines.set_cell_size(width, height);
@@ -495,7 +539,7 @@ impl AppHostSession {
                 layout,
                 event,
             } if layout == self.layout && self.visible && !self.frozen => {
-                self.processed_input_serial = self.processed_input_serial.max(serial);
+                self.input_fences.observe_input(serial);
                 let mut input = serde_json::from_value(event)?;
                 if let InputEvent::Mouse(mouse) = &mut input {
                     mouse.position.row = mouse.position.row.saturating_add(1);
@@ -532,8 +576,8 @@ impl AppHostSession {
             }
             ShellToApp::RequestClose => self.request_close(),
             ShellToApp::InputFence { serial } => {
-                self.processed_input_serial = self.processed_input_serial.max(serial);
-                self.input_fences.push(serial);
+                self.input_fences
+                    .receive(serial, self.services.clipboard_fence());
                 self.redraw.request_input_redraw();
             }
             ShellToApp::TaskAction { id, cancel } => {
@@ -666,6 +710,12 @@ impl AppHostSession {
         self.close_status = self.state.window_close;
         if self.close_status == WindowClose::Confirmed {
             return Ok(());
+        }
+        if self
+            .input_fences
+            .confirm_ready(|token| self.services.clipboard_fence_complete(token))
+        {
+            self.redraw.request_redraw();
         }
         let minimum = [
             self.command_lines.minimum_content_size(),
@@ -856,7 +906,8 @@ impl AppHostSession {
         });
         self.frame_sequence += 1;
         frame.sequence = self.frame_sequence;
-        frame.processed_input_serial = self.processed_input_serial;
+        frame.processed_input_serial = self.input_fences.processed;
+        frame.confirmed_input_fence = self.input_fences.confirmed;
         frame.images = images;
         if let Some(snapshot) = self.compositor.snapshot.take() {
             frame.page = snapshot.page;
@@ -1095,7 +1146,7 @@ pub fn run_app_host(
                 stream.queue_owned(AppToShell::Frame(frame))?;
             }
             if rendered || host.frozen || !host.visible {
-                for serial in host.input_fences.drain(..) {
+                for serial in host.input_fences.drain_confirmed() {
                     host.output.push_back(AppToShell::InputFence { serial });
                 }
             }
@@ -1136,3 +1187,7 @@ fn flush_app_messages(stream: &mut crate::process_host::AppWindowConnection) -> 
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/session/app_host.rs"]
+mod tests;

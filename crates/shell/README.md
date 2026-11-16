@@ -36,6 +36,8 @@ Controllers are grouped by application, including account, clock, command_line, 
 
 Background controllers report whether they consumed content, layout, notification, or task changes. The Shell and AppHost merge those results into redraw requests without cloning the whole session or comparing hit maps. Input requests an immediate frame; unchanged polls keep the existing frame and controls. Shell's header clock and visible Clock pages keep their one-second timer, while notifications, keyboard feedback, recovery, and live queries retain their own deadlines. Hidden or undersized AppHosts continue tasks and child-terminal polling but skip rendering. Active background work and native child adapters retain a 16ms fallback alongside result notifications for completion and process-state checks; idle hosts do not use that timer. System metric snapshots redraw System Status and actual alert changes; unrelated static pages retain their existing frames.
 
+External input fences confirm Copy/Cut only after the shared clipboard service has completed the corresponding mutation and its result has reached the UI; later clipboard writes do not delay that fence. Physical input feedback and other windows continue while it waits.
+
 ## Session flow
 
 ```mermaid
