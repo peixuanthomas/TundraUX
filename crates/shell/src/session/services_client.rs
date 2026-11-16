@@ -530,7 +530,9 @@ impl ShellSession {
         page: bool,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
-        self.submit_workspace_write_kind(operation, page, false, None, complete)
+        let client = SessionServicesClient::current()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        self.submit_workspace_write_kind(client, operation, page, false, None, complete)
     }
 
     pub(super) fn submit_workspace_clipboard(
@@ -538,22 +540,26 @@ impl ShellSession {
         operation: ServiceOperation,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
-        self.submit_workspace_write_kind(operation, true, true, None, complete)
+        let client = SessionServicesClient::current()
+            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
+        self.submit_workspace_write_kind(client, operation, true, true, None, complete)
     }
 
     fn submit_workspace_write_kind(
         &mut self,
+        client: &SessionServicesClient,
         operation: ServiceOperation,
         page: bool,
         input_effect: bool,
-        automation_authorization: Option<u64>,
+        expected_authorization: Option<u64>,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
-        let client = SessionServicesClient::current()
-            .ok_or_else(|| service_error(ServiceError::Unavailable))?;
         let (_, _, snapshot) = client.snapshot()?;
         let (revision, authorization): (_, Option<AuthSession>) =
             SessionServicesClient::decode(&snapshot.authorization)?;
+        if expected_authorization.is_some_and(|expected| expected != revision) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
         let session = self.app.auth_session().map(|auth| auth.session_id.clone());
         if session.as_deref() != authorization.as_ref().map(|auth| auth.session_id.as_str()) {
             return Err(service_error(ServiceError::Forbidden));
@@ -566,7 +572,11 @@ impl ShellSession {
             .completions
             .lock()
             .map_err(|_| service_error(ServiceError::Unavailable))?;
-        let receiver = client.submit(SessionServicesClient::authorized(operation, revision))?;
+        let receiver = client.submit(SessionServicesClient::authorized(
+            operation,
+            expected_authorization.unwrap_or(revision),
+        ))?;
+        let automation_authorization = input_effect.then_some(expected_authorization).flatten();
         let input_effect = input_effect.then(|| client.submit_input_effect_token());
         let task = track.then(|| self.register_workspace_save());
         pending.push(PendingWrite {
@@ -586,9 +596,9 @@ impl ShellSession {
         config: storage::StorageConfig,
         complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
     ) -> bool {
-        if SessionServicesClient::current().is_none() {
+        let Some(client) = SessionServicesClient::current() else {
             return false;
-        }
+        };
         let completion = Arc::new(std::sync::Mutex::new(Some(complete)));
         let callback = completion.clone();
         let auth_revision = config.session_authorization_revision;
@@ -596,7 +606,6 @@ impl ShellSession {
             let revision = config
                 .session_revision
                 .ok_or_else(|| io::Error::other("configuration was not read"))?;
-            let client = SessionServicesClient::current().expect("services available");
             let (_, _, snapshot) = client.snapshot()?;
             if snapshot
                 .authorization
@@ -618,10 +627,11 @@ impl ShellSession {
         })();
         let result = operation.and_then(|(operation, confirm_automation)| {
             self.submit_workspace_write_kind(
+                client,
                 operation,
                 true,
                 confirm_automation,
-                confirm_automation.then_some(auth_revision).flatten(),
+                auth_revision,
                 move |state, result| {
                     let result = result.and_then(|value| match value {
                         ServiceValue::Versioned { revision, value } => {

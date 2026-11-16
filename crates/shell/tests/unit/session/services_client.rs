@@ -536,6 +536,41 @@ fn system_defaults_wait_for_the_real_automation_receipt_at_the_common_config_bou
 }
 
 #[test]
+fn a_config_candidate_cannot_be_reauthorized_by_a_newer_submission_snapshot() {
+    for changes_automation in [false, true] {
+        let mut state = state();
+        let initial = snapshot(None);
+        let (candidate_authorization, _): (u64, Option<AuthSession>) =
+            SessionServicesClient::decode(&initial.authorization).unwrap();
+        let mut published_after_validation = initial;
+        published_after_validation
+            .authorization
+            .as_mut()
+            .unwrap()
+            .revision = 8;
+        let client = SessionServicesClient::for_test(published_after_validation);
+        let result = state.submit_workspace_write_kind(
+            client.as_ref(),
+            ServiceOperation::WriteConfig {
+                revision: 7,
+                config: serde_json::to_value(storage::StorageConfig::default()).unwrap(),
+            },
+            true,
+            changes_automation,
+            Some(candidate_authorization),
+            |_, _| panic!("unsubmitted configuration received a completion"),
+        );
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            service_error(ServiceError::Forbidden).to_string()
+        );
+        assert!(client.completions.lock().unwrap().is_empty());
+        assert_eq!(client.input_effect_fence(), 0);
+        assert!(state.automation_commit.is_none());
+    }
+}
+
+#[test]
 fn an_unchanged_unavailable_domain_does_not_repeat_feedback_or_redraw() {
     let mut state = state();
     let mut snapshot = snapshot(None);
