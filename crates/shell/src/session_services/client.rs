@@ -59,9 +59,15 @@ pub(crate) struct SessionServicesClient {
     shared: Arc<Shared>,
     jobs: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
     clipboard_submitted: AtomicU64,
-    clipboard_completed: AtomicU64,
+    clipboard_completed: Mutex<ClipboardCompletions>,
     pub sync: Mutex<SyncState>,
     pub(crate) completions: Mutex<Vec<crate::session::services_client::PendingWrite>>,
+}
+
+#[derive(Default)]
+struct ClipboardCompletions {
+    watermark: u64,
+    pending: std::collections::BTreeSet<u64>,
 }
 
 impl std::fmt::Debug for SessionServicesClient {
@@ -87,7 +93,7 @@ impl SessionServicesClient {
             commands,
             jobs,
             clipboard_submitted: AtomicU64::new(0),
-            clipboard_completed: AtomicU64::new(0),
+            clipboard_completed: Mutex::new(ClipboardCompletions::default()),
             shared: Arc::new(Shared {
                 snapshot: Mutex::new(Some(SnapshotState {
                     snapshot: Arc::new(snapshot),
@@ -133,7 +139,7 @@ impl SessionServicesClient {
             shared,
             jobs,
             clipboard_submitted: AtomicU64::new(0),
-            clipboard_completed: AtomicU64::new(0),
+            clipboard_completed: Mutex::new(ClipboardCompletions::default()),
             sync: Mutex::new(SyncState::default()),
             completions: Mutex::new(Vec::new()),
         }))
@@ -197,7 +203,11 @@ impl SessionServicesClient {
     }
 
     pub(crate) fn clipboard_fence_complete(&self, token: u64) -> bool {
-        self.clipboard_completed.load(Ordering::Acquire) >= token
+        self.clipboard_completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .watermark
+            >= token
     }
 
     pub(crate) fn submit_clipboard_token(&self) -> u64 {
@@ -205,7 +215,21 @@ impl SessionServicesClient {
     }
 
     pub(crate) fn complete_clipboard_token(&self, token: u64) {
-        self.clipboard_completed.fetch_max(token, Ordering::Release);
+        let mut completed = self
+            .clipboard_completed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if token <= completed.watermark {
+            return;
+        }
+        completed.pending.insert(token);
+        loop {
+            let next = completed.watermark + 1;
+            if !completed.pending.remove(&next) {
+                break;
+            }
+            completed.watermark = next;
+        }
     }
 
     pub(crate) fn acknowledge_updates(&self) {

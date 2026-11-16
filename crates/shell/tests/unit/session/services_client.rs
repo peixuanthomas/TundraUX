@@ -233,3 +233,16 @@ fn clipboard_fence_is_retired_when_its_owner_page_or_session_is_gone() {
         assert!(client.clipboard_fence_complete(token));
     }
 }
+
+#[test]
+fn a_later_clipboard_reply_cannot_complete_an_earlier_inputs_fence() {
+    let client = SessionServicesClient::for_test(snapshot(None));
+    let first = client.submit_clipboard_token();
+    let second = client.submit_clipboard_token();
+    client.complete_clipboard_token(second);
+    assert!(!client.clipboard_fence_complete(first));
+    assert!(!client.clipboard_fence_complete(second));
+    client.complete_clipboard_token(first);
+    assert!(client.clipboard_fence_complete(first));
+    assert!(client.clipboard_fence_complete(second));
+}
