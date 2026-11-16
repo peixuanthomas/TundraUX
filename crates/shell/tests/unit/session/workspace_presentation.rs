@@ -1,4 +1,4 @@
-use super::close_tests::{shell_state, window};
+use super::close_tests::{connected_window, shell_state, window};
 use super::*;
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -355,6 +355,8 @@ fn panes_update_independently_and_keep_content_through_fullscreen_and_restore() 
 #[test]
 fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_controls() {
     let (mut workspace, id) = workspace(120, 36);
+    let (connected, _peer, _listener) = connected_window(Size::new(106, 16));
+    workspace.windows.get_mut(&id).unwrap().stream = connected.stream;
     let context = ui::RenderContext::default();
     let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
     let mut caches = HashMap::new();
@@ -377,6 +379,10 @@ fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_control
         )
         .unwrap();
     assert!(workspace.capture.is_some());
+    assert!(workspace.windows[&id].queued.iter().any(|message| matches!(
+        message,
+        ShellToApp::Input { layout, .. } if *layout == original.layout
+    )));
     let mut newer = app_frame(&workspace, id, "UNPRESENTED");
     newer.animation_running = true;
     workspace
@@ -386,6 +392,10 @@ fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_control
     relayout(&mut workspace, 108, 20);
     assert!(workspace.capture.is_none());
     assert_eq!(workspace.suppress_release, Some(PointerButton::Left));
+    assert!(workspace.windows[&id].queued.iter().any(|message| matches!(
+        message,
+        ShellToApp::CancelPointer { layout } if *layout == original.layout
+    )));
     terminal.backend_mut().resize(108, 20);
     let snapshot = render(&mut workspace, &mut terminal, &context, None, &mut caches);
     let pane = workspace.layout.panes[0];

@@ -26,33 +26,38 @@ pub(super) fn window(minimum: Size) -> Window {
     }
 }
 
-#[cfg(unix)]
-fn connected_window(
+pub(super) fn connected_window(
     minimum: Size,
 ) -> (
     Window,
     platform::shell_control::AsyncLocalConnection,
     platform::shell_control::AsyncLocalListener,
 ) {
-    let path = std::env::temp_dir().join(format!(
-        "tundra-prefix-{}-{}.sock",
+    let name = format!(
+        "tundra-prefix-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos()
-    ));
+    );
+    #[cfg(unix)]
+    let endpoint = std::env::temp_dir()
+        .join(format!("{name}.sock"))
+        .to_str()
+        .unwrap()
+        .to_owned();
+    #[cfg(windows)]
+    let endpoint = name;
     let listener = {
         let _runtime = crate::process_host::event_loop::runtime().enter();
-        platform::shell_control::AsyncLocalListener::bind(path.to_str().unwrap()).unwrap()
+        platform::shell_control::AsyncLocalListener::bind(&endpoint).unwrap()
     };
     let (connection, peer) = crate::process_host::event_loop::runtime().block_on(async {
-        let connection = platform::shell_control::AsyncLocalConnection::connect(
-            path.to_str().unwrap(),
-            std::process::id(),
-        )
-        .await
-        .unwrap();
+        let connection =
+            platform::shell_control::AsyncLocalConnection::connect(&endpoint, std::process::id())
+                .await
+                .unwrap();
         let peer = listener.accept().await.unwrap();
         (connection, peer)
     });

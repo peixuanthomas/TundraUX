@@ -3204,7 +3204,11 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
         bounds,
         state.status_time_button_label().as_deref(),
         &ui::RenderContext::default(),
-    );
+    )
+    .with_back_shortcut(state.shell_back_shortcut())
+    .with_help_button(state.help_button_available())
+    .with_tasks_button(state.tasks_button_label().as_deref());
+    let settled = state.input_keyboard_content_layout(settled);
     for progress in [0, 250, 499, 500, 1_000] {
         state.refresh_hit_map_with_motion(ui::MotionTransitions {
             screen: Some(transition(ui::MotionTransitionKind::Page, progress)),
@@ -3216,7 +3220,7 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
             .iter()
             .find(|region| region.component == ShellComponent::TopBar)
             .unwrap();
-        assert_eq!(top.area, Rect::new(0, 0, 120, 1));
+        assert_eq!(top.area, settled.title);
         assert_eq!(state.shell_layout_for(bounds), settled.shell);
         let status = state
             .hit_map()
@@ -3224,7 +3228,15 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
             .iter()
             .find(|region| region.component == ShellComponent::StatusBar)
             .unwrap();
-        assert_eq!(status.area.y, 39);
+        assert_eq!(status.area, settled.status_message.unwrap());
+        assert_eq!(status.area.y, bounds.y);
+        assert!(top.area.intersection(status.area).is_empty());
+        for region in [top, status] {
+            assert_eq!(
+                state.hit_map().target_at((region.area.x, region.area.y)),
+                Some(region.component),
+            );
+        }
     }
     state.apply_input(InputEvent::from_key_label("Esc"));
     let mut dialog_area = None;
