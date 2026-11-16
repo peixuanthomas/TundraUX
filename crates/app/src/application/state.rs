@@ -106,6 +106,7 @@ pub struct AppState {
     notifications: NotificationCenter,
     auth_session: Option<AuthSession>,
     storage_config: storage::StorageConfig,
+    storage_config_revision: u64,
     active_appearance: Option<storage::AppearanceConfig>,
     active_system_status_dashboard: Option<storage::SystemStatusDashboardConfig>,
     system_status_snapshot: Option<AppSystemStatusSnapshot>,
@@ -131,6 +132,7 @@ impl AppState {
             notifications: NotificationCenter::new(i18n::msg!("notifications-status-ready")),
             auth_session: None,
             storage_config,
+            storage_config_revision: 0,
             active_appearance: None,
             active_system_status_dashboard: None,
             system_status_snapshot: None,
@@ -180,7 +182,10 @@ impl AppState {
                 {
                     self.replace_clock_timezone(Some(config.timezone.clone()), synchronized_utc);
                 }
-                self.storage_config = config;
+                if self.storage_config != config {
+                    self.storage_config_revision = self.storage_config_revision.wrapping_add(1);
+                    self.storage_config = config;
+                }
                 AppAction::Redraw
             }
             AppCommand::SetActiveAppearance(active_appearance) => {
@@ -234,7 +239,10 @@ impl AppState {
                 synchronized_utc,
             } => {
                 if let Some(timezone_id) = timezone_id.as_ref() {
-                    self.storage_config.timezone = timezone_id.clone();
+                    if self.storage_config.timezone != *timezone_id {
+                        self.storage_config_revision = self.storage_config_revision.wrapping_add(1);
+                        self.storage_config.timezone = timezone_id.clone();
+                    }
                 }
                 self.replace_clock_timezone(timezone_id, synchronized_utc);
                 AppAction::Redraw
@@ -262,10 +270,20 @@ impl AppState {
         }
     }
 
+    /// Samples only the clock without assembling page and global snapshot fields.
+    pub fn clock_snapshot(&self) -> ClockSnapshot {
+        self.network_clock.snapshot()
+    }
+
+    /// Changes whenever the effective stored configuration changes.
+    pub fn storage_config_revision(&self) -> u64 {
+        self.storage_config_revision
+    }
+
     pub fn snapshot(&self) -> AppSnapshot<'_> {
         AppSnapshot {
             clock_timezone_id: self.clock_timezone_id.as_deref(),
-            clock: self.network_clock.snapshot(),
+            clock: self.clock_snapshot(),
             exit_confirmation_requested: self.exit_confirmation_requested,
             notifications: &self.notifications,
             auth_session: self.auth_session.as_ref(),

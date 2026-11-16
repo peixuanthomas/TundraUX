@@ -422,3 +422,29 @@ fn notification_modal_response_stays_in_the_app_domain_queue() {
     assert_eq!(activated.action_id, "continue");
     assert_eq!(state.take_notification_response(), Some(activated));
 }
+
+#[test]
+fn configuration_revision_changes_only_when_effective_configuration_changes() {
+    let mut state = AppState::default();
+    let revision = state.storage_config_revision();
+    let mut config = state.storage_config().clone();
+    state.dispatch_at(
+        AppCommand::SetStorageConfig {
+            config: config.clone(),
+            synchronized_utc: None,
+        },
+        Instant::now(),
+    );
+    assert_eq!(state.storage_config_revision(), revision);
+    config.screen_timeout_seconds += 1;
+    state.dispatch_at(
+        AppCommand::SetStorageConfig {
+            config,
+            synchronized_utc: None,
+        },
+        Instant::now(),
+    );
+    assert_eq!(state.storage_config_revision(), revision + 1);
+    state.dispatch_at(AppCommand::Tick, Instant::now());
+    assert_eq!(state.storage_config_revision(), revision + 1);
+}

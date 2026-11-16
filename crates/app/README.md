@@ -16,7 +16,7 @@
 | `clock.rs` | Alarm and timer scheduling, including updates shared across Clock windows |
 | `update/` | Update checks, downloads, builds, Vim installation, replacement, and rollback |
 
-Callers modify state through `AppCommand` and read a consistent view through `AppSnapshot`. `AppAction` only expresses requests to redraw, exit, reboot, or power off; Shell performs terminal restoration and process operations.
+Callers modify state through `AppCommand` and read a consistent view through `AppSnapshot`. `clock_snapshot()` samples only time when no page snapshot is needed; `storage_config_revision()` lets hosts observe effective configuration changes without copying the configuration. `AppAction` only expresses requests to redraw, exit, reboot, or power off; Shell performs terminal restoration and process operations.
 
 ## Main state and workflows
 
