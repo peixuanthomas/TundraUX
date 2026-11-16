@@ -900,8 +900,8 @@ def check_system_settings_environment(master, output, child, cli, env):
            or item["actionable"] and "authorize" in item["id"].lower()
            for item in frame["nodes"]):
         raise SystemExit(f"OS environment limitation incorrectly offered authorization: {frame}")
-    os.write(master, b"\x1b")
-    frame = wait_for_snapshot(master, output, child, cli, env, "OS details did not close",
+    os.write(master, b"\x1bOS")
+    frame = wait_for_snapshot(master, output, child, cli, env, "F4 did not return from OS details",
                               lambda frame: frame["page"] == "Management"
                               and not any(item["id"].startswith("modal/") for item in frame["nodes"]))
     x, y = control_position(frame, "chrome/shell.back")
