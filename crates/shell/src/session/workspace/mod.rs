@@ -263,6 +263,7 @@ impl Workspace {
         let maximum = self
             .windows
             .values()
+            .filter(|_| self.wait_for.is_none())
             .filter_map(|window| match window.close {
                 CloseProgress::Requested(at) | CloseProgress::Cleaning(at) => {
                     Some((at + CLOSE_WAIT).saturating_duration_since(now))

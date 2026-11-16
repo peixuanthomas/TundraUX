@@ -180,6 +180,29 @@ fn closing_window_keeps_reported_minimum_until_guardian_removal() {
 }
 
 #[test]
+fn displayed_close_wait_consumes_its_deadline_without_masking_starting_frames() {
+    let expired = Instant::now() - CLOSE_WAIT - Duration::from_secs(1);
+    for close in [
+        CloseProgress::Requested(expired),
+        CloseProgress::Cleaning(expired),
+    ] {
+        let id = SessionId(1);
+        let mut workspace = Workspace::new(None, false);
+        let mut app = window(Size::new(106, 16));
+        app.close = close;
+        workspace.windows.insert(id, app);
+        assert_eq!(workspace.poll_timeout(), Duration::ZERO);
+
+        workspace.show_close_wait(id);
+        assert_eq!(workspace.poll_timeout(), watchdog::WORKER_PROGRESS_INTERVAL);
+        assert_eq!(workspace.windows[&id].close, close);
+
+        workspace.placeholder_redraw_at = Some(Instant::now());
+        assert_eq!(workspace.poll_timeout(), Duration::ZERO);
+    }
+}
+
+#[test]
 fn exited_window_frame_and_taskbar_hits_do_not_survive_until_redraw() {
     let mut state = shell_state();
     let (first, second) = (SessionId(1), SessionId(2));
