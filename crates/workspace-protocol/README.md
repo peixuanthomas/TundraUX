@@ -25,6 +25,8 @@ The public watchdog request and CLI result protocol keeps its separate `WATCHDOG
 
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration.
 
+Shell initializes each window with the latest viewport size, layout generation, and focus. AppHost also folds already received viewport updates into initialization before constructing its session, then applies retained input and control messages in order.
+
 Configuration, profile, and authorization writes include the revision the caller read. File paths carried by `NativePath` use Unix bytes or Windows UTF-16 code units so they round trip even when they cannot be represented as UTF-8.
 
 `ReadSessionSnapshot` returns one coherent view of configuration, authorization, profile, clock, file operations, and system status. Each domain retains its own revision and authorization or read error. An `Authorized` operation also checks the authorization revision before executing a queued write, including writes submitted by Shell.

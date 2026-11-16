@@ -960,7 +960,7 @@ pub fn run_app_host(
     let mut stream = connection.accept_shell(&listener)?;
     let (shell, shell_pid) = connection.shell_peer().ok_or(io::ErrorKind::InvalidInput)?;
     let mut hello_received = false;
-    let (init, pending) = 'receive_init: loop {
+    let (mut init, pending) = 'receive_init: loop {
         let generation = crate::process_host::event_loop::generation();
         connection.progress()?;
         let mut messages = stream.poll()?.into_iter();
@@ -1005,6 +1005,11 @@ pub fn run_app_host(
         services_setup_us: session_started.duration_since(services_started).as_micros() as u64,
         ..Default::default()
     };
+    let mut pending = pending.collect::<Vec<_>>();
+    pending.extend(stream.poll()?);
+    for message in &pending {
+        init.update_viewport(message);
+    }
     let mut host = match AppHostSession::new(init, process, watchdog, services, &mut timings) {
         Ok(host) => host,
         Err(error) => {

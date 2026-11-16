@@ -528,8 +528,8 @@ impl Workspace {
         match message {
             AppToShell::Welcome { worker } if window.worker == Some(worker) => {
                 if let Some(mut init) = window.init.take() {
-                    if let Some(ShellToApp::Viewport { size, .. }) = window.viewport {
-                        init.size = size.unwrap_or(init.size);
+                    if let Some(viewport) = &window.viewport {
+                        init.update_viewport(viewport);
                     }
                     init.language = Some(state.export_window_language()?);
                     window.queued.push_front(ShellToApp::Init(init));

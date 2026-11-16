@@ -11,6 +11,44 @@ use workspace_protocol::{
 };
 
 #[test]
+fn initialization_tracks_the_latest_viewport_before_session_construction() {
+    use workspace_protocol::{ShellToApp, WindowInit};
+    let mut init = WindowInit {
+        launch: serde_json::Value::Null,
+        profile: None,
+        language: None,
+        size: MIN_CONTENT_SIZE,
+        layout: LayoutGeneration(1),
+        focused: false,
+        image_cell_size: None,
+        text_sizing: false,
+    };
+    init.update_viewport(&ShellToApp::Viewport {
+        layout: LayoutGeneration(3),
+        size: Some(Size::new(215, 35)),
+        visible: true,
+        focused: true,
+    });
+    init.update_viewport(&ShellToApp::Viewport {
+        layout: LayoutGeneration(2),
+        size: Some(MIN_CONTENT_SIZE),
+        visible: true,
+        focused: false,
+    });
+    assert_eq!(init.layout, LayoutGeneration(3));
+    assert_eq!(init.size, Size::new(215, 35));
+    assert!(init.focused);
+    init.update_viewport(&ShellToApp::Viewport {
+        layout: LayoutGeneration(3),
+        size: None,
+        visible: false,
+        focused: false,
+    });
+    assert_eq!(init.size, Size::new(215, 35));
+    assert!(!init.focused);
+}
+
+#[test]
 fn handshake_preserves_full_run_and_worker_identity() {
     let run = RunId(u128::MAX);
     let worker = WorkerId {

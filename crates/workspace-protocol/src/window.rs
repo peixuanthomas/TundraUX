@@ -139,6 +139,23 @@ pub struct WindowInit {
     pub text_sizing: bool,
 }
 
+impl WindowInit {
+    pub fn update_viewport(&mut self, message: &ShellToApp) {
+        if let ShellToApp::Viewport {
+            layout,
+            size,
+            focused,
+            ..
+        } = message
+            && *layout >= self.layout
+        {
+            self.layout = *layout;
+            self.size = size.unwrap_or(self.size);
+            self.focused = *focused;
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowStatus {
     pub minimum: Size,
