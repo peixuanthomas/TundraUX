@@ -697,11 +697,19 @@ def check_animation_settings(master, output, child, cli, env):
                           lambda frame: (item := node(frame, suffix)) is not None and value(item) == expected)
 
     def select_field(suffix):
+        def focus(frame):
+            return tuple(item["id"] for item in frame["nodes"]
+                         if item["focused"] and item["actionable"])
+
+        frame = wait_frame(f"Keyboard controls are not ready for {suffix}",
+                           lambda frame: node(frame, suffix) is not None and focus(frame))
         for _ in range(32):
-            frame = control_snapshot(master, output, child, cli, env)
             if (item := node(frame, suffix)) is not None and item["focused"]:
                 return
+            previous = focus(frame)
             os.write(master, b"\x1b[B")
+            frame = wait_frame(f"Down did not advance keyboard focus toward {suffix}",
+                               lambda frame: focus(frame) and focus(frame) != previous)
         raise SystemExit(f"Keyboard navigation did not reach {suffix}")
 
     fields = [f"management.field.settings.animation.phase-{index}" for index in range(9)]
