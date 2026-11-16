@@ -317,14 +317,28 @@ class Session:
 
     def match_output(self, started, frame, rect=None, styled=False, changed_from=None):
         assert self.frames, "No completed PTY frame"
-        rect = rect or node(frame, "page")["rect"]
-        expected = region(self.frames[-1]["cells"], rect, styled)
+        if rect is None:
+            rect = [item["rect"] for item in frame["nodes"]
+                    if item["id"].startswith("page/") and item["actionable"]
+                    and item["role"] in ("button", "textbox", "tab", "checkbox")
+                    and item["text"].strip()]
+            if not rect:
+                rect = [item["rect"] for item in frame["nodes"]
+                        if item["id"].startswith("page/") and item["actionable"]
+                        and item["role"] == "terminal" and item["text"].strip()]
+            assert rect, "A business frame requires nonempty interactive application controls"
+        rects = [rect] if isinstance(rect, dict) else rect
+
+        def clipped(cells):
+            return tuple(region(cells, area, styled) for area in rects)
+
+        expected = clipped(self.frames[-1]["cells"])
         if not styled:
-            assert any(line.strip() for line in expected), "Blank region cannot prove a business frame"
+            assert any(line.strip() for area in expected for line in area), "Blank region cannot prove a business frame"
         if changed_from is not None:
-            assert expected != changed_from, "Action produced no visible feedback"
+            assert expected != (changed_from,), "Action produced no visible feedback"
         matches = [item for item in self.frames if item["observed_ns"] >= started
-                   and region(item["cells"], rect, styled) == expected]
+                   and clipped(item["cells"]) == expected]
         assert matches, "No complete PTY frame matches the verified business content"
         matched = matches[0]
         return {"latency_ms": (matched["observed_ns"] - started) / 1_000_000,
@@ -355,7 +369,7 @@ class Session:
         self.frames.clear()
         started = self.tap(current, target["id"])
         result = self.until(lambda frame: frame["page"] == app and bool(titles(frame))
-                            and any(item["id"].startswith("page/") and item["actionable"]
+                            and any(item["id"].startswith("page/") and item["actionable"] and item["text"].strip()
                                     for item in frame["nodes"]))
         return result, self.match_output(started, result)
 
@@ -430,7 +444,9 @@ def launches(binary, output, samples, motion, write):
                 started = session.tap(current, f"workspace.taskbar.{identifier}")
                 current = session.until(lambda frame: frame["page"] == app
                                         and any(item["id"].endswith(f"workspace.title.{identifier}")
-                                                and item["selected"] for item in titles(frame)))
+                                                and item["selected"] for item in titles(frame))
+                                        and any(item["id"].startswith("page/") and item["actionable"]
+                                                for item in frame["nodes"]))
                 timing = session.match_output(started, current)
                 write(dict(kind="launch", application=app, index=index, session=identifier,
                            mode="restore_existing_process", layout="single", size="120x36", **timing))

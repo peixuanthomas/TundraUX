@@ -47,6 +47,18 @@ class FrameBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "no visible feedback"):
             session.match_output(90, {}, rect, True, before)
 
+    def test_background_footer_changes_do_not_delay_business_frame(self):
+        session = performance.Session.__new__(performance.Session)
+        screen = performance.Screen(6, 2)
+        first = screen.feed(b"\x1b[1;1HSearch\x1b[2;1Hwait\x1b[?25l")[0]
+        later = screen.feed(b"\x1b[2;1Hdone\x1b[?25l")[0]
+        session.frames = [{"observed_ns": 100, "byte_offset": 30, "cells": first},
+                          {"observed_ns": 200, "byte_offset": 60, "cells": later}]
+        frame = {"number": 2, "page": "Launcher", "nodes": [{
+            "id": "page/search", "actionable": True, "role": "textbox", "text": "Search",
+            "rect": {"x": 0, "y": 0, "width": 6, "height": 1}}]}
+        self.assertEqual(session.match_output(90, frame)["output_ns"], 100)
+
 
 if __name__ == "__main__":
     unittest.main()
