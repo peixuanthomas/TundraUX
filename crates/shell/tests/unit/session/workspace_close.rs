@@ -10,7 +10,6 @@ pub(super) fn window(minimum: Size) -> Window {
         presented: None,
         presenting: None,
         starting_presenting: false,
-        image_assets: BTreeMap::new(),
         status: WindowStatus {
             minimum,
             ..WindowStatus::default()

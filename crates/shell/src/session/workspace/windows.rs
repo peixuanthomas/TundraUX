@@ -363,7 +363,6 @@ impl Workspace {
                 presented: None,
                 presenting: None,
                 starting_presenting: false,
-                image_assets: BTreeMap::new(),
                 status: WindowStatus::default(),
                 state: ProcessState::Starting,
                 queued: VecDeque::new(),

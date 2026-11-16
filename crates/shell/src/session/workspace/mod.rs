@@ -34,7 +34,6 @@ struct Window {
     presented: Option<Arc<WindowFrame>>,
     presenting: Option<Arc<WindowFrame>>,
     starting_presenting: bool,
-    image_assets: BTreeMap<u64, Arc<[u8]>>,
     status: WindowStatus,
     state: ProcessState,
     queued: VecDeque<ShellToApp>,

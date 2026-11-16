@@ -98,18 +98,6 @@ impl TerminalEvents {
     }
 }
 
-pub(crate) fn read_ready_terminal_event_batch(
-    first: event::Event,
-) -> io::Result<Vec<event::Event>> {
-    collect_ready_terminal_event_batch(first, || event::poll(Duration::ZERO), event::read)
-}
-
-pub(crate) fn read_ready_child_terminal_event_batch(
-    first: event::Event,
-) -> io::Result<Vec<event::Event>> {
-    collect_ready_child_terminal_event_batch(first, || event::poll(Duration::ZERO), event::read)
-}
-
 fn collect_ready_child_terminal_event_batch(
     first: event::Event,
     mut poll_ready: impl FnMut() -> io::Result<bool>,
