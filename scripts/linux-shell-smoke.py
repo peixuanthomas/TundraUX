@@ -588,7 +588,7 @@ def check_crash_screen(master: int, output: bytearray, child: subprocess.Popen, 
     print("PASS: crash reason/version/component/location/report, Q exit and saved report")
 
 
-def check_permission_draft(master, slave, output, child, path):
+def check_permission_draft(master, slave, output, child, path, cli, env):
     original = path.stat()
     offset = len(output)
     os.write(master, b"\x1b[21;2~")
@@ -655,7 +655,12 @@ def check_permission_draft(master, slave, output, child, path):
     offset = len(output)
     os.write(master, b"\x1b")
     if not wait_for_output(master, output, b"Discard unsaved changes?", child, 5.0, offset, ignore_spaces=True):
-        raise SystemExit("changed permission draft did not request discard confirmation")
+        frame = control_snapshot(master, output, child, cli, env)
+        screen = painted_screen_lines(bytes(output[repaint:]), 116, 41)
+        raise SystemExit("changed permission draft did not request discard confirmation; snapshot: "
+                         + json.dumps(frame, ensure_ascii=False)
+                         + "\npainted screen:\n" + "\n".join(screen)
+                         + "\nPTY output:\n" + output_diagnostic(output))
     if screen_after(b"\x1b")[recursive_row][column:column + 3] != "[x]":
         raise SystemExit("cancelling discard lost the permission draft")
     screen_after(b"\x1b")
@@ -1052,7 +1057,7 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
         )
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
         raise SystemExit("Explorer did not settle after renaming")
-    check_permission_draft(master, slave, output, child, renamed)
+    check_permission_draft(master, slave, output, child, renamed, cli, env)
     offset = len(output)
     os.write(master, b"\x1b")
     if not wait_for_output(master, output, b"Launcher", child, 5.0, offset):
