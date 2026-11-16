@@ -1368,9 +1368,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         );
                     }
                 })?;
-                if let Some(windows) = &mut workspace {
-                    windows.did_present(&state, output_started_at.elapsed().as_micros() as u64);
-                }
                 if let Some(error) = weather_error {
                     return Err(error);
                 }
@@ -1409,6 +1406,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 if cursor_style != vim_cursor_style {
                     crossterm::execute!(guard.terminal_mut().backend_mut(), cursor_style)?;
                     vim_cursor_style = cursor_style;
+                }
+                if let Some(windows) = &mut workspace {
+                    windows.did_present(&state, output_started_at.elapsed().as_micros() as u64);
                 }
                 if let Some(mut snapshot) = compositor.snapshot.take() {
                     snapshot.background_tasks_running |= command_line_hosts.has_running_processes()
