@@ -43,7 +43,8 @@ fn pending_save_consumes_no_reply_and_remains_in_close_lifecycle() {
             completed.fetch_add(1, Ordering::Relaxed);
         })),
         task: Some(task),
-        clipboard: None,
+        input_effect: None,
+        automation_authorization: None,
     });
     client.sync_session(&mut state);
     assert!(client.has_pending_writes());
@@ -68,7 +69,8 @@ fn failed_save_cancels_normal_close_and_exposes_the_failure() {
         session: Some(None),
         page: Some(state.active_page_id()),
         task: Some(task),
-        clipboard: None,
+        input_effect: None,
+        automation_authorization: None,
         complete: Some(Box::new(|state, result| {
             state.pages.common.error_message = Some(result.unwrap_err().to_string().into());
         })),
@@ -97,7 +99,8 @@ fn consume_workspace_job(
         session: Some(None),
         page: Some(state.active_page_id()),
         task: Some(task),
-        clipboard: None,
+        input_effect: None,
+        automation_authorization: None,
         complete: Some(Box::new(move |state, _| {
             let result = outcome.lock().unwrap().take().unwrap();
             state.pages.common.error_message = result.err().map(|error| error.to_string().into());
@@ -211,7 +214,8 @@ fn a_closed_page_never_delivers_its_save_to_a_replacement_page() {
         session: Some(None),
         page: Some(page),
         task: None,
-        clipboard: None,
+        input_effect: None,
+        automation_authorization: None,
         complete: Some(Box::new(move |_, _| {
             completed.fetch_add(1, Ordering::Relaxed);
         })),
@@ -248,7 +252,8 @@ fn an_old_session_reply_is_retired_without_touching_the_next_session() {
         session: Some(Some("old".into())),
         page: Some(state.active_page_id()),
         task: None,
-        clipboard: None,
+        input_effect: None,
+        automation_authorization: None,
         complete: Some(Box::new(move |_, _| {
             completed.fetch_add(1, Ordering::Relaxed);
         })),
@@ -269,11 +274,11 @@ fn unavailable_configuration_is_an_error_instead_of_a_successful_default() {
 }
 
 #[test]
-fn clipboard_fence_finishes_after_success_or_error_feedback_and_ignores_other_saves() {
+fn input_effect_fence_finishes_after_success_or_error_feedback_and_ignores_other_saves() {
     for result in [Ok(ServiceValue::Empty), Err(ServiceError::Conflict)] {
         let mut state = state();
         let client = SessionServicesClient::for_test(snapshot(None));
-        let token = client.submit_clipboard_token();
+        let token = client.submit_input_effect_token();
         let (reply, receiver) = std::sync::mpsc::sync_channel(1);
         let callback_client = client.clone();
         client.completions.lock().unwrap().push(PendingWrite {
@@ -281,9 +286,10 @@ fn clipboard_fence_finishes_after_success_or_error_feedback_and_ignores_other_sa
             session: Some(None),
             page: Some(state.active_page_id()),
             task: None,
-            clipboard: Some(token),
+            input_effect: Some(token),
+            automation_authorization: None,
             complete: Some(Box::new(move |state, result| {
-                assert!(!callback_client.clipboard_fence_complete(token));
+                assert!(!callback_client.input_effect_fence_complete(token));
                 state.pages.common.error_message = Some(if result.is_ok() {
                     "copied".into()
                 } else {
@@ -298,15 +304,16 @@ fn clipboard_fence_finishes_after_success_or_error_feedback_and_ignores_other_sa
             session: Some(None),
             page: Some(state.active_page_id()),
             task: Some(task),
-            clipboard: None,
+            input_effect: None,
+            automation_authorization: None,
             complete: None,
         });
-        assert_eq!(client.clipboard_fence(), token);
-        assert!(!client.clipboard_fence_complete(token));
+        assert_eq!(client.input_effect_fence(), token);
+        assert!(!client.input_effect_fence_complete(token));
         let expected = if result.is_ok() { "copied" } else { "failed" };
         reply.send(result).unwrap();
         client.sync_session(&mut state);
-        assert!(client.clipboard_fence_complete(token));
+        assert!(client.input_effect_fence_complete(token));
         assert!(client.has_pending_writes());
         assert_eq!(
             state
@@ -322,11 +329,11 @@ fn clipboard_fence_finishes_after_success_or_error_feedback_and_ignores_other_sa
 }
 
 #[test]
-fn clipboard_fence_is_retired_when_its_owner_page_or_session_is_gone() {
+fn input_effect_fence_is_retired_when_its_owner_page_or_session_is_gone() {
     for old_session in [false, true] {
         let mut state = state();
         let client = SessionServicesClient::for_test(snapshot(None));
-        let token = client.submit_clipboard_token();
+        let token = client.submit_input_effect_token();
         let (reply, receiver) = std::sync::mpsc::sync_channel(1);
         client.completions.lock().unwrap().push(PendingWrite {
             receiver,
@@ -337,28 +344,149 @@ fn clipboard_fence_is_retired_when_its_owner_page_or_session_is_gone() {
             }),
             page: Some(PageInstanceId::new()),
             task: None,
-            clipboard: Some(token),
+            input_effect: Some(token),
+            automation_authorization: None,
             complete: Some(Box::new(|_, _| {
                 panic!("retired clipboard feedback reached a different owner")
             })),
         });
         reply.send(Ok(ServiceValue::Empty)).unwrap();
         client.sync_session(&mut state);
-        assert!(client.clipboard_fence_complete(token));
+        assert!(client.input_effect_fence_complete(token));
     }
 }
 
 #[test]
 fn a_later_clipboard_reply_cannot_complete_an_earlier_inputs_fence() {
     let client = SessionServicesClient::for_test(snapshot(None));
-    let first = client.submit_clipboard_token();
-    let second = client.submit_clipboard_token();
-    client.complete_clipboard_token(second);
-    assert!(!client.clipboard_fence_complete(first));
-    assert!(!client.clipboard_fence_complete(second));
-    client.complete_clipboard_token(first);
-    assert!(client.clipboard_fence_complete(first));
-    assert!(client.clipboard_fence_complete(second));
+    let first = client.submit_input_effect_token();
+    let second = client.submit_input_effect_token();
+    client.complete_input_effect_token(second);
+    assert!(!client.input_effect_fence_complete(first));
+    assert!(!client.input_effect_fence_complete(second));
+    client.complete_input_effect_token(first);
+    assert!(client.input_effect_fence_complete(first));
+    assert!(client.input_effect_fence_complete(second));
+}
+
+#[test]
+fn persisted_automation_survives_a_closed_page_before_its_input_effect_retires() {
+    let mut state = state();
+    let mut cached = snapshot(None);
+    cached.config = Err(ServiceError::Unavailable);
+    let client = SessionServicesClient::for_test(cached);
+    let token = client.submit_input_effect_token();
+    let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+    client.completions.lock().unwrap().push(PendingWrite {
+        receiver,
+        session: Some(None),
+        page: Some(PageInstanceId::new()),
+        complete: Some(Box::new(|_, _| panic!("closed page received UI feedback"))),
+        task: None,
+        input_effect: Some(token),
+        automation_authorization: Some(7),
+    });
+    client.sync_session(&mut state);
+    assert!(!client.input_effect_fence_complete(token));
+    assert!(state.automation_commit.is_none());
+    reply
+        .send(Ok(ServiceValue::Versioned {
+            revision: 8,
+            value: serde_json::json!({"automation": {"enabled": false}}),
+        }))
+        .unwrap();
+    client.sync_session(&mut state);
+    assert_eq!(
+        state
+            .automation_commit
+            .as_ref()
+            .map(|commit| (commit.enabled, commit.revision)),
+        Some((false, 8))
+    );
+    assert!(client.input_effect_fence_complete(token));
+}
+
+#[test]
+fn failed_or_disconnected_automation_retires_without_a_false_persisted_commit() {
+    for disconnected in [false, true] {
+        let mut state = state();
+        let client = SessionServicesClient::for_test(snapshot(None));
+        let token = client.submit_input_effect_token();
+        let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+        let feedback = Arc::new(AtomicUsize::new(0));
+        let delivered = feedback.clone();
+        let callback_client = client.clone();
+        client.completions.lock().unwrap().push(PendingWrite {
+            receiver,
+            session: Some(None),
+            page: Some(state.active_page_id()),
+            complete: Some(Box::new(move |_, result| {
+                assert!(result.is_err());
+                assert!(!callback_client.input_effect_fence_complete(token));
+                delivered.fetch_add(1, Ordering::Relaxed);
+            })),
+            task: None,
+            input_effect: Some(token),
+            automation_authorization: Some(7),
+        });
+        if !disconnected {
+            reply.send(Err(ServiceError::Unavailable)).unwrap();
+        }
+        drop(reply);
+        client.sync_session(&mut state);
+        assert_eq!(feedback.load(Ordering::Relaxed), 1);
+        assert!(client.input_effect_fence_complete(token));
+        assert!(state.automation_commit.is_none());
+    }
+}
+
+#[test]
+fn authorization_revision_change_discards_old_automation_but_retires_its_effect() {
+    let mut state = state();
+    let client = SessionServicesClient::for_test(snapshot(None));
+    let token = client.submit_input_effect_token();
+    let (reply, receiver) = std::sync::mpsc::sync_channel(1);
+    client.completions.lock().unwrap().push(PendingWrite {
+        receiver,
+        session: Some(None),
+        page: None,
+        complete: None,
+        task: None,
+        input_effect: Some(token),
+        automation_authorization: Some(6),
+    });
+    reply
+        .send(Ok(ServiceValue::Versioned {
+            revision: 8,
+            value: serde_json::json!({"automation": {"enabled": false}}),
+        }))
+        .unwrap();
+    client.sync_session(&mut state);
+    assert!(state.automation_commit.is_none());
+    assert!(client.input_effect_fence_complete(token));
+}
+
+#[test]
+fn locally_changed_login_rejects_an_automation_commit_despite_a_stale_config_revision() {
+    let mut state = state();
+    let auth = AuthSession {
+        source: identity::IdentitySource::LocalAccount,
+        session_id: "new-session".into(),
+        user_id: "user".into(),
+        username: "user".into(),
+        role: UserRole::Guest,
+        started_at_epoch_ms: 1,
+    };
+    state
+        .app
+        .dispatch_at(app::AppCommand::SetAuthSession(Some(auth)), Instant::now());
+    state.record_automation_commit(workspace_protocol::AutomationCommit {
+        enabled: false,
+        revision: 8,
+        authorization_revision: 7,
+        authorization_session: Some("old-session".into()),
+    });
+    assert!(state.automation_commit.is_none());
 }
 
 #[test]

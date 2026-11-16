@@ -705,6 +705,9 @@ impl Workspace {
                 window.close = CloseProgress::Cleaning(Instant::now());
             }
             AppToShell::ShellAction(HostAction::SettingsChanged) => {}
+            AppToShell::ShellAction(HostAction::AutomationChanged(commit)) => {
+                state.record_automation_commit(commit);
+            }
             AppToShell::ShellAction(HostAction::LanguageReloaded { code }) => {
                 if window.launch.application() == super::window_launch::WindowApplication::Settings
                     && state.language_code() == code

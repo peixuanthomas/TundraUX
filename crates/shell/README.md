@@ -142,6 +142,8 @@ After external CLI control is enabled in Settings → System, the same operating
 
 `session/automation.rs` sends requests through the normal input flow, and the compositor captures snapshots from actual rendered frames. The focused window retains its `page/` control IDs. Other visible windows use `session/<id>/` prefixes. Real user actions invalidate old snapshots, requiring another `snapshot` or `wait`. Passwords remain masked in exported content. See [CLI control](../cli/docs/ui-control.md) for the protocol and examples.
 
+Disabling external control waits for the setting's persistence receipt before completing the initiating request with `closed`. The receipt survives its Settings page closing, remains scoped to the login and authorization revision, and prevents an older configuration cache from reopening control. A failed save leaves control available and exposes its error; unrelated background saves do not delay input confirmation.
+
 Already-due wheel steps from one external scroll request share a frame without dropping steps or advancing future events. Clicks and drags retain separate press and release frames.
 
 ## App startup timings

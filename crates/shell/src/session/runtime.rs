@@ -1113,7 +1113,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 break;
             }
             let was_control_enabled = control.enabled();
-            if let Err(error) = control.synchronize(state.app.storage_config().automation.enabled) {
+            if let Err(error) = control.synchronize_session(&mut state) {
                 background_changed = true;
                 state.notify_alert_with_tone(
                     i18n::msg!("ui-control-unavailable", reason = error.to_string()),
@@ -1411,6 +1411,13 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                     windows.did_present(&state, output_started_at.elapsed().as_micros() as u64);
                 }
                 if let Some(mut snapshot) = compositor.snapshot.take() {
+                    if let Err(error) = control.synchronize_session(&mut state) {
+                        state.notify_alert_with_tone(
+                            i18n::msg!("ui-control-unavailable", reason = error.to_string()),
+                            ui::NotificationTone::Error,
+                        );
+                        redraw.request_redraw();
+                    }
                     snapshot.background_tasks_running |= command_line_hosts.has_running_processes()
                         || editor_vim.running()
                         || script_hosts.running();

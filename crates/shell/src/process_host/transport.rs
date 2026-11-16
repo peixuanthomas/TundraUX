@@ -137,6 +137,12 @@ impl Message for AppToShell {
                 Self::ShellAction(workspace_protocol::ShellAction::UpdatePrepared(path)) => {
                     path.as_os_str().len()
                 }
+                Self::ShellAction(workspace_protocol::ShellAction::AutomationChanged(commit)) => {
+                    commit
+                        .authorization_session
+                        .as_ref()
+                        .map_or(0, String::capacity)
+                }
                 _ => 0,
             }
     }

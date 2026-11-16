@@ -60,14 +60,14 @@ pub(crate) struct SessionServicesClient {
     shared: Arc<Shared>,
     jobs: Option<ServiceJobs>,
     _rpc: Option<watchdog::OwnedTask<()>>,
-    clipboard_submitted: AtomicU64,
-    clipboard_completed: Mutex<ClipboardCompletions>,
+    input_effect_submitted: AtomicU64,
+    input_effect_completed: Mutex<InputEffectCompletions>,
     pub sync: Mutex<SyncState>,
     pub(crate) completions: Mutex<Vec<crate::session::services_client::PendingWrite>>,
 }
 
 #[derive(Default)]
-struct ClipboardCompletions {
+struct InputEffectCompletions {
     watermark: u64,
     pending: std::collections::BTreeSet<u64>,
 }
@@ -94,8 +94,8 @@ impl SessionServicesClient {
             commands,
             jobs: None,
             _rpc: None,
-            clipboard_submitted: AtomicU64::new(0),
-            clipboard_completed: Mutex::new(ClipboardCompletions::default()),
+            input_effect_submitted: AtomicU64::new(0),
+            input_effect_completed: Mutex::new(InputEffectCompletions::default()),
             shared: Arc::new(Shared {
                 snapshot: Mutex::new(Some(SnapshotState {
                     snapshot: Arc::new(snapshot),
@@ -142,8 +142,8 @@ impl SessionServicesClient {
             shared,
             jobs: Some(jobs),
             _rpc: Some(rpc),
-            clipboard_submitted: AtomicU64::new(0),
-            clipboard_completed: Mutex::new(ClipboardCompletions::default()),
+            input_effect_submitted: AtomicU64::new(0),
+            input_effect_completed: Mutex::new(InputEffectCompletions::default()),
             sync: Mutex::new(SyncState::default()),
             completions: Mutex::new(Vec::new()),
         }))
@@ -202,25 +202,25 @@ impl SessionServicesClient {
         })
     }
 
-    pub(crate) fn clipboard_fence(&self) -> u64 {
-        self.clipboard_submitted.load(Ordering::Acquire)
+    pub(crate) fn input_effect_fence(&self) -> u64 {
+        self.input_effect_submitted.load(Ordering::Acquire)
     }
 
-    pub(crate) fn clipboard_fence_complete(&self, token: u64) -> bool {
-        self.clipboard_completed
+    pub(crate) fn input_effect_fence_complete(&self, token: u64) -> bool {
+        self.input_effect_completed
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .watermark
             >= token
     }
 
-    pub(crate) fn submit_clipboard_token(&self) -> u64 {
-        self.clipboard_submitted.fetch_add(1, Ordering::AcqRel) + 1
+    pub(crate) fn submit_input_effect_token(&self) -> u64 {
+        self.input_effect_submitted.fetch_add(1, Ordering::AcqRel) + 1
     }
 
-    pub(crate) fn complete_clipboard_token(&self, token: u64) {
+    pub(crate) fn complete_input_effect_token(&self, token: u64) {
         let mut completed = self
-            .clipboard_completed
+            .input_effect_completed
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         if token <= completed.watermark {

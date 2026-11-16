@@ -33,6 +33,61 @@ fn coalescing_preserves_startup_and_keeps_fence_before_the_replacing_frame() {
 }
 
 #[test]
+fn backpressure_and_frame_replacement_keep_persisted_control_before_its_confirmation() {
+    let queue = Queue::new(MAX_CONTROL_BYTES);
+    queue.push(AppToShell::Frame(frame(1))).unwrap();
+    for _ in 0..MAX_MESSAGES - RESERVED_MESSAGES {
+        queue.push(AppToShell::ToggleTasks).unwrap();
+    }
+    let commit = AppToShell::ShellAction(workspace_protocol::ShellAction::AutomationChanged(
+        workspace_protocol::AutomationCommit {
+            enabled: false,
+            revision: 8,
+            authorization_revision: 7,
+            authorization_session: None,
+        },
+    ));
+    assert_eq!(
+        queue.push(commit.clone()).unwrap_err().0.kind(),
+        io::ErrorKind::WouldBlock
+    );
+    assert!(matches!(
+        event_loop::runtime().block_on(queue.next()).unwrap(),
+        AppToShell::Frame(_)
+    ));
+    queue.complete();
+    assert_eq!(
+        event_loop::runtime().block_on(queue.next()).unwrap(),
+        AppToShell::ToggleTasks
+    );
+    queue.complete();
+    queue.push(commit.clone()).unwrap();
+    queue.push(AppToShell::Frame(frame(2))).unwrap();
+    let mut confirmed = frame(3);
+    confirmed.confirmed_input_fence = 42;
+    queue.push(AppToShell::Frame(confirmed)).unwrap();
+    let state = queue.state.lock().unwrap();
+    let commit_index = state
+        .messages
+        .iter()
+        .position(|message| message == &commit)
+        .unwrap();
+    let frame_index = state
+        .messages
+        .iter()
+        .position(|message| message.frame().is_some())
+        .unwrap();
+    assert!(commit_index < frame_index);
+    assert_eq!(
+        state.messages[frame_index]
+            .frame()
+            .unwrap()
+            .confirmed_input_fence,
+        42
+    );
+}
+
+#[test]
 fn byte_backpressure_recovers_after_the_writer_consumes_a_message() {
     let message = ShellToApp::OpenLauncherEntry {
         id: "x".repeat(1024),

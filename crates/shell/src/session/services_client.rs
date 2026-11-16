@@ -27,7 +27,8 @@ pub(crate) struct PendingWrite {
     page: Option<PageInstanceId>,
     complete: Option<Completion>,
     task: Option<(u64, Arc<std::sync::atomic::AtomicBool>)>,
-    clipboard: Option<u64>,
+    input_effect: Option<u64>,
+    automation_authorization: Option<u64>,
 }
 
 impl PendingWrite {
@@ -43,7 +44,8 @@ impl PendingWrite {
             page: None,
             complete: None,
             task: None,
-            clipboard: None,
+            input_effect: None,
+            automation_authorization: None,
         }
     }
 }
@@ -111,13 +113,33 @@ impl SessionServicesClient {
                 .as_ref()
                 .is_some_and(|session| session != &current)
             {
-                if let Some(token) = pending.clipboard {
-                    self.complete_clipboard_token(token);
+                if let Some(token) = pending.input_effect {
+                    self.complete_input_effect_token(token);
                 }
                 continue;
             }
             if pending.task.is_some() && result.is_err() {
                 state.cancel_window_close_after_workspace_failure();
+            }
+            // A persisted global setting survives its originating page closing.
+            if let (Some(authorization_revision), Ok(ServiceValue::Versioned { revision, value })) =
+                (pending.automation_authorization, &result)
+                && snapshot
+                    .authorization
+                    .as_ref()
+                    .is_ok_and(|auth| auth.revision == authorization_revision)
+                && let Some(enabled) = value
+                    .get("automation")
+                    .and_then(|automation| automation.get("enabled"))
+                    .and_then(serde_json::Value::as_bool)
+            {
+                state.record_automation_commit(workspace_protocol::AutomationCommit {
+                    enabled,
+                    revision: *revision,
+                    authorization_revision,
+                    authorization_session: current.clone(),
+                });
+                changed = true;
             }
             if let Some(complete) = pending.complete {
                 if let Some(page) = pending.page {
@@ -136,8 +158,8 @@ impl SessionServicesClient {
                 state.notify_status(i18n::msg!("workspace-services-unavailable"));
                 changed = true;
             }
-            if let Some(token) = pending.clipboard {
-                self.complete_clipboard_token(token);
+            if let Some(token) = pending.input_effect {
+                self.complete_input_effect_token(token);
             }
         }
         let Ok(mut sync) = self.sync.try_lock() else {
@@ -199,7 +221,8 @@ impl SessionServicesClient {
                             }
                         })),
                         task: None,
-                        clipboard: None,
+                        input_effect: None,
+                        automation_authorization: None,
                     });
             }
             return Ok(false);
@@ -295,7 +318,8 @@ impl SessionServicesClient {
                             }
                         })),
                         task: None,
-                        clipboard: None,
+                        input_effect: None,
+                        automation_authorization: None,
                     });
             }
             if local != profile.1 && profile.1 != SessionProfile::default() {
@@ -325,7 +349,8 @@ impl SessionServicesClient {
                         session: None,
                         page: None,
                         task: None,
-                        clipboard: None,
+                        input_effect: None,
+                        automation_authorization: None,
                         complete: Some(Box::new(move |_, result| {
                             if let Some(client) = SessionServicesClient::current()
                                 && let Ok(mut sync) = client.sync.lock()
@@ -376,6 +401,23 @@ impl SessionServicesClient {
 }
 
 impl ShellSession {
+    pub(super) fn record_automation_commit(
+        &mut self,
+        commit: workspace_protocol::AutomationCommit,
+    ) {
+        if commit.authorization_session.as_deref()
+            != self.app.auth_session().map(|auth| auth.session_id.as_str())
+        {
+            return;
+        }
+        if self.automation_commit.as_ref().is_none_or(|previous| {
+            previous.authorization_revision != commit.authorization_revision
+                || previous.revision <= commit.revision
+        }) {
+            self.automation_commit = Some(commit);
+        }
+    }
+
     fn cancel_window_close_after_workspace_failure(&mut self) {
         if !self.window_close_explicit
             && matches!(
@@ -454,7 +496,8 @@ impl ShellSession {
                     }
                 })),
                 task,
-                clipboard: None,
+                input_effect: None,
+                automation_authorization: None,
             });
         Ok(())
     }
@@ -465,7 +508,7 @@ impl ShellSession {
         page: bool,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
-        self.submit_workspace_write_kind(operation, page, false, complete)
+        self.submit_workspace_write_kind(operation, page, false, None, complete)
     }
 
     pub(super) fn submit_workspace_clipboard(
@@ -473,14 +516,15 @@ impl ShellSession {
         operation: ServiceOperation,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
-        self.submit_workspace_write_kind(operation, true, true, complete)
+        self.submit_workspace_write_kind(operation, true, true, None, complete)
     }
 
     fn submit_workspace_write_kind(
         &mut self,
         operation: ServiceOperation,
         page: bool,
-        clipboard: bool,
+        input_effect: bool,
+        automation_authorization: Option<u64>,
         complete: impl FnOnce(&mut Self, io::Result<ServiceValue>) + Send + 'static,
     ) -> io::Result<()> {
         let client = SessionServicesClient::current()
@@ -496,27 +540,37 @@ impl ShellSession {
             operation,
             ServiceOperation::WriteClockTime { .. } | ServiceOperation::WriteSystemSnapshot { .. }
         );
-        let receiver = client.submit(SessionServicesClient::authorized(operation, revision))?;
-        let clipboard = clipboard.then(|| client.submit_clipboard_token());
-        let task = track.then(|| self.register_workspace_save());
-        client
+        let mut pending = client
             .completions
             .lock()
-            .map_err(|_| service_error(ServiceError::Unavailable))?
-            .push(PendingWrite {
-                receiver,
-                session: Some(session),
-                page: page.then(|| self.active_page_id()),
-                complete: Some(Box::new(complete)),
-                task,
-                clipboard,
-            });
+            .map_err(|_| service_error(ServiceError::Unavailable))?;
+        let receiver = client.submit(SessionServicesClient::authorized(operation, revision))?;
+        let input_effect = input_effect.then(|| client.submit_input_effect_token());
+        let task = track.then(|| self.register_workspace_save());
+        pending.push(PendingWrite {
+            receiver,
+            session: Some(session),
+            page: page.then(|| self.active_page_id()),
+            complete: Some(Box::new(complete)),
+            task,
+            input_effect,
+            automation_authorization,
+        });
         Ok(())
     }
 
     pub(in crate::session) fn defer_workspace_config(
         &mut self,
         config: storage::StorageConfig,
+        complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
+    ) -> bool {
+        self.defer_workspace_config_confirmed(config, false, complete)
+    }
+
+    pub(in crate::session) fn defer_workspace_config_confirmed(
+        &mut self,
+        config: storage::StorageConfig,
+        confirm_automation: bool,
         complete: impl FnOnce(&mut Self, io::Result<storage::StorageConfig>) + Send + 'static,
     ) -> bool {
         if SessionServicesClient::current().is_none() {
@@ -546,24 +600,30 @@ impl ShellSession {
             })
         })();
         let result = operation.and_then(|operation| {
-            self.submit_workspace_write(operation, true, move |state, result| {
-                let result = result.and_then(|value| match value {
-                    ServiceValue::Versioned { revision, value } => {
-                        let mut config: storage::StorageConfig = serde_json::from_value(value)?;
-                        config.session_revision = Some(revision);
-                        config.session_authorization_revision = auth_revision;
-                        Ok(config)
+            self.submit_workspace_write_kind(
+                operation,
+                true,
+                confirm_automation,
+                confirm_automation.then_some(auth_revision).flatten(),
+                move |state, result| {
+                    let result = result.and_then(|value| match value {
+                        ServiceValue::Versioned { revision, value } => {
+                            let mut config: storage::StorageConfig = serde_json::from_value(value)?;
+                            config.session_revision = Some(revision);
+                            config.session_authorization_revision = auth_revision;
+                            Ok(config)
+                        }
+                        ServiceValue::Empty => Err(io::ErrorKind::InvalidData.into()),
+                    });
+                    if let Some(complete) = callback
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .take()
+                    {
+                        complete(state, result);
                     }
-                    ServiceValue::Empty => Err(io::ErrorKind::InvalidData.into()),
-                });
-                if let Some(complete) = callback
-                    .lock()
-                    .unwrap_or_else(|error| error.into_inner())
-                    .take()
-                {
-                    complete(state, result);
-                }
-            })
+                },
+            )
         });
         if let Err(error) = result {
             if let Some(complete) = completion

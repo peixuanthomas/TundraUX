@@ -26,14 +26,14 @@ pub(super) enum WindowClose {
 
 #[derive(Default)]
 struct InputFences {
-    pending: VecDeque<ClipboardInputFence>,
+    pending: VecDeque<EffectInputFence>,
     processed: u64,
     confirmed: u64,
 }
 
-struct ClipboardInputFence {
+struct EffectInputFence {
     serial: u64,
-    clipboard: u64,
+    input_effect: u64,
 }
 
 impl InputFences {
@@ -41,16 +41,18 @@ impl InputFences {
         self.processed = self.processed.max(serial);
     }
 
-    fn receive(&mut self, serial: u64, clipboard: u64) {
+    fn receive(&mut self, serial: u64, input_effect: u64) {
         self.observe_input(serial);
-        self.pending
-            .push_back(ClipboardInputFence { serial, clipboard });
+        self.pending.push_back(EffectInputFence {
+            serial,
+            input_effect,
+        });
     }
 
     fn confirm_ready(&mut self, mut complete: impl FnMut(u64) -> bool) -> bool {
         let mut confirmed = self.confirmed;
         for fence in &self.pending {
-            if !complete(fence.clipboard) {
+            if !complete(fence.input_effect) {
                 break;
             }
             confirmed = confirmed.max(fence.serial);
@@ -612,7 +614,7 @@ impl AppHostSession {
             ShellToApp::RequestClose => self.request_close(),
             ShellToApp::InputFence { serial } => {
                 self.input_fences
-                    .receive(serial, self.services.clipboard_fence());
+                    .receive(serial, self.services.input_effect_fence());
                 self.redraw.request_input_redraw();
             }
             ShellToApp::TaskAction { id, cancel } => {
@@ -730,6 +732,13 @@ impl AppHostSession {
             self.output
                 .push_back(AppToShell::ShellAction(HostAction::SettingsChanged));
         }
+        // The durable receipt must precede any frame confirming this input.
+        if let Some(commit) = self.state.automation_commit.take() {
+            self.output
+                .push_back(AppToShell::ShellAction(HostAction::AutomationChanged(
+                    commit,
+                )));
+        }
         if let Some(code) = self.state.window_language_reloaded.take() {
             self.output
                 .push_back(AppToShell::ShellAction(HostAction::LanguageReloaded {
@@ -749,7 +758,7 @@ impl AppHostSession {
         }
         if self
             .input_fences
-            .confirm_ready(|token| self.services.clipboard_fence_complete(token))
+            .confirm_ready(|token| self.services.input_effect_fence_complete(token))
         {
             self.redraw.request_redraw();
         }

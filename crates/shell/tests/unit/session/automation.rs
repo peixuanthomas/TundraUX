@@ -472,6 +472,127 @@ fn disabling_control_finishes_the_request_before_disconnect() {
     assert!(response.snapshot.is_none());
 }
 
+fn control_config(revision: u64, enabled: bool) -> storage::StorageConfig {
+    let mut config = storage::StorageConfig::default();
+    config.automation.enabled = enabled;
+    config.session_revision = Some(revision);
+    config.session_authorization_revision = Some(7);
+    config
+}
+
+fn automation_commit(revision: u64, enabled: bool) -> workspace_protocol::AutomationCommit {
+    workspace_protocol::AutomationCommit {
+        enabled,
+        revision,
+        authorization_revision: 7,
+        authorization_session: None,
+    }
+}
+
+#[test]
+fn persisted_disable_closes_before_success_and_an_old_cache_cannot_reopen_it() {
+    let directory = TempDirectory::new();
+    let mut control = ControlRuntime::new(directory.0.clone());
+    let cached = control_config(7, true);
+    control.synchronize_configuration(&cached, None).unwrap();
+    control.publish(snapshot());
+    let info = control.server.as_ref().unwrap().info.clone();
+    let reader = std::thread::spawn(move || {
+        platform::shell_control::exchange(
+            &info,
+            &Request::new(Action::Key {
+                key: "Enter".into(),
+                modifiers: vec![],
+                phase: Phase::Press,
+            }),
+            Duration::from_secs(3),
+        )
+        .unwrap()
+    });
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while control.poll(Instant::now()).is_none() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    control.publish_when_ready(snapshot(), false);
+    assert!(control.active.is_some());
+    control.observe_automation_commit(automation_commit(8, false), &cached, None);
+    control.synchronize_configuration(&cached, None).unwrap();
+    control.publish_when_ready(snapshot(), true);
+    let response = reader.join().unwrap();
+    assert!(response.ok && response.closed);
+    assert!(response.snapshot.is_none());
+    control.synchronize_configuration(&cached, None).unwrap();
+    assert!(!control.enabled());
+    let mut unavailable_authorization = cached.clone();
+    unavailable_authorization.session_authorization_revision = None;
+    control
+        .synchronize_configuration(&unavailable_authorization, None)
+        .unwrap();
+    assert!(!control.enabled());
+    control
+        .synchronize_configuration(&control_config(8, false), None)
+        .unwrap();
+    assert!(control.committed_automation.is_none());
+    control
+        .synchronize_configuration(&control_config(9, true), None)
+        .unwrap();
+    assert!(control.enabled());
+}
+
+#[test]
+fn old_revisions_and_old_sessions_cannot_disable_current_control() {
+    let directory = TempDirectory::new();
+    let mut control = ControlRuntime::new(directory.0.clone());
+    let cached = control_config(10, true);
+    control.synchronize_configuration(&cached, None).unwrap();
+    control.observe_automation_commit(automation_commit(9, false), &cached, None);
+    control.synchronize_configuration(&cached, None).unwrap();
+    assert!(control.enabled());
+    control.observe_automation_commit(automation_commit(11, false), &cached, Some("new-login"));
+    control
+        .synchronize_configuration(&cached, Some("new-login"))
+        .unwrap();
+    assert!(control.enabled());
+    control.observe_automation_commit(automation_commit(11, false), &cached, None);
+    control.synchronize_configuration(&cached, None).unwrap();
+    assert!(!control.enabled());
+    control
+        .synchronize_configuration(&cached, Some("new-login"))
+        .unwrap();
+    assert!(control.enabled());
+}
+
+#[test]
+fn failure_feedback_keeps_control_available_and_cancellation_cannot_be_completed_twice() {
+    let directory = TempDirectory::new();
+    let mut control = ControlRuntime::new(directory.0.clone());
+    let cached = control_config(7, true);
+    control.synchronize_configuration(&cached, None).unwrap();
+    control.publish(snapshot());
+    let response = exchange_request(
+        &mut control,
+        Request::new(Action::Key {
+            key: "Enter".into(),
+            modifiers: vec![],
+            phase: Phase::Press,
+        }),
+    )
+    .0;
+    assert!(response.ok && !response.closed && response.snapshot.is_some());
+    assert!(control.enabled());
+    control.active = Some(u64::MAX);
+    control.awaiting_frame = true;
+    assert!(
+        control.observe_user_input(&Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)))
+    );
+    assert!(control.active.is_none());
+    control.observe_automation_commit(automation_commit(8, false), &cached, None);
+    control.synchronize_configuration(&cached, None).unwrap();
+    assert!(!control.enabled());
+    assert!(control.active.is_none());
+}
+
 #[test]
 fn changing_session_discards_remaining_gesture_coordinates() {
     let mut control = ControlRuntime::new(PathBuf::new());

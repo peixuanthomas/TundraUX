@@ -185,6 +185,7 @@ impl ShellSession {
             window_close_explicit: false,
             window_global_request: None,
             window_language_reloaded: None,
+            automation_commit: None,
             windows_active: false,
             window_task_ids: HashSet::new(),
             window_task_action: None,

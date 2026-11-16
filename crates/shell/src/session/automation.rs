@@ -20,6 +20,7 @@ pub(super) struct ControlRuntime {
     releases: Vec<Event>,
     awaiting_frame: bool,
     failed: bool,
+    committed_automation: Option<workspace_protocol::AutomationCommit>,
 }
 
 impl ControlRuntime {
@@ -36,6 +37,7 @@ impl ControlRuntime {
             releases: Vec::new(),
             awaiting_frame: false,
             failed: false,
+            committed_automation: None,
         }
     }
 
@@ -62,6 +64,75 @@ impl ControlRuntime {
             }
         }
         Ok(())
+    }
+
+    pub fn observe_automation_commit(
+        &mut self,
+        commit: workspace_protocol::AutomationCommit,
+        config: &storage::StorageConfig,
+        session: Option<&str>,
+    ) {
+        if commit.authorization_session.as_deref() != session
+            || config
+                .session_authorization_revision
+                .is_some_and(|revision| revision != commit.authorization_revision)
+            || config
+                .session_revision
+                .is_some_and(|revision| revision >= commit.revision)
+        {
+            return;
+        }
+        if self.committed_automation.as_ref().is_none_or(|previous| {
+            previous.authorization_revision != commit.authorization_revision
+                || previous.revision <= commit.revision
+        }) {
+            self.committed_automation = Some(commit);
+        }
+    }
+
+    pub fn synchronize_configuration(
+        &mut self,
+        config: &storage::StorageConfig,
+        session: Option<&str>,
+    ) -> io::Result<()> {
+        // Worker receipts can arrive before Shell's cached configuration.
+        if self.committed_automation.as_ref().is_some_and(|commit| {
+            commit.authorization_session.as_deref() != session
+                || config
+                    .session_authorization_revision
+                    .is_some_and(|revision| revision != commit.authorization_revision)
+                || (config.session_authorization_revision == Some(commit.authorization_revision)
+                    && config
+                        .session_revision
+                        .is_some_and(|revision| revision >= commit.revision))
+        }) {
+            self.committed_automation = None;
+        }
+        let enabled = self
+            .committed_automation
+            .as_ref()
+            .map_or(config.automation.enabled, |commit| commit.enabled);
+        self.synchronize(enabled)
+    }
+
+    pub fn synchronize_session(&mut self, state: &mut super::ShellSession) -> io::Result<()> {
+        if let Some(commit) = state.automation_commit.take() {
+            self.observe_automation_commit(
+                commit,
+                state.app.storage_config(),
+                state
+                    .app
+                    .auth_session()
+                    .map(|auth| auth.session_id.as_str()),
+            );
+        }
+        self.synchronize_configuration(
+            state.app.storage_config(),
+            state
+                .app
+                .auth_session()
+                .map(|auth| auth.session_id.as_str()),
+        )
     }
 
     pub fn publish(&mut self, snapshot: Snapshot) {

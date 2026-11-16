@@ -113,6 +113,7 @@ pub enum AppToShell {
 #[serde(rename_all = "snake_case")]
 pub enum ShellAction {
     SettingsChanged,
+    AutomationChanged(AutomationCommit),
     LanguageReloaded { code: String },
     ClockChanged,
     Logout,
@@ -122,6 +123,15 @@ pub enum ShellAction {
     PowerOff,
     Reboot,
     UpdatePrepared(#[serde(with = "super::native_path")] PathBuf),
+}
+
+/// A persisted external-control setting, scoped to its authorization revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutomationCommit {
+    pub enabled: bool,
+    pub revision: u64,
+    pub authorization_revision: u64,
+    pub authorization_session: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
