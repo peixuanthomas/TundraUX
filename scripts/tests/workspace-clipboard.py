@@ -6,6 +6,9 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import stat
+import subprocess
 import sys
 import time
 
@@ -22,6 +25,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("binary", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--diagnostic-hold-seconds", type=float, default=0)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     session = performance.Session(args.binary.resolve(), args.output, "clipboard", 217, 39)
@@ -72,7 +76,65 @@ def main():
     def text(frame):
         return "\n".join(frame["lines"])
 
+    def diagnostics():
+        metadata = {"captured_at_unix_ns": time.time_ns(), "captured_monotonic_ns": time.monotonic_ns(),
+                    "failed": failed,
+                    "paths": {name: value for name, value in session.env.items()
+                              if name == "HOME" or name.startswith("XDG_")}, "errors": []}
+        try:
+            frame = session.snapshot()
+            metadata["snapshot_observed_at_unix_ns"] = time.time_ns()
+            metadata["snapshot"] = {name: frame.get(name) for name in (
+                "number", "page", "animation_running", "background_tasks_running")}
+            metadata["snapshot"]["status"] = next(
+                (item["text"] for item in frame["nodes"] if item["id"] == "chrome/shell.status"), None)
+            (args.output / "clipboard.diagnostic-snapshot.json").write_text(
+                json.dumps(frame, ensure_ascii=False, indent=2) + "\n")
+        except Exception as error:
+            metadata["errors"].append(f"snapshot: {error}")
+        try:
+            metadata["resources"] = session.resources()
+        except Exception as error:
+            metadata["errors"].append(f"resources: {error}")
+        for label, command in (
+            ("runtime-logs", ["logs", "query", "--limit", "10000", "--format", "jsonl"]),
+            ("watchdog", ["watchdog", "list"]),
+        ):
+            try:
+                result = subprocess.run([str(session.cli), *command], env=session.env,
+                                        capture_output=True, timeout=15)
+                (args.output / f"clipboard.{label}.jsonl").write_bytes(result.stdout)
+                (args.output / f"clipboard.{label}.stderr").write_bytes(result.stderr)
+                metadata[label] = {"returncode": result.returncode}
+            except Exception as error:
+                metadata["errors"].append(f"{label}: {error}")
+
+        def ignore_special(directory, names):
+            ignored = []
+            for name in names:
+                try:
+                    mode = (Path(directory) / name).lstat().st_mode
+                    if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
+                        ignored.append(name)
+                except FileNotFoundError:
+                    ignored.append(name)
+            return ignored
+
+        try:
+            shutil.copytree(Path(session.env["HOME"]).parent, args.output / "state",
+                            symlinks=True, dirs_exist_ok=True, ignore=ignore_special)
+        except OSError as error:
+            metadata["errors"].append(f"state: {error}")
+        (args.output / "clipboard.diagnostics.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
+        if failed and args.diagnostic_hold_seconds > 0:
+            print(f"DIAGNOSTIC HOLD: {session.env['HOME']} ({args.diagnostic_hold_seconds}s)", flush=True)
+            deadline = time.monotonic() + args.diagnostic_hold_seconds
+            while time.monotonic() < deadline:
+                session.drain(max(0, min(.1, deadline - time.monotonic())))
+
     results = []
+    failed = True
     try:
         home = Path(session.env["HOME"])
         source, target = home / "clipboard-source", home / "clipboard-target"
@@ -119,8 +181,12 @@ def main():
         (args.output / "clipboard-results.json").write_text(
             json.dumps(results, ensure_ascii=False, indent=2) + "\n"
         )
+        failed = False
     finally:
-        session.close()
+        try:
+            diagnostics()
+        finally:
+            session.close()
 
 
 if __name__ == "__main__":
