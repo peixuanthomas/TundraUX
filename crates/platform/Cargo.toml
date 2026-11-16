@@ -9,7 +9,8 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-interprocess = "2.4.6"
+interprocess = { version = "2.4.6", features = ["tokio"] }
+tokio = { version = "1", features = ["net", "io-util"] }
 shell-control = { path = "../shell-control" }
 serde_json = "1"
 unicode-width = "0.2"

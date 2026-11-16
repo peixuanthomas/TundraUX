@@ -129,6 +129,8 @@ Already-due wheel steps from one external scroll request share a frame without d
 
 ## App startup timings
 
+Managed IPC shares an event wake with the UI loop. A small Tokio I/O runtime receives local-socket readiness, and a process-wide bounded worker pool handles frame encoding and decoding outside Ratatui's main thread.
+
 `tundra-cli logs query --module ux.workspace --format jsonl` shows one `app-startup` event per new AppHost whose first usable frame the Shell accepts. The application ID, workspace run ID, and window session ID identify the sample. Durations in `message_args` are monotonic microseconds.
 
 | Field | Measurement |

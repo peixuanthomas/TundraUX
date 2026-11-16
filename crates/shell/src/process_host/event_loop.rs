@@ -1,0 +1,48 @@
+use std::sync::{Condvar, Mutex, OnceLock};
+use std::time::Duration;
+
+static WAKE: (Mutex<u64>, Condvar) = (Mutex::new(0), Condvar::new());
+
+pub(crate) fn generation() -> u64 {
+    *WAKE.0.lock().unwrap_or_else(|error| error.into_inner())
+}
+
+pub(crate) fn wake() {
+    let mut generation = WAKE.0.lock().unwrap_or_else(|error| error.into_inner());
+    *generation = generation.wrapping_add(1);
+    WAKE.1.notify_all();
+}
+
+pub(crate) fn wait_since(generation: u64, timeout: Duration) {
+    let current = WAKE.0.lock().unwrap_or_else(|error| error.into_inner());
+    let _ = WAKE.1.wait_timeout_while(current, timeout, |current| *current == generation)
+        .unwrap_or_else(|error| error.into_inner());
+}
+
+pub(crate) fn codec_concurrency() -> usize {
+    std::thread::available_parallelism().map_or(1, |cores| cores.get().min(4))
+}
+
+pub(crate) fn runtime() -> &'static tokio::runtime::Runtime {
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .max_blocking_threads(codec_concurrency())
+        .thread_name("workspace-io")
+        .enable_all()
+        .build()
+        .expect("workspace I/O runtime"))
+}
+
+pub(crate) async fn codec<T: Send + 'static>(
+    work: impl FnOnce() -> std::io::Result<T> + Send + 'static,
+) -> std::io::Result<T> {
+    static PERMITS: OnceLock<std::sync::Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    let permit = PERMITS.get_or_init(|| std::sync::Arc::new(
+        tokio::sync::Semaphore::new(codec_concurrency())))
+        .clone().acquire_owned().await.map_err(std::io::Error::other)?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        work()
+    }).await.map_err(std::io::Error::other)?
+}

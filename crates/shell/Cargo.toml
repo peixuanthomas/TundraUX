@@ -29,11 +29,12 @@ i18n = { path = "../i18n" }
 runtime-log = { path = "../runtime-log" }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
-crossterm.workspace = true
+crossterm = { workspace = true, features = ["event-stream"] }
+futures-core = "0.3"
 ratatui.workspace = true
 tachyonfx.workspace = true
 vt100 = "0.15.2"
-tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "net", "io-util", "macros"] }
 platform = { path = "../platform" }
 app = { path = "../app" }
 identity = { path = "../identity" }

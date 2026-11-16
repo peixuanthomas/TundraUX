@@ -23,4 +23,6 @@ Window initialization can carry Shell's validated language snapshot and catalog.
 
 Configuration, profile, and authorization writes include the revision the caller read. File paths carried by `NativePath` use Unix bytes or Windows UTF-16 code units so they round trip even when they cannot be represented as UTF-8.
 
+`transport::read_payload` separates asynchronous I/O from JSON decoding, and `encode_message` produces bounded complete messages for background writers. The synchronous `Framed` path attempts writes immediately after enqueueing.
+
 Validation: `cargo test --locked -p workspace-protocol`.

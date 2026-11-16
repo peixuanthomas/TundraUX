@@ -5,6 +5,7 @@ use watchdog::ProcessWatchdog;
 use workspace_protocol::{ShellCompletion, WorkerRole};
 
 mod client;
+pub(crate) mod event_loop;
 #[cfg(target_os = "linux")]
 mod delegated;
 #[cfg(windows)]

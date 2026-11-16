@@ -3,11 +3,45 @@
 use serde::{Serialize, de::DeserializeOwned};
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
+use tokio::io::{AsyncRead, AsyncReadExt};
 
 const LENGTH_BYTES: usize = size_of::<u32>();
 const IO_CHUNK_BYTES: usize = 64 * 1024;
 const IO_ROUNDS: usize = 16;
 const MAX_MESSAGES: usize = 32;
+
+/// Encodes one bounded frame. Callers can run this CPU work outside their UI thread.
+pub fn encode_message(message: &impl Serialize, limit: usize) -> io::Result<Vec<u8>> {
+    encode_with_room(message, limit, io::ErrorKind::InvalidInput)
+}
+
+fn encode_with_room(
+    message: &impl Serialize,
+    room: usize,
+    limit_error: io::ErrorKind,
+) -> io::Result<Vec<u8>> {
+    let mut bytes = FrameWriter { bytes: vec![0; LENGTH_BYTES], room, limit_error };
+    serde_json::to_writer(&mut bytes, message)?;
+    let mut bytes = bytes.bytes;
+    let size = u32::try_from(bytes.len() - LENGTH_BYTES)
+        .map_err(|_| io::ErrorKind::InvalidInput)?;
+    bytes[..LENGTH_BYTES].copy_from_slice(&size.to_be_bytes());
+    Ok(bytes)
+}
+
+/// Reads one length-delimited payload without decoding JSON or compressed cells.
+pub async fn read_payload(
+    stream: &mut (impl AsyncRead + Unpin),
+    limit: usize,
+) -> io::Result<Vec<u8>> {
+    let size = stream.read_u32().await? as usize;
+    if size == 0 || size > limit {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid frame length"));
+    }
+    let mut bytes = vec![0; size];
+    stream.read_exact(&mut bytes).await?;
+    Ok(bytes)
+}
 
 /// Each message consists of a big-endian u32 length followed by one JSON value.
 pub struct Framed<S> {
@@ -42,22 +76,14 @@ impl<S: Read + Write> Framed<S> {
         if room == 0 || self.outgoing.len() >= MAX_MESSAGES {
             return Err(io::ErrorKind::WouldBlock.into());
         }
-        let mut bytes = FrameWriter {
-            bytes: vec![0; LENGTH_BYTES],
-            room,
-            limit_error: if self.outgoing.is_empty() {
+        let bytes = encode_with_room(message, room, if self.outgoing.is_empty() {
                 io::ErrorKind::InvalidInput
             } else {
                 io::ErrorKind::WouldBlock
-            },
-        };
-        serde_json::to_writer(&mut bytes, message)?;
-        let mut bytes = bytes.bytes;
-        let size = (bytes.len() - LENGTH_BYTES) as u32;
-        bytes[..LENGTH_BYTES].copy_from_slice(&size.to_be_bytes());
+            })?;
         self.outgoing_bytes += bytes.len();
         self.outgoing.push_back(bytes);
-        Ok(())
+        self.send()
     }
 
     pub fn pending_write(&self) -> bool {
@@ -72,8 +98,8 @@ impl<S: Read + Write> Framed<S> {
         let mut messages = Vec::new();
         let mut consumed = 0;
         if let Err(error) = self
-            .receive(&mut consumed, &mut messages)
-            .and_then(|()| self.send())
+            .send()
+            .and_then(|()| self.receive(&mut consumed, &mut messages))
         {
             self.disconnected = Some(error);
         }

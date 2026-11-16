@@ -211,6 +211,43 @@ impl WorkerConnection {
         }
     }
 
+    pub(crate) async fn connect_services_async(
+        &self,
+    ) -> io::Result<platform::shell_control::AsyncLocalConnection> {
+        use tokio::io::AsyncWriteExt;
+        let start = Instant::now();
+        let endpoint = loop {
+            let service = {
+                let mut control = self.lock();
+                control.poll(self.worker)?;
+                control.services.clone()
+            };
+            if let Some(endpoint) = service {
+                break endpoint;
+            }
+            if start.elapsed() >= HANDSHAKE_TIMEOUT {
+                return Err(io::ErrorKind::TimedOut.into());
+            }
+            tokio::time::sleep(POLL_INTERVAL).await;
+        };
+        tokio::time::timeout(HANDSHAKE_TIMEOUT.saturating_sub(start.elapsed()), async {
+            let connection = platform::shell_control::AsyncLocalConnection::connect(
+                &endpoint.endpoint, endpoint.pid).await?;
+            let mut stream = connection.into_inner();
+            let hello = workspace_protocol::transport::encode_message(
+                &ServiceClientMessage::Hello(Hello::new(self.worker)), MAX_SERVICE_FRAME_BYTES)?;
+            stream.write_all(&hello).await?;
+            let payload = workspace_protocol::transport::read_payload(
+                &mut stream, MAX_SERVICE_FRAME_BYTES).await?;
+            match serde_json::from_slice::<ServiceHostMessage>(&payload)? {
+                ServiceHostMessage::Welcome { worker } if worker == endpoint.worker => {
+                    Ok(platform::shell_control::AsyncLocalConnection::from_inner(stream))
+                }
+                _ => Err(io::ErrorKind::PermissionDenied.into()),
+            }
+        }).await.map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+    }
+
     pub fn finish(&self, completion: workspace_protocol::ShellCompletion) -> io::Result<()> {
         self.send(WorkerToSupervisor::Finished(completion))?;
         let start = Instant::now();

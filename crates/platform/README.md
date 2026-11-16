@@ -44,6 +44,8 @@ The Shell and app hosts request larger Unix socket buffers for window frames. Gu
 
 `shell_control` provides local connections for the external CLI and for managed Shell, application, and service processes. Unix uses private sockets and checks the peer's UID and PID. Windows named pipes and registration directories allow only the current user's SID, and clients check the server PID.
 
+Managed window and service traffic can use `AsyncLocalListener` and `AsyncLocalConnection`. They preserve those credential checks and use Tokio readiness notifications, including overlapped named pipes on Windows.
+
 Each Shell poll processes at most 16 connections, with 64 KiB of reads and writes per connection; requests are limited to 1 MiB and responses to 32 MiB. Connections are cleaned up after 30 seconds, and registration files and sockets are removed on exit. Protocol types are defined by [shell-control](../shell-control/README.md).
 
 The guardian publishes a separate `shell-watchdog` registration under the application cache directory. The watchdog endpoint accepts direct same-user requests up to 4 KiB and returns responses up to 1 MiB. On Linux the guardian also checks the embedded CLI's process descriptor and ancestry before accepting child resource registrations. Its protocol types are defined by [workspace-protocol](../workspace-protocol/README.md).
