@@ -132,7 +132,7 @@ impl Workspace {
                     Err(_) => window.view_requested = None,
                 }
             }
-            match stream.poll::<AppToShell>() {
+            match stream.poll() {
                 Ok(messages) => received.extend(messages.into_iter().map(|message| (id, message))),
                 Err(_) => {
                     window.stream = None;
@@ -515,43 +515,20 @@ impl Workspace {
             }
             AppToShell::Welcome { .. } => self.force(id)?,
             AppToShell::Frame(mut frame) => {
-                if frame.validate().is_err() {
-                    self.force(id)?;
-                    return Ok(true);
-                }
                 let timings = frame.startup_timings.take();
                 if let Some(startup) = &mut window.startup
                     && let Some(timings) = timings
                 {
                     startup.app_timings = Some(timings);
                 }
-                let mut assets = BTreeMap::<u64, Arc<[u8]>>::new();
-                let mut asset_bytes = 0;
-                frame.images.retain_mut(|image| {
-                    if image.rgba.is_empty() {
-                        let Some(pixels) = assets
-                            .get(&image.image_id)
-                            .or_else(|| window.image_assets.get(&image.image_id))
-                        else {
-                            return false;
-                        };
-                        if pixels.len() as u64
-                            != u64::from(image.width) * u64::from(image.height) * 4
-                        {
-                            return false;
-                        }
-                        image.rgba = pixels.clone();
-                    }
-                    if !assets.contains_key(&image.image_id) {
-                        asset_bytes += image.rgba.len();
-                        if asset_bytes > workspace_protocol::MAX_IMAGE_BYTES {
-                            return false;
-                        }
-                        assets.insert(image.image_id, image.rgba.clone());
-                    }
-                    true
-                });
-                window.image_assets = assets;
+                if frame.sequence != 0
+                    && window
+                        .frame
+                        .as_ref()
+                        .is_some_and(|previous| frame.sequence <= previous.sequence)
+                {
+                    return Ok(false);
+                }
                 if frame.layout != self.generation
                     || !self.layout.panes.iter().any(|pane| {
                         pane.id == id
@@ -559,6 +536,13 @@ impl Workspace {
                     })
                 {
                     return Ok(false);
+                }
+                if self
+                    .input_fences
+                    .get(&id)
+                    .is_some_and(|serial| frame.processed_input_serial >= *serial)
+                {
+                    self.input_fences.remove(&id);
                 }
                 if window.frame.as_deref() == Some(&frame) {
                     return Ok(false);
@@ -589,10 +573,11 @@ impl Workspace {
                 }
             }
             AppToShell::InputFence { serial } => {
-                if self
-                    .input_fences
-                    .get(&id)
-                    .is_some_and(|latest| serial >= *latest)
+                if !self.layout.panes.iter().any(|pane| pane.id == id)
+                    && self
+                        .input_fences
+                        .get(&id)
+                        .is_some_and(|latest| serial >= *latest)
                 {
                     self.input_fences.remove(&id);
                 }
@@ -797,7 +782,7 @@ impl Workspace {
         Ok(())
     }
 
-    pub(super) fn enqueue(&mut self, id: SessionId, message: ShellToApp) -> bool {
+    pub(super) fn enqueue(&mut self, id: SessionId, mut message: ShellToApp) -> bool {
         if let Some(window) = self.windows.get_mut(&id)
             && window.init.is_none()
             && window.stream.is_some()
@@ -810,6 +795,10 @@ impl Workspace {
                 CloseProgress::Cleaning(_) | CloseProgress::Waiting | CloseProgress::Exiting
             )
         {
+            if let ShellToApp::Input { serial, .. } = &mut message {
+                self.input_serial += 1;
+                *serial = self.input_serial;
+            }
             if matches!(
                 message,
                 ShellToApp::Input { .. }
@@ -826,13 +815,19 @@ impl Workspace {
                 Some(ShellToApp::Input {
                     layout: old_layout,
                     event: old,
+                    serial: old_serial,
                 }),
-                ShellToApp::Input { layout, event },
+                ShellToApp::Input {
+                    layout,
+                    event,
+                    serial,
+                },
             ) = (window.queued.back_mut(), &message)
                 && old_layout == layout
                 && same_mouse_motion(old, event)
             {
                 *old = event.clone();
+                *old_serial = *serial;
             } else {
                 window.queued.push_back(message);
             }

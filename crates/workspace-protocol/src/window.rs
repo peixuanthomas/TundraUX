@@ -57,6 +57,7 @@ pub enum ShellToApp {
         focused: bool,
     },
     Input {
+        serial: u64,
         layout: LayoutGeneration,
         event: Value,
     },
@@ -187,6 +188,8 @@ pub struct AppStartupTimings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowFrame {
+    pub sequence: u64,
+    pub processed_input_serial: u64,
     pub layout: LayoutGeneration,
     pub size: Size,
     #[serde(default)]
@@ -217,6 +220,8 @@ pub struct WindowFrame {
 impl WindowFrame {
     pub fn new(layout: LayoutGeneration, size: Size) -> Self {
         Self {
+            sequence: 0,
+            processed_input_serial: 0,
             layout,
             size,
             page: String::new(),

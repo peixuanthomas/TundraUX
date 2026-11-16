@@ -1,5 +1,5 @@
-use super::{HANDSHAKE_TIMEOUT, POLL_INTERVAL};
-use platform::shell_control::{LocalConnection, LocalListener};
+use super::HANDSHAKE_TIMEOUT;
+use platform::shell_control::LocalConnection;
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::process::Command;
@@ -14,7 +14,11 @@ use workspace_protocol::{
 
 static CONNECTION: OnceLock<WorkerConnection> = OnceLock::new();
 
-pub type WindowConnection = Framed<LocalConnection>;
+pub type WindowConnection =
+    super::transport::Connection<ShellToApp, workspace_protocol::AppToShell>;
+pub type AppWindowConnection =
+    super::transport::Connection<workspace_protocol::AppToShell, ShellToApp>;
+type ControlConnection = super::transport::Connection<WorkerToSupervisor, SupervisorToWorker>;
 type ServiceConnection = Framed<LocalConnection>;
 
 #[derive(Clone)]
@@ -68,7 +72,7 @@ pub struct WorkerConnection {
 }
 
 struct Control {
-    framed: Framed<LocalConnection>,
+    framed: ControlConnection,
     messages: VecDeque<SupervisorToWorker>,
     services: Option<WorkerEndpoint>,
     replies: BTreeMap<u64, Option<io::Result<()>>>,
@@ -152,15 +156,20 @@ impl WorkerConnection {
         self.lock().shutdown
     }
 
-    pub fn accept_shell(&self, listener: &LocalListener) -> io::Result<WindowConnection> {
+    pub fn accept_shell(
+        &self,
+        listener: &platform::shell_control::AsyncLocalListener,
+    ) -> io::Result<AppWindowConnection> {
         let (_, expected_pid) = self.shell_peer.ok_or(io::ErrorKind::PermissionDenied)?;
-        let stream = listener.accept()?;
+        let stream = super::event_loop::runtime().block_on(async {
+            tokio::time::timeout(HANDSHAKE_TIMEOUT, listener.accept())
+                .await
+                .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+        })?;
         if stream.peer_pid()? != expected_pid {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
-        #[cfg(unix)]
-        stream.increase_buffer_capacity(1024 * 1024);
-        Ok(Framed::new(stream, MAX_WINDOW_FRAME_BYTES))
+        Ok(AppWindowConnection::new(stream, MAX_WINDOW_FRAME_BYTES))
     }
 
     pub fn connect_app(
@@ -175,10 +184,15 @@ impl WorkerConnection {
         {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
-        let stream = LocalConnection::connect(endpoint, pid)?;
-        #[cfg(unix)]
-        stream.increase_buffer_capacity(1024 * 1024);
-        let mut framed = Framed::new(stream, MAX_WINDOW_FRAME_BYTES);
+        let stream = super::event_loop::runtime().block_on(async {
+            tokio::time::timeout(
+                HANDSHAKE_TIMEOUT,
+                platform::shell_control::AsyncLocalConnection::connect(endpoint, pid),
+            )
+            .await
+            .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+        })?;
+        let mut framed = WindowConnection::new(stream, MAX_WINDOW_FRAME_BYTES);
         framed.queue(&ShellToApp::Hello(Hello::new(self.worker)))?;
         Ok(framed)
     }
@@ -186,6 +200,7 @@ impl WorkerConnection {
     pub fn connect_services(&self) -> io::Result<ServiceConnection> {
         let start = Instant::now();
         let endpoint = loop {
+            let generation = super::event_loop::generation();
             let service = {
                 let mut control = self.lock();
                 control.poll(self.worker)?;
@@ -194,18 +209,19 @@ impl WorkerConnection {
             if let Some(endpoint) = service {
                 break endpoint;
             }
-            wait(start)?;
+            wait(start, generation)?;
         };
         let stream = connect(&endpoint.endpoint, endpoint.pid, start)?;
         let mut framed = Framed::new(stream, MAX_SERVICE_FRAME_BYTES);
         framed.queue(&ServiceClientMessage::Hello(Hello::new(self.worker)))?;
         loop {
+            let generation = super::event_loop::generation();
             let messages = framed.poll()?;
             match messages.as_slice() {
                 [ServiceHostMessage::Welcome { worker }] if *worker == endpoint.worker => {
                     return Ok(framed);
                 }
-                [] => wait(start)?,
+                [] => wait(start, generation)?,
                 _ => return Err(io::ErrorKind::PermissionDenied.into()),
             }
         }
@@ -217,6 +233,7 @@ impl WorkerConnection {
         use tokio::io::AsyncWriteExt;
         let start = Instant::now();
         let endpoint = loop {
+            let generation = super::event_loop::generation();
             let service = {
                 let mut control = self.lock();
                 control.poll(self.worker)?;
@@ -228,37 +245,51 @@ impl WorkerConnection {
             if start.elapsed() >= HANDSHAKE_TIMEOUT {
                 return Err(io::ErrorKind::TimedOut.into());
             }
-            tokio::time::sleep(POLL_INTERVAL).await;
+            tokio::time::timeout(
+                HANDSHAKE_TIMEOUT.saturating_sub(start.elapsed()),
+                super::event_loop::wait_async_since(generation),
+            )
+            .await
+            .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?;
         };
         tokio::time::timeout(HANDSHAKE_TIMEOUT.saturating_sub(start.elapsed()), async {
             let connection = platform::shell_control::AsyncLocalConnection::connect(
-                &endpoint.endpoint, endpoint.pid).await?;
+                &endpoint.endpoint,
+                endpoint.pid,
+            )
+            .await?;
             let mut stream = connection.into_inner();
             let hello = workspace_protocol::transport::encode_message(
-                &ServiceClientMessage::Hello(Hello::new(self.worker)), MAX_SERVICE_FRAME_BYTES)?;
+                &ServiceClientMessage::Hello(Hello::new(self.worker)),
+                MAX_SERVICE_FRAME_BYTES,
+            )?;
             stream.write_all(&hello).await?;
-            let payload = workspace_protocol::transport::read_payload(
-                &mut stream, MAX_SERVICE_FRAME_BYTES).await?;
+            let payload =
+                workspace_protocol::transport::read_payload(&mut stream, MAX_SERVICE_FRAME_BYTES)
+                    .await?;
             match serde_json::from_slice::<ServiceHostMessage>(&payload)? {
-                ServiceHostMessage::Welcome { worker } if worker == endpoint.worker => {
-                    Ok(platform::shell_control::AsyncLocalConnection::from_inner(stream))
-                }
+                ServiceHostMessage::Welcome { worker } if worker == endpoint.worker => Ok(
+                    platform::shell_control::AsyncLocalConnection::from_inner(stream),
+                ),
                 _ => Err(io::ErrorKind::PermissionDenied.into()),
             }
-        }).await.map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+        })
+        .await
+        .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
     }
 
     pub fn finish(&self, completion: workspace_protocol::ShellCompletion) -> io::Result<()> {
         self.send(WorkerToSupervisor::Finished(completion))?;
         let start = Instant::now();
         loop {
+            let generation = super::event_loop::generation();
             let mut control = self.lock();
             if !control.framed.pending_write() {
                 return Ok(());
             }
             control.poll(self.worker)?;
             drop(control);
-            wait(start)?;
+            wait(start, generation)?;
         }
     }
 
@@ -291,6 +322,7 @@ impl WorkerConnection {
         };
         let start = Instant::now();
         let result = loop {
+            let generation = super::event_loop::generation();
             {
                 let mut control = self.lock();
                 if let Err(error) = control.poll(self.worker) {
@@ -300,7 +332,7 @@ impl WorkerConnection {
                     break reply;
                 }
             }
-            if let Err(error) = wait(start) {
+            if let Err(error) = wait(start, generation) {
                 break Err(error);
             }
         };
@@ -402,8 +434,15 @@ pub(super) fn connect_worker(args: &[String]) -> io::Result<&'static WorkerConne
     };
 
     let start = Instant::now();
-    let stream = connect(guardian_endpoint, guard_pid, start)?;
-    let mut framed = Framed::new(stream, MAX_CONTROL_FRAME_BYTES);
+    let stream = super::event_loop::runtime().block_on(async {
+        tokio::time::timeout(
+            HANDSHAKE_TIMEOUT,
+            platform::shell_control::AsyncLocalConnection::connect(guardian_endpoint, guard_pid),
+        )
+        .await
+        .map_err(|_| io::Error::from(io::ErrorKind::TimedOut))?
+    })?;
+    let mut framed = ControlConnection::new(stream, MAX_CONTROL_FRAME_BYTES);
     framed.queue(&WorkerToSupervisor::Hello(Hello::new(worker)))?;
     let mut control = Control {
         framed,
@@ -417,11 +456,12 @@ pub(super) fn connect_worker(args: &[String]) -> io::Result<&'static WorkerConne
         shutdown: false,
     };
     loop {
+        let generation = super::event_loop::generation();
         control.poll(worker)?;
         match control.messages.pop_front() {
             Some(SupervisorToWorker::Welcome { worker: accepted }) if accepted == worker => break,
             Some(_) => return Err(io::ErrorKind::PermissionDenied.into()),
-            None => wait(start)?,
+            None => wait(start, generation)?,
         }
     }
     let connection = CONNECTION.get_or_init(|| WorkerConnection {
@@ -445,6 +485,7 @@ pub(super) fn connect_worker(args: &[String]) -> io::Result<&'static WorkerConne
 
 fn connect(endpoint: &str, pid: u32, start: Instant) -> io::Result<LocalConnection> {
     loop {
+        let generation = super::event_loop::generation();
         match LocalConnection::connect(endpoint, pid) {
             Ok(stream) => return Ok(stream),
             Err(error)
@@ -453,17 +494,22 @@ fn connect(endpoint: &str, pid: u32, start: Instant) -> io::Result<LocalConnecti
                     io::ErrorKind::WouldBlock | io::ErrorKind::NotFound | io::ErrorKind::TimedOut
                 ) =>
             {
-                wait(start)?
+                wait(start, generation)?
             }
             Err(error) => return Err(error),
         }
     }
 }
 
-fn wait(start: Instant) -> io::Result<()> {
+fn wait(start: Instant, generation: u64) -> io::Result<()> {
     if start.elapsed() >= HANDSHAKE_TIMEOUT {
         return Err(io::ErrorKind::TimedOut.into());
     }
-    std::thread::sleep(POLL_INTERVAL);
+    super::event_loop::wait_since(
+        generation,
+        HANDSHAKE_TIMEOUT
+            .saturating_sub(start.elapsed())
+            .min(watchdog::WORKER_PROGRESS_INTERVAL),
+    );
     Ok(())
 }

@@ -20,11 +20,15 @@ fn encode_with_room(
     room: usize,
     limit_error: io::ErrorKind,
 ) -> io::Result<Vec<u8>> {
-    let mut bytes = FrameWriter { bytes: vec![0; LENGTH_BYTES], room, limit_error };
+    let mut bytes = FrameWriter {
+        bytes: vec![0; LENGTH_BYTES],
+        room,
+        limit_error,
+    };
     serde_json::to_writer(&mut bytes, message)?;
     let mut bytes = bytes.bytes;
-    let size = u32::try_from(bytes.len() - LENGTH_BYTES)
-        .map_err(|_| io::ErrorKind::InvalidInput)?;
+    let size =
+        u32::try_from(bytes.len() - LENGTH_BYTES).map_err(|_| io::ErrorKind::InvalidInput)?;
     bytes[..LENGTH_BYTES].copy_from_slice(&size.to_be_bytes());
     Ok(bytes)
 }
@@ -36,7 +40,10 @@ pub async fn read_payload(
 ) -> io::Result<Vec<u8>> {
     let size = stream.read_u32().await? as usize;
     if size == 0 || size > limit {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid frame length"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid frame length",
+        ));
     }
     let mut bytes = vec![0; size];
     stream.read_exact(&mut bytes).await?;
@@ -76,11 +83,15 @@ impl<S: Read + Write> Framed<S> {
         if room == 0 || self.outgoing.len() >= MAX_MESSAGES {
             return Err(io::ErrorKind::WouldBlock.into());
         }
-        let bytes = encode_with_room(message, room, if self.outgoing.is_empty() {
+        let bytes = encode_with_room(
+            message,
+            room,
+            if self.outgoing.is_empty() {
                 io::ErrorKind::InvalidInput
             } else {
                 io::ErrorKind::WouldBlock
-            })?;
+            },
+        )?;
         self.outgoing_bytes += bytes.len();
         self.outgoing.push_back(bytes);
         self.send()

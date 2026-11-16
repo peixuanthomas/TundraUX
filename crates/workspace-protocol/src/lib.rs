@@ -13,7 +13,7 @@ pub use service::*;
 pub use supervision::*;
 pub use window::*;
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 pub const MAX_CONTROL_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_WINDOW_FRAME_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_SERVICE_FRAME_BYTES: usize = 8 * 1024 * 1024;

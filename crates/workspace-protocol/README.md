@@ -17,6 +17,8 @@ Window frames include the additive, default-false `ctrl_w_passthrough` flag. App
 
 Window frames also carry styled Markdown headings as text and geometry. The receiving Shell can use native text sizing after checking the pane's bounds.
 
+Private protocol version 2 adds monotonic frame sequences and processed input serials. A visible input fence completes when Shell accepts a current-viewport frame carrying its serial. Background window I/O resolves image references in wire order before retaining only the newest frame; it preserves first-frame startup timings across replacement.
+
 `AppStarted` carries guardian-side spawn and readiness durations. AppHost attaches optional local startup durations to its first frame for Shell's startup log.
 
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration.

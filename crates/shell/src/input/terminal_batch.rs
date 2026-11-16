@@ -1,9 +1,102 @@
 //! Bounded acquisition of already parsed Crossterm events. No byte parsing here.
 use crossterm::event;
+use futures_core::Stream;
 use std::{io, time::Duration};
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll, Wake, Waker},
+};
 
 const MAX_READY_TERMINAL_EVENTS_PER_FRAME: usize = 4_096;
 const MAX_READY_CHILD_TERMINAL_EVENTS_PER_FRAME: usize = 256;
+
+struct TerminalWake;
+
+impl Wake for TerminalWake {
+    fn wake(self: Arc<Self>) {
+        crate::process_host::event_loop::wake();
+    }
+}
+
+pub(crate) struct TerminalEvents {
+    stream: Option<event::EventStream>,
+    pending: Option<event::Event>,
+    waker: Waker,
+}
+
+impl TerminalEvents {
+    pub(crate) fn new() -> Self {
+        Self {
+            stream: Some(event::EventStream::new()),
+            pending: None,
+            waker: Waker::from(Arc::new(TerminalWake)),
+        }
+    }
+
+    pub(crate) fn suspend(&mut self) {
+        self.stream = None;
+        self.pending = None;
+    }
+
+    pub(crate) fn resume(&mut self) {
+        self.stream = Some(event::EventStream::new());
+    }
+
+    fn ready(&mut self) -> io::Result<bool> {
+        if self.pending.is_some() {
+            return Ok(true);
+        }
+        let Some(stream) = &mut self.stream else {
+            return Ok(false);
+        };
+        let mut context = Context::from_waker(&self.waker);
+        match Pin::new(stream).poll_next(&mut context) {
+            Poll::Ready(Some(Ok(event))) => {
+                self.pending = Some(event);
+                Ok(true)
+            }
+            Poll::Ready(Some(Err(error))) => Err(error),
+            Poll::Ready(None) => Err(io::ErrorKind::UnexpectedEof.into()),
+            Poll::Pending => Ok(false),
+        }
+    }
+
+    pub(crate) fn poll(&mut self, generation: u64, timeout: Duration) -> io::Result<bool> {
+        if self.ready()? {
+            return Ok(true);
+        }
+        crate::process_host::event_loop::wait_since(generation, timeout);
+        self.ready()
+    }
+
+    pub(crate) fn read(&mut self) -> io::Result<event::Event> {
+        self.pending
+            .take()
+            .ok_or_else(|| io::ErrorKind::WouldBlock.into())
+    }
+
+    pub(crate) fn read_batch(
+        &mut self,
+        first: event::Event,
+        child: bool,
+    ) -> io::Result<Vec<event::Event>> {
+        let source = std::cell::RefCell::new(self);
+        if child {
+            collect_ready_child_terminal_event_batch(
+                first,
+                || source.borrow_mut().ready(),
+                || source.borrow_mut().read(),
+            )
+        } else {
+            collect_ready_terminal_event_batch(
+                first,
+                || source.borrow_mut().ready(),
+                || source.borrow_mut().read(),
+            )
+        }
+    }
+}
 
 pub(crate) fn read_ready_terminal_event_batch(
     first: event::Event,

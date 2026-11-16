@@ -12,8 +12,9 @@ mod delegated;
 mod desktop;
 mod guardian;
 mod terminal;
+mod transport;
 
-pub use client::{WindowConnection, WorkerConnection};
+pub use client::{AppWindowConnection, WindowConnection, WorkerConnection};
 #[cfg(target_os = "linux")]
 pub use delegated::install_delegated_worker_resources;
 pub use guardian::GuardianExit;

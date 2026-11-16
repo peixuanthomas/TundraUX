@@ -1,9 +1,7 @@
 use super::window_launch::WindowOwner;
 use super::workspace::Workspace;
 use super::*;
-use crate::input::terminal_batch::{
-    read_ready_child_terminal_event_batch, read_ready_terminal_event_batch,
-};
+use crate::input::terminal_batch::TerminalEvents;
 use crate::process_host::WorkerConnection;
 use crate::session_services::SessionServicesClient;
 use std::panic::AssertUnwindSafe;
@@ -1072,9 +1070,11 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let mut terminal_suspended = false;
     let mut last_background_poll = runtime_origin;
     let mut update_ready_marked = false;
+    let mut terminal_input = TerminalEvents::new();
 
     let execution = std::panic::catch_unwind(AssertUnwindSafe(|| -> io::Result<Option<String>> {
         loop {
+            let wake_generation = crate::process_host::event_loop::generation();
             let mut background_changed = false;
             if let Some(windows) = &mut workspace {
                 if windows.poll(&mut state)? {
@@ -1149,6 +1149,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         state.apply_input_with_platform(InputEvent::Shutdown, platform.as_ref());
                     }
                     PlatformLifecycleEvent::PrepareForSleep if !terminal_suspended => {
+                        terminal_input.suspend();
                         if let Some(windows) = &mut workspace {
                             windows.set_suspend(true);
                         }
@@ -1182,6 +1183,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                             editor_vim.observe_window_focus(&state, true);
                             script_hosts.observe_window_focus(&state, true);
                             terminal_suspended = false;
+                            terminal_input.resume();
                         }
                         refresh_session_after_resume(
                             &mut state,
@@ -1200,7 +1202,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 if state.shutdown_requested() {
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                crate::process_host::event_loop::wait_since(
+                    wake_generation,
+                    Duration::from_millis(50),
+                );
                 continue;
             }
 
@@ -1499,8 +1504,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             });
             let mut action = None;
             let mut terminal_events = Vec::new();
-            if event::poll(poll_timeout)? {
-                let first = event::read()?;
+            if terminal_input.poll(wake_generation, poll_timeout)? {
+                let first = terminal_input.read()?;
                 let native_input = matches!(&first, event::Event::Key(_) | event::Event::Paste(_))
                     && (workspace.as_ref().is_some_and(Workspace::has_native_input)
                         || (!state.input_keyboard_open() && {
@@ -1509,11 +1514,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                                 || (command_line_hosts.visible_host(&state).is_running()
                                     && command_line_captures_input(&state, &input))
                         }));
-                terminal_events.extend(if native_input {
-                    read_ready_child_terminal_event_batch(first)?
-                } else {
-                    read_ready_terminal_event_batch(first)?
-                });
+                terminal_events.extend(terminal_input.read_batch(first, native_input)?);
             }
             let mut user_operated = false;
             for event in &terminal_events {
@@ -1686,6 +1687,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         Ok(None)
     }));
 
+    drop(terminal_input);
     if !matches!(&execution, Ok(Ok(None))) || !state.return_to_lockscreen_requested() {
         control.close();
     } else {

@@ -492,13 +492,20 @@ fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
             .unwrap()
             .as_nanos()
     ));
-    let listener = platform::shell_control::LocalListener::bind(path.to_str().unwrap()).unwrap();
-    let connection = platform::shell_control::LocalConnection::connect(
-        path.to_str().unwrap(),
-        std::process::id(),
-    )
-    .unwrap();
-    let peer = listener.accept().unwrap();
+    let listener = {
+        let _runtime = crate::process_host::event_loop::runtime().enter();
+        platform::shell_control::AsyncLocalListener::bind(path.to_str().unwrap()).unwrap()
+    };
+    let (connection, peer) = crate::process_host::event_loop::runtime().block_on(async {
+        let connection = platform::shell_control::AsyncLocalConnection::connect(
+            path.to_str().unwrap(),
+            std::process::id(),
+        )
+        .await
+        .unwrap();
+        let peer = listener.accept().await.unwrap();
+        (connection, peer)
+    });
     let mut app = window(Size::new(106, 16));
     app.stream = Some(WindowConnection::new(
         connection,

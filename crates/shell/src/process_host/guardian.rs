@@ -1,14 +1,17 @@
+use super::HANDSHAKE_TIMEOUT;
 use super::client::WorkerArgs;
+use super::event_loop;
 use super::terminal::TerminalState;
-use super::{HANDSHAKE_TIMEOUT, POLL_INTERVAL};
-use platform::shell_control::{LocalConnection, LocalListener, Server, watchdog_directory};
+use super::transport::Connection;
+use platform::shell_control::{
+    AsyncLocalConnection, AsyncLocalListener, Server, watchdog_directory,
+};
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use watchdog::{SupervisionEvent, Supervisor};
-use workspace_protocol::transport::Framed;
 use workspace_protocol::{
     Hello, MAX_CONTROL_FRAME_BYTES, PROTOCOL_VERSION, ProcessGeneration, ProcessState, RunId,
     ShellCompletion, SupervisorToWorker, WatchdogAction, WatchdogError, WatchdogReply,
@@ -28,7 +31,8 @@ struct Guardian<'a> {
     supervisor: Supervisor,
     terminal: Option<TerminalState>,
     workers: BTreeMap<WorkerId, Worker>,
-    worker_control: LocalListener,
+    worker_control: tokio::sync::mpsc::Receiver<AsyncLocalConnection>,
+    accept_task: tokio::task::JoinHandle<()>,
     #[cfg(target_os = "linux")]
     delegated_resources: super::delegated::DelegatedResources,
     watchdog_control: Server,
@@ -50,7 +54,7 @@ struct Worker {
     pid: u32,
     application: String,
     endpoint: String,
-    channel: Option<Framed<LocalConnection>>,
+    channel: Option<Connection<SupervisorToWorker, WorkerToSupervisor>>,
     authenticated: bool,
     ready: bool,
     ready_since: Instant,
@@ -84,7 +88,25 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
         .app_paths()
         .map_err(io::Error::other)?;
     let addresses = Addresses::new(run)?;
-    let worker_control = LocalListener::bind(&addresses.endpoint("control"))?;
+    let listener = {
+        let _runtime = event_loop::runtime().enter();
+        AsyncLocalListener::bind(&addresses.endpoint("control"))?
+    };
+    let (accepted, worker_control) = tokio::sync::mpsc::channel(16);
+    let accept_task = event_loop::runtime().spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok(stream) => {
+                    if accepted.send(stream).await.is_err() {
+                        break;
+                    }
+                    event_loop::wake();
+                }
+                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
+                Err(_) => break,
+            }
+        }
+    });
     let watchdog_control = Server::start_watchdog(
         &watchdog_directory(&paths),
         run.to_string(),
@@ -102,6 +124,7 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
         terminal,
         workers: BTreeMap::new(),
         worker_control,
+        accept_task,
         #[cfg(target_os = "linux")]
         delegated_resources: super::delegated::DelegatedResources::bind(
             addresses.private_directory(),
@@ -126,6 +149,7 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
     guardian.start_worker(services, "session-services".into())?;
     let startup = Instant::now();
     while guardian.supervisor.has_workers() {
+        let generation = event_loop::generation();
         guardian.poll_watchdog();
         guardian.poll_workers();
         #[cfg(target_os = "linux")]
@@ -176,12 +200,24 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
             terminal.poll_cleanup();
         }
         if guardian.supervisor.has_workers() {
-            std::thread::sleep(POLL_INTERVAL);
+            let timeout = guardian
+                .workers
+                .values()
+                .filter(|worker| {
+                    (!worker.authenticated || !worker.ready)
+                        && worker.ready_since.elapsed() < HANDSHAKE_TIMEOUT
+                })
+                .map(|worker| HANDSHAKE_TIMEOUT.saturating_sub(worker.ready_since.elapsed()))
+                .min()
+                .unwrap_or(watchdog::WORKER_PROGRESS_INTERVAL)
+                .min(watchdog::WORKER_PROGRESS_INTERVAL);
+            event_loop::wait_since(generation, timeout);
         }
     }
     guardian.watchdog_control.stop_accepting();
     let drain = Instant::now();
     while drain.elapsed() < RESPONSE_DRAIN_TIMEOUT {
+        let generation = event_loop::generation();
         let terminal_pending = guardian
             .terminal
             .as_mut()
@@ -190,8 +226,12 @@ pub(super) fn run(executable: &Path) -> io::Result<GuardianExit> {
             break;
         }
         guardian.poll_watchdog();
-        std::thread::sleep(POLL_INTERVAL);
+        event_loop::wait_since(
+            generation,
+            RESPONSE_DRAIN_TIMEOUT.saturating_sub(drain.elapsed()),
+        );
     }
+    guardian.accept_task.abort();
     guardian.final_error.map_or(Ok(guardian.exit), Err)
 }
 
@@ -272,9 +312,8 @@ impl Guardian<'_> {
 
     fn poll_workers(&mut self) {
         for _ in 0..16 {
-            let stream = match self.worker_control.accept() {
+            let stream = match self.worker_control.try_recv() {
                 Ok(stream) => stream,
-                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => continue,
                 Err(_) => break,
             };
             let Ok(pid) = stream.peer_pid() else { continue };
@@ -282,13 +321,13 @@ impl Guardian<'_> {
                 && !metadata.authenticated
                 && metadata.channel.is_none()
             {
-                metadata.channel = Some(Framed::new(stream, MAX_CONTROL_FRAME_BYTES));
+                metadata.channel = Some(Connection::new(stream, MAX_CONTROL_FRAME_BYTES));
             }
         }
         let mut received = Vec::new();
         for (&worker, metadata) in &mut self.workers {
             if let Some(channel) = &mut metadata.channel {
-                match channel.poll::<WorkerToSupervisor>() {
+                match channel.poll() {
                     Ok(messages) => {
                         received.extend(messages.into_iter().map(|value| (worker, value)))
                     }

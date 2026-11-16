@@ -23,7 +23,6 @@ mod taskbar;
 mod windows;
 
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
-const APP_POLL: Duration = Duration::from_millis(16);
 const STARTING_DELAY: Duration = Duration::from_millis(100);
 
 struct Window {
@@ -251,13 +250,21 @@ impl Workspace {
     }
 
     pub(super) fn poll_timeout(&self) -> Duration {
-        let maximum = if self.active() {
-            APP_POLL
-        } else {
-            Duration::from_millis(250)
-        };
+        let now = Instant::now();
+        let maximum = self
+            .windows
+            .values()
+            .filter_map(|window| match window.close {
+                CloseProgress::Requested(at) | CloseProgress::Cleaning(at) => {
+                    Some((at + CLOSE_WAIT).saturating_duration_since(now))
+                }
+                _ => None,
+            })
+            .min()
+            .unwrap_or(watchdog::WORKER_PROGRESS_INTERVAL)
+            .min(watchdog::WORKER_PROGRESS_INTERVAL);
         self.placeholder_redraw_at.map_or(maximum, |deadline| {
-            maximum.min(deadline.saturating_duration_since(Instant::now()))
+            maximum.min(deadline.saturating_duration_since(now))
         })
     }
 

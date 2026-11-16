@@ -1008,6 +1008,7 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
+ "futures-core",
  "mio",
  "parking_lot",
  "rustix 1.1.4",
@@ -2498,8 +2499,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7529951166d4dd4d2a6b9f0bb97919b810623f75eeb76e81ee9e6644886cae37"
 dependencies = [
  "doctest-file",
+ "futures-core",
  "libc",
  "recvmsg",
+ "tokio",
  "widestring",
  "windows-sys 0.61.2",
 ]
@@ -3632,6 +3635,7 @@ dependencies = [
  "starship-battery",
  "sysinfo",
  "tempfile",
+ "tokio",
  "unicode-segmentation",
  "unicode-width 0.2.0",
  "watchdog",
@@ -4926,6 +4930,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "crossterm",
+ "futures-core",
  "getrandom 0.4.3",
  "i18n",
  "identity",
@@ -7112,6 +7117,7 @@ dependencies = [
  "flate2",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

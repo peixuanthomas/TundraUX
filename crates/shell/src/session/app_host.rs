@@ -3,7 +3,6 @@ use super::*;
 use crate::process_host::WorkerConnection;
 use crate::session_services::SessionServicesClient;
 use ratatui::{Terminal, backend::TestBackend};
-use std::thread;
 use watchdog::{AppCriticality, AppDescriptor, AppId};
 use workspace_protocol::{
     AppStartupTimings, AppToShell, Cursor, CursorShape, LayoutGeneration, MAX_IMAGE_BYTES,
@@ -53,7 +52,8 @@ struct AppHostSession {
     pending_explorer_selection: Option<PathBuf>,
     output: VecDeque<AppToShell>,
     input_fences: Vec<u64>,
-    sent_images: std::collections::HashSet<u64>,
+    frame_sequence: u64,
+    processed_input_serial: u64,
 }
 
 impl AppHostSession {
@@ -187,7 +187,8 @@ impl AppHostSession {
             pending_explorer_selection: select,
             output: VecDeque::new(),
             input_fences: Vec::new(),
-            sent_images: std::collections::HashSet::new(),
+            frame_sequence: 0,
+            processed_input_serial: 0,
         };
         if let Some([width, height]) = init.image_cell_size {
             host.command_lines.set_cell_size(width, height);
@@ -473,9 +474,12 @@ impl AppHostSession {
             } => {
                 self.update_viewport(layout, size, visible, focused);
             }
-            ShellToApp::Input { layout, event }
-                if layout == self.layout && self.visible && !self.frozen =>
-            {
+            ShellToApp::Input {
+                serial,
+                layout,
+                event,
+            } if layout == self.layout && self.visible && !self.frozen => {
+                self.processed_input_serial = self.processed_input_serial.max(serial);
                 let mut input = serde_json::from_value(event)?;
                 if let InputEvent::Mouse(mouse) = &mut input {
                     mouse.position.row = mouse.position.row.saturating_add(1);
@@ -512,6 +516,7 @@ impl AppHostSession {
             }
             ShellToApp::RequestClose => self.request_close(),
             ShellToApp::InputFence { serial } => {
+                self.processed_input_serial = self.processed_input_serial.max(serial);
                 self.input_fences.push(serial);
                 self.redraw.request_input_redraw();
             }
@@ -827,12 +832,14 @@ impl AppHostSession {
                 total_bytes = next_bytes;
                 next_ids.insert(image.image_id);
             }
-            if repeated || self.sent_images.contains(&image.image_id) {
+            if repeated {
                 image.rgba = Default::default();
             }
             true
         });
-        self.sent_images = next_ids;
+        self.frame_sequence += 1;
+        frame.sequence = self.frame_sequence;
+        frame.processed_input_serial = self.processed_input_serial;
         frame.images = images;
         if let Some(snapshot) = self.compositor.snapshot.take() {
             frame.page = snapshot.page;
@@ -926,24 +933,20 @@ pub fn run_app_host(
     process: ProcessWatchdog,
 ) -> io::Result<()> {
     let endpoint = connection.endpoint().ok_or(io::ErrorKind::InvalidInput)?;
-    let listener = platform::shell_control::LocalListener::bind(endpoint)?;
-    connection.send(WorkerToSupervisor::Ready)?;
-    let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
-    let mut stream = loop {
-        connection.progress()?;
-        if let Ok(stream) = connection.accept_shell(&listener) {
-            break stream;
-        }
-        if Instant::now() >= deadline {
-            return Err(io::ErrorKind::TimedOut.into());
-        }
-        thread::sleep(HOST_TICK);
+    let listener = {
+        let _runtime = crate::process_host::event_loop::runtime().enter();
+        platform::shell_control::AsyncLocalListener::bind(endpoint)?
     };
+    connection.send(WorkerToSupervisor::Ready)?;
+    connection.progress()?;
+    let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
+    let mut stream = connection.accept_shell(&listener)?;
     let (shell, shell_pid) = connection.shell_peer().ok_or(io::ErrorKind::InvalidInput)?;
     let mut hello_received = false;
     let (init, pending) = 'receive_init: loop {
+        let generation = crate::process_host::event_loop::generation();
         connection.progress()?;
-        let mut messages = stream.poll::<ShellToApp>()?.into_iter();
+        let mut messages = stream.poll()?.into_iter();
         while let Some(message) = messages.next() {
             match message {
                 ShellToApp::Hello(hello)
@@ -964,7 +967,10 @@ pub fn run_app_host(
         if Instant::now() >= deadline {
             return Err(io::ErrorKind::TimedOut.into());
         }
-        thread::sleep(HOST_TICK);
+        crate::process_host::event_loop::wait_since(
+            generation,
+            deadline.saturating_duration_since(Instant::now()),
+        );
     };
     let services_started = Instant::now();
     let services = SessionServicesClient::connect(connection)?;
@@ -999,6 +1005,7 @@ pub fn run_app_host(
     }
 
     loop {
+        let generation = crate::process_host::event_loop::generation();
         connection.progress()?;
         while let Some(command) = connection.try_recv()? {
             if matches!(
@@ -1009,7 +1016,7 @@ pub fn run_app_host(
                 return Ok(());
             }
         }
-        for message in stream.poll::<ShellToApp>()? {
+        for message in stream.poll()? {
             host.receive(message)?;
         }
         let now = Instant::now();
@@ -1040,7 +1047,7 @@ pub fn run_app_host(
             stream.queue(&AppToShell::Closed)?;
             return flush_app_messages(&mut stream);
         }
-        if host.output.is_empty() && !stream.pending_write() {
+        if host.output.is_empty() {
             let draw_started = startup.as_ref().map(|_| Instant::now());
             let frame = host.frame(now)?;
             let rendered = frame.is_some();
@@ -1053,7 +1060,7 @@ pub fn run_app_host(
                         frame_ready.duration_since(draw_started).as_micros() as u64;
                     frame.startup_timings = Some(timings);
                 }
-                stream.queue(&AppToShell::Frame(frame))?;
+                stream.queue_owned(AppToShell::Frame(frame))?;
             }
             if rendered || host.frozen || !host.visible {
                 for serial in host.input_fences.drain(..) {
@@ -1061,19 +1068,30 @@ pub fn run_app_host(
                 }
             }
         }
-        thread::sleep(HOST_TICK);
+        if !host.output.is_empty() {
+            continue;
+        }
+        let now = Instant::now();
+        let timeout = host
+            .poll_timeout(now)
+            .min(watchdog::WORKER_PROGRESS_INTERVAL);
+        crate::process_host::event_loop::wait_since(generation, timeout);
     }
 }
 
-fn flush_app_messages(stream: &mut crate::process_host::WindowConnection) -> io::Result<()> {
+fn flush_app_messages(stream: &mut crate::process_host::AppWindowConnection) -> io::Result<()> {
     let deadline = Instant::now() + Duration::from_secs(1);
     while stream.pending_write() {
-        let _ = stream.poll::<ShellToApp>()?;
+        let generation = crate::process_host::event_loop::generation();
+        let _ = stream.poll()?;
         if Instant::now() >= deadline {
             return Err(io::ErrorKind::TimedOut.into());
         }
         if stream.pending_write() {
-            thread::sleep(HOST_TICK);
+            crate::process_host::event_loop::wait_since(
+                generation,
+                deadline.saturating_duration_since(Instant::now()),
+            );
         }
     }
     Ok(())

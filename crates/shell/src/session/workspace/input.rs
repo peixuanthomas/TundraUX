@@ -226,6 +226,7 @@ impl Workspace {
         self.enqueue(
             id,
             ShellToApp::Input {
+                serial: 0,
                 layout: self.generation,
                 event: serde_json::to_value(input)?,
             },
