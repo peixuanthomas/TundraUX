@@ -10,8 +10,9 @@ use platform::shell_control::{Server, create_private_directory, watchdog_directo
 use platform::{AppPaths, UserDirs};
 use serde_json::{Value, json};
 use workspace_protocol::{
-    PROTOCOL_VERSION, ProcessGeneration, ProcessState, RunId, SessionId, SessionInfo,
-    WatchdogAction, WatchdogReply, WatchdogRequest, WatchdogResponse, WorkerId, WorkerRole,
+    ProcessGeneration, ProcessState, RunId, SessionId, SessionInfo,
+    WATCHDOG_PROTOCOL_VERSION as PROTOCOL_VERSION, WatchdogAction, WatchdogReply, WatchdogRequest,
+    WatchdogResponse, WorkerId, WorkerRole,
 };
 
 const RUN: &str = "000000000000000000000000000000a1";

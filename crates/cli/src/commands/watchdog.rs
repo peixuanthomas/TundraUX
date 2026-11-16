@@ -6,8 +6,8 @@ use platform::shell_control::{watchdog_directory, watchdog_exchange, watchdog_se
 use serde_json::{Value, json};
 use shell_control::SessionInfo as Guardian;
 use workspace_protocol::{
-    PROTOCOL_VERSION, ProcessState, RunId, SessionId, SessionInfo, WatchdogAction, WatchdogError,
-    WatchdogReply, WatchdogRequest, WatchdogResponse, WorkerRole,
+    ProcessState, RunId, SessionId, SessionInfo, WATCHDOG_PROTOCOL_VERSION as PROTOCOL_VERSION,
+    WatchdogAction, WatchdogError, WatchdogReply, WatchdogRequest, WatchdogResponse, WorkerRole,
 };
 
 use crate::CliError;

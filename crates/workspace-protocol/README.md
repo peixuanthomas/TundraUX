@@ -19,6 +19,8 @@ Window frames also carry styled Markdown headings as text and geometry. The rece
 
 Private protocol version 2 adds monotonic frame sequences and processed input serials. A visible input fence completes when Shell accepts a current-viewport frame carrying its serial. Background window I/O resolves image references in wire order before retaining only the newest frame; it preserves first-frame startup timings across replacement.
 
+The public watchdog request and CLI result protocol keeps its separate `WATCHDOG_PROTOCOL_VERSION` at 1.
+
 `AppStarted` carries guardian-side spawn and readiness durations. AppHost attaches optional local startup durations to its first frame for Shell's startup log.
 
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration.

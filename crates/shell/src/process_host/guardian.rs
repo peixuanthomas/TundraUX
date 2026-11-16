@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 use watchdog::{SupervisionEvent, Supervisor};
 use workspace_protocol::{
     Hello, MAX_CONTROL_FRAME_BYTES, PROTOCOL_VERSION, ProcessGeneration, ProcessState, RunId,
-    ShellCompletion, SupervisorToWorker, WatchdogAction, WatchdogError, WatchdogReply,
-    WatchdogRequest, WatchdogResponse, WorkerId, WorkerRole, WorkerToSupervisor,
+    ShellCompletion, SupervisorToWorker, WATCHDOG_PROTOCOL_VERSION, WatchdogAction, WatchdogError,
+    WatchdogReply, WatchdogRequest, WatchdogResponse, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 const SERVICES_STARTUP_TIMEOUT: Duration = Duration::from_secs(4);
@@ -668,7 +668,7 @@ impl Guardian<'_> {
     }
 
     fn watchdog_request(&mut self, request: WatchdogRequest) -> WatchdogResponse {
-        if request.protocol != PROTOCOL_VERSION {
+        if request.protocol != WATCHDOG_PROTOCOL_VERSION {
             return Err(WatchdogError::Version);
         }
         if request.run != self.services.run || request.pid != std::process::id() {
