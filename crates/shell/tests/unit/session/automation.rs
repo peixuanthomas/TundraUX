@@ -564,6 +564,44 @@ fn old_revisions_and_old_sessions_cannot_disable_current_control() {
 }
 
 #[test]
+fn a_late_older_authorization_cannot_replace_the_pending_disable_before_synchronization() {
+    use super::super::{ShellHomeMode, ShellLaunchConfig, ShellSession};
+    let directory = TempDirectory::new();
+    let mut control = ControlRuntime::new(directory.0.clone());
+    let mut state = ShellSession::new_for_home_mode(
+        ShellLaunchConfig::default(),
+        (120, 40),
+        ShellHomeMode::User,
+    );
+    let mut cached = control_config(9, true);
+    cached.session_authorization_revision = Some(8);
+    state.replace_storage_config(cached.clone());
+    control.synchronize_session(&mut state).unwrap();
+    let mut current = automation_commit(10, false);
+    current.authorization_revision = 8;
+    state.record_automation_commit(current.clone());
+    state.record_automation_commit(automation_commit(8, true));
+    assert_eq!(state.automation_commit, Some(current));
+    control.synchronize_session(&mut state).unwrap();
+    assert!(!control.enabled());
+    assert_eq!(
+        control
+            .committed_automation
+            .as_ref()
+            .unwrap()
+            .authorization_revision,
+        8
+    );
+
+    cached.session_authorization_revision = None;
+    let mut late = automation_commit(11, true);
+    late.authorization_revision = 7;
+    control.observe_automation_commit(late, &cached, None);
+    control.synchronize_configuration(&cached, None).unwrap();
+    assert!(!control.enabled());
+}
+
+#[test]
 fn failure_feedback_keeps_control_available_and_cancellation_cannot_be_completed_twice() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());

@@ -83,8 +83,9 @@ impl ControlRuntime {
             return;
         }
         if self.committed_automation.as_ref().is_none_or(|previous| {
-            previous.authorization_revision != commit.authorization_revision
-                || previous.revision <= commit.revision
+            previous.authorization_revision < commit.authorization_revision
+                || (previous.authorization_revision == commit.authorization_revision
+                    && previous.revision <= commit.revision)
         }) {
             self.committed_automation = Some(commit);
         }

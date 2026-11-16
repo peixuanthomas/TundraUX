@@ -407,12 +407,18 @@ impl ShellSession {
     ) {
         if commit.authorization_session.as_deref()
             != self.app.auth_session().map(|auth| auth.session_id.as_str())
+            || self
+                .app
+                .storage_config()
+                .session_authorization_revision
+                .is_some_and(|revision| revision > commit.authorization_revision)
         {
             return;
         }
         if self.automation_commit.as_ref().is_none_or(|previous| {
-            previous.authorization_revision != commit.authorization_revision
-                || previous.revision <= commit.revision
+            previous.authorization_revision < commit.authorization_revision
+                || (previous.authorization_revision == commit.authorization_revision
+                    && previous.revision <= commit.revision)
         }) {
             self.automation_commit = Some(commit);
         }
