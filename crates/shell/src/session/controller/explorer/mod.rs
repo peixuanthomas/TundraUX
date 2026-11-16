@@ -3,6 +3,7 @@ mod save_picker;
 pub(in crate::session) mod tasks;
 use crate::session::overlays::ResolvedExplorerOverlay;
 use crate::session::*;
+use app::explorer::ExplorerClipboardMode;
 impl ShellSession {
     pub(in crate::session) fn handle_explorer_locations_pointer(
         &mut self,
