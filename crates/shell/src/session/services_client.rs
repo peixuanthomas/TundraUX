@@ -140,10 +140,13 @@ impl SessionServicesClient {
             state.notify_status(i18n::msg!("workspace-services-unavailable"));
             changed = true;
         }
-        sync.failed = failed;
+        sync.failed |= failed;
         sync.generation = generation;
         match self.try_sync_session(state, &mut sync, &snapshot) {
-            Ok(applied) => changed |= applied,
+            Ok(applied) => {
+                sync.failed = failed;
+                changed |= applied;
+            }
             Err(_) if !sync.failed => {
                 sync.failed = true;
                 state.notify_status(i18n::msg!("workspace-services-unavailable"));
@@ -283,6 +286,7 @@ impl SessionServicesClient {
         if shell {
             if let Some(snapshot) = state.app.system_status_snapshot()
                 && sync.published_system_revision != Some(snapshot.revision)
+                && sync.pending_system_revision != Some(snapshot.revision)
             {
                 let revision = snapshot.revision;
                 let receiver = self.submit(Self::authorized(
@@ -291,11 +295,29 @@ impl SessionServicesClient {
                     },
                     auth.0,
                 ))?;
-                sync.published_system_revision = Some(revision);
+                sync.pending_system_revision = Some(revision);
                 self.completions
                     .lock()
                     .map_err(|_| service_error(ServiceError::Unavailable))?
-                    .push(PendingWrite::silent(receiver));
+                    .push(PendingWrite {
+                        receiver,
+                        session: None,
+                        page: None,
+                        task: None,
+                        clipboard: None,
+                        complete: Some(Box::new(move |_, result| {
+                            if let Some(client) = SessionServicesClient::current()
+                                && let Ok(mut sync) = client.sync.lock()
+                            {
+                                if sync.pending_system_revision == Some(revision) {
+                                    sync.pending_system_revision = None;
+                                }
+                                if result.is_ok() {
+                                    sync.published_system_revision = Some(revision);
+                                }
+                            }
+                        })),
+                    });
             }
             let (_, requests): (_, SystemStatusRequests) = Self::decode(&snapshot.system_requests)?;
             if requests.active != sync.system_active {
@@ -373,7 +395,9 @@ impl ShellSession {
         let result = outcome.clone();
         let (reply, receiver) = std::sync::mpsc::sync_channel(1);
         let completion_client = client.clone();
+        let language = self.language.clone();
         client.submit_job(Box::new(move || {
+            let _language = i18n::enter_snapshot(language);
             *result.lock().unwrap_or_else(|error| error.into_inner()) =
                 Some(SessionServicesClient::in_authorization(revision, work));
             let _ = reply.send(Ok(ServiceValue::Empty));

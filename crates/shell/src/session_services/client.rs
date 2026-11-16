@@ -47,6 +47,7 @@ pub(crate) struct SyncState {
     pub system_revision: u64,
     pub files_revision: Option<u64>,
     pub published_system_revision: Option<u64>,
+    pub pending_system_revision: Option<u64>,
     pub failed: bool,
     pub system_active: bool,
     pub pending_authorization: bool,

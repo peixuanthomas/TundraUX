@@ -246,3 +246,13 @@ fn a_later_clipboard_reply_cannot_complete_an_earlier_inputs_fence() {
     assert!(client.clipboard_fence_complete(first));
     assert!(client.clipboard_fence_complete(second));
 }
+
+#[test]
+fn an_unchanged_unavailable_domain_does_not_repeat_feedback_or_redraw() {
+    let mut state = state();
+    let mut snapshot = snapshot(None);
+    snapshot.config = Err(ServiceError::Unavailable);
+    let client = SessionServicesClient::for_test(snapshot);
+    assert!(client.sync_session(&mut state));
+    assert!(!client.sync_session(&mut state));
+}

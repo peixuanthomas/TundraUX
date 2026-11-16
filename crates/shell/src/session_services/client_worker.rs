@@ -55,6 +55,7 @@ pub(super) async fn run(
                     failed(&shared);
                     if let Some(request) = request {
                         let _ = request.reply.send(Err(ServiceError::Unavailable));
+                        signal(&shared);
                     }
                     continue;
                 }
@@ -69,6 +70,7 @@ pub(super) async fn run(
                 Err(_) => {
                     failed(&shared);
                     let _ = request.reply.send(Err(ServiceError::Unavailable));
+                    signal(&shared);
                     stream = None;
                     continue;
                 }
