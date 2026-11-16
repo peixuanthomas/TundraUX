@@ -321,9 +321,7 @@ impl Workspace {
         self.input_focus
             .and_then(|id| self.windows.get(&id))
             .and_then(|window| window.frame.as_ref())
-            .is_some_and(|frame| {
-                frame.layout == self.generation && !frame.modal && !frame.native_escape.is_empty()
-            })
+            .is_some_and(|frame| !frame.modal && !frame.native_escape.is_empty())
     }
 
     pub(super) fn finish_input_batch(&mut self, external: bool) {

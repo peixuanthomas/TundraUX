@@ -480,7 +480,7 @@ fn split_chooser_cancellation_and_resize_restore_only_the_pending_region() {
 
 #[cfg(unix)]
 #[test]
-fn editor_and_terminal_ctrl_w_is_sent_to_the_app_without_arming_the_prefix() {
+fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
     let mut state = shell_state();
     let id = SessionId(1);
     let mut workspace = Workspace::new(None, false);
@@ -512,7 +512,17 @@ fn editor_and_terminal_ctrl_w_is_sent_to_the_app_without_arming_the_prefix() {
         Size::new(215, 35),
     );
     frame.ctrl_w_passthrough = true;
+    frame.native_escape.push(workspace_protocol::Rect {
+        x: 0,
+        y: 0,
+        width: 215,
+        height: 35,
+    });
     workspace.windows.get_mut(&id).unwrap().frame = Some(Arc::new(frame));
+    assert!(workspace.has_native_input());
+    workspace
+        .input(&InputEvent::key(InputKey::F(1)), &mut state)
+        .unwrap();
     workspace
         .input(
             &InputEvent::key_with_modifiers(InputKey::Char('w'), crate::InputModifiers::CTRL),
@@ -530,7 +540,13 @@ fn editor_and_terminal_ctrl_w_is_sent_to_the_app_without_arming_the_prefix() {
             .iter()
             .filter(|message| matches!(message, ShellToApp::Input { .. }))
             .count(),
-        2
+        3
+    );
+    assert!(
+        !workspace.windows[&id]
+            .queued
+            .iter()
+            .any(|message| matches!(message, ShellToApp::Help { .. }))
     );
     drop(workspace);
     drop(peer);
