@@ -30,13 +30,13 @@ fn main() {
         _ => {}
     }
 
-    let _language = i18n::enter_snapshot(Arc::new(i18n::LanguageSnapshot::embedded(0)));
-
     match shell::process_host::worker_from_args(&args) {
         Ok(Some(connection)) => std::process::exit(run_worker(connection)),
         Ok(None) => {}
         Err(error) => exit_with_error("shell-entry-failed", error, 2),
     }
+
+    let _language = i18n::enter_snapshot(Arc::new(i18n::LanguageSnapshot::embedded(0)));
 
     #[cfg(target_os = "linux")]
     match shell::confirm_linux_startup() {

@@ -61,6 +61,8 @@ Shell validates the configured language and its English fallback during the star
 
 Shell caches the exported language data for each language generation. New AppHosts restore shared translation bundles alongside loading static assets; unavailable or mismatched language data follows the same disk recovery path as before.
 
+Worker entry connects to the guardian before loading language bundles. AppHosts use the Shell snapshot when constructing the session; early failures retain the lazy embedded diagnostic fallback.
+
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
 The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Logged-in non-guest users can open Tasks. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9 after required account validation.
