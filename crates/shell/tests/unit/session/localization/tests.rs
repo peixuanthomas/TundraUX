@@ -422,6 +422,10 @@ fn window_language_export_cache_tracks_reloads_and_cannot_be_mutated_by_a_caller
         .state
         .save_region_picker_value(Some("zh-CN".into()), None);
     let first = fixture.state.export_window_language().unwrap();
+    assert!(Arc::ptr_eq(
+        &first,
+        &fixture.state.export_window_language().unwrap()
+    ));
     let first_generation = PreparedLanguage::restore_from_shell(first, "zh-CN")
         .unwrap()
         .snapshot
@@ -451,7 +455,7 @@ fn window_language_export_cache_tracks_reloads_and_cannot_be_mutated_by_a_caller
         "缓存已刷新"
     );
     let mut modified = current.clone();
-    modified["snapshot"]["code"] = "invalid".into();
+    Arc::make_mut(&mut modified)["snapshot"]["code"] = "invalid".into();
     assert_eq!(fixture.state.export_window_language().unwrap(), current);
     assert!(PreparedLanguage::restore_from_shell(modified, "zh-CN").is_none());
 }

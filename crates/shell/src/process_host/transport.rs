@@ -63,7 +63,10 @@ impl Message for ShellToApp {
                 Self::Init(init) => {
                     value_bytes(&init.launch)
                         + init.profile.as_ref().map_or(0, value_bytes)
-                        + init.language.as_ref().map_or(0, value_bytes)
+                        + init
+                            .language
+                            .as_ref()
+                            .map_or(0, |language| value_bytes(language))
                 }
                 Self::TaskAction { id, .. } | Self::OpenLauncherEntry { id } => id.capacity(),
                 Self::TaskCatalog { ids } => ids

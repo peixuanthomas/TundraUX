@@ -49,6 +49,37 @@ fn initialization_tracks_the_latest_viewport_before_session_construction() {
 }
 
 #[test]
+fn initialization_shares_language_data_without_changing_its_json_object() {
+    use std::sync::Arc;
+    use workspace_protocol::{ShellToApp, WindowInit};
+    let language = serde_json::json!({
+        "snapshot": { "code": "en-US", "generation": 3, "current": [], "english": ["ok = OK"] },
+        "catalog": { "options": [] }
+    });
+    let init = WindowInit {
+        launch: serde_json::Value::Null,
+        profile: None,
+        language: Some(Arc::new(language.clone())),
+        size: MIN_CONTENT_SIZE,
+        layout: LayoutGeneration(1),
+        focused: true,
+        image_cell_size: None,
+        text_sizing: false,
+    };
+    assert!(Arc::ptr_eq(
+        init.language.as_ref().unwrap(),
+        init.clone().language.as_ref().unwrap()
+    ));
+    let wire = serde_json::to_value(ShellToApp::Init(init)).unwrap();
+    assert_eq!(wire["init"]["language"], language);
+    let ShellToApp::Init(received) = serde_json::from_value(wire).unwrap() else {
+        panic!("initialization expected");
+    };
+    let received = Arc::try_unwrap(received.language.unwrap()).unwrap();
+    assert_eq!(received, language);
+}
+
+#[test]
 fn handshake_preserves_full_run_and_worker_identity() {
     let run = RunId(u128::MAX);
     let worker = WorkerId {

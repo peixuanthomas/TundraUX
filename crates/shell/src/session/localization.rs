@@ -28,7 +28,7 @@ struct WindowLanguage {
 }
 
 thread_local! {
-    static WINDOW_LANGUAGE: std::cell::RefCell<Option<(Arc<i18n::LanguageSnapshot>, u64, serde_json::Value)>> = const { std::cell::RefCell::new(None) };
+    static WINDOW_LANGUAGE: std::cell::RefCell<Option<(Arc<i18n::LanguageSnapshot>, u64, Arc<serde_json::Value>)>> = const { std::cell::RefCell::new(None) };
 }
 
 impl PreparedLanguage {
@@ -44,8 +44,9 @@ impl PreparedLanguage {
         }
     }
 
-    pub(super) fn restore_from_shell(data: serde_json::Value, code: &str) -> Option<Self> {
-        let WindowLanguage { snapshot, catalog } = serde_json::from_value(data).ok()?;
+    pub(super) fn restore_from_shell(data: Arc<serde_json::Value>, code: &str) -> Option<Self> {
+        let WindowLanguage { snapshot, catalog } =
+            serde_json::from_value(Arc::unwrap_or_clone(data)).ok()?;
         if i18n::canonicalize_locale(code).ok()? != snapshot.code {
             return None;
         }
@@ -64,7 +65,7 @@ impl PreparedLanguage {
 }
 
 impl ShellSession {
-    pub(super) fn export_window_language(&self) -> serde_json::Result<serde_json::Value> {
+    pub(super) fn export_window_language(&self) -> serde_json::Result<Arc<serde_json::Value>> {
         WINDOW_LANGUAGE.with(|cached| {
             let mut cached = cached.borrow_mut();
             if let Some((snapshot, generation, data)) = cached.as_ref()
@@ -73,10 +74,10 @@ impl ShellSession {
             {
                 return Ok(data.clone());
             }
-            let data = serde_json::to_value(WindowLanguage {
+            let data = Arc::new(serde_json::to_value(WindowLanguage {
                 snapshot: self.language.export(),
                 catalog: self.language_catalog.clone(),
-            })?;
+            })?);
             *cached = Some((
                 self.language.clone(),
                 self.language.generation(),

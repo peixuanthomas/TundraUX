@@ -59,7 +59,7 @@ Opening a managed application restores a running window or creates an AppHost if
 
 Shell validates the configured language and its English fallback during the startup animation. It sends the current validated resources and language choices to new AppHosts. AppHosts rebuild their translation bundles in memory and load from disk if the shared resources are unavailable or the configured language has changed. Choosing the current language again in Settings refreshes the resources for new windows.
 
-Shell caches the exported language data for each language generation. New AppHosts restore shared translation bundles alongside loading static assets; unavailable or mismatched language data follows the same disk recovery path as before.
+Shell caches the exported language data for each language generation. Initialization shares this immutable data through the Shell's queues instead of copying its strings for every window. New AppHosts consume the received data and restore shared translation bundles alongside loading static assets; unavailable or mismatched language data follows the same disk recovery path as before.
 
 Worker entry connects to the guardian before loading language bundles. AppHosts use the Shell snapshot when constructing the session; early failures retain the lazy embedded diagnostic fallback.
 After an AppHost welcomes the Shell, its current viewport and initialization join the bounded background sender in the same event-loop turn, before the next terminal draw or wait.

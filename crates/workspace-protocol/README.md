@@ -23,7 +23,7 @@ The public watchdog request and CLI result protocol keeps its separate `WATCHDOG
 
 `AppStarted` carries guardian-side spawn and readiness durations. AppHost attaches optional local startup durations to its first frame for Shell's startup log.
 
-Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration.
+Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration. The language JSON is reference-counted within each process so queueing and cloning initialization do not copy its strings; its wire representation remains a JSON object.
 
 Shell initializes each window with the latest viewport size, layout generation, and focus. AppHost also folds already received viewport updates into initialization before constructing its session, then applies retained input and control messages in order.
 
