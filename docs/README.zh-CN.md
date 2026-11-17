@@ -88,7 +88,7 @@ tundra-cli ui wake
 
 新窗口复用 Shell 在启动时验证的语言资源和共享会话设置。运行 `tundra-cli logs query --module ux.workspace --format jsonl` 查看首帧接收和终端输出耗时；字段说明见 [Shell 启动计时](../crates/shell/README.md#app-startup-timings)，复现步骤见 [性能验收](testing.md#workspace-performance-acceptance)。
 
-[2026-11-16 Linux 实测](performance-linux-2026-11-16.md)中，六个内置 AppHost 启动的 P95 均低于 100ms，单窗、双窗和四窗反馈的 P95 均低于 50ms，使用正常动画和独立进程。
+[2026-11-17 Linux 实测](performance-linux-2026-11-17.md)中，六个内置 AppHost 启动的 P95 均低于 100ms，单窗、双窗和四窗反馈的 P95 均低于 50ms，使用正常动画和独立进程。报告另列后加 debug panic 路由修复的功能验证。
 
 ## 文档
 

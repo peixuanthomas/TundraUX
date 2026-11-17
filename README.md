@@ -90,7 +90,7 @@ See the [UI control guide](crates/cli/docs/ui-control.md) for click, input, scro
 
 New app windows reuse the language resources Shell validates during startup and the shared session settings. Inspect first-frame acceptance and terminal output timings with `tundra-cli logs query --module ux.workspace --format jsonl`. See the [timing fields](crates/shell/README.md#app-startup-timings) and [repeatable performance checks](docs/testing.md#workspace-performance-acceptance).
 
-The [2026-11-16 Linux measurements](docs/performance-linux-2026-11-16.md) show all six built-in AppHost startup P95 values below 100ms and all single/two/four-window feedback P95 values below 50ms, with full animation and independent processes.
+The [2026-11-17 Linux measurements](docs/performance-linux-2026-11-17.md) show all six built-in AppHost startup P95 values below 100ms and all single/two/four-window feedback P95 values below 50ms, with full animation and independent processes. The later debug-panic routing fix has separate functional validation in that report.
 
 ## Documentation
 

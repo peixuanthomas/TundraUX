@@ -213,3 +213,17 @@ Implementation modules include unit tests with `#[cfg(test)]` and `#[path = "...
 New tests should prioritize core workflows, data safety, authorization boundaries, error recovery, and user-visible regressions. Shared controls test common states and colors; page tests check hit detection, modal interception, password masking, wide characters, and resizing. When deleting cases, also remove unused fixtures and test entry points.
 
 See [large-file editor support](editor-scalability.md) for reproduction steps and measurement definitions. Historical acceptance results remain in `docs/*validation*.md` and the corresponding specialized records.
+
+## Recorded Linux validation, 2026-11-16–17
+
+The full workspace run at `eda29044` completed 150 targets in 1,479 seconds: **2,888 passed, 11 failed, 34 ignored**. This historical run was not all green. Later checks covered affected code separately: the final persisted-control/authentication, shutdown recovery, input-fence and wire batch passed **66/66** at `6456fe44`, whose complete `crates/` tree matches measured package `cd59be5d`. The benchmark harness passed 25 lightweight tests; affected-crate formatting and localization checks passed (4,077 literal call sites and 4,278 paired en-US/zh-CN messages).
+
+The measured cd59 package passed eight critical terminal groups, including real cross-process clipboard, exact Vim recovery bytes and the full 24-case/720-input UI matrix. Final source `4a8c77a6` subsequently added explicit debug-panic routing, with seven focused checks and a real PANIC/report/Q/terminal-restoration probe passing. The [performance report](performance-linux-2026-11-17.md) records both binary identities and their separate validation scope; the full workspace and performance matrix were not repeated after that isolated follow-up.
+
+Remaining full-suite limitations are preserved as failures, not passes:
+
+- Three ACL fixtures are blocked here: default ACL returns `EOPNOTSUPP` (95); the access ACL with an unmapped UID returns `EINVAL` (22).
+- Two CLI child-cleanup cases and one termination case depend on `/proc/<pid>/task/<tid>/children`, which returns `ENOENT` (2) even for an observed parent/child pair. The two CLI cases also reproduce with the original `919db6b5` binary.
+- The isolated APT/dpkg negative control fails identically on original `919db6b5`: its legacy logger succeeds where the fixture expects failure. The real removal/status-FD positive control passes, and the host package database hash is unchanged. This does not establish a cause in APT/dpkg versions.
+
+The [validation index](/workspace/tundra-perf-artifacts/validation/index.json) retains original failed logs, later focused results and direct capability/baseline evidence separately. Repository-wide formatting also reports unchanged `third_party/lsh` differences present in the baseline. Windows runtime behavior and physical terminal-emulator pixel/graphics presentation were not verified by this Linux PTY work.

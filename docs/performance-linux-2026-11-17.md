@@ -122,7 +122,18 @@ The following P95 milliseconds come only from each application's own 50-start la
 
 ## Functional scope
 
-The measured optimization package cd59be5d passed 66 targeted Rust checks and eight required critical functional groups. At measurement time, the full debug-crash flow had a pre-existing failure reproduced against original919: the explicit debug request panicked AppHost and returned to Home instead of opening the promised Shell PANIC page. The user subsequently requested the separate explicit-debug routing fix 94966994 in the final delivery. That follow-up package receives focused functional validation only; its final source/binary identity and validation outcome will be recorded separately by integration. The complete performance matrix is not repeated after that fix. All performance numbers and measured binary hashes in this report remain those of cd59be5d; they must not be relabeled as measurements of the later patched binary. This report does not claim 9/9 functional groups for the measured package.
+The measured optimization package cd59be5d passed 66 targeted Rust checks and eight required critical functional groups: persisted external control, native Vim/recovery, Linux integration, watchdog recovery, splits, cross-AppHost clipboard, script/Vim handoff, and the 24-case/720-input UI matrix. The explicit debug request still panicked AppHost and returned to Home; a direct original919 probe reproduced that existing failure. The separately requested routing fix is included in the final delivery and validated below. All performance numbers and measured binary hashes in this report remain those of cd59be5d. The complete performance matrix was not repeated for the later patched binary; this report does not claim 9/9 functional groups for the measured package.
+
+### Final debug routing follow-up
+
+Final build source is `4a8c77a6e1799f372aab24467e192d301392bf67` (routing change `81ff5faf`, original patch `94966994`, plus a test-only unwind annotation). The same standard release profile completed in 555.011 seconds. Assets and bundled Vim match cd59be5d exactly. Private worker protocol is 4; public watchdog protocol remains 1.
+
+| Final follow-up binary | SHA256 |
+| --- | --- |
+| tundra-shell | `2ce690df41caa1a29ce067d9253f2cd899eb5668ce4a45e002662c9154d99c97` |
+| tundra-cli | `202f4b5f0dd4db8bdd08300dcfe006baadb347f5724f06cc0f765973c452a15a` |
+
+Seven focused checks passed: wire encoding; explicit request forwarding, backpressure/FIFO and the real Shell boundary; ordinary AppHost failures; native external exits 75/76; and ordinary REPL system exit 76. A 7.102-second real PTY probe then displayed PANIC, Reason, Version, Component, Location, Full report and R/Q choices. Its saved JSON/text report belongs to the actual Shell PID 147638 and `shell.fullscreen-session` boundary. Q exited successfully and restored terminal attributes. The [preserved follow-up evidence](/workspace/tundra-perf-artifacts/debug-panic-followup/finish-status.json) links the source, independent bundle, logs and report. These are functional checks of the follow-up binary, not new performance measurements.
 
 ## Immutable identities
 

@@ -53,4 +53,5 @@ The following files preserve the state at the time and are not current usage gui
 
 - [CHANGELOG](CHANGELOG.md) and [release notes](packaging/releases/v1.5.1.md)
 - [Historical Linux portable-build validation](packaging/linux/VALIDATION-2026-09-18.md)
-- [Linux workspace performance measurements, 2026-11-16](performance-linux-2026-11-16.md)
+- [Linux workspace performance measurements, 2026-11-17](performance-linux-2026-11-17.md)
+- [Historical e2 candidate measurements, 2026-11-16](performance-linux-2026-11-16.md)
