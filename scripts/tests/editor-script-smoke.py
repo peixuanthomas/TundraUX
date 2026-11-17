@@ -116,11 +116,28 @@ def main():
             return next(item for item in current["nodes"] if item["id"].endswith(suffix))
 
         def click(suffix):
-            identifier = node(suffix)["id"]
-            current = until(lambda current: any(
-                item["id"] == identifier and item["enabled"] and item["actionable"]
-                for item in current["nodes"]
-            ))
+            def context(current):
+                owner = next((item["id"] for item in current["nodes"]
+                              if "workspace.title." in item["id"] and item["selected"]), None)
+                return current["page"], owner
+
+            original = context(ui("snapshot"))
+            identifier = None
+
+            def ready(current):
+                nonlocal identifier
+                if context(current) != original:
+                    return False
+                matches = [item for item in current["nodes"] if item["id"].endswith(suffix)]
+                assert len(matches) <= 1, f"Ambiguous control {suffix!r}: {matches}"
+                if not matches:
+                    return False
+                target = matches[0]
+                if identifier is None:
+                    identifier = target["id"]
+                return target["id"] == identifier and target["enabled"] and target["actionable"]
+
+            current = until(ready)
             target = next(item for item in current["nodes"] if item["id"] == identifier)
             assert target["enabled"] and target["actionable"], target
             return ui("click", "--id", target["id"])
