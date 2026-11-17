@@ -2551,7 +2551,7 @@ fn state() -> ShellSession {
     );
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "management-test".into(),
             user_id: "alice".into(),
             username: "alice".into(),
@@ -2760,7 +2760,7 @@ fn home_management_entries_follow_platform_support_and_guest_is_blocked() {
     }
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "guest".into(),
             user_id: "guest".into(),
             username: "guest".into(),

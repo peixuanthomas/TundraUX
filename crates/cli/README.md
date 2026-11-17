@@ -7,7 +7,8 @@
 | Usage | Example |
 | --- | --- |
 | Commands from an external terminal | `tundra-cli doctor` |
-| View help | `tundra-cli help`, `tundra-cli users --help` |
+| View help | `tundra-cli help` |
+| Linux system user management | `tundra-cli users --help` |
 | View version | `tundra-cli --version` |
 | UX commands in the built-in Command Line | `/doctor`, `/config get` |
 | System commands in the built-in Command Line | `ls -la` or `dir` |

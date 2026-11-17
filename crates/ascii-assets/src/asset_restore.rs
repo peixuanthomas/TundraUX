@@ -124,7 +124,6 @@ pub fn restore_default_theme_file(
                 "settings",
                 "system_status",
                 "user_management",
-                "user_profile",
                 "default",
             ],
         ),

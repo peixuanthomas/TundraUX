@@ -33,8 +33,6 @@ impl NavigationCheckpoint {
 pub(super) fn screen_focus(screen: ShellScreen) -> ShellComponent {
     match screen {
         ShellScreen::FirstRunSetup => ShellComponent::SetupLanguage,
-        ShellScreen::BootstrapAdmin => ShellComponent::BootstrapUsername,
-        ShellScreen::Login => ShellComponent::LoginUserList,
         ShellScreen::Home => ShellComponent::Home,
         ShellScreen::Clock => ShellComponent::ClockNewButton,
         ShellScreen::Diagnostics => ShellComponent::Diagnostics,
@@ -46,15 +44,12 @@ pub(super) fn screen_focus(screen: ShellScreen) -> ShellComponent {
         ShellScreen::CommandLine => ShellComponent::CommandLine,
         ShellScreen::Editor => ShellComponent::Editor,
         ShellScreen::Settings => ShellComponent::Settings,
-        ShellScreen::UserManagement => ShellComponent::UserManagement,
         ShellScreen::ExitConfirm => ShellComponent::ExitDialog,
     }
 }
 
-const PAGE_SCREENS: [ShellScreen; 16] = [
+const PAGE_SCREENS: [ShellScreen; 13] = [
     ShellScreen::FirstRunSetup,
-    ShellScreen::BootstrapAdmin,
-    ShellScreen::Login,
     ShellScreen::Home,
     ShellScreen::Clock,
     ShellScreen::Diagnostics,
@@ -66,13 +61,11 @@ const PAGE_SCREENS: [ShellScreen; 16] = [
     ShellScreen::CommandLine,
     ShellScreen::Editor,
     ShellScreen::Settings,
-    ShellScreen::UserManagement,
     ShellScreen::ExitConfirm,
 ];
 
 fn app_page_kind(screen: ShellScreen) -> Option<app::AppPageKind> {
     Some(match screen {
-        ShellScreen::UserManagement => app::AppPageKind::UserManagement,
         ShellScreen::Explorer => app::AppPageKind::Explorer,
         ShellScreen::Launcher => app::AppPageKind::Launcher,
         ShellScreen::Editor => app::AppPageKind::Editor,
@@ -435,8 +428,6 @@ impl ShellSession {
                 .select_page(selection.editor, app::AppPageKind::Editor);
             self.app
                 .select_page(selection.diagnostics, app::AppPageKind::Diagnostics);
-            self.app
-                .select_page(selection.user_management, app::AppPageKind::UserManagement);
         } else {
             self.restore_navigation_page();
         }
@@ -617,8 +608,6 @@ impl ShellSession {
         }
         match self.active_screen() {
             ShellScreen::FirstRunSetup => self.route_setup_key(key),
-            ShellScreen::BootstrapAdmin => self.route_auth_key(key),
-            ShellScreen::Login => self.route_login_key(key),
             ShellScreen::Home => (
                 RoutedTarget::Global,
                 if key.has_non_shift_modifier() {
@@ -636,7 +625,6 @@ impl ShellSession {
             ShellScreen::SystemStatus => self.route_system_status_key(key),
             ShellScreen::Explorer => self.route_explorer_key(key),
             ShellScreen::Launcher => self.route_launcher_key(key),
-            ShellScreen::UserManagement => self.route_user_management_key(key),
             ShellScreen::Editor => (
                 RoutedTarget::Component(ShellComponent::Editor),
                 ShellCommand::EditorKey(key.clone()),

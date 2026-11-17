@@ -26,7 +26,6 @@ pub(crate) mod settings;
 pub(crate) mod shell;
 pub(crate) mod system_status;
 pub mod timezone_map;
-pub(crate) mod user_management;
 
 pub use auth::*;
 pub use clock::*;
@@ -44,7 +43,6 @@ pub use notifications::*;
 pub use panic::PanicScreen;
 pub use shell::*;
 pub use system_status::*;
-pub use user_management::*;
 
 pub use launcher::{
     LauncherConfirmationKind, LauncherConfirmationLayout, LauncherConfirmationViewModel,

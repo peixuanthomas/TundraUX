@@ -4,15 +4,15 @@ use platform::{AppPaths, Platform};
 
 use crate::clock_document::ClockDocument;
 use crate::config_document::StorageConfig;
-use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR};
+use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, PROFILES_DESCRIPTOR};
 use crate::document_io::{
     load_json_document, load_toml_document, save_json_document, save_toml_document,
 };
 use crate::error::StorageError;
 use crate::layout::StorageLayout;
+use crate::profile_document::{ProfilesDocument, UserProfile};
 use crate::state_documents::{RecentFilesDocument, SessionsDocument, StateDocument};
 use crate::trash_document::TrashDocument;
-use crate::user_document::UsersDocument;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageManager {
@@ -65,16 +65,28 @@ impl StorageManager {
         save_toml_document(&self.layout.config_path, CONFIG_DESCRIPTOR.name, &config)
     }
 
-    pub fn load_users(&self) -> Result<UsersDocument, StorageError> {
-        let mut users: UsersDocument = load_json_document(&self.layout.users_path, "users")?;
-        users.normalize();
-        Ok(users)
+    pub fn load_profile(&self, username: &str) -> Result<Option<UserProfile>, StorageError> {
+        let mut document: ProfilesDocument =
+            load_json_document(&self.layout.profiles_path, PROFILES_DESCRIPTOR.name)?;
+        Ok(document.profiles.remove(username).map(|mut profile| {
+            profile.system_status_dashboard.normalize();
+            profile
+        }))
     }
 
-    pub fn save_users(&self, users: &UsersDocument) -> Result<(), StorageError> {
-        let mut users = users.clone();
-        users.normalize();
-        save_json_document(&self.layout.users_path, "users", &users)
+    pub fn update_profile(
+        &self,
+        username: &str,
+        update: impl FnOnce(&mut UserProfile),
+    ) -> Result<UserProfile, StorageError> {
+        let path = &self.layout.profiles_path;
+        let mut document: ProfilesDocument = load_json_document(path, PROFILES_DESCRIPTOR.name)?;
+        let profile = document.profiles.entry(username.to_owned()).or_default();
+        update(profile);
+        profile.system_status_dashboard.normalize();
+        let saved = profile.clone();
+        save_json_document(path, PROFILES_DESCRIPTOR.name, &document)?;
+        Ok(saved)
     }
 
     pub fn load_state(&self) -> Result<StateDocument, StorageError> {

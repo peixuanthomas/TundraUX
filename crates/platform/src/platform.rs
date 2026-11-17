@@ -499,6 +499,12 @@ pub trait Platform: Send + Sync {
     fn kind(&self) -> PlatformKind;
     fn capabilities(&self) -> PlatformCapabilities;
 
+    fn current_username(&self) -> Result<String, PlatformError> {
+        Err(PlatformError::Unsupported {
+            capability: "current_username",
+        })
+    }
+
     /// Whether this value is the operating system's real platform backend.
     /// Test doubles must keep the default even when they emulate a native
     /// `PlatformKind`, so callers never infer permission for native side

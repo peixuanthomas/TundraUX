@@ -1,4 +1,4 @@
-use crate::components::{terminal_width, truncate_to_terminal_width};
+use crate::components::truncate_to_terminal_width;
 use ratatui::Frame;
 use ratatui::layout::{HorizontalAlignment, Rect};
 use ratatui::style::{Modifier, Style};
@@ -7,8 +7,8 @@ use ratatui::widgets::{Paragraph, Wrap};
 
 use super::{HomeDisplayMode, HomeViewModel};
 use crate::components::{
-    Button, ButtonEmphasis, GridDropTarget, PageAction, PageActionBar, Scrollbar, Surface,
-    grid_drop_target, render_grid_drop_indicator,
+    Button, GridDropTarget, PageAction, PageActionBar, Scrollbar, Surface, grid_drop_target,
+    render_grid_drop_indicator,
 };
 use crate::{RenderContext, TundraTheme};
 
@@ -110,7 +110,7 @@ fn render_user_main(
 
     let summary = home_summary_area(workspace);
     let layout = home_layout(area, home);
-    render_home_account_summary(frame, area, summary, home, theme);
+    render_home_account_summary(frame, summary, home, theme);
 
     for item in &layout.items {
         let index = item.index;
@@ -120,7 +120,7 @@ fn render_user_main(
         let mut surface = Button::new(format!("home.entry.{index}"), entry.label.clone())
             .with_current(current)
             .with_surface_border(false);
-        surface.set_focused(current && !home.logout_selected() && !home.edit_selected);
+        surface.set_focused(current && !home.edit_selected);
         surface.render_surface_frame(frame, tile, theme);
         let label_style = surface.surface_style(tile, theme);
         let content_width = usize::from(tile.width);
@@ -227,7 +227,6 @@ fn render_user_main(
 
 fn render_home_account_summary(
     frame: &mut Frame<'_>,
-    main: Rect,
     summary: Rect,
     home: &HomeViewModel,
     theme: &TundraTheme,
@@ -235,12 +234,6 @@ fn render_home_account_summary(
     if summary.width == 0 || summary.height == 0 {
         return;
     }
-    let logout = home_logout_area(main, home);
-    let user_width = if logout.width > 0 {
-        logout.x.saturating_sub(summary.x).saturating_sub(2)
-    } else {
-        summary.width
-    };
     let fallback = i18n::tr!("ui-home-unknown-user");
     let user = home.current_user.as_deref().unwrap_or(&fallback);
     frame.render_widget(
@@ -252,14 +245,8 @@ fn render_home_account_summary(
         .alignment(HorizontalAlignment::Left)
         .style(theme.muted_style())
         .wrap(Wrap { trim: true }),
-        Rect::new(summary.x, summary.y, user_width, summary.height),
+        summary,
     );
-    if logout.width > 0 {
-        let mut button = Button::new("home.logout", i18n::tr!("ui-home-logout-button"))
-            .with_emphasis(ButtonEmphasis::Danger);
-        button.set_focused(home.logout_selected());
-        button.render_inline_frame(frame, logout, theme);
-    }
 }
 
 fn centered_home_tile_line(
@@ -392,23 +379,6 @@ pub fn home_entry_index_at(
         .into_iter()
         .enumerate()
         .find_map(|(index, area)| rect_contains(area, coordinates).then_some(index))
-}
-
-/// Returns the exact Logout control rectangle used by Home rendering.
-///
-/// Homes without an authenticated account expose a zero-sized area so input
-/// routing cannot accidentally make Logout interactive.
-pub fn home_logout_area(main: Rect, home: &HomeViewModel) -> Rect {
-    let summary = home_summary_area(home_workspace_area(main, home.entries().len()));
-    if !home.logout_visible() || summary.width == 0 || summary.height == 0 {
-        return Rect::new(summary.x.saturating_add(summary.width), summary.y, 0, 0);
-    }
-
-    let width = u16::try_from(terminal_width(&i18n::tr!("ui-home-logout-button")))
-        .unwrap_or(u16::MAX)
-        .saturating_add(2)
-        .min(summary.width);
-    Rect::new(summary.right() - width, summary.y, width, 1)
 }
 
 fn home_workspace_area(main: Rect, entry_count: usize) -> Rect {

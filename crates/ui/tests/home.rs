@@ -9,15 +9,11 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 use support::terminal_output;
 use ui::{
-    AuthField, BootstrapAdminViewModel, ClockViewModel, DebugDiagnosticsViewModel,
-    ExitConfirmViewModel, HomeDisplayMode, HomeViewModel, LoginField, LoginUserOptionViewModel,
-    LoginViewModel, NotificationActionViewModel, NotificationLayout, NotificationLevel,
-    NotificationTone, NotificationViewModel, ShellChromeViewModel, ShellEntry, ShellLayout,
-    StatusViewModel, TundraTheme, UserManagementViewModel, compute_shell_layout, home_logout_area,
-    login_password_area, login_password_visibility_area, login_user_list_area,
-    login_user_list_visible_rows, notification_layout, notification_too_small_message,
-    render_bootstrap_admin, render_clock, render_exit_confirmation, render_home, render_login,
-    render_notification_overlay, render_user_management,
+    ClockViewModel, ExitConfirmViewModel, HomeDisplayMode, HomeViewModel,
+    NotificationActionViewModel, NotificationLayout, NotificationLevel, NotificationTone,
+    NotificationViewModel, ShellChromeViewModel, ShellEntry, ShellLayout, StatusViewModel,
+    TundraTheme, compute_shell_layout, notification_layout, notification_too_small_message,
+    render_clock, render_exit_confirmation, render_home, render_notification_overlay,
 };
 
 #[test]
@@ -221,44 +217,6 @@ fn short_home_cards_show_names_without_clipping_ascii_or_image_icons_after_resiz
 }
 
 #[test]
-fn storage_free_debug_home_does_not_expose_logout_hit_area() {
-    let home = HomeViewModel::debug(DebugDiagnosticsViewModel {
-        tick_count: 0,
-        last_key_event: None,
-        last_mouse_event: None,
-        last_resize_event: None,
-        mouse_coordinates: None,
-        scroll_direction: None,
-        drag_direction: None,
-        terminal_flags: Vec::new(),
-        platform_capability_summary: "supported".to_string(),
-    });
-
-    assert_eq!(home_logout_area(main_rect(80, 24), &home).width, 0);
-}
-
-#[test]
-fn minimum_supported_login_shows_password_and_submit_without_scrolling() {
-    let model = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
-    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
-    let chrome = chrome();
-    terminal
-        .draw(|frame| {
-            render_login(
-                frame,
-                frame.area(),
-                &chrome,
-                &model,
-                &TundraTheme::default_dark(),
-            );
-        })
-        .unwrap();
-    let text = terminal_output(&terminal);
-    assert!(text.contains(&i18n::tr!("ui-auth-enter-sign-in")));
-    assert!(text.contains(&i18n::tr!("ui-auth-password")));
-}
-
-#[test]
 fn home_entry_index_at_maps_coordinates_to_entry_tiles() {
     let main = main_rect(100, 30);
     let tile_areas = ui::home_entry_tile_areas(main, 5);
@@ -313,7 +271,7 @@ fn home_scrolling_keeps_tail_entries_and_uses_the_freed_footer_space() {
 }
 
 #[test]
-fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_notification() {
+fn compact_home_and_clock_show_highest_priority_notification() {
     let theme = TundraTheme::default_dark();
     let mut outputs = Vec::new();
 
@@ -331,34 +289,6 @@ fn compact_home_clock_login_bootstrap_and_user_management_show_highest_priority_
     terminal
         .draw(|frame| render_clock(frame, frame.area(), &chrome, &clock, &theme))
         .expect("render compact clock");
-    outputs.push(terminal_output(&terminal));
-
-    let login = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
-    let chrome = compact_alert_chrome();
-    let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
-    terminal
-        .draw(|frame| render_login(frame, frame.area(), &chrome, &login, &theme))
-        .expect("render compact login");
-    outputs.push(terminal_output(&terminal));
-
-    let bootstrap = BootstrapAdminViewModel::new("", 0, AuthField::Username, None);
-    let chrome = compact_alert_chrome();
-    let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
-    terminal
-        .draw(|frame| {
-            render_bootstrap_admin(frame, frame.area(), &chrome, &bootstrap, &theme);
-        })
-        .expect("render compact bootstrap admin");
-    outputs.push(terminal_output(&terminal));
-
-    let management = UserManagementViewModel::new("AdminUser", Vec::new(), 0, None, true, None);
-    let chrome = compact_alert_chrome();
-    let mut terminal = Terminal::new(TestBackend::new(49, 11)).expect("test terminal");
-    terminal
-        .draw(|frame| {
-            render_user_management(frame, frame.area(), &chrome, &management, &theme);
-        })
-        .expect("render compact user management");
     outputs.push(terminal_output(&terminal));
 
     for output in outputs {
@@ -629,163 +559,6 @@ fn notification_layout_and_renderer_share_wrapped_message_and_stacked_action_rec
     ));
 }
 
-#[test]
-fn login_renderer_masks_password_length() {
-    let chrome = chrome();
-    let model = LoginViewModel::new(
-        vec![
-            login_user("AdminUser", "Admin User", "Admin"),
-            login_user("Strix", "Local User", "User"),
-            login_user("Operator", "Backup User", "User"),
-        ],
-        1,
-        0,
-        "StrongPass123".len(),
-        LoginField::Password,
-        Some("Invalid username or password".to_string()),
-    );
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal");
-
-    terminal
-        .draw(|frame| {
-            render_login(
-                frame,
-                frame.area(),
-                &chrome,
-                &model,
-                &TundraTheme::default_dark(),
-            );
-        })
-        .expect("render login");
-
-    let output = terminal_output(&terminal);
-    assert!(output.contains("Users"));
-    assert!(output.contains("AdminUser (Admin)"));
-    assert!(output.contains("Strix"));
-    assert!(output.contains("Local User"));
-    assert!(output.contains("Password"));
-    assert!(output.contains("*************"));
-    assert!(!output.contains("StrongPass123"));
-    assert!(output.contains("F2 Show"));
-    assert!(!output.to_ascii_lowercase().contains("guest"));
-    assert!(!output.contains("F3"));
-    assert!(output.contains("Invalid username or password"));
-
-    let main = main_rect(80, 24);
-    let list_area = login_user_list_area(main);
-    let password_area = login_password_area(main);
-    let visibility_area = login_password_visibility_area(main);
-    assert!(list_area.x < password_area.x);
-    assert!(password_area.right() <= visibility_area.x);
-    assert!(visibility_area.right() <= main.right());
-    assert_eq!(
-        login_user_list_visible_rows(main),
-        usize::from(ui::login_user_list_rows_area(main).height)
-    );
-    assert!(
-        region_has_fg(
-            &terminal,
-            password_area,
-            TundraTheme::default_dark().accent_color
-        ),
-        "focused password field should use the accent style"
-    );
-}
-
-#[test]
-fn login_password_blinks_an_underscore_for_empty_masked_and_revealed_text() {
-    use ratatui::style::Modifier;
-
-    let chrome = chrome();
-    let theme = TundraTheme::default_dark();
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal");
-    let long_password = "中文🙂".repeat(30);
-    for password in ["", "secret", long_password.as_str()] {
-        for revealed in [false, true] {
-            let mut model = LoginViewModel::new(
-                Vec::new(),
-                0,
-                0,
-                password.chars().count(),
-                LoginField::Password,
-                None,
-            );
-            if revealed {
-                model = model.with_visible_password(password);
-            }
-            for focused in [true, false] {
-                model.focused_field = if focused {
-                    LoginField::Password
-                } else {
-                    LoginField::PasswordVisibility
-                };
-                terminal
-                    .draw(|frame| {
-                        render_login(frame, frame.area(), &chrome, &model, &theme);
-                    })
-                    .expect("render login");
-
-                let blinking = terminal
-                    .backend()
-                    .buffer()
-                    .content
-                    .iter()
-                    .filter(|cell| cell.modifier.contains(Modifier::SLOW_BLINK))
-                    .collect::<Vec<_>>();
-                assert_eq!(blinking.len(), usize::from(focused));
-                if focused {
-                    assert_eq!(blinking[0].symbol(), "_");
-                    assert_eq!(blinking[0].fg, theme.accent_color);
-                }
-                if !revealed && !password.is_empty() {
-                    assert!(!terminal_output(&terminal).contains(password));
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn login_renderer_reveals_only_explicit_plaintext_and_focuses_visibility_control() {
-    let chrome = chrome();
-    let visible = "密碼🙂";
-    let model = LoginViewModel::new(
-        vec![login_user("Strix", "Local User", "User")],
-        0,
-        0,
-        visible.chars().count(),
-        LoginField::PasswordVisibility,
-        None,
-    )
-    .with_visible_password(visible);
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal");
-
-    terminal
-        .draw(|frame| {
-            render_login(
-                frame,
-                frame.area(),
-                &chrome,
-                &model,
-                &TundraTheme::default_dark(),
-            );
-        })
-        .expect("render revealed login password");
-
-    let output = terminal_output(&terminal);
-    let visibility = login_password_visibility_area(main_rect(80, 24));
-    assert_eq!(model.visible_password(), Some(visible));
-    assert!(model.password_is_visible());
-    assert!(visible.chars().all(|character| output.contains(character)));
-    assert!(output.contains("F2 Hide"));
-    assert!(!output.contains("***"));
-    assert!(region_has_fg(
-        &terminal,
-        visibility,
-        TundraTheme::default_dark().accent_color,
-    ));
-}
-
 fn chrome() -> ShellChromeViewModel {
     ShellChromeViewModel {
         build_mode: "debug".to_string(),
@@ -839,16 +612,6 @@ fn buffer_row_text(terminal: &Terminal<TestBackend>, x: u16, y: u16, width: u16)
         .collect()
 }
 
-fn login_user(username: &str, display_name: &str, role: &str) -> LoginUserOptionViewModel {
-    LoginUserOptionViewModel {
-        username: username.to_string(),
-        display_name: display_name.to_string(),
-        role: role.to_string(),
-        enabled: true,
-        locked: false,
-    }
-}
-
 fn main_rect(width: u16, height: u16) -> Rect {
     match compute_shell_layout(Rect::new(0, 0, width, height)) {
         ShellLayout::Full { main, .. } => main,
@@ -876,35 +639,4 @@ fn region_has_bg(terminal: &Terminal<TestBackend>, area: Rect, bg: Color) -> boo
                 .is_some_and(|cell| cell.bg == bg && cell.symbol() != " ")
         })
     })
-}
-
-#[test]
-fn linux_login_labels_system_identity_and_keeps_errors_visible() {
-    let chrome = chrome();
-    let mut model = LoginViewModel::new(
-        vec![login_user("alice", "Alice", "Admin")],
-        0,
-        0,
-        6,
-        LoginField::Password,
-        Some("Invalid username or password".into()),
-    );
-    model.system_users = true;
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
-    terminal
-        .draw(|frame| {
-            render_login(
-                frame,
-                frame.area(),
-                &chrome,
-                &model,
-                &TundraTheme::default_dark(),
-            )
-        })
-        .unwrap();
-    let output = terminal_output(&terminal);
-    assert!(output.contains("Linux Login"));
-    assert!(output.contains("Linux password"));
-    assert!(output.contains("Invalid username or password"));
-    assert!(output.contains("******"));
 }

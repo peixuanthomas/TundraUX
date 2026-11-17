@@ -57,7 +57,7 @@ fn log_file(path: std::path::PathBuf, relative_path: &str) -> app::diagnostics::
 
 fn session(role: UserRole) -> AuthSession {
     AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: format!("{}-session", role.as_str()),
         user_id: format!("{}-id", role.as_str()),
         username: role.as_str().to_ascii_lowercase(),
@@ -509,7 +509,7 @@ fn probed_graphics_protocol_controls_terminal_diagnostic_status() {
 }
 
 #[test]
-fn startup_graphics_policy_only_schedules_theme_change_for_unsupported() {
+fn startup_graphics_policy_only_warns_for_unverified_protocols() {
     let new_state = || {
         ShellSession::new_with_startup(
             ShellLaunchConfig::default(),
@@ -523,7 +523,6 @@ fn startup_graphics_policy_only_schedules_theme_change_for_unsupported() {
     let mut unsupported = new_state();
     unsupported
         .apply_terminal_graphics_startup_policy(&ui::TerminalGraphicsProbeStatus::Unsupported);
-    assert!(unsupported.pending_default_ascii_icon_fallback);
     assert_eq!(
         unsupported
             .to_notification_view_model()
@@ -538,7 +537,6 @@ fn startup_graphics_policy_only_schedules_theme_change_for_unsupported() {
             reason: "query timeout".to_string(),
         },
     );
-    assert!(!no_response.pending_default_ascii_icon_fallback);
     let notice = no_response
         .to_notification_view_model()
         .expect("no-response notification");
@@ -549,12 +547,11 @@ fn startup_graphics_policy_only_schedules_theme_change_for_unsupported() {
     verified.apply_terminal_graphics_startup_policy(&ui::TerminalGraphicsProbeStatus::Verified(
         ui::EditorGraphicsProtocol::Kitty,
     ));
-    assert!(!verified.pending_default_ascii_icon_fallback);
     assert!(verified.to_notification_view_model().is_none());
 }
 
 #[test]
-fn unsupported_custom_theme_warns_without_scheduling_a_change() {
+fn unsupported_custom_theme_warns_and_keeps_the_theme() {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -587,7 +584,6 @@ fn unsupported_custom_theme_warns_without_scheduling_a_change() {
     state.notification_dismiss_modal_by_key("shell.resource-recovery");
     state.apply_terminal_graphics_startup_policy(&ui::TerminalGraphicsProbeStatus::Unsupported);
 
-    assert!(!state.pending_default_ascii_icon_fallback);
     let notice = state
         .to_notification_view_model()
         .expect("custom theme warning");
@@ -596,7 +592,7 @@ fn unsupported_custom_theme_warns_without_scheduling_a_change() {
 }
 
 #[test]
-fn unsupported_default_image_mode_is_persisted_as_ascii_after_login() {
+fn unsupported_default_image_mode_is_persisted_as_ascii_at_startup() {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -612,33 +608,27 @@ fn unsupported_default_image_mode_is_persisted_as_ascii_after_login() {
     )
     .expect("test app paths");
     let storage = StorageManager::open(paths).expect("test storage").manager;
-    UserService::new(storage.clone())
-        .bootstrap_admin_with_hint_and_appearance(
-            "AdminUser",
-            "StrongPass123",
-            None,
-            storage::AppearanceConfig {
-                icon_display_mode: storage::IconDisplayMode::Image,
-                ..Default::default()
-            },
-        )
-        .expect("bootstrap user");
-    let session = SessionService::new(storage.clone())
-        .login("AdminUser", "StrongPass123")
-        .expect("login");
-    let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 30));
+    let session = seed_system_profile(
+        &storage,
+        "AdminUser",
+        storage::AppearanceConfig {
+            icon_display_mode: storage::IconDisplayMode::Image,
+            ..Default::default()
+        },
+    );
+    let mut state = ShellSession::new_with_startup(
+        ShellLaunchConfig::default(),
+        (120, 30),
+        ShellStartupState::clean(
+            PlatformKind::Macos,
+            PlatformCapabilities::native_supported(),
+        ),
+    );
     state.storage_manager = Some(storage.clone());
-    state.pending_default_ascii_icon_fallback = true;
+    state.attach_system_session(session.clone());
+    state.apply_terminal_graphics_startup_policy(&ui::TerminalGraphicsProbeStatus::Unsupported);
 
-    state.complete_login(session);
-
-    let user = storage
-        .load_users()
-        .expect("load users")
-        .users
-        .into_iter()
-        .find(|user| user.username == "AdminUser")
-        .expect("admin user");
+    let user = storage.load_profile("AdminUser").unwrap().unwrap();
     assert_eq!(
         user.appearance.icon_display_mode,
         storage::IconDisplayMode::Ascii
@@ -660,9 +650,8 @@ fn unsupported_default_image_mode_is_persisted_as_ascii_after_login() {
     ] {
         let mut restarted = ShellSession::new(ShellLaunchConfig::default(), (120, 30));
         restarted.storage_manager = Some(storage.clone());
-        restarted.pages.login.login_username = "AdminUser".into();
+        restarted.attach_system_session(session.clone());
         restarted.apply_terminal_graphics_startup_policy(&probe);
-        assert!(!restarted.pending_default_ascii_icon_fallback);
         assert!(restarted.to_notification_view_model().is_none());
     }
 
@@ -677,7 +666,6 @@ fn first_setup_keeps_language_and_appearance_selection_free_of_graphics_dialogs(
         state.pages.setup.setup_step = step;
         state.apply_terminal_graphics_startup_policy(&ui::TerminalGraphicsProbeStatus::Unsupported);
         assert!(state.to_notification_view_model().is_none());
-        assert!(!state.pending_default_ascii_icon_fallback);
     }
 }
 
@@ -703,7 +691,7 @@ fn install_temporary_storage(state: &mut ShellSession) -> std::path::PathBuf {
 }
 
 #[test]
-fn diagnostics_shares_details_with_users_but_keeps_repairs_admin_only() {
+fn system_users_can_read_and_repair_application_diagnostics() {
     let mut user_state = state(UserRole::User);
     let (private_log_directory, private_log_path) = temporary_document("private.log", b"private");
     update_diagnostics_snapshot(&mut user_state, |snapshot| {
@@ -714,7 +702,7 @@ fn diagnostics_shares_details_with_users_but_keeps_repairs_admin_only() {
     });
     let user = user_state.to_diagnostics_view_model();
     assert!(user.can_view_details);
-    assert!(!user.can_repair);
+    assert!(user.can_repair);
     assert!(user.checks[0].summary.contains("/private/example/data"));
     assert!(user.checks[0].detail.contains("/private/example/data"));
     assert_eq!(user.logs[0].relative_path, "private.log");
@@ -1344,8 +1332,6 @@ fn restart_requirement_disables_follow_up_repairs() {
     assert!(model.restart_required);
     assert!(!model.can_repair);
 
-    assert!(!state.logout_to_lockscreen_at(Instant::now()));
     assert!(state.diagnostics_restart_required);
     assert!(state.auth_session().is_some());
-    assert!(!state.return_to_lockscreen_requested);
 }

@@ -418,7 +418,7 @@ settings-number-help = Left/Right: move cursor · Type digits · −/+: adjust �
 
 ui-control-settings-title = External CLI control
 ui-control-settings-enable = Allow external CLI control
-ui-control-settings-help = Allow this operating system user to read and operate this Shell, including login. Changes take effect immediately.
+ui-control-settings-help = Allow this operating system user to read and operate this Shell. Changes take effect immediately.
 ui-control-invalid-boolean = Expected true or false.
 ui-control-config-saved = Saved external CLI control setting. Restart a running Shell to load CLI configuration changes.
 ui-control-unavailable = Shell control is unavailable: { $reason }
@@ -435,7 +435,7 @@ ui-control-help = Usage: tundra-cli ui <sessions|snapshot|wake|click|move|drag|s
     key KEY: --modifiers ctrl,alt,shift,super,hyper,meta; --phase press|repeat|release
     text TEXT or text --stdin: enter text at the current focus
     wait --id ID: --state present|absent|actionable (default actionable)
-    wake: close idle weather or the weather lockscreen; return the resulting Shell snapshot.
+    wake: close idle weather; return the resulting Shell snapshot.
     drag also accepts --button; duration is 16..10000 ms, scroll count is 1..1000.
     Multiple sessions require --session. Timeouts never replay input.
     After user operations, run snapshot or wait again, including with --snapshot.
@@ -451,7 +451,6 @@ ui-control-invalid-arguments = Invalid UI command arguments. See tundra-cli ui -
 ui-control-input-failed = Could not read text from standard input.
 ui-control-busy = Another external input is in progress. Try again after it completes.
 
-ui-control-lockscreen = Enter Shell
 settings-screen-timeout = Screen timeout
 settings-screen-timeout-never = Never
 settings-screen-timeout-seconds = { $value } seconds

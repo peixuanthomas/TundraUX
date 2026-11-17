@@ -329,7 +329,7 @@ impl ShellSession {
                 self.save_region_picker_value(Some(option.detail), None)
             }
             ui::SettingsPickerKind::Timezone => {
-                if self.identity_backend == identity::IdentityBackend::Linux {
+                if self.platform_kind == PlatformKind::Linux {
                     if let Some(timezone) = option.timezone_id {
                         self.set_system_timezone(timezone);
                     }
@@ -557,7 +557,7 @@ impl ShellSession {
 
     pub(in crate::session) fn open_settings_time_sync_server(&mut self) {
         self.begin_workspace_draft();
-        if self.identity_backend == identity::IdentityBackend::Linux {
+        if self.platform_kind == PlatformKind::Linux {
             self.open_system_time_servers();
             return;
         }
@@ -605,7 +605,7 @@ impl ShellSession {
         else {
             return;
         };
-        if self.identity_backend == identity::IdentityBackend::Linux {
+        if self.platform_kind == PlatformKind::Linux {
             self.save_system_time_server(value);
             return;
         }

@@ -52,17 +52,6 @@ macro_rules! themed_page {
 
 themed_page!(render_home, HomeViewModel, Home);
 themed_page!(render_setup, SetupViewModel, Setup);
-themed_page!(render_login, LoginViewModel, Login);
-themed_page!(
-    render_bootstrap_admin,
-    BootstrapAdminViewModel,
-    BootstrapAdmin
-);
-themed_page!(
-    render_user_management,
-    UserManagementViewModel,
-    UserManagement
-);
 themed_page!(render_explorer, ExplorerViewModel, Explorer);
 themed_page!(render_launcher, LauncherViewModel, Launcher);
 themed_page!(render_command_line, CommandLineViewModel, CommandLine);

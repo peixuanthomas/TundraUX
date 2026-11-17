@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use platform::AppPaths;
 
 use crate::descriptors::{
-    CLOCK_DESCRIPTOR, TRASH_DIR_NAME, USERS_V1_FILE_NAME, VERSIONED_JSON_DESCRIPTORS,
+    CLOCK_DESCRIPTOR, PROFILES_DESCRIPTOR, TRASH_DIR_NAME, VERSIONED_JSON_DESCRIPTORS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,8 +13,7 @@ pub struct StorageLayout {
     pub cache_path: PathBuf,
     pub logs_path: PathBuf,
     pub temp_path: PathBuf,
-    pub users_path: PathBuf,
-    pub legacy_users_path: PathBuf,
+    pub profiles_path: PathBuf,
     pub state_path: PathBuf,
     pub recent_files_path: PathBuf,
     pub sessions_path: PathBuf,
@@ -34,8 +33,7 @@ impl StorageLayout {
             cache_path: app_paths.cache_path().to_path_buf(),
             logs_path: app_paths.logs_path().to_path_buf(),
             temp_path: app_paths.temp_path().to_path_buf(),
-            users_path: data_path.join(VERSIONED_JSON_DESCRIPTORS[0].file_name),
-            legacy_users_path: data_path.join(USERS_V1_FILE_NAME),
+            profiles_path: data_path.join(PROFILES_DESCRIPTOR.file_name),
             state_path: data_path.join(VERSIONED_JSON_DESCRIPTORS[1].file_name),
             recent_files_path: data_path.join(VERSIONED_JSON_DESCRIPTORS[2].file_name),
             sessions_path: data_path.join(VERSIONED_JSON_DESCRIPTORS[3].file_name),

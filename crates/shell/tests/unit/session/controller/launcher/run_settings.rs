@@ -54,7 +54,7 @@ impl Fixture {
         state.storage_manager = Some(storage);
         state.app.dispatch_at(
             app::AppCommand::SetAuthSession(Some(AuthSession {
-                source: identity::IdentitySource::LocalAccount,
+                source: identity::IdentitySource::SystemCurrentProcess,
                 session_id: "run-settings".into(),
                 user_id: "admin".into(),
                 username: "admin".into(),
@@ -739,7 +739,7 @@ fn mouse_and_touch_can_open_edit_and_cancel_without_background_activation() {
 }
 
 #[test]
-fn builtins_and_unprivileged_users_cannot_open_run_settings() {
+fn builtins_and_unattached_sessions_cannot_open_run_settings() {
     let mut fixture = Fixture::new();
     fixture.state.pages.launcher.launcher_selected_index = 0;
     fixture.input(InputEvent::from_key_label("F4"));
@@ -754,12 +754,10 @@ fn builtins_and_unprivileged_users_cannot_open_run_settings() {
             .enabled
     );
     fixture.state.pages.launcher.launcher_selected_index = fixture.state.built_in_launcher_count();
-    let mut session = fixture.state.app.auth_session().unwrap().clone();
-    session.role = UserRole::User;
-    fixture.state.app.dispatch_at(
-        app::AppCommand::SetAuthSession(Some(session)),
-        Instant::now(),
-    );
+    fixture
+        .state
+        .app
+        .dispatch_at(app::AppCommand::SetAuthSession(None), Instant::now());
     fixture.input(InputEvent::from_key_label("F4"));
     assert!(fixture.state.pages.launcher.launcher_run_settings.is_none());
 }

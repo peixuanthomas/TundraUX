@@ -9,7 +9,7 @@ fn state(size: (u16, u16)) -> ShellSession {
         ShellSession::new_for_home_mode(ShellLaunchConfig::default(), size, ShellHomeMode::User);
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "touch-test".into(),
             user_id: "admin".into(),
             username: "admin".into(),
@@ -123,7 +123,11 @@ fn core_home_tasks_are_visible_and_open_without_launcher_at_minimum_size() {
             let icon = ui::home_entry_icon_area(item.area);
             assert!(icon.is_empty() || (icon.height == 4 && icon.bottom() < item.area.bottom()));
         }
-        for key in ["packages", "tasks", "logs", "users"] {
+        let mut keys = vec!["packages", "tasks", "logs"];
+        if state.platform_kind == PlatformKind::Linux {
+            keys.push("users");
+        }
+        for key in keys {
             let index = model
                 .entries()
                 .iter()
@@ -161,7 +165,11 @@ fn launcher_excludes_applications_already_available_on_home() {
     let state = state((108, 20));
     let home = state.user_home_entries();
     let launcher = state.to_launcher_view_model();
-    for key in ["packages", "users", "tasks", "logs"] {
+    assert_eq!(
+        home.iter().any(|entry| entry.icon_identity() == "users"),
+        state.platform_kind == PlatformKind::Linux,
+    );
+    for key in ["packages", "tasks", "logs"] {
         assert!(home.iter().any(|entry| entry.icon_identity() == key));
     }
     for entry in &home {

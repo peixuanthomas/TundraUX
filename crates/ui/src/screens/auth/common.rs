@@ -1,11 +1,5 @@
-use crate::{RenderContext, components::Surface};
-use ratatui::{
-    Frame, Terminal,
-    backend::TestBackend,
-    layout::{HorizontalAlignment, Rect},
-    text::Line,
-    widgets::{Paragraph, Wrap},
-};
+use crate::RenderContext;
+use ratatui::{Frame, Terminal, backend::TestBackend, layout::Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthViewport {
@@ -175,26 +169,6 @@ fn render_auth_viewport_inner(
         .render_frame(frame, track, context);
     }
 }
-pub(super) fn render_auth_screen(
-    frame: &mut Frame<'_>,
-    main: Rect,
-    title: &str,
-    lines: Vec<Line<'static>>,
-    context: &RenderContext,
-) {
-    let surface = Surface::new()
-        .titled(title)
-        .background(context.theme.canvas);
-    let inner = auth_content_area(main);
-    surface.render_frame(frame, main, context);
-    frame.render_widget(
-        Paragraph::new(lines)
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        inner,
-    );
-}
-
 pub(super) fn auth_content_area(area: Rect) -> Rect {
     Rect::new(
         area.x,

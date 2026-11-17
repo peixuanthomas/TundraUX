@@ -17,7 +17,7 @@ startup-shell-ui-automation-help = UI automation（供 agent 使用）：
     { "  " }tundra-cli ui text "TEXT"
     将 TARGET_ID 替换为 snapshot 中的控件 ID；文字会输入到当前焦点控件。
     用户操作后需重新执行 snapshot 或 wait。界面自动刷新不会使快照失效。
-    用 tundra-cli ui wake 关闭空闲天气或天气锁屏。
+    用 tundra-cli ui wake 关闭空闲天气。
     点击、拖动、滚动、按键、文字输入和等待的完整用法见 tundra-cli ui --help。
 startup-cli-help = TundraUX3 命令行
     { cli-administration-root-usage }

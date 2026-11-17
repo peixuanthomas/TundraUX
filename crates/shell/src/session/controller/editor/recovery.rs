@@ -105,8 +105,8 @@ impl ShellSession {
         !self.persist_editor_recovery_now(now)
     }
 
-    /// Writes the current dirty buffer without debounce. Interactive exit and
-    /// logout paths use the return value to avoid destroying the only copy of
+    /// Writes the current dirty buffer without debounce. Interactive exit
+    /// uses the return value to avoid destroying the only copy of
     /// unsaved text when recovery storage is unavailable.
     pub(in crate::session) fn persist_editor_recovery_now(&mut self, now: Instant) -> bool {
         let Some(state) = self.app.editor_state() else {

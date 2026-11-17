@@ -9,14 +9,13 @@ impl ShellSession {
     ) -> (ShellAction, bool) {
         self.tick_count = self.tick_count.saturating_add(1);
         let mut changed = self.notification_expire(now);
-        changed |= self.expire_login_password_visibility_at(now);
         changed |= self.advance_screen_saver_at(now);
         changed |= self.advance_clock_background();
         changed |= self.poll_explorer_background_tasks(platform);
         changed |= self.poll_launcher_background_tasks();
         changed |= self.poll_settings_background_tasks();
         changed |= self.drain_diagnostics_events();
-        if self.pending_login_reset.is_some() || self.pending_session_exit.is_some() {
+        if self.pending_session_exit.is_some() {
             self.drain_logs_for_shutdown();
             self.drain_management_for_shutdown();
         } else {
@@ -24,21 +23,9 @@ impl ShellSession {
             changed |= self.poll_management();
         }
         changed |= self.poll_auto_admin();
-        changed |= self.poll_user_management_task();
         changed |= self.poll_editor_background_tasks(platform);
         changed |= self.persist_all_editor_recovery_if_due(now);
         changed |= self.poll_page_closes();
-        if !self.tasks.has_running()
-            && let Some(status) = self.pending_login_reset.take()
-        {
-            let lockscreen = std::mem::take(&mut self.pending_lockscreen_after_logout);
-            self.return_to_login_at(status, now);
-            changed = true;
-            if lockscreen && self.app.auth_session().is_none() {
-                self.prepare_return_to_lockscreen();
-                return (ShellAction::Exit, true);
-            }
-        }
         if !self.tasks.has_running()
             && let Some(command) = self.pending_session_exit.take()
         {

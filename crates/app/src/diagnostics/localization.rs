@@ -180,7 +180,7 @@ impl DiagnosticCheck {
 fn storage_kind(id: &str) -> Option<StorageDocumentKind> {
     Some(match id {
         "storage.config" => StorageDocumentKind::Config,
-        "storage.users" => StorageDocumentKind::Users,
+        "storage.profiles" => StorageDocumentKind::Profiles,
         "storage.state" => StorageDocumentKind::State,
         "storage.recent-files" => StorageDocumentKind::RecentFiles,
         "storage.sessions" => StorageDocumentKind::Sessions,
@@ -193,7 +193,7 @@ fn storage_kind(id: &str) -> Option<StorageDocumentKind> {
 fn storage_label(kind: StorageDocumentKind) -> LocalizedText {
     match kind {
         StorageDocumentKind::Config => msg!("app-diagnostics-label-storage-config"),
-        StorageDocumentKind::Users => msg!("app-diagnostics-label-storage-users"),
+        StorageDocumentKind::Profiles => msg!("app-diagnostics-label-storage-profiles"),
         StorageDocumentKind::State => msg!("app-diagnostics-label-storage-state"),
         StorageDocumentKind::RecentFiles => msg!("app-diagnostics-label-storage-recent-files"),
         StorageDocumentKind::Sessions => msg!("app-diagnostics-label-storage-sessions"),

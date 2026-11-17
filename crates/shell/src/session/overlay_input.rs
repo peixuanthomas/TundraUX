@@ -38,7 +38,6 @@ impl ShellSession {
             }
             ShellComponent::DiagnosticsRepairDialog => self.route_diagnostics_key(key),
             ShellComponent::SystemStatus => self.route_system_status_key(key),
-            ShellComponent::UserManagement => self.route_user_management_key(key),
             ShellComponent::Editor => (target, ShellCommand::EditorKey(key.clone())),
             ShellComponent::Settings => (target, ShellCommand::SettingsKey(key.clone())),
             ShellComponent::Logs => (target, ShellCommand::LogsKey(key.clone())),
@@ -78,7 +77,6 @@ impl ShellSession {
             }
             ShellComponent::DiagnosticsRepairDialog => self.route_diagnostics_mouse(mouse, hit),
             ShellComponent::SystemStatus => self.route_system_status_mouse(mouse, hit, at),
-            ShellComponent::UserManagement => self.route_user_management_mouse(mouse, hit),
             ShellComponent::Editor => (target, ShellCommand::EditorPointer(mouse)),
             ShellComponent::Settings => (
                 target,
@@ -109,9 +107,6 @@ impl ShellSession {
             Some(ShellComponent::Management) => ShellCommand::ManagementPaste(value.to_owned()),
             Some(ShellComponent::Settings) => {
                 ShellCommand::SettingsFormInput(InputEvent::Paste(value.to_owned()))
-            }
-            Some(ShellComponent::UserManagement) => {
-                ShellCommand::UserManagementFormInput(InputEvent::Paste(value.to_owned()))
             }
             Some(ShellComponent::Logs) => {
                 ShellCommand::LogsFormInput(InputEvent::Paste(value.to_owned()))

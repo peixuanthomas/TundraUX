@@ -1250,7 +1250,7 @@ fn file_attributes(path: PathBuf, hidden: bool, shortcut: bool) -> FileAttribute
 
 fn session() -> AuthSession {
     AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "session-1".to_string(),
         user_id: "user-1".to_string(),
         username: "AdminUser".to_string(),

@@ -49,9 +49,6 @@ impl ShellSession {
             ShellScreen::Clock if self.pages.clock.clock_create_state.is_none() => {
                 Some(("clock".into(), 2))
             }
-            ShellScreen::UserManagement if self.to_user_management_view_model().form.is_none() => {
-                Some(("users".into(), 4))
-            }
             ShellScreen::Diagnostics
                 if self.pages.diagnostics.diagnostics_repair_preview.is_empty() =>
             {
@@ -134,7 +131,6 @@ impl ShellSession {
     ) -> Option<ui::components::ButtonRegion> {
         let (column, area) = self.table_sort_header_rect_at(point)?;
         let id = match self.active_screen() {
-            ShellScreen::UserManagement => format!("user-management.sort.{column}"),
             ShellScreen::Launcher => format!("launcher.sort.{column}"),
             ShellScreen::Clock => format!(
                 "clock.sort.{}",
@@ -177,9 +173,6 @@ impl ShellSession {
                 let layout = ui::clock_page_layout(main, &self.to_clock_view_model());
                 vec![(0, layout.alarms_heading), (1, layout.countdowns_heading)]
             }
-            ShellScreen::UserManagement => ui::user_management_sort_headers(
-                &ui::user_management_layout(main, &self.to_user_management_view_model()),
-            ),
             ShellScreen::Diagnostics => {
                 ui::diagnostics_layout(main, &self.to_diagnostics_view_model()).headers
             }
@@ -265,7 +258,6 @@ impl ShellSession {
                 self.pages.launcher.launcher_viewport_offset = 0;
                 self.pages.launcher.launcher_drag = None;
             }
-            ShellScreen::UserManagement => self.apply_user_table_sort(),
             ShellScreen::Diagnostics => self.apply_diagnostics_table_sorts(),
             ShellScreen::SystemStatus => {
                 self.apply_diagnostics_table_sorts();
@@ -356,35 +348,6 @@ impl ShellSession {
                 });
             }
         }
-    }
-
-    pub(in crate::session) fn apply_user_table_sort(&mut self) {
-        let Some(sort) = self.pages.common.table_sorts.get("users").copied() else {
-            return;
-        };
-        let mut users = self.app.managed_users().to_vec();
-        let cells = users
-            .iter()
-            .map(|u| {
-                vec![
-                    u.username.clone(),
-                    u.display_name.clone(),
-                    u.role.as_str().into(),
-                    format!(
-                        "{} {}",
-                        u.enabled,
-                        u.locked_until_epoch_ms
-                            .is_some_and(|until| until > unix_millis())
-                    ),
-                ]
-            })
-            .collect::<Vec<_>>();
-        let mut selected = self.pages.user_management.user_management_selected;
-        reorder(&mut users, &cells, sort, &mut selected);
-        self.app
-            .dispatch_at(app::AppCommand::SetManagedUsers(users), Instant::now());
-        self.pages.user_management.user_management_selected = selected;
-        self.pages.user_management.user_management_window_start = selected;
     }
 
     pub(in crate::session) fn apply_logs_sort(&mut self) {

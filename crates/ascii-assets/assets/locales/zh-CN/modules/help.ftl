@@ -16,7 +16,6 @@ ui-help-nav-activate = 执行
 ui-help-home-title = 首页
 ui-help-home-entries = 打开入口
 ui-help-home-move = 在入口之间移动
-ui-help-home-logout = 退出登录
 
 ui-help-explorer-title = 文件浏览器
 ui-help-explorer-open = 打开选中项
@@ -50,13 +49,6 @@ ui-help-settings-adjust = 上下切换分类或设置项，左右在应用列表
 ui-help-settings-section = 在分类、操作系统入口和当前页控件之间移动
 ui-help-settings-number = 数值弹窗内调整或输入，回车确认
 
-ui-help-users-title = 用户管理
-ui-help-users-new = 新建用户
-ui-help-users-edit = 编辑用户
-ui-help-users-password = 设置密码
-ui-help-users-delete = 删除用户
-ui-help-users-focus = 切换区域
-ui-help-users-activate = 执行
 
 ui-help-management-title = 管理
 ui-help-management-action = 执行主操作
@@ -100,11 +92,9 @@ ui-help-clock-manage = 管理条目
 ui-help-clock-create = 创建闹钟或计时器
 ui-help-clock-confirm = 确认或取消
 
-ui-help-auth-title = 登录
 ui-help-auth-submit = 继续或登录
 ui-help-auth-back = 返回
 ui-help-auth-focus = 切换字段
-ui-help-auth-password = 显示或隐藏密码
 
 ui-help-editor-title = 编辑器
 ui-help-editor-save = 保存
@@ -116,9 +106,6 @@ ui-help-command-line-title = 命令行
 ui-help-command-line-close = 关闭命令行
 ui-help-command-line-keys = 按键交给终端
 
-ui-help-users-more = 更多账户操作
-ui-help-users-enabled = 禁用、启用或解锁用户
-ui-help-users-role = 切换用户角色
 ui-help-explorer-sort = 排序文件列表
 ui-help-explorer-options = 文件浏览器选项
 ui-help-system-status-save = 保存仪表盘
@@ -126,7 +113,6 @@ ui-help-system-status-add = 添加卡片
 ui-help-system-status-size = 调整所选卡片大小
 ui-help-system-status-remove = 移除所选卡片
 ui-help-setup-title = 首次设置
-ui-help-bootstrap-title = 创建管理员
 ui-help-back-button = 返回按钮
 ui-help-clock-input = 选择并调整时、分、秒
 ui-help-editor-reload = 重新加载只读文件

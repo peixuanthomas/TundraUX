@@ -224,59 +224,6 @@ fn canvas_projection_clips_rows_and_disables_partly_visible_actions() {
 }
 
 #[test]
-fn login_reveal_exports_no_password_and_uses_the_scrolled_screen_coordinates() {
-    let secret = "Secret中文42";
-    let bounds = Rect::new(0, 0, 108, 22);
-    for (main, offset) in [(Rect::new(3, 4, 100, 16), 0), (Rect::new(3, 5, 100, 10), 5)] {
-        let mut login = ui::LoginViewModel::new(
-            vec![ui::LoginUserOptionViewModel {
-                username: "alice".into(),
-                display_name: "Alice".into(),
-                role: "admin".into(),
-                enabled: true,
-                locked: false,
-            }],
-            0,
-            0,
-            secret.chars().count(),
-            ui::LoginField::Password,
-            None,
-        )
-        .with_visible_password(secret);
-        login.scroll_offset = offset;
-        let viewport = ui::login_viewport(main, &login);
-        let logical = ui::login_layout(viewport.content).password;
-        let expected = viewport
-            .project(Rect::new(
-                logical.x + 1,
-                logical.y + 1,
-                logical.width - 2,
-                1,
-            ))
-            .unwrap();
-        let capture = FrameCapture::begin(bounds, "login");
-        capture.set_group("page", "page", main, false);
-        let mut terminal = Terminal::new(TestBackend::new(bounds.width, bounds.height)).unwrap();
-        terminal
-            .draw(|frame| ui::render_login_content(frame, main, &login, &RenderContext::default()))
-            .unwrap();
-        let snapshot = capture.finish(terminal.backend().buffer());
-        let input = find(&snapshot, "/login.password");
-        assert_eq!(
-            (input.rect.x, input.rect.y, input.rect.width),
-            (expected.x, expected.y, expected.width)
-        );
-        assert!(input.focused && input.sensitive && input.actionable);
-        assert_eq!(input.text, "••••");
-        assert_secret_absent(&snapshot, secret);
-        assert_eq!(
-            terminal.backend().buffer()[(expected.x, expected.y)].symbol(),
-            "S"
-        );
-    }
-}
-
-#[test]
 fn management_password_and_actual_table_cells_are_exported() {
     let bounds = Rect::new(0, 0, 120, 40);
     let secret = "never-export-this";

@@ -6,12 +6,12 @@ pub(crate) mod linux_startup;
 pub(crate) mod startup_banner;
 pub(crate) mod terminal_size;
 use crate::{ShellComponent, ShellPopup};
-use identity::DebugPolicy;
+use identity::{AuthSession, DebugPolicy};
 use platform::{
     AppPaths, Platform, PlatformCapabilities, PlatformError, PlatformKind, StartupPermissionStatus,
 };
 use std::path::PathBuf;
-use storage::{StorageError, StorageLoadReport, StorageManager, UserRecord};
+use storage::{StorageError, StorageLoadReport, StorageManager};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeModeOverride {
@@ -51,8 +51,6 @@ pub enum ShellHomeMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellScreen {
     FirstRunSetup,
-    BootstrapAdmin,
-    Login,
     Home,
     Clock,
     Diagnostics,
@@ -64,7 +62,6 @@ pub enum ShellScreen {
     CommandLine,
     Editor,
     Settings,
-    UserManagement,
     ExitConfirm,
 }
 
@@ -230,31 +227,6 @@ impl ShellRestoredSession {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShellLoginUser {
-    pub username: String,
-    pub display_name: String,
-    pub role: String,
-    pub enabled: bool,
-    pub password_hint: Option<String>,
-    pub locked_until_epoch_ms: Option<u64>,
-    pub last_login_at_epoch_ms: Option<u64>,
-}
-
-impl ShellLoginUser {
-    pub(crate) fn from_record(record: &UserRecord) -> Self {
-        Self {
-            username: record.username.clone(),
-            display_name: record.display_name.clone(),
-            role: record.role.clone(),
-            enabled: record.enabled,
-            password_hint: record.password_hint.clone(),
-            locked_until_epoch_ms: record.locked_until_epoch_ms,
-            last_login_at_epoch_ms: record.last_login_at_epoch_ms,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellStartupState {
     pub app_config: ShellAppConfig,
     pub storage_report: ShellStorageReport,
@@ -262,9 +234,7 @@ pub struct ShellStartupState {
     pub platform_capabilities: PlatformCapabilities,
     pub restored_session: Option<ShellRestoredSession>,
     pub storage_manager: Option<StorageManager>,
-    pub identity_backend: identity::IdentityBackend,
-    pub auth_bootstrap_required: bool,
-    pub login_users: Vec<ShellLoginUser>,
+    pub system_session: Option<AuthSession>,
     pub debug_policy: DebugPolicy,
 }
 
@@ -277,9 +247,7 @@ impl ShellStartupState {
             platform_capabilities,
             restored_session: None,
             storage_manager: None,
-            identity_backend: identity::IdentityBackend::Local,
-            auth_bootstrap_required: false,
-            login_users: Vec::new(),
+            system_session: None,
             debug_policy: DebugPolicy::default(),
         }
     }
@@ -324,37 +292,17 @@ impl From<StorageError> for ShellStartupError {
 pub fn prepare_shell_startup(
     platform: &dyn Platform,
 ) -> Result<ShellStartupState, ShellStartupError> {
-    #[cfg(target_os = "linux")]
-    if platform.kind() == PlatformKind::Linux && platform.is_native_backend() {
-        platform::linux::identity::LinuxUserContext::current()
-            .map_err(|error| ShellStartupError::Identity(error.to_string()))?;
-    }
     ensure_startup_permissions(platform)?;
     let platform_kind = platform.kind();
     let platform_capabilities = platform.capabilities();
     let storage_open = StorageManager::open_from_platform(platform)?;
     let app_paths = app_paths_from_storage_layout(storage_open.manager.layout())?;
-    let identity_backend = if cfg!(target_os = "linux")
-        && platform_kind == PlatformKind::Linux
-        && platform.is_native_backend()
-    {
-        identity::IdentityBackend::Linux
-    } else {
-        identity::IdentityBackend::Local
-    };
-    let users = identity::UserService::new(storage_open.manager.clone())
-        .with_backend(identity_backend)
-        .login_records()
+    let system_session = AuthSession::current(platform)
         .map_err(|error| ShellStartupError::Identity(error.to_string()))?;
     let sessions = storage_open.manager.load_sessions()?;
     let storage_report =
         ShellStorageReport::from_storage_load_report(Some(app_paths), storage_open.report);
     let debug_policy = DebugPolicy::current_build();
-    let login_users = users
-        .iter()
-        .map(ShellLoginUser::from_record)
-        .collect::<Vec<_>>();
-
     Ok(ShellStartupState {
         app_config: ShellAppConfig::default(),
         storage_report,
@@ -362,10 +310,7 @@ pub fn prepare_shell_startup(
         platform_capabilities,
         restored_session: restored_session_from_storage(&sessions),
         storage_manager: Some(storage_open.manager),
-        identity_backend,
-        auth_bootstrap_required: identity_backend == identity::IdentityBackend::Local
-            && login_users.is_empty(),
-        login_users,
+        system_session: Some(system_session),
         debug_policy,
     })
 }

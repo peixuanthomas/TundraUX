@@ -41,7 +41,7 @@ fn prepare_shell_startup_uses_windows_mock_app_paths() {
 }
 
 #[test]
-fn prepare_shell_startup_uses_default_theme_before_any_user_logs_in() {
+fn prepare_shell_startup_uses_default_theme_before_personalization() {
     let fixture = FixtureRoot::new("square-border");
     let base = fixture.path();
     let app_paths =
@@ -187,7 +187,11 @@ fn simulated_linux_does_not_read_host_accounts_or_request_root() {
             .unwrap();
     let platform = MockPlatform::new(user_dirs(base), paths).with_kind(PlatformKind::Linux);
     let startup = prepare_shell_startup(&platform).unwrap();
-    assert_eq!(startup.identity_backend, identity::IdentityBackend::Local);
-    assert!(startup.auth_bootstrap_required);
-    assert!(startup.login_users.is_empty());
+    let session = startup.system_session.unwrap();
+    assert_eq!(
+        session.source,
+        identity::IdentitySource::LinuxCurrentProcess
+    );
+    assert_eq!(session.username, "operator");
+    assert_eq!(session.role, identity::UserRole::User);
 }

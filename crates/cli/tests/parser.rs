@@ -466,11 +466,11 @@ fn config_args_parse_safe_get_and_set_commands() {
 fn config_args_reject_username_and_password_updates() {
     assert_eq!(
         parse_args(["config", "set", "username", "admin2"]),
-        Err(CliError::ForbiddenConfigField("username".to_string()))
+        Err(CliError::UnsupportedConfigField("username".to_string()))
     );
     assert_eq!(
         parse_args(["config", "set", "password", "secret"]),
-        Err(CliError::ForbiddenConfigField("password".to_string()))
+        Err(CliError::UnsupportedConfigField("password".to_string()))
     );
 }
 
@@ -685,14 +685,17 @@ fn managed_cli_routes_pending_watchdog_incidents_for_regular_commands() {
 }
 
 #[test]
-fn config_set_border_theme_fields_normalizes_and_preserves_users() {
+fn config_set_border_theme_fields_normalizes_and_preserves_default_profile() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let tree = TempTree::new("config-set-border-theme-fields");
     let platform = mock_windows_platform(tree.path());
     let app_paths = platform.app_paths().expect("mock app paths");
     let opened = StorageManager::open(app_paths).expect("storage initializes");
-    let users_before = opened.manager.load_users().expect("users load");
+    let profile_before = opened
+        .manager
+        .load_profile("operator")
+        .expect("profile load");
 
     let exit_code = run_with_platform(
         ["config", "set", "border-shape", "square"],
@@ -740,8 +743,11 @@ fn config_set_border_theme_fields_normalizes_and_preserves_users() {
         BorderColor::LightCyan
     );
     assert_eq!(
-        opened.manager.load_users().expect("users reload"),
-        users_before
+        opened
+            .manager
+            .load_profile("operator")
+            .expect("profile reload"),
+        profile_before
     );
 }
 
@@ -1005,15 +1011,35 @@ fn config_set_address_by_label_updates_timezone() {
     );
 }
 
+#[cfg(not(target_os = "linux"))]
 #[test]
-fn config_set_password_is_rejected_and_leaves_users_unchanged() {
+fn system_user_management_is_unavailable_on_this_platform() {
+    let tree = TempTree::new("users-platform-disabled");
+    let platform = mock_macos_platform(tree.path());
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let code = run_with_platform(["users", "list"], &platform, &mut stdout, &mut stderr);
+    assert_eq!(code, 4);
+    assert!(stdout.is_empty());
+    assert!(
+        String::from_utf8(stderr)
+            .unwrap()
+            .contains("Linux management is unavailable")
+    );
+}
+
+#[test]
+fn config_set_password_is_rejected_and_leaves_profile_unchanged() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let tree = TempTree::new("config-set-password-denied");
     let platform = mock_windows_platform(tree.path());
     let app_paths = platform.app_paths().expect("mock app paths");
     let opened = StorageManager::open(app_paths).expect("storage initializes");
-    let users_before = opened.manager.load_users().expect("users load");
+    let profile_before = opened
+        .manager
+        .load_profile("operator")
+        .expect("profile load");
 
     let exit_code = run_with_platform(
         ["config", "set", "password", "new-password"],
@@ -1025,12 +1051,13 @@ fn config_set_password_is_rejected_and_leaves_users_unchanged() {
     assert_eq!(exit_code, 2);
     assert!(stdout.is_empty());
     let stderr = String::from_utf8(stderr).expect("config error output should be utf8");
-    assert!(
-        stderr.contains("username and password changes must use authenticated user management")
-    );
+    assert!(stderr.contains("unsupported config field"));
     assert_eq!(
-        opened.manager.load_users().expect("users reload"),
-        users_before
+        opened
+            .manager
+            .load_profile("operator")
+            .expect("profile reload"),
+        profile_before
     );
 }
 
@@ -1058,7 +1085,7 @@ fn new_command_clears_saved_content_and_recreates_default_storage() {
     assert!(stdout.contains("TundraUX3 storage reset"));
     assert!(stdout.contains("Recreated storage files:"));
     assert!(layout.config_path.is_file());
-    assert!(layout.users_path.is_file());
+    assert!(layout.profiles_path.is_file());
     assert!(layout.state_path.is_file());
     assert!(layout.recent_files_path.is_file());
     assert!(layout.sessions_path.is_file());
@@ -1071,10 +1098,9 @@ fn new_command_clears_saved_content_and_recreates_default_storage() {
     assert!(
         manager
             .manager
-            .load_users()
-            .expect("users")
-            .users
-            .is_empty()
+            .load_profile("operator")
+            .expect("profiles")
+            .is_none()
     );
     assert_eq!(manager.manager.load_config().expect("config").theme, "dark");
 }

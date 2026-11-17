@@ -1,7 +1,5 @@
-use crate::schema::{SCHEMA_VERSION, StorageFormat, USERS_SCHEMA_VERSION};
+use crate::schema::{SCHEMA_VERSION, StorageFormat};
 
-pub(crate) const USERS_V1_FILE_NAME: &str = "users.v1.json";
-const USERS_V2_FILE_NAME: &str = "users.v2.json";
 pub(crate) const TRASH_DIR_NAME: &str = "trash";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,18 +19,20 @@ pub const CONFIG_DESCRIPTOR: StorageDescriptor = StorageDescriptor {
 
 pub const CLOCK_DESCRIPTOR: StorageDescriptor = StorageDescriptor {
     name: "clock",
-    file_name: "clock.v1.json",
+    file_name: "clock.v2.json",
+    format: StorageFormat::VersionedJson,
+    schema_version: SCHEMA_VERSION,
+};
+
+pub(crate) const PROFILES_DESCRIPTOR: StorageDescriptor = StorageDescriptor {
+    name: "profiles",
+    file_name: "profiles.v1.json",
     format: StorageFormat::VersionedJson,
     schema_version: SCHEMA_VERSION,
 };
 
 pub const VERSIONED_JSON_DESCRIPTORS: &[StorageDescriptor] = &[
-    StorageDescriptor {
-        name: "users",
-        file_name: USERS_V2_FILE_NAME,
-        format: StorageFormat::VersionedJson,
-        schema_version: USERS_SCHEMA_VERSION,
-    },
+    PROFILES_DESCRIPTOR,
     StorageDescriptor {
         name: "state",
         file_name: "state.v1.json",

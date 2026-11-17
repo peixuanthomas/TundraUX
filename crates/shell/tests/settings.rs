@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use identity::{SessionService, UserRole, UserService};
 use platform::mock::{MockCall, MockPlatform};
 use platform::{
     AppPaths, PlatformCapabilities, PlatformKind, UserDirs, build_windows_app_paths,
@@ -26,8 +25,8 @@ fn default_config() -> ShellLaunchConfig {
 fn settings_action_repeat_is_ignored_and_shift_tab_goes_to_previous_control() {
     let fixture = FixtureRoot::new("settings-key-phases");
     let platform = mock_platform(fixture.path());
-    initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     for phase in [InputPhase::Repeat, InputPhase::Release] {
         for key in [InputKey::Enter, InputKey::Char(' ')] {
@@ -65,8 +64,8 @@ fn settings_action_repeat_is_ignored_and_shift_tab_goes_to_previous_control() {
 fn settings_arrows_do_not_change_saved_values() {
     let fixture = FixtureRoot::new("settings-navigation-only");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::System);
     let before = manager.load_config().unwrap();
@@ -80,14 +79,17 @@ fn settings_arrows_do_not_change_saved_values() {
 fn numeric_settings_wait_for_confirmation_and_escape_discards_changes() {
     let fixture = FixtureRoot::new("settings-numeric-confirmation");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     for _ in 0..5 {
         press(&mut state, &platform, "Down");
     }
     let saved_speed = || {
-        manager.load_users().unwrap().users[0]
+        manager
+            .load_profile("AdminUser")
+            .unwrap()
+            .unwrap()
             .appearance
             .animation_speed_percent
     };
@@ -131,8 +133,8 @@ fn numeric_settings_wait_for_confirmation_and_escape_discards_changes() {
 fn tab_traverses_controls_and_category_arrows_do_not_change_values() {
     let fixture = FixtureRoot::new("settings-focus");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     let before = manager.load_config().unwrap();
     for key in ["Tab", "Shift+Tab", "Down", "Up"] {
@@ -181,8 +183,8 @@ fn tab_traverses_controls_and_category_arrows_do_not_change_values() {
 fn numeric_settings_validate_direct_input_before_saving() {
     let fixture = FixtureRoot::new("settings-number-input");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     for (category, field, value, display) in [
         (
@@ -293,8 +295,8 @@ fn numeric_settings_use_the_same_dialog_for_mouse_and_touch() {
     for hover in [true, false] {
         let fixture = FixtureRoot::new("settings-number-pointer");
         let platform = mock_platform(fixture.path());
-        let manager = initialize_users(&platform, false, false);
-        let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+        let manager = initialize_profiles(&platform);
+        let mut state = start_as_system_user(&platform, "AdminUser");
         open_settings_from_home(&mut state, &platform);
         select_category(&mut state, &platform, SettingsCategory::System);
         let main = match ui::compute_shell_layout(Rect::new(0, 0, 120, 40)) {
@@ -415,72 +417,46 @@ fn linux_personal_settings_work_without_system_account_service() {
         return;
     }
     let platform = mock_platform(fixture.path()).with_kind(PlatformKind::Linux);
-    let manager = StorageManager::open_from_platform(&platform)
-        .unwrap()
-        .manager;
-    let backend = identity::IdentityBackend::Linux;
-    let actor = SessionService::new(manager.clone())
-        .with_backend(backend)
-        .attach_current_linux_user()
-        .unwrap();
-    let users = UserService::new(manager.clone()).with_backend(backend);
-    let appearance = storage::AppearanceConfig {
-        icon_display_mode: IconDisplayMode::Ascii,
-        ..Default::default()
-    };
-    users
-        .complete_personalization(&actor, appearance.clone())
-        .unwrap();
-    assert!(
-        users.list_accessible_users(&actor).is_err(),
-        "system account management must really be unavailable"
-    );
-
-    let mut startup = prepare_shell_startup(&platform).unwrap();
-    startup.identity_backend = backend;
-    startup.auth_bootstrap_required = false;
-    let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     assert_eq!(state.active_screen(), ShellScreen::Settings);
-    assert!(state.to_settings_view_model().is_some());
 
     // Exercise the normal settings save path, then reopen from disk.
-    let before = manager.load_users().unwrap().users[0]
+    let before = manager
+        .load_profile("AdminUser")
+        .unwrap()
+        .unwrap()
         .appearance
         .border_shape;
     press(&mut state, &platform, "Down");
     press(&mut state, &platform, "Enter");
-    let saved = manager.load_users().unwrap().users[0].appearance.clone();
+    let saved = manager
+        .load_profile("AdminUser")
+        .unwrap()
+        .unwrap()
+        .appearance
+        .clone();
     assert_ne!(saved.border_shape, before);
     press(&mut state, &platform, "Esc");
     open_settings_from_home(&mut state, &platform);
     assert_eq!(state.active_screen(), ShellScreen::Settings);
-    assert_eq!(manager.load_users().unwrap().users[0].appearance, saved);
-
-    let before = manager.load_users().unwrap();
-    let mut wrong_actor = actor.clone();
-    wrong_actor.user_id.push_str("-another-user");
-    assert!(users.current_user_appearance(&wrong_actor).is_err());
-    assert!(
-        users
-            .update_user_appearance(&wrong_actor, &actor.username, appearance.clone())
-            .is_err()
+    assert_eq!(
+        manager
+            .load_profile("AdminUser")
+            .unwrap()
+            .unwrap()
+            .appearance,
+        saved
     );
-    assert!(
-        users
-            .update_user_appearance(&actor, "another-user", appearance)
-            .is_err()
-    );
-    assert_eq!(manager.load_users().unwrap(), before);
 }
 
 #[test]
 fn category_navigation_keeps_application_list_and_content_arrows() {
     let fixture = FixtureRoot::new("tab-section-cycle");
     let platform = mock_platform(fixture.path());
-    initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_settings_from_home(&mut state, &platform);
     let appearance = state.to_settings_view_model().unwrap();
@@ -551,8 +527,8 @@ fn category_navigation_keeps_application_list_and_content_arrows() {
 fn linux_update_mode_saves_keyboard_and_mouse_choices_across_reopen() {
     let fixture = FixtureRoot::new("update-mode");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     assert_eq!(
         manager.load_config().unwrap().linux_update_mode,
         storage::LinuxUpdateMode::Release
@@ -612,8 +588,8 @@ fn linux_update_mode_saves_keyboard_and_mouse_choices_across_reopen() {
 fn application_list_switches_with_pointer_without_changing_saved_settings() {
     let fixture = FixtureRoot::new("application-settings-pointer");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::Applications);
     let original = manager.load_config().unwrap();
@@ -664,12 +640,12 @@ fn application_list_switches_with_pointer_without_changing_saved_settings() {
 fn restore_application_defaults_changes_only_the_selected_application() {
     let fixture = FixtureRoot::new("application-settings-reset");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
+    let manager = initialize_profiles(&platform);
     let mut config = manager.load_config().unwrap();
     config.explorer.show_hidden = true;
     config.editor.cursor_acceleration_delay_ms += 100;
     manager.save_config(&config).unwrap();
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::Applications);
     for key in ["End", "Enter", "R"] {
@@ -694,8 +670,8 @@ fn restore_application_defaults_changes_only_the_selected_application() {
 fn mouse_wheel_scrolls_only_to_the_settings_content_boundary() {
     let fixture = FixtureRoot::new("bounded-settings-scroll");
     let platform = mock_platform(fixture.path());
-    initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
 
     state.apply_input_with_platform(
@@ -775,8 +751,8 @@ fn mouse_wheel_scrolls_only_to_the_settings_content_boundary() {
 fn system_settings_show_defaults_and_persist_confirmed_values() {
     let fixture = FixtureRoot::new("system-settings");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::System);
     for (index, policy) in [
@@ -854,12 +830,9 @@ fn auto_admin_picker_requires_confirmation_with_mouse_or_touch() {
     for hover in [true, false] {
         let fixture = FixtureRoot::new("aa-picker");
         let platform = mock_platform(fixture.path());
-        let manager = initialize_users(&platform, true, false);
-        for (username, password, enabled) in [
-            ("AdminUser", "StrongPass123", true),
-            ("NormalUser", "NormalPass123", false),
-        ] {
-            let mut state = logged_in_state(&platform, username, password);
+        let manager = initialize_profiles(&platform);
+        for username in ["AdminUser", "NormalUser"] {
+            let mut state = start_as_system_user(&platform, username);
             open_settings_from_home(&mut state, &platform);
             select_category(&mut state, &platform, SettingsCategory::System);
             let main = match ui::compute_shell_layout(Rect::new(0, 0, 120, 40)) {
@@ -891,11 +864,6 @@ fn auto_admin_picker_requires_confirmation_with_mouse_or_touch() {
                     &platform,
                 );
                 let model = state.to_settings_view_model().unwrap();
-                assert_eq!(model.picker.is_some(), enabled);
-                if !enabled {
-                    assert_eq!(manager.load_config().unwrap().auto_admin, before);
-                    continue;
-                }
                 assert_eq!(
                     model.picker.as_ref().unwrap().kind,
                     SettingsPickerKind::AutoAdmin
@@ -950,8 +918,8 @@ fn auto_admin_picker_requires_confirmation_with_mouse_or_touch() {
 fn screen_timeout_saves_all_choices_and_wakes_without_logging_out() {
     let fixture = FixtureRoot::new("screen-timeout");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::System);
     for key in ["Down", "Down"] {
@@ -1002,40 +970,11 @@ fn screen_timeout_saves_all_choices_and_wakes_without_logging_out() {
 }
 
 #[test]
-fn normal_user_system_settings_keep_their_controls_disabled() {
-    let fixture = FixtureRoot::new("system-settings-user");
-    let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
-    open_settings_from_home(&mut state, &platform);
-    select_category(&mut state, &platform, SettingsCategory::System);
-
-    let before = manager.load_config().unwrap();
-    let model = state.to_settings_view_model().unwrap();
-    assert!(
-        model
-            .cards
-            .iter()
-            .flat_map(|card| &card.items)
-            .all(|item| !item.enabled)
-    );
-    assert!(
-        model
-            .cards
-            .iter()
-            .flat_map(|card| &card.items)
-            .all(|item| item.kind != ui::SettingsControlKind::ReadOnly)
-    );
-    press(&mut state, &platform, "Right");
-    assert_eq!(manager.load_config().unwrap(), before);
-}
-
-#[test]
 fn admin_settings_immediately_persist_global_changes_and_confirm_picker_selection() {
     let fixture = FixtureRoot::new("admin-persistence");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_settings_from_home(&mut state, &platform);
     assert_eq!(state.active_screen(), ShellScreen::Settings);
@@ -1099,8 +1038,8 @@ fn admin_settings_immediately_persist_global_changes_and_confirm_picker_selectio
 fn weather_location_rejects_non_english_input_and_saves_only_after_warning() {
     let fixture = FixtureRoot::new("weather-location");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::RegionTime);
@@ -1151,10 +1090,10 @@ fn weather_location_rejects_non_english_input_and_saves_only_after_warning() {
 fn operating_system_time_source_uses_platform_boundary_and_persists() {
     let fixture = FixtureRoot::new("system-time-source");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
+    let manager = initialize_profiles(&platform);
     let system_time = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     platform.set_system_time_result(Ok(system_time));
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::RegionTime);
@@ -1184,8 +1123,8 @@ fn operating_system_time_source_uses_platform_boundary_and_persists() {
 fn malformed_time_server_shows_error_and_does_not_save() {
     let fixture = FixtureRoot::new("malformed-time-server");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_time_server_editor(&mut state, &platform);
     for character in "not a URL".chars() {
@@ -1206,8 +1145,8 @@ fn malformed_time_server_shows_error_and_does_not_save() {
 fn editor_settings_save_normalized_explorer_open_suffixes() {
     let fixture = FixtureRoot::new("editor-open-suffixes");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
 
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::Applications);
@@ -1253,11 +1192,11 @@ fn editor_settings_save_normalized_explorer_open_suffixes() {
 }
 
 #[test]
-fn normal_user_can_change_only_their_appearance() {
+fn appearance_changes_apply_only_to_the_current_system_user() {
     let fixture = FixtureRoot::new("user-permissions");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
 
     open_settings_from_home(&mut state, &platform);
     let appearance = state.to_settings_view_model().unwrap();
@@ -1272,56 +1211,23 @@ fn normal_user_can_change_only_their_appearance() {
 
     press(&mut state, &platform, "Down");
     press(&mut state, &platform, "Enter");
-    let users = manager.load_users().unwrap();
     assert_eq!(
-        users
-            .users
-            .iter()
-            .find(|user| user.username == "NormalUser")
+        manager
+            .load_profile("NormalUser")
+            .unwrap()
             .unwrap()
             .appearance
             .border_shape,
         BorderShape::Square
     );
     assert_eq!(
-        users
-            .users
-            .iter()
-            .find(|user| user.username == "AdminUser")
+        manager
+            .load_profile("AdminUser")
+            .unwrap()
             .unwrap()
             .appearance
             .border_shape,
         BorderShape::Rounded
-    );
-
-    select_category(&mut state, &platform, SettingsCategory::RegionTime);
-    let region = state.to_settings_view_model().unwrap();
-    assert_eq!(region.selected_category, SettingsCategory::RegionTime);
-    assert!(
-        region
-            .locked_message
-            .as_deref()
-            .unwrap()
-            .contains("administrator")
-    );
-    assert!(
-        region
-            .cards
-            .iter()
-            .flat_map(|card| &card.items)
-            .all(|item| !item.enabled)
-    );
-
-    let config_before = manager.load_config().unwrap();
-    press(&mut state, &platform, "Enter");
-    press(&mut state, &platform, "Enter");
-    assert_eq!(manager.load_config().unwrap(), config_before);
-    assert!(
-        state
-            .to_settings_view_model()
-            .unwrap()
-            .status
-            .starts_with("Error:")
     );
 }
 
@@ -1329,8 +1235,8 @@ fn normal_user_can_change_only_their_appearance() {
 fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
     let fixture = FixtureRoot::new("animation-phases");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut state, &platform);
     for _ in 0..5 {
         press(&mut state, &platform, "Down");
@@ -1373,11 +1279,8 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
     }
     assert_eq!(
         manager
-            .load_users()
+            .load_profile("NormalUser")
             .unwrap()
-            .users
-            .iter()
-            .find(|user| user.username == "NormalUser")
             .unwrap()
             .appearance
             .animation_timings,
@@ -1388,11 +1291,9 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
     assert!(model.animation_editor.is_none());
     assert_eq!(model.selected_field, SettingsField::AnimationAdvanced);
     assert_eq!(state.active_screen(), ShellScreen::Settings);
-    let users = manager.load_users().unwrap();
-    let saved = &users
-        .users
-        .iter()
-        .find(|user| user.username == "NormalUser")
+    let saved = &manager
+        .load_profile("NormalUser")
+        .unwrap()
         .unwrap()
         .appearance;
     assert_eq!(saved.animation_speed_percent, 125);
@@ -1400,17 +1301,16 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
     assert_eq!(saved.animation_timings.dialog, [46, 91, 46]);
     assert_eq!(saved.animation_timings.menu, [41, 81, 41]);
     assert_eq!(
-        users
-            .users
-            .iter()
-            .find(|user| user.username == "AdminUser")
+        manager
+            .load_profile("AdminUser")
+            .unwrap()
             .unwrap()
             .appearance
             .animation_timings,
         storage::AnimationTimingsConfig::default()
     );
 
-    let mut reopened = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let mut reopened = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut reopened, &platform);
     press(&mut reopened, &platform, "Home");
     for _ in 0..4 {
@@ -1424,11 +1324,9 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
         SettingsField::ResetAnimationSpeed
     );
     press(&mut reopened, &platform, "Enter");
-    let users = manager.load_users().unwrap();
-    let restored = &users
-        .users
-        .iter()
-        .find(|user| user.username == "NormalUser")
+    let restored = &manager
+        .load_profile("NormalUser")
+        .unwrap()
         .unwrap()
         .appearance;
     assert_eq!(restored.animation_speed_percent, 100);
@@ -1443,14 +1341,14 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
 fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
     let fixture = FixtureRoot::new("animation-form");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut state, &platform);
     for _ in 0..6 {
         press(&mut state, &platform, "Down");
     }
     press(&mut state, &platform, "Enter");
-    let original = manager.load_users().unwrap();
+    let original = manager.load_profile("NormalUser").unwrap();
     press(&mut state, &platform, "Ctrl+A");
     state.apply_input_with_platform(InputEvent::Paste("123".into()), &platform);
     press(&mut state, &platform, "Esc");
@@ -1461,7 +1359,7 @@ fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
             .animation_editor
             .is_none()
     );
-    assert_eq!(manager.load_users().unwrap(), original);
+    assert_eq!(manager.load_profile("NormalUser").unwrap(), original);
     press(&mut state, &platform, "Enter");
     press(&mut state, &platform, "Ctrl+A");
     state.apply_input_with_platform(InputEvent::Paste("123".into()), &platform);
@@ -1473,7 +1371,7 @@ fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
     let editor = model.animation_editor.as_ref().unwrap();
     assert_eq!(editor.selected, 1);
     assert!(!editor.message.is_empty());
-    assert_eq!(manager.load_users().unwrap(), original);
+    assert_eq!(manager.load_profile("NormalUser").unwrap(), original);
     let main = match ui::compute_shell_layout(Rect::new(0, 0, 120, 40)) {
         ui::ShellLayout::Full { main, .. } | ui::ShellLayout::Compact(main) => main,
     };
@@ -1523,7 +1421,7 @@ fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
             .collect::<Vec<_>>(),
         expected
     );
-    assert_eq!(manager.load_users().unwrap(), original);
+    assert_eq!(manager.load_profile("NormalUser").unwrap(), original);
     press(&mut state, &platform, "Esc");
     assert_eq!(
         state.to_settings_view_model().unwrap().selected_field,
@@ -1536,8 +1434,8 @@ fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
 fn animation_speed_is_per_user_adjustable_and_has_a_default_button() {
     let fixture = FixtureRoot::new("animation-speed");
     let platform = mock_platform(fixture.path());
-    let manager = initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
 
     open_settings_from_home(&mut state, &platform);
     for _ in 0..5 {
@@ -1560,11 +1458,8 @@ fn animation_speed_is_per_user_adjustable_and_has_a_default_button() {
     press(&mut state, &platform, "Enter");
     let normal_appearance = || {
         manager
-            .load_users()
+            .load_profile("NormalUser")
             .unwrap()
-            .users
-            .into_iter()
-            .find(|user| user.username == "NormalUser")
             .unwrap()
             .appearance
     };
@@ -1659,19 +1554,16 @@ fn animation_speed_is_per_user_adjustable_and_has_a_default_button() {
 fn default_theme_icon_picker_persists_ascii_and_image_modes_when_supported() {
     let fixture = FixtureRoot::new("theme-icon-mode-supported");
     let platform = mock_platform(fixture.path()).with_kind(platform::native_platform().kind());
-    let manager = initialize_users(&platform, true, false);
+    let manager = initialize_profiles(&platform);
     let saved_mode = || {
         manager
-            .load_users()
+            .load_profile("NormalUser")
             .unwrap()
-            .users
-            .into_iter()
-            .find(|user| user.username == "NormalUser")
             .unwrap()
             .appearance
             .icon_display_mode
     };
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    let mut state = start_as_system_user(&platform, "NormalUser");
     state.set_terminal_image_support(true);
 
     open_settings_from_home(&mut state, &platform);
@@ -1722,8 +1614,8 @@ fn default_theme_icon_picker_persists_ascii_and_image_modes_when_supported() {
 fn unsupported_terminal_locks_default_theme_to_ascii_and_disables_image_option() {
     let fixture = FixtureRoot::new("theme-icon-mode-unsupported");
     let platform = mock_platform(fixture.path());
-    initialize_users(&platform, true, false);
-    let mut state = logged_in_state(&platform, "NormalUser", "NormalPass123");
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
     state.set_terminal_image_support(false);
 
     open_settings_from_home(&mut state, &platform);
@@ -1753,82 +1645,22 @@ fn unsupported_terminal_locks_default_theme_to_ascii_and_disables_image_option()
     assert!(!state.graphical_icons_enabled());
 }
 
-#[test]
-fn guest_home_does_not_expose_settings() {
-    let fixture = FixtureRoot::new("guest-hidden");
-    let platform = mock_platform(fixture.path());
-    initialize_users(&platform, false, true);
-    let state = logged_in_state(&platform, "GuestUser", "GuestPass123");
-
-    assert_eq!(state.active_screen(), ShellScreen::Home);
-    assert!(
-        state
-            .to_home_view_model()
-            .entries()
-            .iter()
-            .all(|entry| entry.label != "Settings")
-    );
-}
-
-fn initialize_users(
-    platform: &MockPlatform,
-    create_user: bool,
-    create_guest: bool,
-) -> StorageManager {
+fn initialize_profiles(platform: &MockPlatform) -> StorageManager {
     let manager = StorageManager::open_from_platform(platform)
-        .expect("storage open")
+        .unwrap()
         .manager;
-    let users = UserService::new(manager.clone());
-    users
-        .bootstrap_admin("AdminUser", "StrongPass123")
-        .expect("bootstrap admin");
-    let admin = SessionService::new(manager.clone())
-        .login("AdminUser", "StrongPass123")
-        .expect("admin login");
-    if create_user {
-        users
-            .create_user(
-                &admin,
-                "NormalUser",
-                "Normal User",
-                UserRole::User,
-                "NormalPass123",
-            )
-            .expect("create normal user");
-    }
-    if create_guest {
-        users
-            .create_user(
-                &admin,
-                "GuestUser",
-                "Guest User",
-                UserRole::Guest,
-                "GuestPass123",
-            )
-            .expect("create guest user");
+    for name in ["AdminUser", "NormalUser"] {
+        manager.update_profile(name, |_| {}).unwrap();
     }
     manager
 }
 
-fn logged_in_state(platform: &MockPlatform, username: &str, password: &str) -> ShellSession {
-    let startup = prepare_shell_startup(platform).expect("startup");
-    let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    assert_eq!(state.active_screen(), ShellScreen::Login);
-    let target = state
-        .to_login_view_model()
-        .users
-        .iter()
-        .position(|user| user.username == username)
-        .expect("login user");
-    while state.to_login_view_model().selected_index < target {
-        press(&mut state, platform, "Down");
-    }
-    press(&mut state, platform, "Tab");
-    for character in password.chars() {
-        state
-            .apply_input_with_platform(InputEvent::from_key_label(character.to_string()), platform);
-    }
-    press(&mut state, platform, "Enter");
+fn start_as_system_user(platform: &MockPlatform, username: &str) -> ShellSession {
+    let mut startup = prepare_shell_startup(platform).expect("startup");
+    let session = startup.system_session.as_mut().unwrap();
+    session.username = username.to_owned();
+    session.user_id = username.to_owned();
+    let state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
     assert_eq!(state.active_screen(), ShellScreen::Home);
     state
 }
@@ -1994,15 +1826,12 @@ fn unavailable_device_pages_are_removed_from_settings_on_every_platform() {
     ] {
         let fixture = FixtureRoot::new(&format!("device-settings-{kind:?}"));
         let platform = mock_platform(fixture.path()).with_kind(kind);
-        let manager = initialize_users(&platform, true, false);
-        for (username, password) in [
-            ("AdminUser", "StrongPass123"),
-            ("NormalUser", "NormalPass123"),
-        ] {
-            let mut state = logged_in_state(&platform, username, password);
+        let manager = initialize_profiles(&platform);
+        for username in ["AdminUser", "NormalUser"] {
+            let mut state = start_as_system_user(&platform, username);
             open_settings_from_home(&mut state, &platform);
             let before = manager.load_config().unwrap();
-            let users_before = manager.load_users().unwrap();
+            let users_before = manager.load_profile(username).unwrap();
             for expected in SettingsCategory::ALL {
                 select_category(&mut state, &platform, expected);
                 let category = state.to_settings_view_model().unwrap().selected_category;
@@ -2015,7 +1844,7 @@ fn unavailable_device_pages_are_removed_from_settings_on_every_platform() {
                 ));
             }
             assert_eq!(manager.load_config().unwrap(), before);
-            assert_eq!(manager.load_users().unwrap(), users_before);
+            assert_eq!(manager.load_profile(username).unwrap(), users_before);
         }
     }
 }
@@ -2024,8 +1853,8 @@ fn unavailable_device_pages_are_removed_from_settings_on_every_platform() {
 fn picker_search_edits_at_the_visible_cursor() {
     let fixture = FixtureRoot::new("picker-text-cursor");
     let platform = mock_platform(fixture.path());
-    initialize_users(&platform, false, false);
-    let mut state = logged_in_state(&platform, "AdminUser", "StrongPass123");
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::RegionTime);
     select_field(&mut state, &platform, SettingsField::Language);

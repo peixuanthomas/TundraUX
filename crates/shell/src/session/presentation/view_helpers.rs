@@ -31,7 +31,6 @@ pub(in crate::session) fn clock_button_active_for_screen(screen: ShellScreen) ->
             | ShellScreen::Editor
             | ShellScreen::Settings
             | ShellScreen::SystemStatus
-            | ShellScreen::UserManagement
             | ShellScreen::Logs
             | ShellScreen::Management
             | ShellScreen::Diagnostics
@@ -677,120 +676,6 @@ pub(in crate::session) fn explorer_input_prompt(mode: ExplorerInputMode) -> Stri
     }
 }
 
-pub(in crate::session) fn unix_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .ok()
-        .and_then(|millis| u64::try_from(millis).ok())
-        .unwrap_or(0)
-}
-
-pub(in crate::session) fn format_core_error(error: &CoreError) -> i18n::LocalizedText {
-    match error {
-        CoreError::InvalidCredentials => {
-            i18n::LocalizedText::from(i18n::msg!("shell-invalid-username-or-password"))
-        }
-        CoreError::AccountDisabled => {
-            i18n::LocalizedText::from(i18n::msg!("shell-account-disabled"))
-        }
-        CoreError::AccountLocked { .. } => {
-            i18n::LocalizedText::from(i18n::msg!("shell-account-locked"))
-        }
-        CoreError::BootstrapAlreadyExists => {
-            i18n::LocalizedText::from(i18n::msg!("shell-admin-already-exists"))
-        }
-        CoreError::BootstrapRequired => {
-            i18n::LocalizedText::from(i18n::msg!("shell-create-the-first-admin-account"))
-        }
-        CoreError::DuplicateUsername => {
-            i18n::LocalizedText::from(i18n::msg!("shell-username-already-exists"))
-        }
-        CoreError::InvalidUsername => {
-            i18n::LocalizedText::from(i18n::msg!("shell-invalid-username"))
-        }
-        CoreError::InvalidUserInfo(reason) => i18n::LocalizedText::from(i18n::msg!(
-            "shell-invalid-user-info-reason",
-            reason = reason.to_string()
-        )),
-        CoreError::InvalidPassword(reason) => i18n::LocalizedText::from(i18n::msg!(
-            "shell-invalid-password-reason",
-            reason = reason.to_string()
-        )),
-        CoreError::LastPrivilegedUserRequired => {
-            i18n::LocalizedText::from(i18n::msg!("shell-at-least-one-enabled-admin-is-required"))
-        }
-        CoreError::PermissionDenied { reason, .. } => i18n::LocalizedText::from(i18n::msg!(
-            "shell-permission-denied-reason",
-            reason = reason.to_string()
-        )),
-        CoreError::UserNotFound => i18n::LocalizedText::from(i18n::msg!("shell-user-not-found")),
-        other => other.to_string().into(),
-    }
-}
-
-pub(in crate::session) fn login_error_message(
-    error: &CoreError,
-    password_hint: Option<&str>,
-) -> i18n::LocalizedText {
-    if matches!(error, CoreError::InvalidCredentials)
-        && let Some(hint) = password_hint.map(str::trim).filter(|hint| !hint.is_empty())
-    {
-        return i18n::LocalizedText::from(i18n::msg!("shell-password-hint-hint", hint = hint));
-    }
-
-    format_core_error(error)
-}
-
-pub(in crate::session) fn to_ui_user_management_field(
-    field: UserManagementFormField,
-) -> ui::UserManagementField {
-    match field {
-        UserManagementFormField::Username => ui::UserManagementField::Username,
-        UserManagementFormField::DisplayName => ui::UserManagementField::DisplayName,
-        UserManagementFormField::Role => ui::UserManagementField::Role,
-        UserManagementFormField::Password => ui::UserManagementField::Password,
-        UserManagementFormField::Submit => ui::UserManagementField::Submit,
-        UserManagementFormField::Cancel => ui::UserManagementField::Cancel,
-    }
-}
-
-pub(in crate::session) fn from_ui_user_management_field(
-    field: ui::UserManagementField,
-) -> UserManagementFormField {
-    match field {
-        ui::UserManagementField::Username => UserManagementFormField::Username,
-        ui::UserManagementField::DisplayName => UserManagementFormField::DisplayName,
-        ui::UserManagementField::Role => UserManagementFormField::Role,
-        ui::UserManagementField::Password => UserManagementFormField::Password,
-        ui::UserManagementField::Submit => UserManagementFormField::Submit,
-        ui::UserManagementField::Cancel => UserManagementFormField::Cancel,
-    }
-}
-
-pub(in crate::session) fn user_management_action_model(
-    action: ui::UserManagementAction,
-    label: String,
-    shortcut: Option<char>,
-    enabled: bool,
-    disabled_reason: Option<String>,
-    dangerous: bool,
-) -> ui::UserManagementActionViewModel {
-    ui::UserManagementActionViewModel {
-        action,
-        label: label.to_string(),
-        shortcut,
-        enabled,
-        disabled_reason: (!enabled).then_some(disabled_reason).flatten(),
-        dangerous,
-    }
-}
-
-pub(in crate::session) fn user_is_locked(user: &UserAccount) -> bool {
-    user.locked_until_epoch_ms
-        .is_some_and(|locked_until| locked_until > unix_millis())
-}
-
 pub(in crate::session) fn user_home_entries() -> Vec<ui::ShellEntry> {
     vec![
         ui::ShellEntry::new(i18n::tr!("shell-explorer"), i18n::tr!("shell-browse-files"))
@@ -851,13 +736,6 @@ pub(in crate::session) fn resolved_home_mode(
     } else {
         requested_mode
     }
-}
-
-pub(in crate::session) fn should_show_startup_lockscreen(startup: &ShellStartupState) -> bool {
-    startup.identity_backend != identity::IdentityBackend::Linux
-        && startup.storage_manager.is_some()
-        && !startup.auth_bootstrap_required
-        && !startup.login_users.is_empty()
 }
 
 pub(in crate::session) fn platform_capability_summary(
@@ -921,23 +799,9 @@ pub(in crate::session) fn component_message(component: ShellComponent) -> i18n::
         ShellComponent::DiagnosticsRepairDialog => {
             i18n::msg!("shell-component-diagnostics-repair-dialog")
         }
-        ShellComponent::LoginUserList => i18n::msg!("shell-component-login-user-list"),
-        ShellComponent::LoginUsername => i18n::msg!("shell-component-login-username"),
-        ShellComponent::LoginPassword => i18n::msg!("shell-component-login-password"),
-        ShellComponent::LoginPasswordVisibility => {
-            i18n::msg!("shell-component-login-password-visibility")
-        }
-        ShellComponent::HomeLogout => i18n::msg!("shell-component-home-logout"),
         ShellComponent::HomeEdit => i18n::msg!("ui-home-edit"),
         ShellComponent::SetupLanguage => i18n::msg!("shell-component-setup-language"),
         ShellComponent::SetupTimezone => i18n::msg!("shell-component-setup-timezone"),
-        ShellComponent::SetupAdminUsername => i18n::msg!("shell-component-setup-admin-username"),
-        ShellComponent::SetupAdminPassword => i18n::msg!("shell-component-setup-admin-password"),
-        ShellComponent::SetupAdminPasswordConfirm => {
-            i18n::msg!("shell-component-setup-admin-password-confirm")
-        }
-        ShellComponent::SetupAdminHint => i18n::msg!("shell-component-setup-admin-hint"),
-        ShellComponent::SetupSubmit => i18n::msg!("shell-component-setup-submit"),
         ShellComponent::SetupAppearanceShape => {
             i18n::msg!("shell-component-setup-appearance-shape")
         }
@@ -959,14 +823,11 @@ pub(in crate::session) fn component_message(component: ShellComponent) -> i18n::
         ShellComponent::SetupCustomColorDialog => {
             i18n::msg!("shell-component-setup-custom-color-dialog")
         }
-        ShellComponent::BootstrapUsername => i18n::msg!("shell-component-bootstrap-username"),
-        ShellComponent::BootstrapPassword => i18n::msg!("shell-component-bootstrap-password"),
         ShellComponent::Explorer => i18n::msg!("shell-component-explorer"),
         ShellComponent::Launcher => i18n::msg!("shell-component-launcher"),
         ShellComponent::CommandLine => i18n::msg!("shell-component-command-line"),
         ShellComponent::Editor => i18n::msg!("shell-component-editor"),
         ShellComponent::Settings => i18n::msg!("shell-component-settings"),
-        ShellComponent::UserManagement => i18n::msg!("shell-component-user-management"),
         ShellComponent::StatusBar => i18n::msg!("shell-component-status-bar"),
         ShellComponent::ExitDialog => i18n::msg!("shell-component-exit-dialog"),
         ShellComponent::TimeSyncDialog => i18n::msg!("shell-component-time-sync-dialog"),

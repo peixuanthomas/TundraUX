@@ -6,9 +6,6 @@ use ratatui::Frame;
 pub enum ScreenContent<'a> {
     Home(&'a HomeViewModel),
     Setup(&'a SetupViewModel),
-    Login(&'a LoginViewModel),
-    BootstrapAdmin(&'a BootstrapAdminViewModel),
-    UserManagement(&'a UserManagementViewModel),
     Explorer(&'a ExplorerViewModel),
     Launcher(&'a LauncherViewModel),
     CommandLine(&'a CommandLineViewModel),
@@ -41,10 +38,7 @@ impl ScreenContent<'_> {
                 | Self::Settings(_)
                 | Self::Management(_)
                 | Self::Logs(_)
-                | Self::Login(_)
                 | Self::Setup(_)
-                | Self::BootstrapAdmin(_)
-                | Self::UserManagement(_)
                 | Self::Clock(_)
         )
     }
@@ -66,13 +60,6 @@ impl ScreenContent<'_> {
         match self {
             Self::Home(model) => render_home_content(frame, main, model, context, home_icons),
             Self::Setup(model) => render_setup_content(frame, main, model, context),
-            Self::Login(model) => render_login_content(frame, main, model, context),
-            Self::BootstrapAdmin(model) => {
-                render_bootstrap_admin_content(frame, main, model, context)
-            }
-            Self::UserManagement(model) => {
-                render_user_management_content(frame, main, model, context)
-            }
             Self::Explorer(model) => render_explorer_content(frame, main, model, context),
             Self::Launcher(model) => {
                 render_launcher_content(frame, main, model, context, launcher_icons)
@@ -138,9 +125,6 @@ impl ScreenContent<'_> {
         match self {
             Self::Setup(model) => render_setup_overlay(frame, main, model, context),
             Self::Management(model) => render_management_overlay(frame, main, model, context),
-            Self::UserManagement(model) => {
-                render_user_management_overlay(frame, main, model, context)
-            }
             Self::Explorer(model) => {
                 render_explorer_overlay(frame, main, model, context, &context.compatibility_theme())
             }

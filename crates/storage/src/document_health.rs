@@ -3,21 +3,21 @@ use std::path::{Path, PathBuf};
 use crate::atomic_write::create_dir;
 use crate::clock_document::ClockDocument;
 use crate::config_document::StorageConfig;
-use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR};
+use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, PROFILES_DESCRIPTOR};
 use crate::document_io::{
     save_json_document, save_toml_document, validate_json_document, validate_toml_document,
 };
 use crate::error::StorageError;
 use crate::manager::{StorageLoadReport, StorageManager};
+use crate::profile_document::ProfilesDocument;
 use crate::recovery::recover_document;
 use crate::state_documents::{RecentFilesDocument, SessionsDocument, StateDocument};
 use crate::trash_document::TrashDocument;
-use crate::user_document::UsersDocument;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StorageDocumentKind {
     Config,
-    Users,
+    Profiles,
     State,
     RecentFiles,
     Sessions,
@@ -28,7 +28,7 @@ pub enum StorageDocumentKind {
 impl StorageDocumentKind {
     const ALL: [Self; 7] = [
         Self::Config,
-        Self::Users,
+        Self::Profiles,
         Self::State,
         Self::RecentFiles,
         Self::Sessions,
@@ -154,7 +154,7 @@ impl StorageManager {
     fn document_path(&self, kind: StorageDocumentKind) -> &Path {
         match kind {
             StorageDocumentKind::Config => &self.layout.config_path,
-            StorageDocumentKind::Users => &self.layout.users_path,
+            StorageDocumentKind::Profiles => &self.layout.profiles_path,
             StorageDocumentKind::State => &self.layout.state_path,
             StorageDocumentKind::RecentFiles => &self.layout.recent_files_path,
             StorageDocumentKind::Sessions => &self.layout.sessions_path,
@@ -166,7 +166,7 @@ impl StorageManager {
     fn document_name(&self, kind: StorageDocumentKind) -> &'static str {
         match kind {
             StorageDocumentKind::Config => CONFIG_DESCRIPTOR.name,
-            StorageDocumentKind::Users => "users",
+            StorageDocumentKind::Profiles => PROFILES_DESCRIPTOR.name,
             StorageDocumentKind::State => "state",
             StorageDocumentKind::RecentFiles => "recent-files",
             StorageDocumentKind::Sessions => "sessions",
@@ -181,8 +181,8 @@ impl StorageManager {
             StorageDocumentKind::Config => {
                 validate_toml_document::<StorageConfig>(path, CONFIG_DESCRIPTOR.name)?;
             }
-            StorageDocumentKind::Users => {
-                validate_json_document::<UsersDocument>(path, "users")?;
+            StorageDocumentKind::Profiles => {
+                validate_json_document::<ProfilesDocument>(path, PROFILES_DESCRIPTOR.name)?;
             }
             StorageDocumentKind::State => {
                 validate_json_document::<StateDocument>(path, "state")?;
@@ -209,8 +209,8 @@ impl StorageManager {
             StorageDocumentKind::Config => {
                 save_toml_document(path, CONFIG_DESCRIPTOR.name, &StorageConfig::default())
             }
-            StorageDocumentKind::Users => {
-                save_json_document(path, "users", &UsersDocument::default())
+            StorageDocumentKind::Profiles => {
+                save_json_document(path, PROFILES_DESCRIPTOR.name, &ProfilesDocument::default())
             }
             StorageDocumentKind::State => {
                 save_json_document(path, "state", &StateDocument::default())

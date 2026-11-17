@@ -125,7 +125,6 @@ pub enum CliError {
     InvalidWatchdogArgument,
     InvalidManagementArgument(String),
     InvalidLogsArgument(String),
-    ForbiddenConfigField(String),
     MissingArgument(&'static str),
     ReadOnlyConfigField(String),
     UnknownCommand(String),
@@ -154,12 +153,6 @@ impl fmt::Display for CliError {
             }
             Self::InvalidLogsArgument(message) => {
                 write!(formatter, "invalid logs arguments: {message}")
-            }
-            Self::ForbiddenConfigField(field) => {
-                write!(
-                    formatter,
-                    "config field {field:?} is not exposed; username and password changes must use authenticated user management"
-                )
             }
             Self::MissingArgument(argument) => write!(formatter, "missing argument: {argument}"),
             Self::ReadOnlyConfigField(field) => write!(
@@ -439,9 +432,6 @@ fn parse_config_field(field: &str) -> Result<ConfigField, CliError> {
         "animation-speed" | "animation_speed" => Ok(ConfigField::AnimationSpeed),
         "weather-location" | "weather_location" => Ok(ConfigField::WeatherLocation),
         "update-mode" | "update_mode" => Ok(ConfigField::UpdateMode),
-        "user" | "users" | "username" | "password" | "passwd" | "password_hint" => {
-            Err(CliError::ForbiddenConfigField(field.to_string()))
-        }
         other => Err(CliError::UnsupportedConfigField(other.to_string())),
     }
 }

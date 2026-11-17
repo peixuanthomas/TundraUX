@@ -5,12 +5,7 @@ enum TouchScroll {
     Settings,
     SettingsPicker,
     SettingsCategories,
-    Users,
-    UserForm,
     Clock,
-    LoginPage,
-    LoginUsers,
-    BootstrapPage,
     SetupPage,
     SetupZones,
 }
@@ -32,7 +27,7 @@ mod tests {
     #[test]
     fn setup_scrollbar_drag_reaches_hidden_fields_without_activating_them() {
         let mut state = state(ShellScreen::FirstRunSetup);
-        state.pages.setup.setup_step = ui::SetupStep::Admin;
+        state.pages.setup.setup_step = ui::SetupStep::Appearance;
         let region = state
             .touch_regions()
             .into_iter()
@@ -49,7 +44,7 @@ mod tests {
             ui::MouseEventKind::Drag(PointerButton::Left),
         ));
         assert!(state.pages.common.page_touch.setup_scroll > 0);
-        assert_eq!(state.pages.setup.setup_step, ui::SetupStep::Admin);
+        assert_eq!(state.pages.setup.setup_step, ui::SetupStep::Appearance);
         state.handle_touch_pages_pointer(MouseInput::new(
             0,
             0,
@@ -109,8 +104,6 @@ struct TouchDrag {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(in crate::session) struct PageTouchState {
     pub(in crate::session) setup_scroll: u16,
-    pub(in crate::session) login_scroll: u16,
-    pub(in crate::session) bootstrap_scroll: u16,
     drag: Option<TouchDrag>,
 }
 
@@ -189,27 +182,6 @@ impl ShellSession {
                     }
                 }
             }
-            ShellScreen::UserManagement => {
-                let model = self.to_user_management_view_model();
-                let layout = ui::user_management_layout(self.touch_main(), &model);
-                if let Some(form) = layout.form {
-                    add(
-                        TouchScroll::UserForm,
-                        form.scrollbar,
-                        form.field_count,
-                        form.field_capacity,
-                        form.field_window_start,
-                    );
-                } else {
-                    add(
-                        TouchScroll::Users,
-                        layout.scrollbar,
-                        model.users.len(),
-                        layout.visible_capacity,
-                        layout.visible_start,
-                    );
-                }
-            }
             ShellScreen::Clock => {
                 let model = self.to_clock_view_model_at(&self.app.snapshot().clock, Instant::now());
                 let layout = ui::clock_page_layout(self.touch_main(), &model);
@@ -222,37 +194,6 @@ impl ShellSession {
                         layout.entry_window_start,
                     );
                 }
-            }
-            ShellScreen::Login => {
-                let model = self.to_login_view_model();
-                let page = ui::login_viewport(self.touch_main(), &model);
-                add(
-                    TouchScroll::LoginPage,
-                    page.scrollbar,
-                    usize::from(page.content.height),
-                    usize::from(page.area.height),
-                    usize::from(page.offset),
-                );
-                let list = ui::login_layout(page.content).user_list;
-                add(
-                    TouchScroll::LoginUsers,
-                    ui::login_list_scrollbar(page.content, &model)
-                        .and_then(|track| page.project(track)),
-                    model.users.len(),
-                    usize::from(list.height.saturating_sub(2)),
-                    model.user_window_start,
-                );
-            }
-            ShellScreen::BootstrapAdmin => {
-                let model = self.to_bootstrap_admin_view_model();
-                let page = ui::bootstrap_viewport(self.touch_main(), &model);
-                add(
-                    TouchScroll::BootstrapPage,
-                    page.scrollbar,
-                    usize::from(page.content.height),
-                    usize::from(page.area.height),
-                    usize::from(page.offset),
-                );
             }
             ShellScreen::FirstRunSetup => {
                 let model = self.to_setup_view_model();
@@ -320,42 +261,8 @@ impl ShellSession {
         if !rect_contains(self.touch_main(), point) {
             return None;
         }
-        if self.active_screen() == ShellScreen::BootstrapAdmin
-            && matches!(mouse.kind, ui::MouseEventKind::Down(PointerButton::Left))
-        {
-            let page =
-                ui::bootstrap_viewport(self.touch_main(), &self.to_bootstrap_admin_view_model());
-            let submit = ui::bootstrap_submit_area(page.content);
-            if page
-                .project(submit)
-                .is_some_and(|area| rect_contains(area, point))
-            {
-                return Some(ShellCommand::SubmitBootstrapAdmin);
-            }
-        }
-        if self.active_screen() == ShellScreen::Login
-            && matches!(mouse.kind, ui::MouseEventKind::Down(PointerButton::Left))
-        {
-            let model = self.to_login_view_model();
-            let page = ui::login_viewport(self.touch_main(), &model);
-            let layout = ui::login_layout(page.content);
-            if page
-                .project(layout.submit)
-                .is_some_and(|area| rect_contains(area, point))
-            {
-                return Some(ShellCommand::SubmitLogin);
-            }
-            if page
-                .project(layout.password_visibility)
-                .is_some_and(|area| rect_contains(area, point))
-            {
-                return Some(ShellCommand::ToggleLoginPasswordVisibility);
-            }
-        }
-        if matches!(
-            self.active_screen(),
-            ShellScreen::Login | ShellScreen::FirstRunSetup | ShellScreen::BootstrapAdmin
-        ) && !matches!(mouse.kind, ui::MouseEventKind::Moved)
+        if self.active_screen() == ShellScreen::FirstRunSetup
+            && !matches!(mouse.kind, ui::MouseEventKind::Moved)
         {
             return Some(ShellCommand::TouchPagesPointer(mouse));
         }
@@ -406,25 +313,6 @@ impl ShellSession {
                 {
                     return Some(ShellCommand::ClockManageEntry(row.id));
                 }
-            }
-        }
-        if self.active_screen() == ShellScreen::UserManagement
-            && matches!(mouse.kind, ui::MouseEventKind::Down(PointerButton::Left))
-        {
-            let layout = ui::user_management_layout(
-                self.touch_main(),
-                &self.to_user_management_view_model(),
-            );
-            if layout.form.is_some() {
-                return Some(ShellCommand::UserManagementFormInput(InputEvent::Mouse(
-                    mouse,
-                )));
-            }
-            if let Some(index) = layout.row_index_at(point.0, point.1) {
-                return Some(ShellCommand::UserManagementSelectRow(index));
-            }
-            if let Some(action) = layout.action_at(point.0, point.1) {
-                return Some(ShellCommand::UserManagementActivateAction(action));
             }
         }
         None
@@ -501,24 +389,8 @@ impl ShellSession {
                     self.set_touch_offset(region.kind, offset);
                 } else {
                     self.pages.common.page_touch.drag = None;
-                    if self.active_screen() == ShellScreen::Login {
-                        self.touch_login(point);
-                    } else if self.active_screen() == ShellScreen::FirstRunSetup {
+                    if self.active_screen() == ShellScreen::FirstRunSetup {
                         self.touch_setup(point);
-                    } else if self.active_screen() == ShellScreen::BootstrapAdmin {
-                        let page = ui::bootstrap_viewport(
-                            self.touch_main(),
-                            &self.to_bootstrap_admin_view_model(),
-                        );
-                        if let Some(point) = page.content_point(point) {
-                            if point.1 == 3 {
-                                self.pages.common.focused_component =
-                                    ShellComponent::BootstrapUsername;
-                            } else if point.1 == 4 {
-                                self.pages.common.focused_component =
-                                    ShellComponent::BootstrapPassword;
-                            }
-                        }
                     }
                 }
             }
@@ -529,9 +401,7 @@ impl ShellSession {
                     _ => return,
                 };
                 let kind = match self.active_screen() {
-                    ShellScreen::Login => TouchScroll::LoginPage,
                     ShellScreen::FirstRunSetup => TouchScroll::SetupPage,
-                    ShellScreen::BootstrapAdmin => TouchScroll::BootstrapPage,
                     _ => return,
                 };
                 let regions = self.touch_regions();
@@ -581,68 +451,11 @@ impl ShellSession {
                         .min(ui::SettingsCategory::ALL.len() - 1)],
                 );
             }
-            TouchScroll::Users => self.pages.user_management.user_management_window_start = offset,
-            TouchScroll::UserForm => {
-                let model = self.to_user_management_view_model();
-                if let Some(form) = model.form.as_ref() {
-                    let layout = ui::user_management_layout(self.touch_main(), &model)
-                        .form
-                        .unwrap();
-                    let fields = form
-                        .field_order()
-                        .iter()
-                        .copied()
-                        .filter(|field| {
-                            !matches!(
-                                field,
-                                ui::UserManagementField::Submit | ui::UserManagementField::Cancel
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    if let Some(field) =
-                        fields.get(offset + layout.field_capacity.saturating_sub(1))
-                    {
-                        self.set_user_management_form_focus(*field);
-                    }
-                }
-            }
             TouchScroll::Clock => self.pages.clock.clock_entry_window_start = offset,
-            TouchScroll::LoginPage => {
-                self.pages.common.page_touch.login_scroll = offset.min(usize::from(u16::MAX)) as u16
-            }
-            TouchScroll::LoginUsers => self.pages.login.login_user_window_start = offset,
-            TouchScroll::BootstrapPage => {
-                self.pages.common.page_touch.bootstrap_scroll =
-                    offset.min(usize::from(u16::MAX)) as u16
-            }
             TouchScroll::SetupPage => {
                 self.pages.common.page_touch.setup_scroll = offset.min(usize::from(u16::MAX)) as u16
             }
             TouchScroll::SetupZones => self.pages.setup.setup_timezone_window_start = offset,
-        }
-    }
-
-    fn touch_login(&mut self, point: CellPosition) {
-        let model = self.to_login_view_model();
-        let page = ui::login_viewport(self.touch_main(), &model);
-        let Some(point) = page.content_point(point) else {
-            return;
-        };
-        let layout = ui::login_layout(page.content);
-        if rect_contains(layout.password, point) {
-            self.pages.common.focused_component = ShellComponent::LoginPassword;
-        } else if rect_contains(layout.user_list, point) {
-            self.pages.common.focused_component = ShellComponent::LoginUserList;
-            let row = point.1.saturating_sub(layout.user_list.y + 1);
-            if point.1 > layout.user_list.y && point.1 < layout.user_list.bottom().saturating_sub(1)
-            {
-                let index = self.pages.login.login_user_window_start + usize::from(row);
-                if index < self.login_users.len() {
-                    self.select_login_user_at(index);
-                    self.pages.common.focused_component = ShellComponent::LoginPassword;
-                    self.ensure_touch_auth_focus_visible();
-                }
-            }
         }
     }
 
@@ -715,37 +528,6 @@ impl ShellSession {
                     self.pages.common.error_message = None;
                 }
             }
-            ui::SetupStep::Admin => {
-                for (field, component) in [
-                    (
-                        ui::SetupField::AdminUsername,
-                        ShellComponent::SetupAdminUsername,
-                    ),
-                    (
-                        ui::SetupField::AdminPassword,
-                        ShellComponent::SetupAdminPassword,
-                    ),
-                    (
-                        ui::SetupField::AdminPasswordConfirm,
-                        ShellComponent::SetupAdminPasswordConfirm,
-                    ),
-                    (ui::SetupField::PasswordHint, ShellComponent::SetupAdminHint),
-                    (ui::SetupField::Submit, ShellComponent::SetupSubmit),
-                ] {
-                    if rect_contains(ui::setup_admin_field_area(main, field), point) {
-                        self.focus_setup_component(component);
-                        if field == ui::SetupField::Submit
-                            && model.can_submit
-                            && page
-                                .project(ui::setup_admin_field_area(main, field))
-                                .is_some()
-                        {
-                            self.setup_primary_action();
-                        }
-                        break;
-                    }
-                }
-            }
             ui::SetupStep::Appearance => {
                 for (field, component) in [
                     (
@@ -784,57 +566,10 @@ impl ShellSession {
 
     pub(in crate::session) fn ensure_touch_auth_focus_visible(&mut self) {
         let (page, field) = match self.active_screen() {
-            ShellScreen::Login => {
-                let model = self.to_login_view_model();
-                let page = ui::login_viewport(self.touch_main(), &model);
-                let layout = ui::login_layout(page.content);
-                let field = match self.pages.common.focused_component {
-                    ShellComponent::LoginPassword => layout.password,
-                    ShellComponent::LoginPasswordVisibility => layout.password_visibility,
-                    _ => Rect::new(
-                        layout.user_list.x,
-                        layout.user_list.y
-                            + 1
-                            + self
-                                .pages
-                                .login
-                                .login_selected_user
-                                .saturating_sub(self.pages.login.login_user_window_start)
-                                as u16,
-                        layout.user_list.width,
-                        1,
-                    ),
-                };
-                (page, field)
-            }
-            ShellScreen::BootstrapAdmin => {
-                let page = ui::bootstrap_viewport(
-                    self.touch_main(),
-                    &self.to_bootstrap_admin_view_model(),
-                );
-                (
-                    page,
-                    Rect::new(
-                        1,
-                        if self.pages.common.focused_component == ShellComponent::BootstrapPassword
-                        {
-                            4
-                        } else {
-                            3
-                        },
-                        page.content.width.saturating_sub(2),
-                        1,
-                    ),
-                )
-            }
             ShellScreen::FirstRunSetup if self.pages.setup.setup_custom_color_target.is_none() => {
                 let model = self.to_setup_view_model();
                 let page = ui::setup_viewport(self.touch_main(), &model);
                 let field = match self.pages.setup.setup_step {
-                    ui::SetupStep::Admin => ui::setup_admin_field_area(
-                        page.content,
-                        self.pages.setup.setup_focused_field,
-                    ),
                     ui::SetupStep::Appearance => ui::setup_appearance_field_area(
                         page.content,
                         self.pages.setup.setup_focused_field,
@@ -883,8 +618,6 @@ impl ShellSession {
         }
         .min(page.content.height.saturating_sub(page.area.height));
         match self.active_screen() {
-            ShellScreen::Login => self.pages.common.page_touch.login_scroll = offset,
-            ShellScreen::BootstrapAdmin => self.pages.common.page_touch.bootstrap_scroll = offset,
             ShellScreen::FirstRunSetup => self.pages.common.page_touch.setup_scroll = offset,
             _ => {}
         }

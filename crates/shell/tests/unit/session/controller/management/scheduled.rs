@@ -9,7 +9,7 @@ fn session() -> ShellSession {
     session.settings_task_runtime = ShellSettingsTaskRuntime::unavailable();
     session.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "schedule-form".into(),
             user_id: "alice".into(),
             username: "alice".into(),

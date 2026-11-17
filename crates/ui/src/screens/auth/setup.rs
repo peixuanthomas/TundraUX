@@ -4,9 +4,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Paragraph, Wrap};
 
 use super::{SetupCustomColorTarget, SetupField, SetupStep, SetupViewModel};
-use crate::components::{
-    Button, ButtonEmphasis, DialogLayout, List, ListItem, Scrollbar, Surface, TextInput,
-};
+use crate::components::{Button, ButtonEmphasis, DialogLayout, List, ListItem, Scrollbar, Surface};
 use crate::screens::shell::centered_rect;
 use crate::timezone_map::{TimezoneMapWidget, boundary_id_for_timezone};
 use crate::{RenderContext, TundraTheme, setup_standard_color_options};
@@ -19,19 +17,6 @@ const SETUP_TIMEZONE_TOP_GAP_HEIGHT: u16 = 1;
 const SETUP_TIMEZONE_BOTTOM_GAP_HEIGHT: u16 = 1;
 const SETUP_TIMEZONE_FOOTER_HEIGHT: u16 = 3;
 const SETUP_LANGUAGE_LIST_LINE: u16 = 3;
-const SETUP_ADMIN_HEADER_HEIGHT: u16 = 2;
-const SETUP_ADMIN_FIELD_HEIGHT: u16 = 3;
-const SETUP_ADMIN_CHECKLIST_HEIGHT: u16 = 7;
-const SETUP_ADMIN_SIDE_CHECKLIST_MIN_WIDTH: u16 = 68;
-const SETUP_ADMIN_CHECKLIST_WIDTH: u16 = 32;
-const SETUP_ADMIN_COLUMN_GAP: u16 = 2;
-const SETUP_ADMIN_USERNAME_LINE: u16 = 2;
-const SETUP_ADMIN_PASSWORD_LINE: u16 = 5;
-const SETUP_ADMIN_CONFIRM_PASSWORD_LINE: u16 = 8;
-const SETUP_ADMIN_HINT_LINE: u16 = 11;
-const SETUP_ADMIN_SUBMIT_LINE: u16 = 14;
-const SETUP_ADMIN_ERROR_LINE: u16 = 16;
-const SETUP_ADMIN_STACKED_CHECKLIST_LINE: u16 = 18;
 const SETUP_APPEARANCE_HEADER_HEIGHT: u16 = 2;
 const SETUP_APPEARANCE_SHAPE_LINE: u16 = 2;
 const SETUP_APPEARANCE_SHAPE_HEIGHT: u16 = 3;
@@ -76,9 +61,8 @@ pub fn render_setup_content(
         |frame, area, context| render_setup_unscrolled(frame, area, model, context),
     );
     if model.defaults_available {
-        let mut button = Button::new("setup.defaults", i18n::tr!("ui-auth-use-defaults"))
+        let button = Button::new("setup.defaults", i18n::tr!("ui-auth-use-defaults"))
             .with_emphasis(ButtonEmphasis::Primary);
-        button.set_disabled(model.step == SetupStep::Admin && !model.can_submit);
         button.render_inline_frame(
             frame,
             setup_defaults_area(area),
@@ -110,13 +94,6 @@ pub fn setup_viewport(main: Rect, model: &SetupViewModel) -> super::AuthViewport
             .min(200)
             .saturating_add(12),
         SetupStep::Timezone => 15,
-        SetupStep::Admin => {
-            if main.width >= SETUP_ADMIN_SIDE_CHECKLIST_MIN_WIDTH + 3 {
-                20
-            } else {
-                26
-            }
-        }
         SetupStep::Appearance => 29,
     };
     super::auth_viewport(main, minimum, model.scroll_offset)
@@ -213,7 +190,6 @@ fn render_setup_controls(
     match model.step {
         SetupStep::Language => render_setup_language_page(frame, controls, model, context),
         SetupStep::Timezone => render_setup_timezone_page(frame, main, controls, model, context),
-        SetupStep::Admin => render_setup_admin_page(frame, controls, model, context),
         SetupStep::Appearance => render_setup_appearance_page(frame, controls, model, context),
     }
 }
@@ -380,99 +356,6 @@ fn render_setup_timezone_page(
             .wrap(Wrap { trim: true }),
         footer,
     );
-}
-
-fn render_setup_admin_page(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    model: &SetupViewModel,
-    context: &RenderContext,
-) {
-    let theme = &context.compatibility_theme();
-    render_setup_surface(frame, area, context, model.border_shape);
-
-    let content = super::common::auth_content_area(area);
-    let header = Rect::new(
-        content.x,
-        content.y,
-        content.width,
-        SETUP_ADMIN_HEADER_HEIGHT.min(content.height),
-    );
-    frame.render_widget(
-        Paragraph::new(setup_admin_header_lines(model, theme))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        header,
-    );
-
-    render_setup_admin_field(
-        frame,
-        area,
-        model,
-        SetupField::AdminUsername,
-        i18n::tr!("ui-auth-admin-username"),
-        model.admin_username.clone(),
-        i18n::tr!("ui-auth-enter-admin-username"),
-        context,
-    );
-    render_setup_admin_field(
-        frame,
-        area,
-        model,
-        SetupField::AdminPassword,
-        i18n::tr!("ui-auth-admin-password"),
-        "*".repeat(model.admin_password_len),
-        i18n::tr!("ui-auth-enter-admin-password"),
-        context,
-    );
-    render_setup_admin_field(
-        frame,
-        area,
-        model,
-        SetupField::AdminPasswordConfirm,
-        i18n::tr!("ui-auth-re-enter-password"),
-        "*".repeat(model.admin_password_confirm_len),
-        i18n::tr!("ui-auth-re-enter-admin-password"),
-        context,
-    );
-    render_setup_admin_field(
-        frame,
-        area,
-        model,
-        SetupField::PasswordHint,
-        i18n::tr!("ui-auth-password-hint"),
-        model.password_hint.clone(),
-        i18n::tr!("ui-auth-optional-recovery-hint-not-the-password"),
-        context,
-    );
-
-    render_setup_password_checklist(frame, area, model, context);
-
-    render_setup_inline_button(
-        frame,
-        setup_admin_field_area(area, SetupField::Submit),
-        "setup.admin.submit",
-        if model.can_submit {
-            i18n::tr!("regression-setup-submit-ready")
-        } else {
-            i18n::tr!("regression-setup-submit-incomplete")
-        },
-        model.focused_field == SetupField::Submit,
-        !model.can_submit,
-        theme,
-    );
-
-    if let Some(error) = &model.error {
-        frame.render_widget(
-            Paragraph::new(Line::styled(
-                i18n::tr!("ui-auth-error", error = error),
-                theme.error_style(),
-            ))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-            setup_admin_error_area(area),
-        );
-    }
 }
 
 fn render_setup_appearance_page(
@@ -869,69 +752,7 @@ fn setup_timezone_footer_lines(model: &SetupViewModel, theme: &TundraTheme) -> V
     lines
 }
 
-fn setup_admin_header_lines(model: &SetupViewModel, theme: &TundraTheme) -> Vec<Line<'static>> {
-    vec![
-        Line::styled(
-            i18n::tr!("ui-auth-step", step = setup_step_label(model.step)),
-            theme.title_style(),
-        ),
-        Line::from(i18n::tr!("ui-auth-create-the-first-administrator-account")),
-    ]
-}
-
 #[allow(clippy::too_many_arguments)]
-fn render_setup_admin_field(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    model: &SetupViewModel,
-    field: SetupField,
-    title: String,
-    value: String,
-    placeholder: String,
-    context: &RenderContext,
-) {
-    let theme = &context.compatibility_theme();
-    let field_area = setup_admin_field_area(area, field);
-    if field_area.width == 0 || field_area.height == 0 {
-        return;
-    }
-
-    let focused = model.focused_field == field;
-    let field_context = focused_context(context, focused);
-    let surface = Surface::new()
-        .titled(title)
-        .bordered(true)
-        .border_shape(model.border_shape);
-    let inner = surface.inner(field_area);
-    surface.render_frame(frame, field_area, &field_context);
-
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
-
-    let mut input = TextInput::new(setup_admin_input_id(field))
-        .with_sensitive(matches!(
-            field,
-            SetupField::AdminPassword | SetupField::AdminPasswordConfirm
-        ))
-        .with_placeholder(placeholder)
-        .with_placeholder_when_focused(true)
-        .with_cursor_symbol("_");
-    input.set_value(value);
-    input.set_focused(focused);
-    input.render_borderless_frame(frame, Rect::new(inner.x, inner.y, inner.width, 1), theme);
-}
-
-fn setup_admin_input_id(field: SetupField) -> &'static str {
-    match field {
-        SetupField::AdminUsername => "setup.admin.username",
-        SetupField::AdminPassword => "setup.admin.password",
-        SetupField::AdminPasswordConfirm => "setup.admin.password-confirm",
-        SetupField::PasswordHint => "setup.admin.password-hint",
-        _ => "setup.admin.input",
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn render_setup_inline_button(
     frame: &mut Frame<'_>,
@@ -963,37 +784,6 @@ fn render_setup_inline_button(
     button.state.selected = focused;
     button.set_disabled(disabled);
     button.render_borderless_frame(frame, area, theme);
-}
-
-fn render_setup_password_checklist(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    model: &SetupViewModel,
-    context: &RenderContext,
-) {
-    let theme = &context.compatibility_theme();
-    let checklist_area = setup_admin_checklist_area(area);
-    if checklist_area.width == 0 || checklist_area.height == 0 {
-        return;
-    }
-
-    let surface = Surface::new()
-        .titled(i18n::tr!("ui-auth-password-checklist"))
-        .bordered(false)
-        .border_shape(model.border_shape);
-    let inner = surface.inner(checklist_area);
-    surface.render_frame(frame, checklist_area, context);
-
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
-
-    frame.render_widget(
-        Paragraph::new(setup_password_checklist_lines(model, theme))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        inner,
-    );
 }
 
 fn append_setup_error(lines: &mut Vec<Line<'static>>, model: &SetupViewModel, theme: &TundraTheme) {
@@ -1034,27 +824,6 @@ pub fn setup_language_list_area(main: Rect, language_count: usize) -> Rect {
         SETUP_LANGUAGE_LIST_LINE,
         setup_rendered_row_count(language_count),
     )
-}
-
-pub fn setup_admin_field_area(main: Rect, field: SetupField) -> Rect {
-    let (line, height) = match field {
-        SetupField::AdminUsername => (SETUP_ADMIN_USERNAME_LINE, SETUP_ADMIN_FIELD_HEIGHT),
-        SetupField::AdminPassword => (SETUP_ADMIN_PASSWORD_LINE, SETUP_ADMIN_FIELD_HEIGHT),
-        SetupField::AdminPasswordConfirm => {
-            (SETUP_ADMIN_CONFIRM_PASSWORD_LINE, SETUP_ADMIN_FIELD_HEIGHT)
-        }
-        SetupField::PasswordHint => (SETUP_ADMIN_HINT_LINE, SETUP_ADMIN_FIELD_HEIGHT),
-        SetupField::Submit => (SETUP_ADMIN_SUBMIT_LINE, 1),
-        SetupField::LanguageList
-        | SetupField::TimezoneList
-        | SetupField::AppearanceShape
-        | SetupField::AppearanceThemeColor
-        | SetupField::AppearanceThemeCustom
-        | SetupField::AppearanceAccentColor
-        | SetupField::AppearanceAccentCustom
-        | SetupField::AppearanceSubmit => (SETUP_ADMIN_USERNAME_LINE, SETUP_ADMIN_FIELD_HEIGHT),
-    };
-    setup_admin_line_area(main, line, height)
 }
 
 pub fn setup_appearance_field_area(main: Rect, field: SetupField) -> Rect {
@@ -1166,74 +935,6 @@ pub fn setup_custom_color_input_area(main: Rect) -> Rect {
     )
 }
 
-fn setup_admin_form_area(area: Rect) -> Rect {
-    let content = super::common::auth_content_area(area);
-    if content.width < SETUP_ADMIN_SIDE_CHECKLIST_MIN_WIDTH {
-        return content;
-    }
-
-    let reserved_checklist_width =
-        SETUP_ADMIN_CHECKLIST_WIDTH.saturating_add(SETUP_ADMIN_COLUMN_GAP);
-    Rect::new(
-        content.x,
-        content.y,
-        content.width.saturating_sub(reserved_checklist_width),
-        content.height,
-    )
-}
-
-fn setup_admin_checklist_area(area: Rect) -> Rect {
-    let content = super::common::auth_content_area(area);
-    if content.width >= SETUP_ADMIN_SIDE_CHECKLIST_MIN_WIDTH {
-        let form = setup_admin_form_area(area);
-        let x = form
-            .x
-            .saturating_add(form.width)
-            .saturating_add(SETUP_ADMIN_COLUMN_GAP);
-        let width = content.x.saturating_add(content.width).saturating_sub(x);
-        let line = SETUP_ADMIN_PASSWORD_LINE;
-        return Rect::new(
-            x,
-            content.y.saturating_add(line),
-            width,
-            SETUP_ADMIN_CHECKLIST_HEIGHT.min(content.height.saturating_sub(line)),
-        );
-    }
-
-    setup_line_area(
-        area,
-        SETUP_ADMIN_STACKED_CHECKLIST_LINE,
-        SETUP_ADMIN_CHECKLIST_HEIGHT,
-    )
-}
-
-fn setup_admin_error_area(area: Rect) -> Rect {
-    let content = super::common::auth_content_area(area);
-    if content.width >= SETUP_ADMIN_SIDE_CHECKLIST_MIN_WIDTH {
-        return setup_admin_line_area(area, SETUP_ADMIN_ERROR_LINE, 2);
-    }
-
-    setup_line_area(
-        area,
-        SETUP_ADMIN_STACKED_CHECKLIST_LINE.saturating_add(SETUP_ADMIN_CHECKLIST_HEIGHT),
-        2,
-    )
-}
-
-fn setup_admin_line_area(area: Rect, line: u16, desired_height: u16) -> Rect {
-    let form = setup_admin_form_area(area);
-    if line >= form.height || desired_height == 0 {
-        return Rect::new(form.x, form.y.saturating_add(form.height), form.width, 0);
-    }
-
-    Rect::new(
-        form.x,
-        form.y.saturating_add(line),
-        form.width,
-        desired_height.min(form.height.saturating_sub(line)),
-    )
-}
-
 fn setup_timezone_controls_area(main: Rect) -> Rect {
     if main.width >= SETUP_WIDE_MAP_MIN_WIDTH && main.height >= SETUP_WIDE_MAP_MIN_HEIGHT {
         Layout::horizontal([
@@ -1283,32 +984,6 @@ fn setup_timezone_window_bounds(model: &SetupViewModel, visible_rows: usize) -> 
     (start, end)
 }
 
-fn setup_password_checklist_lines(
-    model: &SetupViewModel,
-    theme: &TundraTheme,
-) -> Vec<Line<'static>> {
-    if model.password_requirements.is_empty() {
-        return vec![Line::styled(
-            i18n::tr!("ui-auth-no-password-rules-available"),
-            theme.muted_style(),
-        )];
-    }
-
-    model
-        .password_requirements
-        .iter()
-        .map(|requirement| {
-            let marker = if requirement.met { "[x]" } else { "[ ]" };
-            let style = if requirement.met {
-                theme.title_style()
-            } else {
-                theme.muted_style()
-            };
-            Line::styled(format!("{marker} {}", requirement.label), style)
-        })
-        .collect()
-}
-
 fn selected_language_summary(model: &SetupViewModel) -> String {
     model
         .selected_language()
@@ -1345,7 +1020,6 @@ fn setup_step_label(step: SetupStep) -> String {
     match step {
         SetupStep::Language => i18n::tr!("ui-auth-language"),
         SetupStep::Timezone => i18n::tr!("ui-auth-timezone"),
-        SetupStep::Admin => i18n::tr!("ui-auth-admin"),
         SetupStep::Appearance => i18n::tr!("ui-auth-appearance"),
     }
 }

@@ -7,11 +7,6 @@ use crate::error::StorageError;
 /// Version 3 adds System Status storage-pressure thresholds. Documents from
 /// versions 1 and 2 remain readable and are rewritten during initialization.
 pub const SCHEMA_VERSION: u32 = 3;
-/// Version of the per-user document.
-///
-/// Version 3 adds the same appearance contract to each user record.
-pub const USERS_SCHEMA_VERSION: u32 = 4;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageFormat {
     Toml,
@@ -32,7 +27,7 @@ pub(crate) fn ensure_document_schema(
     path: &Path,
     schema_version: u32,
 ) -> Result<(), StorageError> {
-    let supported = supported_schema_version(document);
+    let supported = SCHEMA_VERSION;
     if schema_version == supported {
         return Ok(());
     }
@@ -59,7 +54,7 @@ pub(crate) fn ensure_supported_schema(
     path: &Path,
     schema_version: u32,
 ) -> Result<(), StorageError> {
-    let supported = supported_schema_version(document);
+    let supported = SCHEMA_VERSION;
     if schema_version > supported {
         return Err(StorageError::UnsupportedSchema {
             document,
@@ -79,13 +74,6 @@ pub(crate) fn ensure_supported_schema(
     }
 
     Ok(())
-}
-
-pub(crate) fn supported_schema_version(document: &str) -> u32 {
-    match document {
-        "users" => USERS_SCHEMA_VERSION,
-        _ => SCHEMA_VERSION,
-    }
 }
 
 pub(crate) fn toml_schema_version(

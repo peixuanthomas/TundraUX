@@ -178,16 +178,12 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
 ) -> io::Result<ShellRunOutcome> {
     let config = ShellLaunchConfig::default();
     let platform: std::sync::Arc<dyn Platform> = std::sync::Arc::from(platform::native_platform());
-    let (mut ascii_assets, recovery_report) = load_startup_runtime_ascii_assets()?;
-    let mut startup_resource_report = Some(recovery_report);
+    let (ascii_assets, recovery_report) = load_startup_runtime_ascii_assets()?;
     let terminal_size_requirement = ShellTerminalSizeRequirement::from_assets(&ascii_assets);
     checked_current_terminal_size(terminal_size_requirement)?;
     let terminal_control = TerminalControlHandler::install();
     let shell_watchdog = process
         .register_app(shell_watchdog_descriptor())
-        .map_err(io::Error::other)?;
-    let weathr_watchdog = process
-        .register_app(weathr_watchdog_descriptor())
         .map_err(io::Error::other)?;
     let diagnostics_watchdog = process
         .register_app(app::diagnostics::diagnostics_watchdog_descriptor())
@@ -198,13 +194,13 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
     if let Some(services) = &workspace_services {
         services.install();
     }
-    let initial_startup = prepare_shell_startup(platform.as_ref()).map_err(io::Error::other)?;
+    let startup = prepare_shell_startup(platform.as_ref()).map_err(io::Error::other)?;
     let control_directory = platform
         .app_paths()
         .map(|paths| platform::shell_control::directory(&paths))
         .unwrap_or_default();
     let mut control = super::automation::ControlRuntime::new(control_directory);
-    let configured_language = initial_startup
+    let configured_language = startup
         .storage_manager
         .as_ref()
         .and_then(|storage| storage.load_config().ok())
@@ -217,16 +213,12 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
             PreparedLanguage::load(&language_root, &configured_language)
         })
         .map_err(io::Error::other)?;
-    // Storage is initialized at this point, but login has not opened yet.
-    // Keep this single service runtime alive across lockscreen/session cycles.
     let (system_services, _system_snapshots) = system_services::SystemServicesRuntime::start(
-        system_services_config_for_startup(&initial_startup),
+        system_services_config_for_startup(&startup),
         shell_watchdog.clone(),
     );
     let (time_sync_sender, time_sync_receiver) = platform::task_events::channel();
     let time_sync_watchdog = shell_watchdog.child_component(ComponentId::from_static("time-sync"));
-    // Both background jobs must be live before the blocking frost animation so
-    // normal login can consume time calibration and prefetched weather data.
     let time_sync_worker = spawn_time_sync_worker(
         time_sync_sender,
         &time_sync_watchdog,
@@ -241,7 +233,7 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         display_startup_banner_with_assets_colored(
             output,
             &ascii_assets,
-            initial_startup.app_config.border_color,
+            startup.app_config.border_color,
         )
     })?;
     let mut language_runtime = language_worker
@@ -254,178 +246,89 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
             "terminal graphics detection worker stopped without returning a result",
         )
     });
-    let mut initial_startup = Some(initial_startup);
     let mut cached_time_sync = None;
-    let mut force_lockscreen = false;
-    let mut show_terminal_graphics_notice = true;
-    let mut explorer_task_runtime: Option<ShellExplorerTaskRuntime> = None;
-    let mut diagnostics_task_runtime: Option<ShellDiagnosticsTaskRuntime> = None;
-    // Linux installs its logind subscriptions lazily through this poll. Do it
-    // before the first Weathr lockscreen so PrepareForShutdown can drive the
-    // same process-wide shutdown flag used by the main Shell and lockscreen.
     let _ = platform.poll_lifecycle_event();
 
-    loop {
-        let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
-        let mut startup = match initial_startup.take() {
-            Some(startup) => startup,
-            None => prepare_shell_startup(platform.as_ref()).map_err(io::Error::other)?,
-        };
-        let _ = system_services.reconfigure(system_services_config_for_startup(&startup));
-        let control_enabled = startup
-            .storage_manager
-            .as_ref()
-            .and_then(|storage| storage.load_config().ok())
-            .is_some_and(|config| config.automation.enabled);
-        if let Err(error) = control.synchronize(control_enabled) {
-            // The UI remains usable if the optional control connection cannot start.
-            eprintln!(
-                "{}",
-                i18n::tr!("ui-control-unavailable", reason = error.to_string())
-            );
-        }
-        if workspace_services.is_none()
-            && explorer_task_runtime.is_none()
-            && let Some(storage) = startup.storage_manager.as_ref()
-        {
-            let explorer_watchdog = process
-                .register_app(app::explorer_tasks::explorer_watchdog_descriptor())
-                .map_err(io::Error::other)?;
-            explorer_task_runtime = Some(ShellExplorerTaskRuntime::new_managed(
-                storage.clone(),
-                explorer_watchdog,
-            ));
-        }
-        if diagnostics_task_runtime.is_none()
-            && let Some(storage) = startup.storage_manager.as_ref()
-        {
-            diagnostics_task_runtime = Some(ShellDiagnosticsTaskRuntime::new_managed(
-                storage.clone(),
-                process.clone(),
-                diagnostics_watchdog.clone(),
-            ));
-        }
-        if force_lockscreen || should_show_startup_lockscreen(&startup) {
-            let language = language_runtime.snapshot.clone();
-            let lockscreen_input = weathr::WeathrDisplayInput {
-                localize: Arc::new(move |id, args| {
-                    let mut message = i18n::LocalizedMessage::new(id);
-                    for (name, value) in args {
-                        message = message.with_arg(*name, value.clone());
-                    }
-                    language.render(&message)
-                }),
-                snapshots: system_services.subscribe(),
-                clock_format: weathr::ClockFormat::TwentyFourHour,
-                hide_hud: false,
-                palette: weathr::theme::catalogue::DEFAULT_PALETTE,
-                shutdown: terminal_control.shutdown_flag(),
-                minimum_terminal_size: Some(terminal_size_requirement.as_terminal_size()),
-                exit_semantic: weathr::ExitSemantic::Start,
-                first_frame_callback: Some(Arc::new(|| {
-                    app::update::mark_update_ready_from_env().map_err(io::Error::other)
-                })),
-            };
-            let lockscreen_result = weathr_watchdog.run_boundary(
-                BoundarySpec::new("shell-lockscreen-ui-session", BoundaryKind::UiSession)
-                    .terminal_owner(),
-                AssertUnwindSafe(|| {
-                    if control.enabled() || WorkerConnection::current().is_some() {
-                        weathr::run_display_blocking_with_control(lockscreen_input, &mut control)
-                    } else {
-                        weathr::run_display_blocking(lockscreen_input)
-                    }
-                }),
-            );
-            match lockscreen_result {
-                Ok(Ok(weathr::ShellLockscreenResult::Started)) => {}
-                Ok(Ok(weathr::ShellLockscreenResult::Quit)) => return Ok(ShellRunOutcome::Exit),
-                Ok(Ok(weathr::ShellLockscreenResult::Cancelled)) => {
-                    return Ok(ShellRunOutcome::Exit);
-                }
-                Ok(Err(error)) => return Err(io::Error::other(error)),
-                Err(caught) => {
-                    let message = finalize_session_panic(caught, "Weathr lockscreen");
-                    return run_panic_screen(
-                        output,
-                        &message,
-                        &terminal_control,
-                        platform.as_ref(),
-                    );
-                }
-            }
-            startup = prepare_shell_startup(platform.as_ref()).map_err(io::Error::other)?;
-        }
-
-        let session_result = shell_watchdog.run_boundary(
-            BoundarySpec::new("shell.fullscreen-session", BoundaryKind::UiSession).terminal_owner(),
-            AssertUnwindSafe(|| {
-                run_fullscreen_shell_session(FullscreenShellSessionInput {
-                    output,
-                    config,
-                    startup,
-                    control: &mut control,
-                    ascii_assets: ascii_assets.clone(),
-                    platform: std::sync::Arc::clone(&platform),
-                    time_sync_receiver: &time_sync_receiver,
-                    cached_time_sync: &mut cached_time_sync,
-                    time_sync_worker: &time_sync_worker,
-                    system_services: &system_services,
-                    workspace_services: workspace_services.as_deref(),
-                    terminal_control: &terminal_control,
-                    shell_watchdog: &shell_watchdog,
-                    process_watchdog: &process,
-                    explorer_task_runtime: explorer_task_runtime.clone(),
-                    diagnostics_task_runtime: diagnostics_task_runtime.clone(),
-                    terminal_graphics_probe: &terminal_graphics_probe,
-                    language_runtime: &mut language_runtime,
-                    startup_resource_report: startup_resource_report.take(),
-                    show_terminal_graphics_notice: std::mem::take(
-                        &mut show_terminal_graphics_notice,
-                    ),
-                })
-            }),
+    let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
+    let control_enabled = startup
+        .storage_manager
+        .as_ref()
+        .and_then(|storage| storage.load_config().ok())
+        .is_some_and(|config| config.automation.enabled);
+    if let Err(error) = control.synchronize(control_enabled) {
+        // The UI remains usable if the optional control connection cannot start.
+        eprintln!(
+            "{}",
+            i18n::tr!("ui-control-unavailable", reason = error.to_string())
         );
-        match session_result {
-            Ok(Ok((outcome, refreshed_ascii_assets))) => {
-                ascii_assets = refreshed_ascii_assets;
-                match outcome {
-                    FullscreenShellSessionOutcome::Exit => return Ok(ShellRunOutcome::Exit),
-                    FullscreenShellSessionOutcome::RestartRequested => {
-                        return Ok(ShellRunOutcome::RestartRequested);
-                    }
-                    FullscreenShellSessionOutcome::ReturnToLockscreen => {
-                        force_lockscreen = true;
-                    }
-                    FullscreenShellSessionOutcome::ResetRequested => {
-                        return Ok(ShellRunOutcome::ResetRequested);
-                    }
-                    FullscreenShellSessionOutcome::UpdatePrepared(manifest) => {
-                        return Ok(ShellRunOutcome::UpdatePrepared(manifest));
-                    }
-                    FullscreenShellSessionOutcome::Panic(message) => {
-                        let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
-                        return run_panic_screen(
-                            output,
-                            &message,
-                            &terminal_control,
-                            platform.as_ref(),
-                        );
-                    }
-                }
-            }
-            Ok(Err(error)) => return Err(error),
-            Err(caught) => {
-                let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
-                let message = finalize_session_panic(caught, "Shell UI");
-                return run_panic_screen(output, &message, &terminal_control, platform.as_ref());
-            }
+    }
+    let explorer_task_runtime = if workspace_services.is_none()
+        && let Some(storage) = startup.storage_manager.as_ref()
+    {
+        let explorer_watchdog = process
+            .register_app(app::explorer_tasks::explorer_watchdog_descriptor())
+            .map_err(io::Error::other)?;
+        Some(ShellExplorerTaskRuntime::new_managed(
+            storage.clone(),
+            explorer_watchdog,
+        ))
+    } else {
+        None
+    };
+    let diagnostics_task_runtime = startup.storage_manager.as_ref().map(|storage| {
+        ShellDiagnosticsTaskRuntime::new_managed(
+            storage.clone(),
+            process.clone(),
+            diagnostics_watchdog,
+        )
+    });
+    let session_result = shell_watchdog.run_boundary(
+        BoundarySpec::new("shell.fullscreen-session", BoundaryKind::UiSession).terminal_owner(),
+        AssertUnwindSafe(|| {
+            run_fullscreen_shell_session(FullscreenShellSessionInput {
+                output,
+                config,
+                startup,
+                control: &mut control,
+                ascii_assets,
+                platform: std::sync::Arc::clone(&platform),
+                time_sync_receiver: &time_sync_receiver,
+                cached_time_sync: &mut cached_time_sync,
+                time_sync_worker: &time_sync_worker,
+                system_services: &system_services,
+                workspace_services: workspace_services.as_deref(),
+                terminal_control: &terminal_control,
+                shell_watchdog: &shell_watchdog,
+                process_watchdog: &process,
+                explorer_task_runtime,
+                diagnostics_task_runtime,
+                terminal_graphics_probe: &terminal_graphics_probe,
+                language_runtime: &mut language_runtime,
+                startup_resource_report: Some(recovery_report),
+                show_terminal_graphics_notice: true,
+            })
+        }),
+    );
+    match session_result {
+        Ok(Ok(FullscreenShellSessionOutcome::Exit)) => Ok(ShellRunOutcome::Exit),
+        Ok(Ok(FullscreenShellSessionOutcome::RestartRequested)) => {
+            Ok(ShellRunOutcome::RestartRequested)
         }
-        if diagnostics_task_runtime
-            .as_ref()
-            .is_some_and(ShellDiagnosticsTaskRuntime::restart_required)
-        {
-            return Ok(ShellRunOutcome::Exit);
+        Ok(Ok(FullscreenShellSessionOutcome::ResetRequested)) => {
+            Ok(ShellRunOutcome::ResetRequested)
+        }
+        Ok(Ok(FullscreenShellSessionOutcome::UpdatePrepared(manifest))) => {
+            Ok(ShellRunOutcome::UpdatePrepared(manifest))
+        }
+        Ok(Ok(FullscreenShellSessionOutcome::Panic(message))) => {
+            let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
+            run_panic_screen(output, &message, &terminal_control, platform.as_ref())
+        }
+        Ok(Err(error)) => Err(error),
+        Err(caught) => {
+            let _language = i18n::enter_snapshot(language_runtime.snapshot.clone());
+            let message = finalize_session_panic(caught, "Shell UI");
+            run_panic_screen(output, &message, &terminal_control, platform.as_ref())
         }
     }
 }
@@ -434,7 +337,6 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
 pub(super) enum FullscreenShellSessionOutcome {
     Exit,
     RestartRequested,
-    ReturnToLockscreen,
     ResetRequested,
     UpdatePrepared(std::path::PathBuf),
     Panic(String),
@@ -762,17 +664,17 @@ pub(super) struct ThemeFileSignature {
 pub(super) struct UserThemeReloader {
     pub(super) storage: Option<StorageManager>,
     pub(super) last_observed: Option<Result<ThemeFileSignature, String>>,
-    pub(super) active_user_id: Option<String>,
+    pub(super) active_username: Option<String>,
     pub(super) next_check: Instant,
 }
 
 impl UserThemeReloader {
     pub(super) fn new(storage: Option<StorageManager>, now: Instant) -> Self {
-        let last_observed = storage.as_ref().map(users_file_signature);
+        let last_observed = storage.as_ref().map(profiles_file_signature);
         Self {
             storage,
             last_observed,
-            active_user_id: None,
+            active_username: None,
             next_check: now.checked_add(THEME_RELOAD_INTERVAL).unwrap_or(now),
         }
     }
@@ -783,8 +685,8 @@ impl UserThemeReloader {
         theme: &mut ui::TundraTheme,
         state: &mut ShellSession,
     ) -> bool {
-        let active_user_id = state.auth_session().map(|session| session.user_id.clone());
-        let user_changed = self.active_user_id != active_user_id;
+        let active_username = state.auth_session().map(|session| session.username.clone());
+        let user_changed = self.active_username != active_username;
         if !user_changed && now < self.next_check {
             return false;
         }
@@ -794,7 +696,7 @@ impl UserThemeReloader {
             return false;
         };
 
-        if active_user_id.is_none() {
+        if active_username.is_none() {
             if !user_changed {
                 return false;
             }
@@ -805,29 +707,27 @@ impl UserThemeReloader {
             state
                 .app
                 .dispatch_at(app::AppCommand::SetActiveAppearance(None), now);
-            self.active_user_id = None;
+            self.active_username = None;
             state.notification_dismiss_modal_by_key(THEME_RELOAD_NOTIFICATION_KEY);
             state.finish_modal_focus_transition();
             return true;
         }
 
-        let observed = users_file_signature(storage);
+        let observed = profiles_file_signature(storage);
         if !user_changed && self.last_observed.as_ref() == Some(&observed) {
             return false;
         }
         self.last_observed = Some(observed.clone());
 
         let result = observed.and_then(|_| {
-            let users = storage.load_users().map_err(|error| error.to_string())?;
-            let user_id = active_user_id.as_deref().unwrap_or_default();
-            users
-                .users
-                .iter()
-                .find(|user| user.id == user_id)
-                .map(|user| user.appearance.clone())
-                .ok_or_else(|| format!("active user {user_id:?} is missing"))
+            let username = active_username.as_deref().unwrap_or_default();
+            storage
+                .load_profile(username)
+                .map_err(|error| error.to_string())?
+                .map(|profile| profile.appearance)
+                .ok_or_else(|| format!("active profile for {username:?} is missing"))
         });
-        self.active_user_id = active_user_id;
+        self.active_username = active_username;
         match result {
             Ok(appearance) => {
                 let app_config = ShellAppConfig::from_appearance(&appearance);
@@ -859,8 +759,10 @@ impl UserThemeReloader {
     }
 }
 
-pub(super) fn users_file_signature(storage: &StorageManager) -> Result<ThemeFileSignature, String> {
-    let path = &storage.layout().users_path;
+pub(super) fn profiles_file_signature(
+    storage: &StorageManager,
+) -> Result<ThemeFileSignature, String> {
+    let path = &storage.layout().profiles_path;
     let metadata = std::fs::metadata(path)
         .map_err(|error| format!("could not inspect {}: {error}", path.display()))?;
     Ok(ThemeFileSignature {
@@ -928,7 +830,7 @@ pub(super) struct FullscreenShellSessionInput<'a, W> {
 
 pub(super) fn run_fullscreen_shell_session<W: Write>(
     input: FullscreenShellSessionInput<'_, W>,
-) -> io::Result<(FullscreenShellSessionOutcome, ui::RuntimeAsciiAssets)> {
+) -> io::Result<FullscreenShellSessionOutcome> {
     platform::task_events::install_notifier(crate::process_host::event_loop::wake);
     let FullscreenShellSessionInput {
         output,
@@ -977,13 +879,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 .ok()
         });
     let theme_storage = startup.storage_manager.clone();
-    if startup.auth_bootstrap_required {
-        display_first_run_banner_with_assets_colored(
-            guard.terminal_mut().backend_mut(),
-            &ascii_assets,
-            startup.app_config.border_color,
-        )?;
-    }
+    let startup_border_color = startup.app_config.border_color;
     let mut theme = ui::TundraTheme::default_dark();
     let settings_services_config = system_services_config_for_startup(&startup);
     let mut state = ShellSession::new_with_runtime_services(
@@ -1013,10 +909,16 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         },
         None,
     );
+    if state.active_screen() == ShellScreen::FirstRunSetup {
+        display_first_run_banner_with_assets_colored(
+            guard.terminal_mut().backend_mut(),
+            &state.ascii_assets,
+            startup_border_color,
+        )?;
+    }
     if let Some(report) = startup_resource_report {
         state.report_graphical_resource_recovery(&report);
     } else {
-        // The startup report is process-scoped, not a login-session notification.
         state.app.dispatch_at(
             app::AppCommand::Notification(app::NotificationCommand::DismissModalByKey(
                 "shell.resource-recovery".into(),
@@ -1481,10 +1383,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 state.input_keyboard_poll_timeout(poll_now, background_poll_timeout);
             let state_poll_timeout = state.screen_saver_poll_timeout(
                 poll_now,
-                state.auth_poll_timeout(
-                    poll_now,
-                    state.notification_poll_timeout(poll_now, background_poll_timeout),
-                ),
+                state.notification_poll_timeout(poll_now, background_poll_timeout),
             );
             let redraw_timeout = if state.screen_saver_active() {
                 next_weather_frame.saturating_duration_since(poll_now)
@@ -1716,11 +1615,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     }));
 
     drop(terminal_input);
-    if !matches!(&execution, Ok(Ok(None))) || !state.return_to_lockscreen_requested() {
-        control.close();
-    } else {
-        control.invalidate();
-    }
+    control.close();
     editor_vim.stop(&mut state);
     script_hosts.stop_all();
     if !matches!(&execution, Ok(Ok(None))) {
@@ -1750,10 +1645,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     )?;
 
     if let Some(message) = panic_message {
-        return Ok((
-            FullscreenShellSessionOutcome::Panic(message),
-            state.ascii_assets.clone(),
-        ));
+        return Ok(FullscreenShellSessionOutcome::Panic(message));
     }
 
     let outcome = if let Some(manifest) = state.update_apply_manifest().map(ToOwned::to_owned) {
@@ -1762,13 +1654,11 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         FullscreenShellSessionOutcome::ResetRequested
     } else if state.restart_requested {
         FullscreenShellSessionOutcome::RestartRequested
-    } else if state.return_to_lockscreen_requested() {
-        FullscreenShellSessionOutcome::ReturnToLockscreen
     } else {
         FullscreenShellSessionOutcome::Exit
     };
     language_runtime.update_from(&state);
-    Ok((outcome, state.ascii_assets.clone()))
+    Ok(outcome)
 }
 
 fn resize_runtime_session(
@@ -1861,7 +1751,6 @@ pub(super) fn stop_fullscreen_session_tasks(
         state.poll_editor_background_tasks(platform);
         state.drain_management_for_shutdown();
         state.drain_logs_for_shutdown();
-        state.poll_user_management_task();
         state.poll_auto_admin();
         state.tasks.reap();
         if !state.tasks.has_running() {
@@ -2460,15 +2349,6 @@ pub(super) fn shell_watchdog_descriptor() -> AppDescriptor {
     )
 }
 
-fn weathr_watchdog_descriptor() -> AppDescriptor {
-    AppDescriptor::new(
-        AppId::from_static("weathr"),
-        "Weathr",
-        env!("CARGO_PKG_VERSION"),
-        AppCriticality::SessionCritical,
-    )
-}
-
 pub(super) fn drain_watchdog_incidents(
     state: &mut ShellSession,
     watchdog: &ProcessWatchdog,
@@ -2520,8 +2400,7 @@ pub(super) fn show_watchdog_incident(state: &mut ShellSession, incident: Inciden
 
     // Unclean-exit receipts describe a previous process, not a failure in the
     // current UI session. The watchdog has already persisted them for the
-    // Diagnostics screen, so they must not interrupt the first shell frame
-    // after the Weathr lockscreen.
+    // Diagnostics screen, so they can wait until the first Shell frame.
     if incident.kind == IncidentKind::UncleanExit {
         return;
     }

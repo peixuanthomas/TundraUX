@@ -167,7 +167,7 @@ impl TimeJob {
 
 impl ShellSession {
     pub(super) fn refresh_system_time_settings(&mut self) {
-        if self.identity_backend != identity::IdentityBackend::Linux {
+        if self.platform_kind != PlatformKind::Linux {
             return;
         }
         if self

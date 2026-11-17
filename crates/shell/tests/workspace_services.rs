@@ -38,7 +38,7 @@ fn managed_services_share_window_state_and_reject_stale_writes_over_real_connect
     register(&mut control, shell);
     let mut shell_client = Client::connect(&fixture, services, shell);
     let auth = AuthSession {
-        source: IdentitySource::LocalAccount,
+        source: IdentitySource::SystemCurrentProcess,
         session_id: "first-login".into(),
         user_id: "workspace-test".into(),
         username: "workspace-test".into(),

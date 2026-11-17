@@ -19,7 +19,6 @@ impl ShellSession {
             ShellScreen::CommandLine => "command-line",
             ShellScreen::Settings => "settings",
             ShellScreen::Diagnostics => "diagnostics",
-            ShellScreen::UserManagement => "users",
             _ => "home",
         }
         .into()

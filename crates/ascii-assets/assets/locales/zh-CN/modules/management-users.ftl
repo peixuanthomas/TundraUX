@@ -1,5 +1,5 @@
 app-catalog-users-name = 用户管理
-app-catalog-users-description = 管理账户、用户组和登录设置
+app-catalog-users-description = 管理系统用户、用户组和登录设置
 management-action-user-create = 创建账户
 management-action-user-lookup = 按名称查找账户
 management-action-user-info = 修改账户名称

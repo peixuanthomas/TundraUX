@@ -12,9 +12,9 @@
 
 Run `tundra-cli debug paths` to view path templates and resolved absolute paths.
 
-## Linux startup identity
+## Startup identity
 
-Shell and CLI check UID/EUID and GID/EGID before accessing storage or entering fullscreen mode.
+Shell reads the current logon name from the Windows logon API, the macOS account database, or Linux NSS. Personal preferences use the system username as their key. On Linux, Shell and CLI check UID/EUID and GID/EGID before accessing storage or entering fullscreen mode.
 
 | Startup identity | Behavior |
 | --- | --- |
@@ -22,9 +22,7 @@ Shell and CLI check UID/EUID and GID/EGID before accessing storage or entering f
 | root | Show a privilege warning; when stdin and stderr are both terminals, press lowercase `y` to continue |
 | Mismatched set-ID credentials | Refuse to start |
 
-Identity comes from NSS, not USER, LOGNAME, Tundra roles, or account enumeration. Linux uses `LinuxCurrentProcess`; Windows/macOS use `LocalAccount`.
-
-On Linux, `linux-uid-<UID>` stores personal preferences such as appearance, dashboard, and clock settings. The home page opens after the initial appearance settings are saved; an interrupted setup resumes on the next start. Normal users do not read old data from `/root`; a confirmed root session uses root's NSS HOME and `linux-uid-0`.
+Home opens after the first-time preferences are saved. An interrupted setup resumes on the next start. A confirmed Linux root session uses root's NSS HOME.
 
 Personal directories are read from NSS HOME and `user-dirs.dirs`, with support for Chinese characters, spaces, and the convention of using HOME to disable a directory. The local interface can still open without XDG_RUNTIME_DIR, logind, or D-Bus; the affected system features report their unavailability separately.
 
@@ -61,5 +59,5 @@ Run `tundra-cli doctor` to check the terminal, `/proc`, `/sys`, management comma
 
 1. Close the application on both systems, run `tundra-cli debug paths` on Windows, and back up configuration and state.
 2. Run the same command on Linux and copy the backups to the displayed config and state paths respectively, keeping the original backups.
-3. Global settings can be reused; appearance and clock settings from old local accounts are not automatically bound to a Linux UID.
+3. Global settings can be reused. Set up personal preferences again when moving from a pre-2.0 installation.
 4. Windows absolute paths need to be selected again; Launcher and recent files initially show Missing.

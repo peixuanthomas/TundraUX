@@ -71,7 +71,6 @@ fn every_page_returns_to_actual_caller_for_escape_and_back_button() {
             ShellScreen::Launcher,
             ShellScreen::Editor,
             ShellScreen::Settings,
-            ShellScreen::UserManagement,
         ] {
             if parent == page {
                 continue;
@@ -101,10 +100,10 @@ fn reset_discards_old_paths_and_wrong_page_close_is_ignored() {
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     state.enter_screen(ShellScreen::Editor);
     assert_eq!(state.screen_stack().len(), 3);
-    state.reset_navigation(ShellScreen::Login);
+    state.reset_navigation(ShellScreen::FirstRunSetup);
     state.enter_screen(ShellScreen::ExitConfirm);
     state.cancel_exit_confirmation();
-    assert_eq!(state.screen_stack(), &[ShellScreen::Login]);
+    assert_eq!(state.screen_stack(), &[ShellScreen::FirstRunSetup]);
     state.reset_navigation(ShellScreen::Home);
     state.enter_screen(ShellScreen::Launcher);
     state.close_launcher();
@@ -117,7 +116,7 @@ fn nested_visits_restore_each_callers_focus_and_ignore_held_escape() {
     state.pages.common.focused_component = ShellComponent::StatusBar;
     state.open_clock();
     state.pages.common.focused_component = ShellComponent::ClockNewButton;
-    prepare_page(&mut state, ShellScreen::UserManagement);
+    prepare_page(&mut state, ShellScreen::Settings);
     back(&mut state, false);
     assert_eq!(state.active_screen(), ShellScreen::Clock);
     assert_eq!(
@@ -138,45 +137,6 @@ fn nested_visits_restore_each_callers_focus_and_ignore_held_escape() {
         state.pages.common.focused_component,
         ShellComponent::StatusBar
     );
-}
-
-#[test]
-fn notification_and_form_close_before_leaving_the_page() {
-    for pointer in [false, true] {
-        let mut state = state();
-        state.enter_screen(ShellScreen::Launcher);
-        prepare_page(&mut state, ShellScreen::UserManagement);
-        state.pages.user_management.user_management_mode =
-            UserManagementMode::Create(UserManagementCreateForm {
-                interaction: Default::default(),
-                editing: Default::default(),
-                username: "draft".into(),
-                display_name: String::new(),
-                password: String::new(),
-                role: UserRole::User,
-                focused_field: UserManagementFormField::Username,
-            });
-        state.notify_modal(
-            "Notice",
-            "Close this first",
-            ui::NotificationTone::Info,
-            vec![ShellNotificationAction::new("cancel", "Cancel").cancel()],
-        );
-        back(&mut state, pointer);
-        assert!(!state.notification_has_active_modal());
-        assert!(matches!(
-            state.pages.user_management.user_management_mode,
-            UserManagementMode::Create(_)
-        ));
-        back(&mut state, pointer);
-        assert_eq!(
-            state.pages.user_management.user_management_mode,
-            UserManagementMode::Browse
-        );
-        assert_eq!(state.active_screen(), ShellScreen::UserManagement);
-        back(&mut state, pointer);
-        assert_eq!(state.active_screen(), ShellScreen::Launcher);
-    }
 }
 
 #[test]

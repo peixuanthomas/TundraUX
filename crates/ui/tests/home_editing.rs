@@ -194,7 +194,11 @@ fn home_tiles_stand_out_from_the_static_account_summary() {
                 ui::RenderCapabilities::default(),
                 ui::RenderCapabilities::ansi(),
             ] {
-                let home = model(16).with_account_logout("用户 e\u{301} 目录", false);
+                let home = HomeViewModel::user(
+                    "用户 e\u{301} 目录",
+                    "12:00",
+                    model(16).entries().to_vec(),
+                );
                 let theme = ui::TundraTheme::default_dark();
                 let mut context =
                     ui::RenderContext::from_theme(&theme, Default::default(), capabilities);
@@ -218,16 +222,18 @@ fn home_tiles_stand_out_from_the_static_account_summary() {
                 } else {
                     assert_eq!(top, 0);
                 }
-                let logout = ui::home_logout_area(main, &home);
-                assert_eq!(logout.y, account.1);
-                assert_eq!(
+                assert!(
                     buttons
                         .regions()
-                        .into_iter()
-                        .find(|region| region.id.as_str() == "home.logout")
-                        .unwrap()
-                        .area,
-                    logout
+                        .iter()
+                        .all(|region| region.id.as_str() != "home.logout")
+                );
+                let summary = (account.0..layout.content.right())
+                    .map(|column| buffer[(column, account.1)].symbol())
+                    .collect::<String>();
+                assert!(
+                    summary.replace(' ', "").contains("用户e\u{301}目录"),
+                    "{summary:?}"
                 );
                 assert_eq!(
                     ui::home_edit_area(main, &home).unwrap().y,

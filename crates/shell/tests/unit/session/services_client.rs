@@ -232,7 +232,7 @@ fn a_closed_page_never_delivers_its_save_to_a_replacement_page() {
 fn an_old_session_reply_is_retired_without_touching_the_next_session() {
     let mut state = state();
     let auth = AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "next".into(),
         user_id: "next".into(),
         username: "next".into(),
@@ -470,7 +470,7 @@ fn authorization_revision_change_discards_old_automation_but_retires_its_effect(
 fn locally_changed_login_rejects_an_automation_commit_despite_a_stale_config_revision() {
     let mut state = state();
     let auth = AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "new-session".into(),
         user_id: "user".into(),
         username: "user".into(),
@@ -584,7 +584,7 @@ fn an_unchanged_unavailable_domain_does_not_repeat_feedback_or_redraw() {
 fn an_authorization_update_for_the_same_session_keeps_the_window_authenticated() {
     let mut state = state();
     let mut auth = AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "same".into(),
         user_id: "same".into(),
         username: "same".into(),
@@ -605,7 +605,7 @@ fn an_authorization_update_for_the_same_session_keeps_the_window_authenticated()
 fn a_snapshot_for_another_session_cannot_authenticate_the_current_window() {
     let mut state = state();
     let mut auth = AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "old".into(),
         user_id: "same".into(),
         username: "same".into(),
@@ -625,7 +625,7 @@ fn a_snapshot_for_another_session_cannot_authenticate_the_current_window() {
 #[test]
 fn the_linux_time_policy_does_not_make_an_unchanged_snapshot_dirty() {
     let mut state = state();
-    state.identity_backend = identity::IdentityBackend::Linux;
+    state.platform_kind = PlatformKind::Linux;
     let client = SessionServicesClient::for_test(snapshot(None));
     client.sync_session(&mut state);
     assert_eq!(

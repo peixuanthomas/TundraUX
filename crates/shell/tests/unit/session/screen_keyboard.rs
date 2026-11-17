@@ -108,36 +108,6 @@ fn app_host_keyboard_keeps_bottom_keys_inside_the_window_content() {
 }
 
 #[test]
-fn native_forms_accept_virtual_keys_spaces_and_safe_multilingual_paste() {
-    for screen in [
-        ShellScreen::Login,
-        ShellScreen::BootstrapAdmin,
-        ShellScreen::FirstRunSetup,
-    ] {
-        let mut state = session();
-        state.enter_screen(screen);
-        if screen == ShellScreen::FirstRunSetup {
-            state.pages.setup.setup_step = ui::SetupStep::Admin;
-        }
-        state.toggle_input_keyboard();
-        state.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
-        assert!(state.input_keyboard_open());
-        for action in [Action::Letter('a'), Action::Space] {
-            let event = click(&mut state, action).unwrap();
-            state.apply_input(event);
-        }
-        state.apply_input(InputEvent::Paste("中文\n文档".into()));
-        let text = match screen {
-            ShellScreen::Login => &state.pages.login.login_password,
-            ShellScreen::BootstrapAdmin => &state.pages.bootstrap.bootstrap_username,
-            _ => &state.pages.setup.setup_admin_username,
-        };
-        assert!(text.ends_with("a 中文文档"), "{screen:?}: {text:?}");
-        assert_eq!(state.active_screen(), screen);
-    }
-}
-
-#[test]
 fn explorer_and_editor_keyboard_follow_page_and_field_changes() {
     let mut state = session();
     state.enter_screen(ShellScreen::Explorer);
@@ -167,27 +137,8 @@ fn explorer_and_editor_keyboard_follow_page_and_field_changes() {
 }
 
 #[test]
-fn account_and_clock_dialogs_focus_text_when_opening_the_keyboard() {
+fn clock_dialog_focuses_text_when_opening_the_keyboard() {
     let mut state = session();
-    state.enter_screen(ShellScreen::UserManagement);
-    state.pages.user_management.user_management_mode =
-        UserManagementMode::Create(UserManagementCreateForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: String::new(),
-            display_name: String::new(),
-            password: String::new(),
-            role: UserRole::User,
-            focused_field: UserManagementFormField::Submit,
-        });
-    state.toggle_input_keyboard();
-    state.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
-    let event = click(&mut state, Action::Letter('a')).unwrap();
-    state.apply_input(event);
-    let UserManagementMode::Create(form) = &state.pages.user_management.user_management_mode else {
-        panic!("form was submitted");
-    };
-    assert_eq!(form.username, "a");
     state.enter_screen(ShellScreen::Clock);
     state.pages.clock.clock_create_state = Some(ClockCreateState {
         focus: ui::ClockCreateDialogFocus::Cancel,

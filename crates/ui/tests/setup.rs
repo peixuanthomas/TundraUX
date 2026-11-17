@@ -10,15 +10,14 @@ use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ui::{
-    HomeDisplayMode, SetupField, SetupPasswordRequirementViewModel, SetupStep, SetupViewModel,
-    ShellChromeViewModel, StatusViewModel, TundraTheme, render_setup, setup_language_options,
+    SetupField, SetupStep, SetupViewModel, TundraTheme, setup_language_options,
     setup_timezone_options,
 };
 
 #[test]
 fn short_setup_projects_only_visible_buttons_to_the_scrolled_rows() {
     let area = Rect::new(3, 2, 40, 10);
-    let mut model = sample_model(SetupStep::Admin, None);
+    let mut model = sample_model(SetupStep::Appearance, None);
     let theme = TundraTheme::default_dark();
     let buttons = ui::components::ButtonFrame::new(None, None, &theme);
     let mut context = ui::RenderContext::from_theme(&theme, Default::default(), Default::default());
@@ -31,24 +30,23 @@ fn short_setup_projects_only_visible_buttons_to_the_scrolled_rows() {
         !buttons
             .regions()
             .iter()
-            .any(|button| button.id.as_str() == "setup.admin.submit")
+            .any(|button| button.id.as_str() == "setup.appearance.finish")
     );
-    model.scroll_offset = 15;
+    model.scroll_offset = u16::MAX;
     terminal
         .draw(|frame| ui::render_setup_content(frame, area, &model, &context))
         .unwrap();
     let viewport = ui::setup_viewport(area, &model);
     let expected = viewport
-        .project(ui::setup_admin_field_area(
+        .project(ui::setup_appearance_field_area(
             viewport.content,
-            SetupField::Submit,
+            SetupField::AppearanceSubmit,
         ))
         .unwrap();
     assert!(
-        buttons
-            .regions()
-            .iter()
-            .any(|button| button.id.as_str() == "setup.admin.submit" && button.area == expected)
+        buttons.regions().iter().any(
+            |button| button.id.as_str() == "setup.appearance.finish" && button.area == expected
+        )
     );
     assert!(
         buttons
@@ -86,51 +84,8 @@ fn narrow_setup_navigation_keeps_previous_and_primary_shortcuts_visible() {
     assert!(output.contains("F10 Next"));
 }
 
-#[test]
-fn setup_admin_page_is_step_specific_and_masks_password() {
-    let model = sample_model(SetupStep::Admin, None);
-    let terminal = render_terminal(&model, 120, 34, TundraTheme::default_dark());
-    let output = terminal_output(&terminal);
-
-    assert!(output.contains("Step: Admin"));
-    assert!(output.contains("Create the first Tundra application administrator account."));
-    assert!(output.contains("This account is not used for operating system login."));
-    assert!(output.contains("Admin username"));
-    assert!(output.contains("AdminUser"));
-    assert!(output.contains("Admin password"));
-    assert!(output.contains("Re-enter password"));
-    assert!(output.contains("*************_"));
-    assert!(!output.contains("ActualPlaintext"));
-    assert!(output.contains("Password hint"));
-    assert!(output.contains("Stored in 1Password"));
-    assert!(output.contains("Password checklist"));
-    assert!(output.contains("[x] At least 10 characters"));
-    assert!(output.contains("[x] Different from username"));
-    assert!(output.contains("[x] Passwords match"));
-    assert!(output.contains("F10 Submit"));
-    assert!(!output.contains("Admin username:"));
-    assert!(!output.contains("Admin password:"));
-    assert!(!output.contains("Timezone Map"));
-    assert!(!output.contains("Selected timezone"));
-    assert!(!output.contains("Los Angeles"));
-    assert!(!output.contains("Shanghai - China Standard Time"));
-    assert!(!output.contains("Tokyo - Japan Standard Time"));
-    assert!(!output.contains("English (en-US)"));
-    assert!(!output.contains("简体中文"));
-}
-
 fn sample_model(step: SetupStep, error: Option<String>) -> SetupViewModel {
     sample_model_with_timezone(step, "Asia/Tokyo", error)
-}
-
-fn sample_password_requirements(valid: bool) -> Vec<SetupPasswordRequirementViewModel> {
-    vec![
-        SetupPasswordRequirementViewModel::new("At least 10 characters", valid),
-        SetupPasswordRequirementViewModel::new("At most 256 characters", true),
-        SetupPasswordRequirementViewModel::new("Not blank", valid),
-        SetupPasswordRequirementViewModel::new("Different from username", valid),
-        SetupPasswordRequirementViewModel::new("Passwords match", valid),
-    ]
 }
 
 fn sample_model_with_timezone(
@@ -153,13 +108,7 @@ fn sample_model_with_timezone(
         selected_language_index: 0,
         selected_timezone_index,
         timezone_window_start: selected_timezone_index.saturating_sub(2),
-        admin_username: "AdminUser".to_string(),
-        admin_password_len: 13,
-        admin_password_confirm_len: 13,
-        password_requirements: sample_password_requirements(true),
-        password_hint: "Stored in 1Password".to_string(),
-        focused_field: SetupField::AdminPassword,
-        can_submit: true,
+        focused_field: SetupField::AppearanceShape,
         defaults_available: false,
         border_shape: ui::BorderShape::Rounded,
         theme_color: Color::White,
@@ -176,49 +125,9 @@ fn sample_model_with_timezone(
     }
 }
 
-fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
-    ShellChromeViewModel {
-        build_mode: "debug".to_string(),
-        display_mode: HomeDisplayMode::Auth,
-        terminal_size: (width, height),
-        back_button_hovered: false,
-        help_available: false,
-        tasks_label: None,
-        tasks_button_focused: false,
-        tasks_button_hovered: false,
-        help_button_hovered: false,
-        help_button_focused: false,
-        back_shortcut: "Esc",
-        status: StatusViewModel {
-            status: "Ready".to_string(),
-            toast: None,
-            error: None,
-            alert_tone: ui::NotificationTone::Info,
-            time_button_label: None,
-            time_button_selected: false,
-        },
-    }
-}
-
-fn render_terminal(
-    model: &SetupViewModel,
-    width: u16,
-    height: u16,
-    theme: TundraTheme,
-) -> Terminal<TestBackend> {
-    let chrome = chrome(width, height);
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test terminal");
-    terminal
-        .draw(|frame| {
-            render_setup(frame, frame.area(), &chrome, model, &theme);
-        })
-        .expect("render setup");
-    terminal
-}
-
 #[test]
 fn defaults_action_stays_visible_below_scrolling_setup_at_minimum_size() {
-    let mut model = sample_model(SetupStep::Admin, None);
+    let mut model = sample_model(SetupStep::Appearance, None);
     model.defaults_available = true;
     let area = ratatui::layout::Rect::new(0, 0, 108, 14);
     let button = ui::setup_defaults_area(area);
@@ -228,44 +137,6 @@ fn defaults_action_stays_visible_below_scrolling_setup_at_minimum_size() {
         assert!(button.y >= viewport.area.bottom());
         assert!(button.bottom() <= area.bottom());
     }
-}
-
-#[test]
-fn minimum_setup_keeps_admin_submit_and_default_completion_visible_together() {
-    let mut model = sample_model(SetupStep::Admin, None);
-    model.defaults_available = true;
-    let main = Rect::new(0, 1, 108, 18);
-    let viewport = ui::setup_viewport(main, &model);
-    for field in [
-        SetupField::AdminPassword,
-        SetupField::AdminPasswordConfirm,
-        SetupField::Submit,
-    ] {
-        assert!(
-            viewport
-                .project(ui::setup_admin_field_area(viewport.content, field))
-                .is_some(),
-            "{field:?}"
-        );
-    }
-    let theme = TundraTheme::default_dark();
-    let mut context = ui::RenderContext::from_theme(&theme, Default::default(), Default::default());
-    let buttons = ui::components::ButtonFrame::new(None, None, &theme);
-    context.buttons = Some(buttons.clone());
-    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
-    terminal
-        .draw(|frame| ui::render_setup_content(frame, main, &model, &context))
-        .unwrap();
-    for id in ["setup.admin.submit", "setup.defaults"] {
-        let region = buttons
-            .regions()
-            .into_iter()
-            .find(|region| region.id.as_str() == id)
-            .unwrap();
-        assert_eq!(region.area.intersection(main), region.area);
-        assert!(!region.disabled);
-    }
-    assert_eq!(ui::setup_defaults_area(main).y, viewport.area.bottom());
 }
 
 #[test]

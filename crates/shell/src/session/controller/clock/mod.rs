@@ -50,7 +50,7 @@ impl ShellSession {
         };
         let profile = document
             .profiles
-            .get(&session.user_id)
+            .get(&session.username)
             .cloned()
             .unwrap_or_default();
         if !self.time_sync_attempted && !profile.entries.is_empty() {
@@ -108,10 +108,10 @@ impl ShellSession {
         let storage = self.storage_manager.as_ref().ok_or_else(|| {
             i18n::LocalizedText::from(i18n::msg!("shell-clock-storage-is-unavailable"))
         })?;
-        let user_id = self
+        let username = self
             .app
             .auth_session()
-            .map(|session| session.user_id.as_str())
+            .map(|session| session.username.as_str())
             .ok_or_else(|| {
                 i18n::LocalizedText::from(i18n::msg!("shell-sign-in-to-save-alarms-and-countdowns"))
             })?;
@@ -121,9 +121,10 @@ impl ShellSession {
         let mut document = storage
             .load_clock()
             .map_err(|error| i18n::LocalizedText::from(error.to_string()))?;
-        document
-            .profiles
-            .insert(user_id.to_string(), scheduler.export_profile(snapshot, now));
+        document.profiles.insert(
+            username.to_string(),
+            scheduler.export_profile(snapshot, now),
+        );
         storage
             .save_clock(&document)
             .map_err(|error| i18n::LocalizedText::from(error.to_string()))
@@ -290,12 +291,15 @@ impl ShellSession {
                 continue;
             }
 
-            let user_id = self
+            let username = self
                 .app
                 .auth_session()
-                .map(|session| session.user_id.as_str())
+                .map(|session| session.username.as_str())
                 .unwrap_or("unknown");
-            let key = format!("{CLOCK_DUE_NOTIFICATION_KEY_PREFIX}.{user_id}.{}", event.id);
+            let key = format!(
+                "{CLOCK_DUE_NOTIFICATION_KEY_PREFIX}.{username}.{}",
+                event.id
+            );
             let (title, actions) = match event.kind {
                 ScheduledClockEntryKind::DailyAlarm => (
                     i18n::LocalizedText::from(i18n::msg!("regression-clock-alarm-reminder")),
@@ -740,10 +744,10 @@ impl ShellSession {
         } else {
             i18n::LocalizedText::from(i18n::msg!("shell-turn-strong-on"))
         };
-        let user_id = self
+        let username = self
             .app
             .auth_session()
-            .map(|session| session.user_id.as_str())
+            .map(|session| session.username.as_str())
             .unwrap_or("unknown");
         self.notify_modal_with_options(
             ShellNotification::modal(
@@ -773,7 +777,7 @@ impl ShellSession {
                 ],
             )
             .with_key(format!(
-                "{CLOCK_MANAGE_NOTIFICATION_KEY_PREFIX}.{user_id}.{id}"
+                "{CLOCK_MANAGE_NOTIFICATION_KEY_PREFIX}.{username}.{id}"
             ))
             .with_cancel_default()
             .with_component(ShellComponent::NotificationDialog),
@@ -800,13 +804,13 @@ impl ShellSession {
             if result.is_err() {
                 return;
             }
-            if let Some(user_id) = state
+            if let Some(username) = state
                 .app
                 .auth_session()
-                .map(|session| session.user_id.clone())
+                .map(|session| session.username.clone())
             {
                 state.notification_dismiss_modal_by_key(&format!(
-                    "{CLOCK_DUE_NOTIFICATION_KEY_PREFIX}.{user_id}.{id}"
+                    "{CLOCK_DUE_NOTIFICATION_KEY_PREFIX}.{username}.{id}"
                 ));
             }
             state.sync_clock_selection_at(now);

@@ -146,27 +146,12 @@ fn only_current_authorized_configuration_revision_can_be_saved() {
 }
 
 #[test]
-fn profile_edits_reject_an_old_draft_before_touching_the_account_file() {
+fn profile_edits_reject_an_old_draft_before_touching_the_profile_file() {
     let fixture = Fixture::new();
-    let users = UserService::new(fixture.storage.clone());
-    let admin = users
-        .bootstrap_admin("profile-admin", "example-pass-2026")
-        .unwrap();
-    let mut sessions = identity::SessionService::new(fixture.storage.clone());
-    let administrator = sessions
-        .login(&admin.username, "example-pass-2026")
-        .unwrap();
-    let account = users
-        .create_user(
-            &administrator,
-            "profile-user",
-            "Profile User",
-            UserRole::User,
-            "example-pass-2026",
-        )
-        .unwrap();
-    let auth = sessions
-        .login(&account.username, "example-pass-2026")
+    let auth = test_session("profile-user");
+    let account = fixture
+        .storage
+        .update_profile(&auth.username, |_| {})
         .unwrap();
     let mut state = fixture.state();
     let shell = worker(WorkerRole::Shell, 1);
@@ -223,7 +208,7 @@ fn profile_edits_reject_an_old_draft_before_touching_the_account_file() {
     assert_eq!(updated, seeded + 1);
     assert_eq!(saved.appearance, Some(appearance.clone()));
     assert_eq!(saved.dashboard, initial.dashboard);
-    let disk = std::fs::read(&fixture.storage.layout().users_path).unwrap();
+    let disk = std::fs::read(&fixture.storage.layout().profiles_path).unwrap();
 
     let mut dashboard = account.system_status_dashboard;
     assert!(dashboard.remove_widget(storage::SystemStatusWidgetKind::Network));
@@ -243,7 +228,7 @@ fn profile_edits_reject_an_old_draft_before_touching_the_account_file() {
         Err(ServiceError::Conflict)
     );
     assert_eq!(
-        std::fs::read(&fixture.storage.layout().users_path).unwrap(),
+        std::fs::read(&fixture.storage.layout().profiles_path).unwrap(),
         disk
     );
     let (current, profile): (u64, SessionProfile) =
@@ -263,11 +248,8 @@ fn profile_edits_reject_an_old_draft_before_touching_the_account_file() {
     assert_eq!(saved.dashboard, Some(dashboard.clone()));
     let disk = fixture
         .storage
-        .load_users()
+        .load_profile(&auth.username)
         .unwrap()
-        .users
-        .into_iter()
-        .find(|user| user.id == auth.user_id)
         .unwrap();
     assert_eq!(disk.appearance, appearance);
     assert_eq!(disk.system_status_dashboard, dashboard);
@@ -380,20 +362,9 @@ fn relogin_does_not_reauthorize_a_previous_window() {
 }
 
 #[test]
-fn clock_profile_rejects_stale_revisions_and_deleted_accounts() {
+fn clock_profile_rejects_stale_revisions_and_saves_by_username() {
     let fixture = Fixture::new();
-    let users = identity::UserService::new(fixture.storage.clone());
-    let account = users
-        .bootstrap_admin("clock-admin", "example-pass-2026")
-        .unwrap();
-    let auth = AuthSession {
-        source: IdentitySource::LocalAccount,
-        session_id: "clock-session".into(),
-        user_id: account.id,
-        username: account.username,
-        role: UserRole::Admin,
-        started_at_epoch_ms: 1,
-    };
+    let auth = test_session("clock-admin");
     let mut state = fixture.state();
     let shell = worker(WorkerRole::Shell, 1);
     let first = worker(WorkerRole::App(SessionId(1)), 2);
@@ -443,31 +414,9 @@ fn clock_profile_rejects_stale_revisions_and_deleted_accounts() {
         read::<storage::ClockProfile>(&mut state, shell, ServiceOperation::ReadClockProfile),
         (updated, profile.clone()),
     );
-    let mut users = fixture.storage.load_users().unwrap();
-    users.users.clear();
-    fixture.storage.save_users(&users).unwrap();
-    assert_eq!(
-        state.execute(
-            first,
-            ServiceOperation::DeleteClockProfile {
-                user_id: auth.user_id.clone()
-            },
-            &UnsupportedPlatform,
-        ),
-        Ok(ServiceValue::Empty),
-    );
-    assert_eq!(
-        state.execute(
-            second,
-            ServiceOperation::WriteClockProfile {
-                revision: updated + 1,
-                profile: json!(profile)
-            },
-            &UnsupportedPlatform,
-        ),
-        Err(ServiceError::Forbidden),
-    );
-    assert!(fixture.storage.load_clock().unwrap().profiles.is_empty());
+    let stored = fixture.storage.load_clock().unwrap();
+    assert_eq!(stored.profiles.get(&auth.username), Some(&profile));
+    assert!(!stored.profiles.contains_key(&auth.user_id));
 }
 
 #[test]
@@ -505,18 +454,7 @@ fn only_shell_can_publish_the_shared_clock_time() {
 fn shared_clock_keeps_new_alarm_dates_until_shell_advances_them() {
     use crate::session_services::clock::SharedClockProfile;
     let fixture = Fixture::new();
-    let users = identity::UserService::new(fixture.storage.clone());
-    let account = users
-        .bootstrap_admin("alarm-admin", "example-pass-2026")
-        .unwrap();
-    let auth = AuthSession {
-        source: IdentitySource::LocalAccount,
-        session_id: "clock-session".into(),
-        user_id: account.id,
-        username: account.username,
-        role: UserRole::Admin,
-        started_at_epoch_ms: 1,
-    };
+    let auth = test_session("alarm-admin");
     let mut state = fixture.state();
     let shell = worker(WorkerRole::Shell, 1);
     let clock = worker(WorkerRole::App(SessionId(1)), 2);
@@ -584,7 +522,7 @@ fn shared_clock_keeps_new_alarm_dates_until_shell_advances_them() {
         shared
     );
     assert_eq!(
-        fixture.storage.load_clock().unwrap().profiles[&auth.user_id],
+        fixture.storage.load_clock().unwrap().profiles[&auth.username],
         shared.profile
     );
 }
@@ -597,9 +535,20 @@ fn worker(role: WorkerRole, generation: u64) -> WorkerId {
     }
 }
 
+fn test_session(username: &str) -> AuthSession {
+    AuthSession {
+        source: IdentitySource::SystemCurrentProcess,
+        session_id: format!("{username}-session"),
+        user_id: format!("process-{username}"),
+        username: username.to_owned(),
+        role: UserRole::User,
+        started_at_epoch_ms: 1,
+    }
+}
+
 fn login(state: &mut ServiceState, shell: WorkerId, revision: u64, session_id: &str) {
     let auth = AuthSession {
-        source: IdentitySource::LocalAccount,
+        source: IdentitySource::SystemCurrentProcess,
         session_id: session_id.into(),
         user_id: "test-user".into(),
         username: "test-user".into(),

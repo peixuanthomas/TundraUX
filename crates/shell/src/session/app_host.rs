@@ -162,9 +162,6 @@ impl AppHostSession {
             ),
         ));
         startup.debug_policy = DebugPolicy::current_build();
-        if cfg!(target_os = "linux") {
-            startup.identity_backend = identity::IdentityBackend::Linux;
-        }
         let storage = startup.storage_manager.clone();
         let explorer = storage.as_ref().map(|storage| {
             ShellExplorerTaskRuntime::new_managed(storage.clone(), watchdog.clone())
@@ -479,9 +476,6 @@ impl AppHostSession {
         let request = match action {
             ShellAction::PowerOff => Some(HostAction::PowerOff),
             ShellAction::Reboot => Some(HostAction::Reboot),
-            ShellAction::Exit if self.state.return_to_lockscreen_requested() => {
-                Some(HostAction::Logout)
-            }
             ShellAction::Exit if self.state.restart_requested() => Some(HostAction::Restart),
             ShellAction::Exit => Some(HostAction::Exit),
             ShellAction::Redraw => None,
@@ -714,7 +708,6 @@ impl AppHostSession {
         if let Some(request) = self.state.window_global_request.take() {
             self.output
                 .push_back(AppToShell::ShellAction(match request {
-                    ShellCommand::Logout | ShellCommand::LogoutToLockscreen => HostAction::Logout,
                     ShellCommand::Restart => HostAction::Restart,
                     _ => HostAction::Exit,
                 }));
@@ -840,10 +833,7 @@ impl AppHostSession {
             .state
             .background_timer_timeout(now, Duration::MAX)
             .max(next_poll);
-        self.state.auth_poll_timeout(
-            now,
-            self.state.notification_poll_timeout(now, work.min(timers)),
-        )
+        self.state.notification_poll_timeout(now, work.min(timers))
     }
 
     fn poll_timeout(&self, now: Instant) -> Duration {

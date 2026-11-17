@@ -5,16 +5,11 @@ fn page_error_alerts_only_clear_their_owner_and_leave_session_alerts_alone() {
     for (screen, key) in [
         (ShellScreen::Editor, EDITOR_ALERT_KEY),
         (ShellScreen::Explorer, EXPLORER_ALERT_KEY),
-        (
-            ShellScreen::UserManagement,
-            USER_MANAGEMENT_REFRESH_ALERT_KEY,
-        ),
     ] {
         let mut state = ShellSession::new(ShellLaunchConfig::default(), (100, 35));
         let report = |session: &mut ShellSession, message: &str| match screen {
             ShellScreen::Editor => session.report_editor_error(message),
             ShellScreen::Explorer => session.report_explorer_task_error(message),
-            ShellScreen::UserManagement => session.report_user_management_refresh_error(message),
             _ => unreachable!(),
         };
         state.notify_alert_with_key(key, "session", ui::NotificationTone::Warning);
@@ -27,7 +22,6 @@ fn page_error_alerts_only_clear_their_owner_and_leave_session_alerts_alone() {
         state.with_page_context(first, |session| match screen {
             ShellScreen::Editor => session.resolve_page_alert(key),
             ShellScreen::Explorer => session.resolve_explorer_alert(),
-            ShellScreen::UserManagement => session.resolve_user_management_refresh_alert(),
             _ => unreachable!(),
         });
         assert_eq!(state.active_page_id(), second);

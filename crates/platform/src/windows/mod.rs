@@ -112,6 +112,27 @@ fn open_desktop(operation: DesktopOpen) -> Result<(), PlatformError> {
 }
 
 impl Platform for WindowsPlatform {
+    fn current_username(&self) -> Result<String, PlatformError> {
+        use windows_sys::Win32::{
+            NetworkManagement::NetManagement::UNLEN, System::WindowsProgramming::GetUserNameW,
+        };
+
+        let mut name = [0u16; UNLEN as usize + 1];
+        let mut length = name.len() as u32;
+        // SAFETY: length describes the size of the writable UTF-16 buffer.
+        if unsafe { GetUserNameW(name.as_mut_ptr(), &mut length) } == 0 {
+            return Err(PlatformError::from_io(
+                "GetUserNameW",
+                None,
+                &std::io::Error::last_os_error(),
+            ));
+        }
+        String::from_utf16(&name[..length as usize - 1]).map_err(|error| PlatformError::Native {
+            operation: "GetUserNameW",
+            message: error.to_string(),
+        })
+    }
+
     fn create_system_monitor(&self) -> Result<Box<dyn crate::SystemMonitor>, PlatformError> {
         crate::NativeSystemMonitor::new().map(|monitor| Box::new(monitor) as Box<_>)
     }

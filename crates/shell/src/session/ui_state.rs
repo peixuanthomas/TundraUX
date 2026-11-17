@@ -434,56 +434,6 @@ pub(super) struct EditorRichRenderCache {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum UserManagementFormField {
-    Username,
-    DisplayName,
-    Role,
-    Password,
-    Submit,
-    Cancel,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct UserManagementCreateForm {
-    pub(super) interaction: ui::components::FormInteraction,
-    pub(super) editing: [ui::components::TextEditState; 3],
-    pub(super) username: String,
-    pub(super) display_name: String,
-    pub(super) password: String,
-    pub(super) role: UserRole,
-    pub(super) focused_field: UserManagementFormField,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct UserManagementInfoForm {
-    pub(super) interaction: ui::components::FormInteraction,
-    pub(super) editing: [ui::components::TextEditState; 3],
-    pub(super) username: String,
-    pub(super) display_name: String,
-    pub(super) focused_field: UserManagementFormField,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum UserManagementMode {
-    Browse,
-    Create(UserManagementCreateForm),
-    EditInfo(UserManagementInfoForm),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum UserManagementPageFocus {
-    UserList,
-    Action(ui::UserManagementAction),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum UserManagementFeedbackTone {
-    Info,
-    Success,
-    Error,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ExplorerInputMode {
     Browse,
     Address,
@@ -621,18 +571,15 @@ pub struct UiSessionState {
     pub(super) time_sync_failure_message: Option<i18n::LocalizedText>,
     /// Retains the build-policy-selected debug home across authentication.
     /// This is internal session state and is not configurable by process args.
-    pub(super) debug_home_after_login: bool,
+    pub(super) debug_home: bool,
     pub(super) debug_policy: DebugPolicy,
-    pub(super) identity_backend: identity::IdentityBackend,
-    pub(super) login_users: Vec<ShellLoginUser>,
+    pub(super) platform_kind: PlatformKind,
 
     pub(super) pending_personalization_session: Option<AuthSession>,
 
     pub(super) system_settings_backend: app::system_settings::UnavailableSystemSettingsBackend,
     pub(super) tasks: ShellTasks,
     pub(super) pending_page_closes: HashSet<PageInstanceId>,
-    pub(super) pending_login_reset: Option<i18n::LocalizedText>,
-    pub(super) pending_lockscreen_after_logout: bool,
     pub(super) pending_session_exit: Option<ShellCommand>,
     pub(super) approved_editor_closes: BTreeMap<PageInstanceId, (Option<u64>, bool)>,
     pub(super) settings_update_request: Option<u64>,
@@ -660,7 +607,6 @@ pub struct UiSessionState {
     #[cfg(target_os = "linux")]
     pub(super) privilege_session: super::controller::privilege_session::PrivilegeSession,
     pub(super) detached_management_operations: Vec<DetachedManagementOperation>,
-    pub(super) detached_user_management_jobs: Vec<UserManagementJob>,
 
     pub(super) diagnostics_restart_required: bool,
     pub(super) terminal_size: (u16, u16),
@@ -668,7 +614,6 @@ pub struct UiSessionState {
     pub(super) default_icon_display_mode: storage::IconDisplayMode,
     pub(super) terminal_image_support: bool,
     pub(super) terminal_text_sizing_support: bool,
-    pub(super) pending_default_ascii_icon_fallback: bool,
 
     pub(super) interaction: super::controller::InteractionState,
     pub(super) screen_saver: super::screen_saver::ScreenSaverState,
@@ -692,7 +637,6 @@ pub struct UiSessionState {
     pub(super) latest_watchdog_summary: Option<String>,
     pub(super) shutdown_requested: bool,
     pub(super) restart_requested: bool,
-    pub(super) return_to_lockscreen_requested: bool,
     pub(super) last_command: Option<ShellCommand>,
     pub(super) last_routed_target: Option<RoutedTarget>,
     pub(super) last_key_event: Option<String>,

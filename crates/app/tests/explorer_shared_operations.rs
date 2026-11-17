@@ -219,7 +219,7 @@ impl Fixture {
             files: ExplorerFileService::default(),
             platform,
             actor: AuthSession {
-                source: IdentitySource::LocalAccount,
+                source: IdentitySource::SystemCurrentProcess,
                 session_id: "shared-session".into(),
                 user_id: "user-1".into(),
                 username: "AdminUser".into(),

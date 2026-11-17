@@ -65,7 +65,7 @@ fn fixture() -> Fixture {
     );
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "language-test".into(),
             user_id: "language-admin".into(),
             username: "admin".into(),
@@ -164,7 +164,7 @@ fn same_language_selection_reloads_disk_and_keeps_retained_messages() {
 fn failed_reload_preserves_snapshot_configuration_and_user_input() {
     let mut f = fixture();
     f.state.save_region_picker_value(Some("zh-CN".into()), None);
-    f.state.pages.login.login_username = "unchanged input".into();
+    f.state.pages.setup.setup_custom_color_input = "unchanged input".into();
     let snapshot = f.state.language.clone();
     let config = std::fs::read(&f.storage.layout().config_path).unwrap();
     std::fs::write(
@@ -178,7 +178,10 @@ fn failed_reload_preserves_snapshot_configuration_and_user_input() {
         std::fs::read(&f.storage.layout().config_path).unwrap(),
         config
     );
-    assert_eq!(f.state.pages.login.login_username, "unchanged input");
+    assert_eq!(
+        f.state.pages.setup.setup_custom_color_input,
+        "unchanged input"
+    );
     assert!(
         f.state
             .app

@@ -139,11 +139,6 @@ impl ShellSession {
         if let Some(settings) = &mut self.pages.settings.settings_state {
             settings.form_interaction.cancel_pointer();
         }
-        match &mut self.pages.user_management.user_management_mode {
-            UserManagementMode::Create(form) => form.interaction.cancel_pointer(),
-            UserManagementMode::EditInfo(form) => form.interaction.cancel_pointer(),
-            UserManagementMode::Browse => {}
-        }
         if let Some(form) = &mut self.pages.editor.editor_settings_dialog {
             form.interaction.cancel_pointer();
         }

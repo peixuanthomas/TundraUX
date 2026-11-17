@@ -116,7 +116,7 @@ fn embedded_panic_exit_enters_fullscreen_panic_without_login_or_dialog() {
         if let Some(role) = role {
             state.app.dispatch_at(
                 app::AppCommand::SetAuthSession(Some(identity::AuthSession {
-                    source: identity::IdentitySource::LocalAccount,
+                    source: identity::IdentitySource::SystemCurrentProcess,
                     session_id: "panic-test-session".into(),
                     user_id: "panic-test-user".into(),
                     username: "panic-test".into(),
@@ -758,7 +758,7 @@ fn command_line_app_host_launches_a_live_pty_at_the_minimum_window_size() {
     state.window_owner = WindowOwner::App(WindowApplication::CommandLine);
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(identity::AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "terminal-size-test-session".into(),
             user_id: "terminal-size-test-user".into(),
             username: "terminal-size-test".into(),

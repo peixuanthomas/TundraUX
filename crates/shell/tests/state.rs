@@ -1259,9 +1259,7 @@ fn debug_override_wins_over_persisted_config_and_session() {
             ShellComponent::StatusBar,
         )),
         storage_manager: None,
-        identity_backend: identity::IdentityBackend::Local,
-        auth_bootstrap_required: false,
-        login_users: Vec::new(),
+        system_session: None,
         debug_policy: identity::DebugPolicy::default(),
     };
 
@@ -1287,9 +1285,7 @@ fn restored_session_is_sanitized_to_stable_home_state() {
             }),
         }),
         storage_manager: None,
-        identity_backend: identity::IdentityBackend::Local,
-        auth_bootstrap_required: false,
-        login_users: Vec::new(),
+        system_session: None,
         debug_policy: identity::DebugPolicy::default(),
     };
 

@@ -11,10 +11,7 @@ use app::launcher::{
     LauncherAddOutcome, LauncherCommand, LauncherController, LauncherEffect, LauncherItemStatus,
     LauncherState,
 };
-use identity::{
-    AuthSession, CoreError, DebugPolicy, PASSWORD_MAX_LEN, PASSWORD_MIN_LEN, PermissionAction,
-    PermissionService, SessionService, UserAccount, UserRole, UserService,
-};
+use identity::{AuthSession, DebugPolicy, PermissionAction, PermissionService, UserRole};
 use storage::{ClockProfile, LauncherExecutableKind, StorageManager};
 
 use chrono::{DateTime, Timelike, Utc};
@@ -50,7 +47,6 @@ const EXPLORER_ALERT_KEY: &str = "explorer.operation";
 const EDITOR_CLOSE_NOTIFICATION_KEY: &str = "editor.close-confirm";
 const EDITOR_OPEN_NOTIFICATION_KEY: &str = "editor.open-confirm";
 const EDITOR_ALERT_KEY: &str = "editor.operation";
-const USER_MANAGEMENT_REFRESH_ALERT_KEY: &str = "user-management.refresh";
 const CLOCK_STORAGE_ALERT_KEY: &str = "clock.storage";
 const CLOCK_MANAGE_NOTIFICATION_KEY_PREFIX: &str = "clock.manage";
 const CLOCK_DUE_NOTIFICATION_KEY_PREFIX: &str = "clock.due";
@@ -128,3 +124,22 @@ mod tasks;
 use tasks::{ShellTasks, TaskClass, TaskControl, TaskDomain, TaskOwner};
 
 mod page_lifecycle;
+
+#[cfg(test)]
+fn seed_system_profile(
+    storage: &StorageManager,
+    username: &str,
+    appearance: storage::AppearanceConfig,
+) -> AuthSession {
+    storage
+        .update_profile(username, |profile| profile.appearance = appearance)
+        .unwrap();
+    AuthSession {
+        source: identity::IdentitySource::SystemCurrentProcess,
+        session_id: format!("{username}-session"),
+        user_id: username.to_owned(),
+        username: username.to_owned(),
+        role: UserRole::Admin,
+        started_at_epoch_ms: 1,
+    }
+}

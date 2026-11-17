@@ -714,7 +714,7 @@ fn failed_terminal_preflight_writes_no_banner_or_fullscreen_sequence() {
 }
 
 #[test]
-fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() {
+fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_profiles() {
     let root = std::env::temp_dir().join(format!(
         "tundra-theme-reload-{}-{}",
         std::process::id(),
@@ -729,7 +729,7 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() 
         root.join("temp"),
     )
     .expect("test paths");
-    let storage = StorageManager::open(app_paths)
+    let storage = StorageManager::open(app_paths.clone())
         .expect("test storage")
         .manager;
     let started_at = Instant::now();
@@ -740,17 +740,7 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() 
         icon_display_mode: storage::IconDisplayMode::Image,
         ..storage::AppearanceConfig::default()
     };
-    UserService::new(storage.clone())
-        .bootstrap_admin_with_hint_and_appearance(
-            "AdminUser",
-            "StrongPass123",
-            None,
-            appearance.clone(),
-        )
-        .expect("bootstrap admin with appearance");
-    let session = SessionService::new(storage.clone())
-        .login("AdminUser", "StrongPass123")
-        .expect("login");
+    let session = seed_system_profile(&storage, "AdminUser", appearance.clone());
     let mut reloader = UserThemeReloader::new(Some(storage.clone()), started_at);
     let mut theme = ui::TundraTheme::default_dark();
     let mut state = ShellSession::new_for_home_mode(
@@ -758,7 +748,8 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() 
         (120, 40),
         ShellHomeMode::User,
     );
-    state.complete_login(session);
+    state.storage_manager = Some(storage.clone());
+    state.attach_system_session(session);
 
     reloader.last_observed = None;
     reloader.next_check = started_at;
@@ -771,7 +762,7 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() 
     assert_eq!(theme.accent_color, ratatui::style::Color::LightMagenta);
     assert_eq!(state.app.active_appearance(), Some(&appearance));
 
-    std::fs::write(&storage.layout().users_path, "{ not valid json")
+    std::fs::write(&storage.layout().profiles_path, "{ not valid json")
         .expect("corrupt users fixture");
     let failure_at = started_at + THEME_RELOAD_INTERVAL;
     reloader.last_observed = None;
@@ -790,27 +781,11 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_users() 
         "Theme reload failed"
     );
 
-    std::fs::remove_file(&storage.layout().users_path).expect("remove corrupt users");
-    let mut users = storage::UsersDocument::default();
-    let now = unix_millis();
-    users.users.push(storage::UserRecord {
-        id: state.auth_session().expect("session").user_id.clone(),
-        username: "AdminUser".to_string(),
-        display_name: "AdminUser".to_string(),
-        role: "Admin".to_string(),
-        password_hash: String::new(),
-        password_hint: None,
-        appearance,
-        personalization_pending: false,
-        system_status_dashboard: storage::SystemStatusDashboardConfig::for_role("Admin"),
-        enabled: true,
-        failed_login_attempts: 0,
-        locked_until_epoch_ms: None,
-        created_at_epoch_ms: now,
-        updated_at_epoch_ms: now,
-        last_login_at_epoch_ms: Some(now),
-    });
-    storage.save_users(&users).expect("repaired users");
+    std::fs::remove_file(&storage.layout().profiles_path).expect("remove corrupt users");
+    let storage = StorageManager::open(app_paths).unwrap().manager;
+    storage
+        .update_profile("AdminUser", |profile| profile.appearance = appearance)
+        .unwrap();
     let recovery_at = failure_at + THEME_RELOAD_INTERVAL;
     reloader.last_observed = None;
     reloader.next_check = recovery_at;
@@ -846,41 +821,28 @@ fn theme_reloader_switches_from_custom_admin_theme_to_managed_user_defaults() {
         icon_display_mode: storage::IconDisplayMode::Image,
         ..storage::AppearanceConfig::default()
     };
-    let users = UserService::new(storage.clone());
-    users
-        .bootstrap_admin_with_hint_and_appearance("AdminUser", "StrongPass123", None, custom)
-        .expect("bootstrap");
-    let admin_session = SessionService::new(storage.clone())
-        .login("AdminUser", "StrongPass123")
-        .expect("admin login");
-    users
-        .create_user(
-            &admin_session,
-            "ManagedUser",
-            "Managed User",
-            UserRole::User,
-            "ManagedPass123",
-        )
-        .expect("managed user");
-    let managed_session = SessionService::new(storage.clone())
-        .login("ManagedUser", "ManagedPass123")
-        .expect("managed login");
-
+    let first_session = seed_system_profile(&storage, "AdminUser", custom);
+    let second_session = seed_system_profile(
+        &storage,
+        "ManagedUser",
+        storage::AppearanceConfig::default(),
+    );
     let started_at = Instant::now();
-    let mut reloader = UserThemeReloader::new(Some(storage), started_at);
+    let mut reloader = UserThemeReloader::new(Some(storage.clone()), started_at);
     let mut theme = ui::TundraTheme::default_dark();
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),
         (120, 40),
         ShellHomeMode::User,
     );
-    state.complete_login(admin_session);
+    state.storage_manager = Some(storage);
+    state.attach_system_session(first_session);
     reloader.poll_at(started_at, &mut theme, &mut state);
     assert_eq!(theme.border_shape, ui::BorderShape::Square);
     assert_eq!(theme.border_color, ratatui::style::Color::LightGreen);
     assert_eq!(theme.accent_color, ratatui::style::Color::LightMagenta);
 
-    state.complete_login(managed_session);
+    state.attach_system_session(second_session);
     reloader.poll_at(started_at, &mut theme, &mut state);
     assert_eq!(theme.border_shape, ui::BorderShape::Rounded);
     assert_eq!(

@@ -117,7 +117,6 @@ pub enum ShellAction {
     DebugPanicRequested,
     LanguageReloaded { code: String },
     ClockChanged,
-    Logout,
     Restart,
     Reset,
     Exit,

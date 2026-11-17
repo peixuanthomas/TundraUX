@@ -18,7 +18,7 @@
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. Tasks is available to logged-in non-guest users and shows running or awaiting-approval status.
+The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. Tasks is available after first-time setup and shows running or awaiting-approval status.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
@@ -81,7 +81,7 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 - Launcher search uses `TextInput` and shares its region between rendering and hit testing. The entry menu offers Open, New session for managed apps, and Move. User-added entries also expose Delete and their editing actions. Right-click the blank area for launcher-wide actions.
 - Settings uses Tab/Shift+Tab across categories, the operating-system entry, and controls. Arrows switch categories when that region is focused and operate content otherwise; ordinary numeric options open the shared input dialog.
 - Update activity shows download progress for Release and adds compilation progress and live output for source builds. Hidden build panels take no space, keeping release notes close to the download meter.
-- The shared terminal minimum is 108×20, with all Home entries and the Command Line available at that size. Login keeps the password and submit controls visible. First-time setup keeps completion with default appearance at the bottom of the visible area while its body scrolls; the administrator label identifies the role as belonging to Tundra.
+- The shared terminal minimum is 108×20, with all Home entries and the Command Line available at that size. First-time setup keeps completion with default appearance at the bottom of the visible area while its body scrolls. Home shows the system username as read-only text.
 
 ### Input and themes
 

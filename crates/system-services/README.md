@@ -21,7 +21,7 @@ flowchart LR
 
 Sampling runs every 5 seconds in the foreground and every 30 seconds in the background, with explicit immediate refresh also available. Each metric is independently marked stale or unavailable; one failure does not affect other metrics. Network link status describes only the local interface link. Collection does not read MAC/SSID or probe external connectivity.
 
-Linux displays data according to the current process's permissions. Windows/macOS local administrators and ordinary users can view details; Guest has no System Status entry. Write operations check permissions separately.
+System Status displays data according to the current process's OS permissions. Operating-system write operations check permissions separately.
 
 ## Weather and time
 

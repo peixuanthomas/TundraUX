@@ -296,7 +296,7 @@ impl Workspace {
         launch: WindowLaunch,
         auth: Option<&AuthSession>,
     ) -> io::Result<SessionId> {
-        // The watchdog can receive an older window ID after logout and login.
+        // The watchdog can receive an older window ID.
         static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
         let id = SessionId(NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
         let init = WindowInit {
@@ -673,9 +673,6 @@ impl Workspace {
                     self.split_launch = None;
                 }
                 report_launch_failure(state, reason);
-            }
-            AppToShell::ShellAction(HostAction::Logout) => {
-                self.pending_global = Some(ShellCommand::LogoutToLockscreen);
             }
             AppToShell::ShellAction(HostAction::Restart) => {
                 self.pending_global = Some(ShellCommand::Restart);

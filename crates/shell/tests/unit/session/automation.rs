@@ -170,7 +170,7 @@ fn wake_only_sends_input_to_weather_pages() {
         current.page = page.into();
         assert!(action_events(&Action::Wake, &current).unwrap().is_empty());
     }
-    for page in ["lockscreen", "screen_saver"] {
+    for page in ["screen_saver"] {
         current.page = page.into();
         let events = action_events(&Action::Wake, &current).unwrap();
         assert_eq!(events.len(), 2);
@@ -808,7 +808,7 @@ fn automatic_frames_and_pointer_motion_keep_previously_read_snapshots_usable() {
 
 #[test]
 fn weather_pages_ignore_user_changes_and_allow_wake_with_an_old_snapshot() {
-    for page in ["lockscreen", "screen_saver"] {
+    for page in ["screen_saver"] {
         let directory = TempDirectory::new();
         let mut control = ControlRuntime::new(directory.0.clone());
         control.synchronize(true).unwrap();

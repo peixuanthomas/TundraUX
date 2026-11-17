@@ -140,10 +140,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn home_display_mode(&self) -> ui::HomeDisplayMode {
-        if matches!(
-            self.content_screen(),
-            ShellScreen::FirstRunSetup | ShellScreen::Login | ShellScreen::BootstrapAdmin
-        ) {
+        if self.content_screen() == ShellScreen::FirstRunSetup {
             return ui::HomeDisplayMode::Auth;
         }
 
@@ -155,14 +152,5 @@ impl ShellSession {
 
     pub fn auth_session(&self) -> Option<&AuthSession> {
         self.app.auth_session()
-    }
-
-    #[doc(hidden)]
-    pub fn login_password_visible_until_for_test(&self) -> Option<Instant> {
-        self.pages.login.login_password_visible_until
-    }
-
-    pub(in crate::session) fn return_to_lockscreen_requested(&self) -> bool {
-        self.return_to_lockscreen_requested
     }
 }

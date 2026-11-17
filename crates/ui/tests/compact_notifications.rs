@@ -34,9 +34,6 @@ fn first_line(terminal: &Terminal<TestBackend>, width: u16) -> String {
 #[test]
 fn compact_pages_keep_the_highest_priority_notification_above_their_content() {
     let clock = ClockViewModel::new("now");
-    let login = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
-    let bootstrap = BootstrapAdminViewModel::new("", 0, AuthField::Username, None);
-    let users = UserManagementViewModel::new("Admin", Vec::new(), 0, None, true, None);
     let management = ManagementViewModel::default();
     let logs = LogsViewModel::default();
     let theme = TundraTheme::default_dark();
@@ -44,9 +41,6 @@ fn compact_pages_keep_the_highest_priority_notification_above_their_content() {
     let chrome = chrome();
     for page in [
         ScreenContent::Clock(&clock),
-        ScreenContent::Login(&login),
-        ScreenContent::BootstrapAdmin(&bootstrap),
-        ScreenContent::UserManagement(&users),
         ScreenContent::Management(&management),
         ScreenContent::Logs(&logs),
     ] {

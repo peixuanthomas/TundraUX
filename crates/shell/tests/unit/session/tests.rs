@@ -153,7 +153,7 @@ impl Drop for SystemStatusTempGuard {
 fn set_test_auth_role(state: &mut ShellSession, role: UserRole) {
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: format!("{}-session", role.as_str()),
             user_id: format!("{}-id", role.as_str()),
             username: role.as_str().to_ascii_lowercase(),
@@ -2294,12 +2294,11 @@ fn system_status_save_persists_dashboard_to_user_record() {
     )
     .unwrap();
     let manager = StorageManager::open(paths).unwrap().manager;
-    UserService::new(manager.clone())
-        .bootstrap_admin("DashboardAdmin", "StrongPass123")
-        .unwrap();
-    let login = SessionService::new(manager.clone())
-        .login("DashboardAdmin", "StrongPass123")
-        .unwrap();
+    let session = seed_system_profile(
+        &manager,
+        "DashboardAdmin",
+        storage::AppearanceConfig::default(),
+    );
     let mut startup = ShellStartupState::clean(
         PlatformKind::Linux,
         PlatformCapabilities::native_supported(),
@@ -2307,7 +2306,7 @@ fn system_status_save_persists_dashboard_to_user_record() {
     startup.storage_manager = Some(manager.clone());
     let mut state =
         ShellSession::new_with_startup(ShellLaunchConfig::default(), (120, 40), startup);
-    state.complete_login(login);
+    state.attach_system_session(session);
     let loaded = state
         .app
         .active_system_status_dashboard()
@@ -2340,11 +2339,8 @@ fn system_status_save_persists_dashboard_to_user_record() {
     );
     assert_eq!(state.app.active_system_status_dashboard(), Some(&expected));
     let persisted = manager
-        .load_users()
+        .load_profile("DashboardAdmin")
         .unwrap()
-        .users
-        .into_iter()
-        .find(|user| user.username == "DashboardAdmin")
         .unwrap()
         .system_status_dashboard;
     assert_eq!(persisted, expected);
@@ -2565,26 +2561,32 @@ fn system_status_alert_dedupe_upgrade_recovery_and_network_baseline() {
         app::AppCommand::SetSystemStatusSnapshot(None),
         Instant::now(),
     );
-    state.complete_login(AuthSession {
-        source: identity::IdentitySource::LocalAccount,
-        session_id: "next-admin-session".into(),
-        user_id: "next-admin".into(),
-        username: "next-admin".into(),
-        role: UserRole::Admin,
-        started_at_epoch_ms: 2,
-    });
+    state.open_home_for_session(
+        AuthSession {
+            source: identity::IdentitySource::SystemCurrentProcess,
+            session_id: "next-admin-session".into(),
+            user_id: "next-admin".into(),
+            username: "next-admin".into(),
+            role: UserRole::Admin,
+            started_at_epoch_ms: 2,
+        },
+        storage::UserProfile::default(),
+    );
     assert!(state.system_status_network_baseline.is_none());
     assert!(state.system_status_storage_alerts.is_empty());
     assert_eq!(state.app.notification_center().alert_count(), 0);
 
-    state.complete_login(AuthSession {
-        source: identity::IdentitySource::LocalAccount,
-        session_id: "user-session".into(),
-        user_id: "user-id".into(),
-        username: "user".into(),
-        role: UserRole::User,
-        started_at_epoch_ms: 3,
-    });
+    state.open_home_for_session(
+        AuthSession {
+            source: identity::IdentitySource::SystemCurrentProcess,
+            session_id: "user-session".into(),
+            user_id: "user-id".into(),
+            username: "user".into(),
+            role: UserRole::User,
+            started_at_epoch_ms: 3,
+        },
+        storage::UserProfile::default(),
+    );
     state.apply_system_status_snapshot(system_status_test_snapshot(
         10,
         system_services::StoragePressure::Low,
@@ -2936,12 +2938,11 @@ fn system_status_live_service_home_open_refresh_and_background_close() {
     let mut storage_config = manager.load_config().unwrap();
     storage_config.time_sync.source = storage::TimeSyncSource::OperatingSystem;
     manager.save_config(&storage_config).unwrap();
-    UserService::new(manager.clone())
-        .bootstrap_admin("StatusAdmin", "StrongPass123")
-        .unwrap();
-    let admin_session = SessionService::new(manager.clone())
-        .login("StatusAdmin", "StrongPass123")
-        .unwrap();
+    let session = seed_system_profile(
+        &manager,
+        "StatusAdmin",
+        storage::AppearanceConfig::default(),
+    );
     let platform = Arc::new(platform::mock::MockPlatform::new(user_dirs, app_paths));
     platform.set_local_volumes_result(Ok(vec![platform::LocalVolume {
         root: PathBuf::from("/live-system"),
@@ -2995,7 +2996,7 @@ fn system_status_live_service_home_open_refresh_and_background_close() {
         },
         None,
     );
-    state.complete_login(admin_session);
+    state.attach_system_session(session);
     state.set_navigation_path(vec![ShellScreen::Home]);
     state.pages.common.focused_component = ShellComponent::Home;
     let index = state
@@ -3147,17 +3148,17 @@ fn critical_modal_preempts_and_then_restores_the_previous_modal() {
 }
 
 #[test]
-fn exit_confirmation_keeps_login_as_the_content_screen() {
+fn exit_confirmation_keeps_setup_as_the_content_screen() {
     let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
-    state.set_navigation_path(vec![ShellScreen::Login]);
-    state.pages.common.focused_component = ShellComponent::LoginUserList;
+    state.set_navigation_path(vec![ShellScreen::FirstRunSetup]);
+    state.pages.common.focused_component = ShellComponent::SetupLanguage;
     state.refresh_hit_map();
 
     let action = state.apply_input(InputEvent::from_key_label("Esc"));
 
     assert_eq!(action, ShellAction::Redraw);
     assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
-    assert_eq!(state.content_screen(), ShellScreen::Login);
+    assert_eq!(state.content_screen(), ShellScreen::FirstRunSetup);
     assert_eq!(
         state.to_shell_chrome_view_model().display_mode,
         ui::HomeDisplayMode::Auth
@@ -3167,7 +3168,7 @@ fn exit_confirmation_keeps_login_as_the_content_screen() {
             .hit_map()
             .regions()
             .iter()
-            .any(|region| region.component == ShellComponent::LoginUserList)
+            .any(|region| region.component == ShellComponent::SetupLanguage)
     );
     assert!(
         state
@@ -3179,9 +3180,9 @@ fn exit_confirmation_keeps_login_as_the_content_screen() {
 
     state.apply_input(InputEvent::from_key_label("Esc"));
 
-    assert_eq!(state.active_screen(), ShellScreen::Login);
-    assert_eq!(state.content_screen(), ShellScreen::Login);
-    assert_eq!(state.focused_component(), ShellComponent::LoginUserList);
+    assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
+    assert_eq!(state.content_screen(), ShellScreen::FirstRunSetup);
+    assert_eq!(state.focused_component(), ShellComponent::SetupLanguage);
 }
 
 #[test]
@@ -3664,62 +3665,6 @@ fn rendered_overlay_resolver_ids_are_variant_stable_and_precedence_is_preserved(
             .id,
         quick.id
     );
-
-    let mut users = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    users.set_navigation_path(vec![ShellScreen::UserManagement]);
-    users.pages.user_management.user_management_mode =
-        UserManagementMode::Create(UserManagementCreateForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: "first".into(),
-            display_name: "First".into(),
-            password: "secret".into(),
-            role: UserRole::User,
-            focused_field: UserManagementFormField::Username,
-        });
-    let create = users.active_overlay_descriptor().expect("create user");
-    if let UserManagementMode::Create(form) = &mut users.pages.user_management.user_management_mode
-    {
-        form.username = "typing".into();
-    }
-    assert_eq!(
-        users.active_overlay_descriptor().expect("stable create").id,
-        create.id
-    );
-    users.pages.user_management.user_management_mode =
-        UserManagementMode::EditInfo(UserManagementInfoForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: "user".into(),
-            display_name: "Display".into(),
-            focused_field: UserManagementFormField::DisplayName,
-        });
-    let edit = users.active_overlay_descriptor().expect("edit user");
-    users.pages.user_management.user_management_mode =
-        UserManagementMode::EditInfo(UserManagementInfoForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: "other-user".into(),
-            display_name: "Typed name".into(),
-            focused_field: UserManagementFormField::DisplayName,
-        });
-    let other_edit = users
-        .active_overlay_descriptor()
-        .expect("edit another user");
-    for overlay in [&create, &edit, &other_edit] {
-        assert_eq!(overlay.kind, ui::MotionOverlayKind::Dialog);
-        assert_eq!(overlay.category, ShellOverlayCategory::PageDialog);
-        assert_eq!(
-            overlay.target,
-            Some(RoutedTarget::Component(ShellComponent::UserManagement))
-        );
-    }
-    assert_ne!(create.id, edit.id);
-    assert_eq!(edit.id, other_edit.id);
 }
 
 #[test]
@@ -3748,21 +3693,6 @@ fn newly_tracked_overlay_groups_keep_keyboard_mouse_focus_ready_during_entry() {
     );
     editor.pages.editor.editor_open_menu = Some(ui::EditorMenu::File);
 
-    let mut users = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    users.set_navigation_path(vec![ShellScreen::UserManagement]);
-    users.pages.user_management.user_management_mode =
-        UserManagementMode::EditInfo(UserManagementInfoForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: "user".into(),
-            display_name: String::new(),
-            focused_field: UserManagementFormField::DisplayName,
-        });
-
     for (state, kind, owner) in [
         (
             &mut launcher,
@@ -3773,11 +3703,6 @@ fn newly_tracked_overlay_groups_keep_keyboard_mouse_focus_ready_during_entry() {
             &mut editor,
             ui::MotionTransitionKind::Popover,
             ShellComponent::Editor,
-        ),
-        (
-            &mut users,
-            ui::MotionTransitionKind::Dialog,
-            ShellComponent::UserManagement,
         ),
     ] {
         state.refresh_hit_map();
@@ -3838,7 +3763,6 @@ fn newly_tracked_overlay_groups_keep_keyboard_mouse_focus_ready_during_entry() {
         });
         let launcher_before = state.pages.launcher.clone();
         let editor_before = state.app.editor_state().cloned();
-        let users_before = state.pages.user_management.user_management_mode.clone();
         let overlay_before = state.active_overlay_descriptor();
         let calls_before = platform.calls();
         let now = Instant::now();
@@ -3854,18 +3778,6 @@ fn newly_tracked_overlay_groups_keep_keyboard_mouse_focus_ready_during_entry() {
         );
         assert_eq!(state.pages.launcher, launcher_before);
         assert_eq!(state.app.editor_state(), editor_before.as_ref());
-        match (
-            &state.pages.user_management.user_management_mode,
-            &users_before,
-        ) {
-            (UserManagementMode::EditInfo(form), UserManagementMode::EditInfo(before)) => {
-                assert_eq!(
-                    (&form.username, &form.display_name, form.focused_field),
-                    (&before.username, &before.display_name, before.focused_field)
-                );
-            }
-            (mode, before) => assert_eq!(mode, before),
-        }
         assert_eq!(platform.calls(), calls_before);
         if owner != ShellComponent::Editor {
             assert_eq!(state.active_overlay_descriptor(), overlay_before);
@@ -5039,8 +4951,6 @@ fn back_button_routes_escape_except_for_command_line_close_confirmation() {
         while state.notification_dismiss_active_modal_without_response() {}
         for screen in [
             ShellScreen::FirstRunSetup,
-            ShellScreen::Login,
-            ShellScreen::BootstrapAdmin,
             ShellScreen::Home,
             ShellScreen::Clock,
             ShellScreen::Diagnostics,
@@ -5051,7 +4961,6 @@ fn back_button_routes_escape_except_for_command_line_close_confirmation() {
             ShellScreen::Launcher,
             ShellScreen::Editor,
             ShellScreen::Settings,
-            ShellScreen::UserManagement,
             ShellScreen::ExitConfirm,
             ShellScreen::CommandLine,
         ] {
@@ -5419,14 +5328,14 @@ fn refresh_hit_map_normalizes_an_illegal_focus_to_the_order_start() {
         (120, 40),
         ShellHomeMode::User,
     );
-    state.set_navigation_path(vec![ShellScreen::Login]);
+    state.set_navigation_path(vec![ShellScreen::FirstRunSetup]);
     state.pages.common.focused_component = ShellComponent::TopBar;
 
     state.refresh_hit_map();
 
     assert_eq!(
         state.pages.common.focused_component,
-        ShellComponent::LoginUserList
+        ShellComponent::SetupLanguage
     );
 }
 
@@ -5604,19 +5513,6 @@ fn cached_time_sync_replays_into_recreated_shell_state() {
 }
 
 #[test]
-fn auth_poll_timeout_wakes_at_password_reveal_deadline() {
-    let now = Instant::now();
-    let mut state = ShellSession::new(ShellLaunchConfig::default(), (80, 24));
-    state.set_navigation_path(vec![ShellScreen::Login]);
-    state.pages.login.login_password_visible_until = Some(now + Duration::from_millis(10));
-
-    assert_eq!(
-        state.auth_poll_timeout(now, Duration::from_millis(250)),
-        Duration::from_millis(10)
-    );
-}
-
-#[test]
 fn hit_map_uses_explicit_layer_priority_instead_of_insertion_order() {
     let area = Rect::new(0, 0, 10, 5);
     let map = ShellHitMap::new(
@@ -5712,30 +5608,6 @@ fn clock_button_routes_before_explorer_popup_and_app_forms() {
     explorer.pages.explorer.explorer_input_mode = ExplorerInputMode::NewFolder;
     explorer.refresh_hit_map();
     let routed = explorer.route_input_at(
-        InputEvent::mouse_down(PointerButton::Left, clock),
-        Instant::now(),
-    );
-    assert_eq!(routed.command, ShellCommand::OpenClock);
-
-    let mut user_management = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    user_management.set_navigation_path(vec![ShellScreen::UserManagement]);
-    user_management.pages.user_management.user_management_mode =
-        UserManagementMode::Create(UserManagementCreateForm {
-            interaction: Default::default(),
-            editing: Default::default(),
-            username: String::new(),
-            display_name: String::new(),
-            password: String::new(),
-            role: UserRole::User,
-            focused_field: UserManagementFormField::Username,
-        });
-    user_management.refresh_hit_map();
-    let clock = hit_region_center(&user_management, ShellComponent::ClockButton);
-    let routed = user_management.route_input_at(
         InputEvent::mouse_down(PointerButton::Left, clock),
         Instant::now(),
     );
@@ -6064,7 +5936,7 @@ fn watchdog_incident_shows_details_and_view_actions_to_standard_users() {
     );
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "user-session".to_string(),
             user_id: "user-id".to_string(),
             username: "user".to_string(),
@@ -6117,14 +5989,14 @@ fn watchdog_incident_shows_details_and_view_actions_to_standard_users() {
 }
 
 #[test]
-fn previous_unclean_exit_does_not_interrupt_the_login_screen() {
+fn previous_unclean_exit_does_not_interrupt_setup() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),
         (120, 40),
         ShellHomeMode::User,
     );
-    state.set_navigation_path(vec![ShellScreen::Login]);
-    state.pages.common.focused_component = ShellComponent::LoginUserList;
+    state.set_navigation_path(vec![ShellScreen::FirstRunSetup]);
+    state.pages.common.focused_component = ShellComponent::SetupLanguage;
     let report_path = std::path::PathBuf::from("/reports/previous-run.txt");
 
     show_watchdog_incident(
@@ -6153,8 +6025,8 @@ fn previous_unclean_exit_does_not_interrupt_the_login_screen() {
         },
     );
 
-    assert_eq!(state.active_screen(), ShellScreen::Login);
-    assert_eq!(state.focused_component(), ShellComponent::LoginUserList);
+    assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
+    assert_eq!(state.focused_component(), ShellComponent::SetupLanguage);
     assert!(state.to_notification_view_model().is_none());
     assert_eq!(state.latest_watchdog_report.as_ref(), Some(&report_path));
     assert!(
@@ -6675,7 +6547,7 @@ fn explorer_blank_context_opens_terminal_at_directory_and_returns_without_reusin
 #[test]
 fn explorer_terminal_action_cannot_bypass_permissions_size_or_trash_location() {
     let (mut state, platform, _guard) = explorer_terminal_test_fixture();
-    set_test_auth_role(&mut state, UserRole::User);
+    set_test_auth_role(&mut state, UserRole::Guest);
     assert!(!state.can_execute_command_line());
     open_explorer_blank_context_for_test(&mut state, &platform);
     let menu = explorer_test_context_menu(&state);
@@ -7083,57 +6955,6 @@ fn system_status_picker_wheel_moves_selection_without_editing_or_scrolling_dashb
 }
 
 #[test]
-fn linux_admin_can_manage_accounts_but_cannot_remove_own_access() {
-    let mut state = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    set_test_auth_role(&mut state, UserRole::Admin);
-    state.identity_backend = identity::IdentityBackend::Linux;
-    let actions = state.user_management_action_view_models();
-    assert!(
-        actions
-            .iter()
-            .any(|action| action.action == ui::UserManagementAction::NewUser && action.enabled)
-    );
-    assert!(
-        actions
-            .iter()
-            .any(|action| action.action == ui::UserManagementAction::EditInfo)
-    );
-    assert!(
-        actions
-            .iter()
-            .any(|action| action.action == ui::UserManagementAction::SetPassword)
-    );
-    state.activate_user_management_action(ui::UserManagementAction::NewUser);
-    assert!(matches!(
-        state.pages.user_management.user_management_mode,
-        UserManagementMode::Create(_)
-    ));
-}
-
-#[test]
-fn linux_ordinary_user_has_no_create_role_lock_or_delete_action() {
-    let mut state = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    set_test_auth_role(&mut state, UserRole::User);
-    state.identity_backend = identity::IdentityBackend::Linux;
-    let actions = state.user_management_action_view_models();
-    assert_eq!(
-        actions.iter().map(|a| a.action).collect::<Vec<_>>(),
-        vec![
-            ui::UserManagementAction::EditInfo,
-            ui::UserManagementAction::SetPassword,
-        ]
-    );
-}
-
-#[test]
 fn explorer_conflict_arrows_select_the_action_instead_of_always_keeping_both() {
     let mut state = explorer_routing_test_state();
     state.update_explorer_state(|explorer| {
@@ -7406,46 +7227,6 @@ fn system_overview_metrics_do_not_depend_on_dashboard_placements() {
 }
 
 #[test]
-fn linux_current_user_cannot_reenter_internal_authentication() {
-    let mut state = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    set_test_auth_role(&mut state, UserRole::User);
-    state.identity_backend = identity::IdentityBackend::Linux;
-    let original = state.app.auth_session().cloned();
-    for command in [
-        ShellCommand::Logout,
-        ShellCommand::LogoutToLockscreen,
-        ShellCommand::SubmitLogin,
-        ShellCommand::AppendAuthChar('x'),
-        ShellCommand::SubmitBootstrapAdmin,
-        ShellCommand::ActivateLogin {
-            target: ShellComponent::LoginPassword,
-            coordinates: (1, 1),
-        },
-    ] {
-        state.apply_routed_event_once(
-            RoutedEvent {
-                input: InputEvent::Tick,
-                target: RoutedTarget::Global,
-                command,
-            },
-            platform::native_platform().as_ref(),
-            Instant::now(),
-        );
-        assert_eq!(state.active_screen(), ShellScreen::Home);
-        assert_eq!(state.app.auth_session(), original.as_ref());
-        assert!(state.pages.login.login_password.is_empty());
-        assert!(!state.return_to_lockscreen_requested);
-    }
-    state.apply_input(InputEvent::key(InputKey::Char('L')));
-    assert_eq!(state.active_screen(), ShellScreen::Home);
-    assert!(!state.return_to_lockscreen_requested);
-}
-
-#[test]
 fn linux_personal_apps_use_process_permissions_without_admin_role() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),
@@ -7459,12 +7240,11 @@ fn linux_personal_apps_use_process_permissions_without_admin_role() {
         app::AppCommand::SetAuthSession(Some(session)),
         Instant::now(),
     );
-    state.identity_backend = identity::IdentityBackend::Linux;
+    state.platform_kind = PlatformKind::Linux;
     assert!(state.to_logs_view_model().can_view_system);
     assert!(state.can_manage_launcher());
     assert!(state.can_execute_command_line());
     assert!(state.can_change_global_settings());
-    assert!(!state.can_manage_all_users());
 }
 
 #[test]
@@ -7596,45 +7376,6 @@ fn launcher_sort_preserves_builtin_identity_and_keyboard_order() {
         at + Duration::from_millis(20),
     );
     assert!(state.pages.common.table_sorts["launcher"].descending);
-}
-
-#[test]
-fn user_management_more_keeps_focus_and_blocks_covered_rows() {
-    let mut state = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
-    );
-    set_test_auth_role(&mut state, UserRole::Admin);
-    while state.notification_dismiss_active_modal_without_response() {}
-    state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::UserManagement]);
-    state.refresh_hit_map();
-    state.apply_input(InputEvent::key(InputKey::Char('m')));
-    assert!(state.pages.user_management.user_management_more_open);
-    assert!(state.resolved_overlay_owner() == Some(ShellComponent::UserManagement));
-    state.apply_input(InputEvent::key(InputKey::F(1)));
-    assert!(!state.help_open);
-    state.apply_input(InputEvent::key(InputKey::Escape));
-    assert!(!state.pages.user_management.user_management_more_open);
-    assert_eq!(
-        state.pages.user_management.user_management_focus,
-        UserManagementPageFocus::Action(ui::UserManagementAction::More)
-    );
-    assert_eq!(state.active_screen(), ShellScreen::UserManagement);
-    let layout = state.user_management_layout().unwrap();
-    let area = layout
-        .actions
-        .iter()
-        .find(|action| action.action == ui::UserManagementAction::More)
-        .unwrap()
-        .area;
-    state.apply_input(InputEvent::mouse_down(
-        PointerButton::Left,
-        (area.x, area.y),
-    ));
-    assert!(!state.pages.user_management.user_management_more_open);
-    state.apply_input(InputEvent::mouse_up(PointerButton::Left, (area.x, area.y)));
-    assert!(state.pages.user_management.user_management_more_open);
 }
 
 #[test]

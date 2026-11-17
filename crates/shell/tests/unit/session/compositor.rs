@@ -462,9 +462,6 @@ fn aa_keyboard_keeps_background_layout_and_places_one_global_launcher_on_every_p
     for screen in [
         ShellScreen::Home,
         ShellScreen::FirstRunSetup,
-        ShellScreen::Login,
-        ShellScreen::BootstrapAdmin,
-        ShellScreen::UserManagement,
         ShellScreen::Explorer,
         ShellScreen::Launcher,
         ShellScreen::CommandLine,
@@ -481,7 +478,7 @@ fn aa_keyboard_keeps_background_layout_and_places_one_global_launcher_on_every_p
             state.terminal_size = (width, height);
             state.app.dispatch_at(
                 app::AppCommand::SetAuthSession(Some(AuthSession {
-                    source: identity::IdentitySource::LocalAccount,
+                    source: identity::IdentitySource::SystemCurrentProcess,
                     session_id: "layout".into(),
                     user_id: "layout".into(),
                     username: "layout".into(),
@@ -1803,7 +1800,7 @@ fn home_entry_single_click_shows_complete_page_immediately_and_returns_without_m
         state.storage_manager = Some(manager.clone());
         state.app.dispatch_at(
             app::AppCommand::SetAuthSession(Some(AuthSession {
-                source: identity::IdentitySource::LocalAccount,
+                source: identity::IdentitySource::SystemCurrentProcess,
                 session_id: "click-session".into(),
                 user_id: "click-user".into(),
                 username: "click-user".into(),

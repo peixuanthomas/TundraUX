@@ -36,7 +36,7 @@ fn management_logs_and_scripts_keep_platform_visibility_and_distinct_entry_point
 }
 
 #[test]
-fn user_management_is_a_home_application_on_all_platforms() {
+fn user_management_is_a_linux_home_application() {
     let users = BUILT_IN_APPLICATIONS
         .iter()
         .find(|item| item.id == "builtin.users")
@@ -47,6 +47,9 @@ fn user_management_is_a_home_application_on_all_platforms() {
         PlatformKind::Windows,
         PlatformKind::Macos,
     ] {
-        assert!(users.available_on_platform(platform));
+        assert_eq!(
+            users.available_on_platform(platform),
+            platform == PlatformKind::Linux
+        );
     }
 }

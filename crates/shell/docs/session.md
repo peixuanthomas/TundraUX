@@ -7,29 +7,26 @@ This document describes startup, input, page lifecycles, and full-frame composit
 1. On Linux, validate real/effective UID and GID, require interactive confirmation when starting as root, then resolve the current user through NSS.
 2. Start the independent watchdog. It captures the terminal state, launches SessionServices, and hands the terminal to the Shell worker.
 3. Load default assets and calculate the minimum terminal size.
-4. `prepare_shell_startup` initializes platform permissions, storage, migrations, and recovery information.
+4. `prepare_shell_startup` checks platform permissions, resolves the system username, and opens storage.
 5. Show the startup screen and prefetch weather as needed.
-6. On Linux, enter Appearance or Home according to the setup-complete marker for the current UID; on Windows/macOS, enter local account setup, the lock screen, or login.
-7. Initialize the Shell's login and Home state. Opening an application launches a separate AppHost whose `ShellSession` owns the business controllers, navigation, and task state.
+6. Open Home if the system username has saved preferences. Otherwise, open setup for language and appearance, plus timezone on Windows and macOS.
+7. Activate the Shell session for the system user. Opening an application launches a separate AppHost whose `ShellSession` owns the business controllers, navigation, and task state.
 8. AppHosts render window-local frames. The Shell routes input to the selected window and paints those frames with global controls.
 
 ```mermaid
 flowchart TD
     A[tundra-shell] --> B[Initialize identity, watchdog, assets, and storage]
-    B --> C{Identity source}
-    C -->|Linux current user| D{Appearance complete?}
-    D -->|No| E[Appearance]
-    D -->|Yes| H[Home]
+    B --> C{Saved preferences for this username?}
+    C -->|No| E[First-time setup]
+    C -->|Yes| H[Home]
     E --> H
-    C -->|Windows/macOS local account| F[Setup / Lock screen / Login]
-    F --> H
     H --> I[Event loop and full-frame rendering]
     I --> J[Save recovery data and restore the terminal]
 ```
 
 `tundra-shell --help` and `--version` only print query results; they do not enter a full-screen session.
 
-First-time setup offers F9 to use the default appearance and start once required account information is valid. Appearance can be changed later; the application administrator role does not grant operating-system privileges.
+First-time setup offers F9 to use the default appearance and start. Appearance can be changed later in Settings.
 
 Watchdog commands, application data, and shared service requests use separate local connections. Workers verify the peer process identity. Window IDs identify an opening within one run, and layout generations bind input and returned frames to the current viewport.
 
@@ -72,11 +69,11 @@ Unix input messages are assembled by the local Crossterm patch. A standalone Esc
 - **Cancel the task and close:** wait for the task to stop and cleanup to finish, then destroy the page.
 - **Stay on the page:** keep the page, data, and task.
 
-`tasks.rs` registers the page or session a task belongs to, its request ID, generation, and cancellation action. Results from old login sessions, closed pages, and superseded requests do not update new pages. watchdog handles execution and failure isolation; Shell handles ownership and presentation.
+`tasks.rs` registers the page or session a task belongs to, its request ID, generation, and cancellation action. Results from old Shell sessions, closed pages, and superseded requests do not update new pages. watchdog handles execution and failure isolation; Shell handles ownership and presentation.
 
 The title-bar Tasks button is available to logged-in non-guest users and shows running operations or pending approval; background queries are excluded. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
 
-Before exit or logout, save editor recovery records, stop tasks for the current session, and revoke authorization. Task summaries and output persist across program restarts; scheduled tasks run independently through system services.
+Before exit, save editor recovery records, stop tasks for the current session, and revoke authorization. Task summaries and output persist across program restarts; scheduled tasks run independently through system services.
 
 ## Dialogs and focus
 
@@ -116,7 +113,6 @@ Clicking the status area in the header opens the full text. The dialog retains t
 | Exit | Save recovery data, finish task cleanup, and restore the terminal |
 | Restart the program | Close AppHosts, restore the terminal, and let the watchdog start the replacement |
 | Reset | Recreate initial storage after cleanup, then restart |
-| Log out | Destroy the UI session and return to the lock screen on Windows/macOS |
 | Reboot/shut down the computer | Save recovery data and restore the terminal before calling platform interfaces |
 
 Before suspend, save editor recovery data and leave full-screen mode. On resume, reestablish the terminal, platform session, and size.
@@ -137,7 +133,7 @@ Page buttons show their shortcuts, and F1 opens complete help for the current pa
 | Logs | O/Enter opens, L/M/T filters, C clears, G opens the log directory, F3 toggles expert tools, F10 opens More |
 | System Status | E edits, A adds, F4 changes size, Ctrl+S saves the layout |
 | Clock | N creates, M manages |
-| Login | Enter logs in, F2 shows or hides the password |
+| First-time setup | Enter continues, F9 starts with the default appearance |
 
 Letters typed in text fields are inserted normally and do not trigger page letter shortcuts.
 
@@ -159,7 +155,7 @@ Logs keep F3 expert controls visible across row and filter changes; Tab traverse
 
 ## On-screen keyboard for AA and Command Line
 
-The compositor places the on-screen keyboard control in the header. It covers text input in AA, Command Line, management forms, login, first-time setup, accounts, settings, the editor, file paths, and search.
+The compositor places the on-screen keyboard control in the header. It covers text input in AA, Command Line, management forms, custom setup colors, settings, the editor, file paths, and search.
 
 - Virtual keys and paste enter the normal input flow of the current page or child terminal.
 - Ctrl, Alt, Shift, and CapsLock can be latched by tapping; key combinations continue to be sent to the current program.

@@ -95,10 +95,8 @@ impl ShellSession {
                 return;
             }
         };
-        let users = UserService::with_debug_policy(storage, self.debug_policy)
-            .with_backend(self.identity_backend);
-        let appearance = match users.current_user_appearance(&actor) {
-            Ok(appearance) => appearance,
+        let appearance = match storage.load_profile(&actor.username) {
+            Ok(profile) => profile.unwrap_or_default().appearance,
             Err(error) => {
                 self.pages.common.error_message = Some(
                     i18n::msg!(
@@ -298,7 +296,7 @@ impl ShellSession {
                 self.select_settings_field_at(1)
             }
             InputKey::F(5)
-                if self.identity_backend == identity::IdentityBackend::Linux
+                if self.platform_kind == PlatformKind::Linux
                     && self
                         .pages
                         .settings
@@ -1004,12 +1002,11 @@ impl ShellSession {
             }
             return false;
         }
-        let saved = UserService::with_debug_policy(storage, self.debug_policy)
-            .with_backend(self.identity_backend)
-            .update_user_appearance(&actor, &actor.username, appearance)
-            .map(|account| {
+        let saved = storage
+            .update_profile(&actor.username, |profile| profile.appearance = appearance)
+            .map(|profile| {
                 self.app.dispatch_at(
-                    app::AppCommand::SetActiveAppearance(Some(account.appearance)),
+                    app::AppCommand::SetActiveAppearance(Some(profile.appearance)),
                     Instant::now(),
                 );
             })

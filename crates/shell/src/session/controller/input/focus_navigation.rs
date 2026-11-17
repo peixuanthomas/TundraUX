@@ -78,9 +78,6 @@ impl ShellSession {
         self.hit_map_generation = self.hit_map_generation.saturating_add(1);
         let active_screen = self.active_screen();
         let content_screen = self.content_screen();
-        if content_screen == ShellScreen::Login {
-            self.sync_login_selection();
-        }
         let notification_model = self.notification_active_modal_view_model().or_else(|| {
             self.help_open.then(|| {
                 ui::page_help_notification(&self.to_page_help_view_model(), self.help_scroll)
@@ -112,9 +109,6 @@ impl ShellSession {
             && page_overlay_owner == Some(ShellComponent::Settings))
         .then(|| self.to_settings_view_model())
         .flatten();
-        let user_management_model = (content_screen == ShellScreen::UserManagement
-            && page_overlay_owner == Some(ShellComponent::UserManagement))
-        .then(|| self.to_user_management_view_model());
         let diagnostics_model = matches!(
             content_screen,
             ShellScreen::Diagnostics | ShellScreen::SystemStatus
@@ -141,7 +135,6 @@ impl ShellSession {
             launcher_model.as_ref(),
             editor_model.as_ref(),
             settings_model.as_ref(),
-            user_management_model.as_ref(),
             overlay_descriptor.as_ref(),
             motion,
             overlay_blocks_interaction,
@@ -182,13 +175,6 @@ impl ShellSession {
             return match self.pages.setup.setup_step {
                 ui::SetupStep::Language => vec![ShellComponent::SetupLanguage],
                 ui::SetupStep::Timezone => vec![ShellComponent::SetupTimezone],
-                ui::SetupStep::Admin => vec![
-                    ShellComponent::SetupAdminUsername,
-                    ShellComponent::SetupAdminPassword,
-                    ShellComponent::SetupAdminPasswordConfirm,
-                    ShellComponent::SetupAdminHint,
-                    ShellComponent::SetupSubmit,
-                ],
                 ui::SetupStep::Appearance
                     if self.overlay_interaction_ready
                         && self.pages.setup.setup_custom_color_target.is_some() =>
@@ -204,22 +190,6 @@ impl ShellSession {
                     ShellComponent::SetupAppearanceSubmit,
                 ],
             };
-        }
-        if self.active_screen() == ShellScreen::Login {
-            return vec![
-                ShellComponent::LoginUserList,
-                ShellComponent::LoginPassword,
-                ShellComponent::LoginPasswordVisibility,
-            ];
-        }
-        if self.active_screen() == ShellScreen::BootstrapAdmin {
-            return vec![
-                ShellComponent::BootstrapUsername,
-                ShellComponent::BootstrapPassword,
-            ];
-        }
-        if self.active_screen() == ShellScreen::UserManagement {
-            return vec![ShellComponent::UserManagement];
         }
         if self.active_screen() == ShellScreen::Explorer {
             return vec![ShellComponent::Explorer];
@@ -280,11 +250,6 @@ impl ShellSession {
         let mut order = vec![ShellComponent::Home];
         if !self.user_home_entries().is_empty() {
             order.push(ShellComponent::HomeEdit);
-        }
-        if self.identity_backend != identity::IdentityBackend::Linux
-            && self.app.auth_session().is_some()
-        {
-            order.push(ShellComponent::HomeLogout);
         }
         order.push(ShellComponent::ClockButton);
         if self.tasks_button_label().is_some() {

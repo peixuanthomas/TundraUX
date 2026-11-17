@@ -25,7 +25,7 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
     );
     state.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "host-shutdown".into(),
             user_id: "alice".into(),
             username: "alice".into(),

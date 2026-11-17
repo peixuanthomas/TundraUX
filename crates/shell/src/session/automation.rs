@@ -136,7 +136,8 @@ impl ControlRuntime {
         )
     }
 
-    pub fn publish(&mut self, snapshot: Snapshot) {
+    #[cfg(test)]
+    fn publish(&mut self, snapshot: Snapshot) {
         self.publish_when_ready(snapshot, true);
     }
 
@@ -360,40 +361,6 @@ impl ControlRuntime {
     }
 }
 
-impl weathr::DisplayControl for ControlRuntime {
-    fn frame(&mut self, buffer: &ratatui::buffer::Buffer) {
-        if let Some(connection) = crate::process_host::WorkerConnection::current()
-            && (connection.progress().is_err() || connection.shutdown_requested())
-        {
-            platform::request_process_shutdown();
-        }
-        if !self.enabled() {
-            return;
-        }
-        let capture = ui::automation::FrameCapture::begin(buffer.area, "lockscreen");
-        let mut snapshot = capture.finish(buffer);
-        let area = buffer.area;
-        let mut start = shell_control::Node::new(
-            "lockscreen/start",
-            "button",
-            i18n::tr!("ui-control-lockscreen"),
-            shell_control::Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: area.height,
-            },
-        );
-        start.actions = vec!["click".into(), "key".into()];
-        start.parent = Some("screen".into());
-        snapshot.nodes.push(start);
-        self.publish(snapshot);
-    }
-    fn poll(&mut self) -> Option<Event> {
-        ControlRuntime::poll(self, Instant::now())
-    }
-}
-
 fn cancel_pointer(releases: &mut Vec<Event>) {
     if releases
         .iter()
@@ -595,7 +562,7 @@ pub(super) fn action_events(
 }
 
 fn is_weather_page(page: &str) -> bool {
-    matches!(page, "lockscreen" | "screen_saver")
+    page == "screen_saver"
 }
 
 fn parse_key(key: &str) -> Result<(KeyCode, KeyModifiers), &'static str> {

@@ -28,8 +28,7 @@ impl ShellSession {
                 self.ascii_assets.theme_id(),
                 self.terminal_image_support,
                 &self.language_options(),
-                (self.identity_backend == identity::IdentityBackend::Linux)
-                    .then_some(&state.system_time),
+                (self.platform_kind == PlatformKind::Linux).then_some(&state.system_time),
             )
         };
         let picker = state.picker.as_ref().map(|picker| {

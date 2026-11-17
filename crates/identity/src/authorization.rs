@@ -19,14 +19,6 @@ impl UserRole {
             Self::Admin => "Admin",
         }
     }
-
-    pub(crate) fn from_storage(value: &str) -> Self {
-        match value {
-            "Admin" => Self::Admin,
-            "Guest" => Self::Guest,
-            _ => Self::User,
-        }
-    }
 }
 
 impl fmt::Display for UserRole {
@@ -44,7 +36,6 @@ pub enum PermissionAction {
     OpenExternal,
     ExecuteCommandLine,
     ManageLauncher,
-    ManageOwnUser,
     ManageUsers,
     ViewDiagnosticsDetails,
     RepairDiagnostics,
@@ -62,7 +53,6 @@ impl PermissionAction {
             Self::OpenExternal => "OpenExternal",
             Self::ExecuteCommandLine => "ExecuteCommandLine",
             Self::ManageLauncher => "ManageLauncher",
-            Self::ManageOwnUser => "ManageOwnUser",
             Self::ManageUsers => "ManageUsers",
             Self::ViewDiagnosticsDetails => "ViewDiagnosticsDetails",
             Self::RepairDiagnostics => "RepairDiagnostics",
@@ -139,56 +129,22 @@ impl PermissionService {
         action: PermissionAction,
         _resource: Option<&str>,
     ) -> Authorization {
-        if session
-            .is_some_and(|session| session.source == crate::IdentitySource::LinuxCurrentProcess)
-        {
-            return match action {
-                PermissionAction::ManageUsers => {
-                    if session.is_some_and(|session| session.role == UserRole::Admin) {
-                        Authorization::allow()
-                    } else {
-                        Authorization::deny("insufficient_role")
-                    }
-                }
-                PermissionAction::EnterDebugMode if !self.debug_policy.allows_debug() => {
-                    Authorization::deny("debug_policy_denied")
-                }
-                _ => Authorization::allow(),
-            };
-        }
-        let role = session
-            .map(|session| session.role)
-            .unwrap_or(UserRole::Guest);
+        let Some(session) = session.filter(|session| session.role != UserRole::Guest) else {
+            return Authorization::deny("not_authenticated");
+        };
         match action {
-            PermissionAction::ReadFile
-            | PermissionAction::WriteFile
-            | PermissionAction::DeleteFile
-            | PermissionAction::MoveFile
-            | PermissionAction::OpenExternal => match role {
-                UserRole::User | UserRole::Admin => Authorization::allow(),
-                UserRole::Guest => Authorization::deny("not_authenticated"),
-            },
-            PermissionAction::ManageOwnUser | PermissionAction::ViewDiagnosticsDetails => {
-                match role {
-                    UserRole::User | UserRole::Admin => Authorization::allow(),
-                    UserRole::Guest => Authorization::deny("not_authenticated"),
-                }
-            }
             PermissionAction::ManageUsers
-            | PermissionAction::ExecuteCommandLine
-            | PermissionAction::ManageLauncher
-            | PermissionAction::RepairDiagnostics
-            | PermissionAction::ChangeSettings => match role {
-                UserRole::Admin => Authorization::allow(),
-                UserRole::Guest => Authorization::deny("not_authenticated"),
-                UserRole::User => Authorization::deny("insufficient_role"),
-            },
-            PermissionAction::EnterDebugMode => match role {
-                UserRole::Admin if self.debug_policy.allows_debug() => Authorization::allow(),
-                UserRole::Admin => Authorization::deny("debug_policy_denied"),
-                UserRole::Guest => Authorization::deny("not_authenticated"),
-                UserRole::User => Authorization::deny("insufficient_role"),
-            },
+                if session.source != crate::IdentitySource::LinuxCurrentProcess =>
+            {
+                Authorization::deny("unsupported_platform")
+            }
+            PermissionAction::ManageUsers if session.role != UserRole::Admin => {
+                Authorization::deny("insufficient_role")
+            }
+            PermissionAction::EnterDebugMode if !self.debug_policy.allows_debug() => {
+                Authorization::deny("debug_policy_denied")
+            }
+            _ => Authorization::allow(),
         }
     }
 }

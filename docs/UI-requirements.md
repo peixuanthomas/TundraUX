@@ -1,6 +1,6 @@
 # UI design and acceptance requirements
 
-This is the shared design and acceptance contract for the complete interface: startup and account flows, Home, Launcher, Settings, system management, files, editor and Vim, scripts, Command Line, Tasks, clock, weather, dialogs, menus, and AutoAdmin (AA). Apply it in stages across shared foundations, global bars, workspaces, tools, and motion; a page is complete only when its rendering, input, automation, and tests agree.
+This is the shared design and acceptance contract for the complete interface: startup and first-time setup, Home, Launcher, Settings, system management, files, editor and Vim, scripts, Command Line, Tasks, clock, weather, dialogs, menus, and AutoAdmin (AA). Apply it in stages across shared foundations, global bars, workspaces, tools, and motion; a page is complete only when its rendering, input, automation, and tests agree.
 
 ## Visual language and density
 
@@ -128,7 +128,7 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 - Keep automation control IDs and the external-control protocol compatible. Capture actual visible controls, disabled states, text, focus, clipping, and coordinates; preserve password masking. Interaction must never target a stale location from an earlier layout or covered layer.
 - Accepted application inputs retain their order. When a window's bounded queue is full, reject new business input with localized feedback and a retryable CLI `busy` response; other windows, window management, cancellation, and close remain available. Cancel a captured press or drag when admission fails.
 - For a visible window, input confirmation requires a frame for the current viewport carrying the processed input serial. A separate acknowledgement must not make retained content actionable. Hidden, stopped, closing, and unresponsive windows must not indefinitely block unrelated snapshots. Decode image references in wire order before keeping only the latest frame, including frames whose old viewport will not be displayed.
-- Shared settings, appearance, and Clock writes complete in the background. Apply success only after persistence, preserve newer or canceled drafts, and keep errors visible. Check the original configuration/profile and authorization revisions so a delayed save cannot cross login sessions or overwrite a newer edit.
+- Shared settings, appearance, and Clock writes complete in the background. Apply success only after persistence, preserve newer or canceled drafts, and keep errors visible. Check the original configuration/profile and authorization revisions so a delayed save cannot cross Shell sessions or overwrite a newer edit.
 
 ## Screen keyboard, forms, and selection dialogs
 
@@ -143,7 +143,7 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 - Packages uses an Installed, Updates, Search sidebar; Settings reuses that workspace structure. Tab/Shift+Tab moves between regions and controls. Arrows change categories only in the focused sidebar and otherwise operate content. Packages retains F7/F8/F6 for Installed/Updates/Search.
 - In application settings, Left/Right moves between the application list and its controls. Enter/Space activates controls; arrow navigation does not save options.
 - Numeric options support direct entry or minus/plus controls. AA policy and screen timeout use selection dialogs.
-- Once required account information is valid, first-time setup can finish with the default appearance. Distinguish Tundra application administrators from operating-system administrators.
+- First-time setup offers F9 to finish with the default appearance. Home shows the current system username, and Users is available on Linux.
 
 ## Lists and sorting
 

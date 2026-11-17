@@ -207,7 +207,6 @@ pub(crate) fn load_home_icon_catalog(
         "settings",
         "system_status",
         "user_management",
-        "user_profile",
         "default",
     ] {
         if !icons.contains_key(required) {

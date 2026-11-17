@@ -5,7 +5,7 @@ fn session(size: (u16, u16)) -> ShellSession {
         ShellSession::new_for_home_mode(ShellLaunchConfig::default(), size, ShellHomeMode::User);
     session.app.dispatch_at(
         app::AppCommand::SetAuthSession(Some(AuthSession {
-            source: identity::IdentitySource::LocalAccount,
+            source: identity::IdentitySource::SystemCurrentProcess,
             session_id: "choice-scroll-test".into(),
             user_id: "alice".into(),
             username: "alice".into(),

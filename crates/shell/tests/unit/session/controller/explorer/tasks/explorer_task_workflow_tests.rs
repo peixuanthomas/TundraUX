@@ -98,7 +98,7 @@ fn completed_move_from_an_old_session_cannot_change_new_clipboard_or_undo_histor
         ShellHomeMode::User,
     );
     let mut actor = AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "old-session".into(),
         user_id: "same-user".into(),
         username: "tester".into(),

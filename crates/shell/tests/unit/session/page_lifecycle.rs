@@ -147,10 +147,7 @@ fn all_page_kinds_keep_separate_state_and_reopen_with_a_fresh_identity() {
     for screen in [
         ShellScreen::Home,
         ShellScreen::Clock,
-        ShellScreen::Login,
-        ShellScreen::BootstrapAdmin,
         ShellScreen::FirstRunSetup,
-        ShellScreen::UserManagement,
         ShellScreen::Settings,
         ShellScreen::SystemStatus,
         ShellScreen::Launcher,
@@ -352,58 +349,6 @@ fn background_modal_does_not_touch_visible_focus_hit_map_or_another_pages_modal(
     assert_eq!(state.pages.common.get(second).unwrap(), &visible);
     state.close_page_instance(second);
     assert!(!state.notification_has_active_modal());
-}
-
-#[test]
-fn login_reset_waits_for_task_cleanup_and_rejects_old_results() {
-    let mut state = state();
-    state.enter_new_page(ShellScreen::Settings);
-    let page = state.active_page_id();
-    let done = Arc::new(AtomicBool::new(false));
-    let stopped = done.clone();
-    state.register_page_task(
-        TaskDomain::Explorer,
-        700,
-        TaskClass::Operation,
-        TaskControl::new(|| {}, move || stopped.load(Ordering::Acquire)),
-    );
-    state.return_to_login("Signed out");
-    assert_eq!(state.active_page_id(), page);
-    assert!(state.pending_login_reset.is_some());
-    assert_eq!(state.tasks.owner(TaskDomain::Explorer, 700), None);
-    done.store(true, Ordering::Release);
-    state.apply_input(InputEvent::Tick);
-    assert_eq!(state.active_screen(), ShellScreen::Login);
-    assert!(state.pending_login_reset.is_none());
-    assert_eq!(state.page_screen(page), None);
-}
-
-#[test]
-fn logout_to_lockscreen_waits_for_real_task_completion() {
-    let mut state = state();
-    state.enter_new_page(ShellScreen::Settings);
-    let page = state.active_page_id();
-    let done = Arc::new(AtomicBool::new(false));
-    let stopped = done.clone();
-    state.register_page_task(
-        TaskDomain::Explorer,
-        702,
-        TaskClass::Operation,
-        TaskControl::new(|| {}, move || stopped.load(Ordering::Acquire)),
-    );
-
-    assert!(!state.logout_to_lockscreen_at(Instant::now()));
-    assert!(state.pending_login_reset.is_some());
-    assert!(!state.return_to_lockscreen_requested());
-    assert_eq!(state.active_page_id(), page);
-    assert_eq!(state.apply_input(InputEvent::Tick), ShellAction::Redraw);
-    assert!(!state.return_to_lockscreen_requested());
-
-    done.store(true, Ordering::Release);
-    assert_eq!(state.apply_input(InputEvent::Tick), ShellAction::Exit);
-    assert!(state.pending_login_reset.is_none());
-    assert!(state.return_to_lockscreen_requested());
-    assert_eq!(state.page_screen(page), None);
 }
 
 #[test]

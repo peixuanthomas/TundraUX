@@ -99,32 +99,6 @@ impl ShellSession {
             .as_ref()
             .is_some_and(ShellDiagnosticsTaskRuntime::restart_required);
         let home_mode = resolved_home_mode(launch_config, &startup);
-        let auth_gate_enabled = startup.storage_manager.is_some();
-        let initial_screen = if auth_gate_enabled {
-            if startup.auth_bootstrap_required {
-                ShellScreen::FirstRunSetup
-            } else {
-                ShellScreen::Login
-            }
-        } else {
-            ShellScreen::Home
-        };
-        let initial_focus = match initial_screen {
-            ShellScreen::FirstRunSetup => ShellComponent::SetupLanguage,
-            ShellScreen::BootstrapAdmin => ShellComponent::BootstrapUsername,
-            ShellScreen::Login => ShellComponent::LoginUserList,
-            ShellScreen::Launcher => ShellComponent::Launcher,
-            ShellScreen::CommandLine => ShellComponent::CommandLine,
-            ShellScreen::Editor => ShellComponent::Editor,
-            ShellScreen::SystemStatus => ShellComponent::SystemStatus,
-            _ => ShellComponent::Home,
-        };
-        let login_users = startup.login_users.clone();
-        let login_selected_user = default_login_user_index(&login_users);
-        let login_username = login_users
-            .get(login_selected_user)
-            .map(|user| user.username.clone())
-            .unwrap_or_default();
         let mut storage_config = if let Some(snapshot) = &runtime_services.session_snapshot {
             let (revision, mut config): (_, storage::StorageConfig) =
                 crate::session_services::SessionServicesClient::decode(&snapshot.config)
@@ -204,7 +178,7 @@ impl ShellSession {
             fallback_resource_paths: Vec::new(),
             home_mode,
             ascii_assets,
-            navigation: ShellNavigation::new(initial_screen),
+            navigation: ShellNavigation::new(ShellScreen::Home),
             storage_manager: startup.storage_manager.clone(),
             last_time_sync_utc: None,
             clock_scheduler: None,
@@ -219,10 +193,9 @@ impl ShellSession {
             help_scroll: 0,
             help_scrollbar_drag: None,
             time_sync_failure_message: None,
-            debug_home_after_login: launch_config.home_mode_override == HomeModeOverride::Debug,
+            debug_home: launch_config.home_mode_override == HomeModeOverride::Debug,
             debug_policy: startup.debug_policy,
-            identity_backend: startup.identity_backend,
-            login_users,
+            platform_kind: startup.platform_kind,
 
             pending_personalization_session: None,
 
@@ -240,8 +213,6 @@ impl ShellSession {
                     .map(|storage| storage.layout().data_path.join("task-history")),
             ),
             pending_page_closes: HashSet::new(),
-            pending_login_reset: None,
-            pending_lockscreen_after_logout: false,
             pending_session_exit: None,
             approved_editor_closes: BTreeMap::new(),
             settings_update_request: None,
@@ -269,7 +240,6 @@ impl ShellSession {
             #[cfg(target_os = "linux")]
             privilege_session: Default::default(),
             detached_management_operations: Vec::new(),
-            detached_user_management_jobs: Vec::new(),
 
             diagnostics_restart_required,
             terminal_size,
@@ -279,7 +249,6 @@ impl ShellSession {
             ),
             terminal_image_support: runtime_services.terminal_image_support,
             terminal_text_sizing_support: false,
-            pending_default_ascii_icon_fallback: false,
 
             interaction: Default::default(),
             screen_saver: Default::default(),
@@ -302,7 +271,6 @@ impl ShellSession {
             latest_watchdog_summary: None,
             shutdown_requested: false,
             restart_requested: false,
-            return_to_lockscreen_requested: false,
             last_command: None,
             last_routed_target: None,
             last_key_event: None,
@@ -320,15 +288,6 @@ impl ShellSession {
         };
         let mut state = Self { app, ui };
         state.initialize_root_page();
-        state.pages.common.focused_component = initial_focus;
-        state.pages.login.login_selected_user = login_selected_user;
-        state.pages.login.login_username = login_username;
-        state.pages.setup.setup_selected_language_index = state
-            .language_catalog
-            .options()
-            .iter()
-            .position(|option| option.code == state.language.code())
-            .unwrap_or(0);
         state.report_language_diagnostics(&prepared_language.diagnostics);
         if let Some(target) = std::env::var_os(app::update::UPDATE_TARGET_SHA_ENV) {
             let target = target.to_string_lossy();
@@ -350,28 +309,12 @@ impl ShellSession {
             if let Some(session) = runtime_services.inherited_auth {
                 state.attach_window_profile(session, runtime_services.session_snapshot.as_deref());
             }
-        }
-        #[cfg(target_os = "linux")]
-        if !state.window_owner.is_app()
-            && state.identity_backend == identity::IdentityBackend::Linux
-        {
-            if let Some(storage) = state.storage_manager.clone() {
-                match SessionService::new(storage)
-                    .with_backend(identity::IdentityBackend::Linux)
-                    .attach_current_linux_user()
-                {
-                    Ok(session) => state.complete_login(session),
-                    Err(error) => {
-                        state.pages.common.error_message = Some(format_core_error(&error));
-                        state.shutdown_requested = true;
-                    }
-                }
-            }
-        }
-        state.refresh_hit_map();
-        if !auth_gate_enabled && let Some(restored_session) = startup.restored_session.as_ref() {
+        } else if let Some(session) = startup.system_session {
+            state.attach_system_session(session);
+        } else if let Some(restored_session) = startup.restored_session.as_ref() {
             state.apply_restored_session(restored_session);
         }
+        state.refresh_hit_map();
         state
     }
 
@@ -390,13 +333,7 @@ impl ShellSession {
             let profile = self
                 .storage_manager
                 .as_ref()
-                .and_then(|storage| storage.load_users().ok())
-                .and_then(|document| {
-                    document
-                        .users
-                        .into_iter()
-                        .find(|user| user.id == session.user_id)
-                });
+                .and_then(|storage| storage.load_profile(&session.username).ok().flatten());
             if let Some(profile) = profile {
                 self.app.dispatch_at(
                     app::AppCommand::SetActiveAppearance(Some(profile.appearance)),
@@ -410,7 +347,6 @@ impl ShellSession {
                 );
             }
         }
-        self.pages.login.login_username = session.username.clone();
         self.reset_navigation(ShellScreen::Home);
         self.app.dispatch_at(
             app::AppCommand::SetAuthSession(Some(session.clone())),

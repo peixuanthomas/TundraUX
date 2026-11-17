@@ -37,7 +37,6 @@ pub(in crate::session) fn build_shell_hit_map(
     launcher_model: Option<&ui::LauncherViewModel>,
     editor_model: Option<&ui::EditorViewModel>,
     settings_model: Option<&ui::SettingsViewModel>,
-    user_management_model: Option<&ui::UserManagementViewModel>,
     overlay_descriptor: Option<&ShellOverlayDescriptor>,
     motion: ui::MotionTransitions,
     overlay_blocks_interaction: bool,
@@ -61,10 +60,7 @@ pub(in crate::session) fn build_shell_hit_map(
                     ShellScreen::Settings => ShellComponent::Settings,
                     ShellScreen::Management => ShellComponent::Management,
                     ShellScreen::Logs => ShellComponent::Logs,
-                    ShellScreen::Login => ShellComponent::LoginUserList,
                     ShellScreen::FirstRunSetup => ShellComponent::SetupLanguage,
-                    ShellScreen::BootstrapAdmin => ShellComponent::BootstrapUsername,
-                    ShellScreen::UserManagement => ShellComponent::UserManagement,
                     ShellScreen::Clock => ShellComponent::Clock,
                     _ => ShellComponent::CompactHome,
                 },
@@ -75,10 +71,7 @@ pub(in crate::session) fn build_shell_hit_map(
                         | ShellScreen::Settings
                         | ShellScreen::Management
                         | ShellScreen::Logs
-                        | ShellScreen::Login
                         | ShellScreen::FirstRunSetup
-                        | ShellScreen::BootstrapAdmin
-                        | ShellScreen::UserManagement
                         | ShellScreen::Clock
                 ) {
                     ShellHitLayer::AppContent
@@ -118,49 +111,6 @@ pub(in crate::session) fn build_shell_hit_map(
                             }
                         }
                     }
-                }
-                ShellScreen::Login => {
-                    let layout = ui::login_layout(main);
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::LoginUserList,
-                        area: layout.user_list,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::LoginUsername,
-                        area: layout.selected_username,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::LoginPassword,
-                        area: layout.password,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::LoginPasswordVisibility,
-                        area: layout.password_visibility,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                }
-                ShellScreen::BootstrapAdmin => {
-                    let (username, password) = auth_field_rects(main);
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::BootstrapUsername,
-                        area: username,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::BootstrapPassword,
-                        area: password,
-                        layer: ShellHitLayer::AppContent,
-                    });
-                }
-                ShellScreen::UserManagement => {
-                    regions.push(ShellHitRegion {
-                        component: ShellComponent::UserManagement,
-                        area: main,
-                        layer: ShellHitLayer::AppContent,
-                    });
                 }
                 ShellScreen::Explorer => {
                     regions.push(ShellHitRegion {
@@ -307,14 +257,6 @@ pub(in crate::session) fn build_shell_hit_map(
                             regions.push(ShellHitRegion {
                                 component: ShellComponent::HomeEdit,
                                 area,
-                                layer: ShellHitLayer::AppContent,
-                            });
-                        }
-                        let logout = ui::home_logout_area(main, model);
-                        if logout.width > 0 && logout.height > 0 {
-                            regions.push(ShellHitRegion {
-                                component: ShellComponent::HomeLogout,
-                                area: logout,
                                 layer: ShellHitLayer::AppContent,
                             });
                         }
@@ -506,12 +448,6 @@ pub(in crate::session) fn build_shell_hit_map(
                     .or(layout.file_extensions_editor)
                     .or(layout.time_sync_server_editor)
             }),
-            ShellScreen::UserManagement => user_management_model.and_then(|model| {
-                let layout = ui::user_management_layout(main, model);
-                layout
-                    .more_menu
-                    .or_else(|| layout.form.map(|form| form.dialog))
-            }),
             _ => None,
         };
         let layer = match descriptor.category {
@@ -538,18 +474,6 @@ pub(in crate::session) fn build_shell_hit_map(
     ShellHitMap::new(terminal_size, generation, regions)
 }
 
-pub(in crate::session) fn auth_field_rects(main: Rect) -> (Rect, Rect) {
-    let x = main.x.saturating_add(1);
-    let width = main.width.saturating_sub(2);
-    let username_y = main.y.saturating_add(3);
-    let password_y = main.y.saturating_add(4);
-
-    (
-        Rect::new(x, username_y, width, 1),
-        Rect::new(x, password_y, width, 1),
-    )
-}
-
 pub(in crate::session) fn setup_hit_regions(
     main: Rect,
     setup_step: ui::SetupStep,
@@ -566,33 +490,6 @@ pub(in crate::session) fn setup_hit_regions(
             area: ui::setup_timezone_list_area(main),
             layer: ShellHitLayer::AppContent,
         }],
-        ui::SetupStep::Admin => vec![
-            ShellHitRegion {
-                component: ShellComponent::SetupAdminUsername,
-                area: ui::setup_admin_field_area(main, ui::SetupField::AdminUsername),
-                layer: ShellHitLayer::AppContent,
-            },
-            ShellHitRegion {
-                component: ShellComponent::SetupAdminPassword,
-                area: ui::setup_admin_field_area(main, ui::SetupField::AdminPassword),
-                layer: ShellHitLayer::AppContent,
-            },
-            ShellHitRegion {
-                component: ShellComponent::SetupAdminPasswordConfirm,
-                area: ui::setup_admin_field_area(main, ui::SetupField::AdminPasswordConfirm),
-                layer: ShellHitLayer::AppContent,
-            },
-            ShellHitRegion {
-                component: ShellComponent::SetupAdminHint,
-                area: ui::setup_admin_field_area(main, ui::SetupField::PasswordHint),
-                layer: ShellHitLayer::AppContent,
-            },
-            ShellHitRegion {
-                component: ShellComponent::SetupSubmit,
-                area: ui::setup_admin_field_area(main, ui::SetupField::Submit),
-                layer: ShellHitLayer::AppContent,
-            },
-        ],
         ui::SetupStep::Appearance => vec![
             ShellHitRegion {
                 component: ShellComponent::SetupAppearanceShape,
@@ -628,39 +525,8 @@ pub(in crate::session) fn setup_hit_regions(
     }
 }
 
-pub(in crate::session) fn setup_main_rect(terminal_size: CellPosition) -> Option<Rect> {
-    let area = Rect::new(0, 0, terminal_size.0, terminal_size.1);
-    let ui::ShellLayout::Full { main, .. } = ui::compute_shell_layout(area) else {
-        return None;
-    };
-
-    Some(main)
-}
-
 pub(in crate::session) fn setup_row_at(rect: Rect, coordinates: CellPosition) -> Option<usize> {
     rect_contains(rect, coordinates).then(|| coordinates.1.saturating_sub(rect.y) as usize)
-}
-
-pub(in crate::session) fn login_user_list_row_at(
-    terminal_size: CellPosition,
-    coordinates: CellPosition,
-) -> Option<usize> {
-    let main = setup_main_rect(terminal_size)?;
-    let rect = ui::login_user_list_rows_area(main);
-    rect_contains(rect, coordinates).then(|| usize::from(coordinates.1 - rect.y))
-}
-
-pub(in crate::session) fn default_login_user_index(users: &[ShellLoginUser]) -> usize {
-    users
-        .iter()
-        .enumerate()
-        .filter_map(|(index, user)| {
-            user.last_login_at_epoch_ms
-                .map(|last_login| (index, last_login))
-        })
-        .max_by_key(|(_, last_login)| *last_login)
-        .map(|(index, _)| index)
-        .unwrap_or(0)
 }
 
 pub(in crate::session) fn setup_field_for_component(
@@ -669,11 +535,6 @@ pub(in crate::session) fn setup_field_for_component(
     match component {
         ShellComponent::SetupLanguage => Some(ui::SetupField::LanguageList),
         ShellComponent::SetupTimezone => Some(ui::SetupField::TimezoneList),
-        ShellComponent::SetupAdminUsername => Some(ui::SetupField::AdminUsername),
-        ShellComponent::SetupAdminPassword => Some(ui::SetupField::AdminPassword),
-        ShellComponent::SetupAdminPasswordConfirm => Some(ui::SetupField::AdminPasswordConfirm),
-        ShellComponent::SetupAdminHint => Some(ui::SetupField::PasswordHint),
-        ShellComponent::SetupSubmit => Some(ui::SetupField::Submit),
         ShellComponent::SetupAppearanceShape => Some(ui::SetupField::AppearanceShape),
         ShellComponent::SetupAppearanceThemeColor => Some(ui::SetupField::AppearanceThemeColor),
         ShellComponent::SetupAppearanceThemeCustom => Some(ui::SetupField::AppearanceThemeCustom),
@@ -688,11 +549,6 @@ pub(in crate::session) fn setup_component_for_field(field: ui::SetupField) -> Sh
     match field {
         ui::SetupField::LanguageList => ShellComponent::SetupLanguage,
         ui::SetupField::TimezoneList => ShellComponent::SetupTimezone,
-        ui::SetupField::AdminUsername => ShellComponent::SetupAdminUsername,
-        ui::SetupField::AdminPassword => ShellComponent::SetupAdminPassword,
-        ui::SetupField::AdminPasswordConfirm => ShellComponent::SetupAdminPasswordConfirm,
-        ui::SetupField::PasswordHint => ShellComponent::SetupAdminHint,
-        ui::SetupField::Submit => ShellComponent::SetupSubmit,
         ui::SetupField::AppearanceShape => ShellComponent::SetupAppearanceShape,
         ui::SetupField::AppearanceThemeColor => ShellComponent::SetupAppearanceThemeColor,
         ui::SetupField::AppearanceThemeCustom => ShellComponent::SetupAppearanceThemeCustom,
@@ -711,14 +567,6 @@ pub(in crate::session) fn setup_component_active_for_step(
         (ui::SetupStep::Language, ShellComponent::SetupLanguage)
             | (ui::SetupStep::Timezone, ShellComponent::SetupTimezone)
             | (
-                ui::SetupStep::Admin,
-                ShellComponent::SetupAdminUsername
-                    | ShellComponent::SetupAdminPassword
-                    | ShellComponent::SetupAdminPasswordConfirm
-                    | ShellComponent::SetupAdminHint
-                    | ShellComponent::SetupSubmit
-            )
-            | (
                 ui::SetupStep::Appearance,
                 ShellComponent::SetupAppearanceShape
                     | ShellComponent::SetupAppearanceThemeColor
@@ -729,54 +577,6 @@ pub(in crate::session) fn setup_component_active_for_step(
                     | ShellComponent::SetupCustomColorDialog
             )
     )
-}
-
-pub(in crate::session) fn setup_admin_text_field(field: ui::SetupField) -> bool {
-    matches!(
-        field,
-        ui::SetupField::AdminUsername
-            | ui::SetupField::AdminPassword
-            | ui::SetupField::AdminPasswordConfirm
-            | ui::SetupField::PasswordHint
-    )
-}
-
-pub(in crate::session) fn setup_password_requirements(
-    username: &str,
-    password: &str,
-    password_confirm: &str,
-) -> Vec<ui::SetupPasswordRequirementViewModel> {
-    let normalized_username = username.trim().to_ascii_lowercase();
-    let normalized_password = password.trim().to_ascii_lowercase();
-
-    vec![
-        ui::SetupPasswordRequirementViewModel::new(
-            i18n::tr!(
-                "shell-at-least-password-min-len-characters",
-                PASSWORD_MIN_LEN = PASSWORD_MIN_LEN
-            ),
-            password.len() >= PASSWORD_MIN_LEN,
-        ),
-        ui::SetupPasswordRequirementViewModel::new(
-            i18n::tr!(
-                "shell-at-most-password-max-len-characters",
-                PASSWORD_MAX_LEN = PASSWORD_MAX_LEN
-            ),
-            password.len() <= PASSWORD_MAX_LEN,
-        ),
-        ui::SetupPasswordRequirementViewModel::new(
-            i18n::tr!("shell-not-blank"),
-            !password.trim().is_empty(),
-        ),
-        ui::SetupPasswordRequirementViewModel::new(
-            i18n::tr!("shell-different-from-username"),
-            normalized_username != normalized_password,
-        ),
-        ui::SetupPasswordRequirementViewModel::new(
-            i18n::tr!("shell-passwords-match"),
-            !password.is_empty() && password == password_confirm,
-        ),
-    ]
 }
 
 pub(in crate::session) fn setup_language_code_at(

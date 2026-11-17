@@ -54,10 +54,6 @@ impl ShellSession {
                     self.pages.system_status.system_status_add_picker.is_some()
                         || self.pages.system_status.system_status_size_picker.is_some()
                 }
-                Some(ShellComponent::UserManagement) => !matches!(
-                    self.pages.user_management.user_management_mode,
-                    UserManagementMode::Browse
-                ),
                 Some(ShellComponent::SetupCustomColorDialog | ShellComponent::ClockCreateInput) => {
                     true
                 }
@@ -66,9 +62,7 @@ impl ShellSession {
             return accepts_text.then(|| overlay.id.clone());
         }
         match self.active_screen() {
-            ShellScreen::Login | ShellScreen::BootstrapAdmin | ShellScreen::Editor => {
-                Some(format!("{:?}", self.active_screen()))
-            }
+            ShellScreen::Editor => Some(format!("{:?}", self.active_screen())),
             ShellScreen::Launcher if self.pages.launcher.search.state.focused => {
                 Some("launcher-search".into())
             }
@@ -76,9 +70,6 @@ impl ShellSession {
                 "explorer:{:?}",
                 self.pages.explorer.explorer_input_mode
             )),
-            ShellScreen::FirstRunSetup if self.pages.setup.setup_step == ui::SetupStep::Admin => {
-                Some("setup-admin".into())
-            }
             _ => None,
         }
     }
@@ -127,15 +118,6 @@ impl ShellSession {
                     target.push_str(&format!(":animation:{}", editor.form.selected));
                 }
             }
-            ShellScreen::UserManagement => match &self.pages.user_management.user_management_mode {
-                UserManagementMode::Create(form) => {
-                    target.push_str(&format!(":{:?}", form.focused_field))
-                }
-                UserManagementMode::EditInfo(form) => {
-                    target.push_str(&format!(":{:?}", form.focused_field))
-                }
-                UserManagementMode::Browse => {}
-            },
             ShellScreen::Clock => {
                 if let Some(form) = &self.pages.clock.clock_create_state {
                     target.push_str(&format!(":{:?}:{}", form.focus, form.active_field));
@@ -167,35 +149,6 @@ impl ShellSession {
                     })
                 {
                     state.selected = 1;
-                }
-            }
-            ShellScreen::Login => {
-                self.pages.common.focused_component = ShellComponent::LoginPassword
-            }
-            ShellScreen::BootstrapAdmin => {
-                if !matches!(
-                    self.pages.common.focused_component,
-                    ShellComponent::BootstrapUsername | ShellComponent::BootstrapPassword
-                ) {
-                    self.pages.common.focused_component = ShellComponent::BootstrapUsername;
-                }
-            }
-            ShellScreen::FirstRunSetup => {
-                if self.pages.setup.setup_custom_color_target.is_none()
-                    && !matches!(
-                        self.pages.common.focused_component,
-                        ShellComponent::SetupAdminUsername
-                            | ShellComponent::SetupAdminPassword
-                            | ShellComponent::SetupAdminPasswordConfirm
-                            | ShellComponent::SetupAdminHint
-                    )
-                {
-                    self.pages.common.focused_component = ShellComponent::SetupAdminUsername;
-                    if let Some(field) =
-                        setup_field_for_component(ShellComponent::SetupAdminUsername)
-                    {
-                        self.pages.setup.setup_focused_field = field;
-                    }
                 }
             }
             ShellScreen::Explorer => {
@@ -248,24 +201,6 @@ impl ShellSession {
                     .and_then(|state| state.animation_editor.as_mut())
                 {
                     editor.form.selected = editor.form.selected.min(editor.form.fields.len() - 1);
-                }
-            }
-            ShellScreen::UserManagement => {
-                match &mut self.pages.user_management.user_management_mode {
-                    UserManagementMode::Create(form) => {
-                        if !matches!(
-                            form.focused_field,
-                            UserManagementFormField::Username
-                                | UserManagementFormField::DisplayName
-                                | UserManagementFormField::Password
-                        ) {
-                            form.focused_field = UserManagementFormField::Username;
-                        }
-                    }
-                    UserManagementMode::EditInfo(form) => {
-                        form.focused_field = UserManagementFormField::DisplayName
-                    }
-                    UserManagementMode::Browse => {}
                 }
             }
             _ => {}

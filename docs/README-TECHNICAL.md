@@ -35,7 +35,7 @@ flowchart TD
     Input --> Exit[Save recovery data, clean up tasks, restore the terminal, and exit]
 ```
 
-Linux uses the system user that launches the program and opens the home page after the initial language and appearance setup. Windows and macOS use local accounts, login, and lockscreen flows. See the [session guide](../crates/shell/docs/session.md) for detailed rules.
+Shell opens as the system user who launches it. First-time setup saves personal preferences for that system username. Linux provides system account management. See the [session guide](../crates/shell/docs/session.md) for detailed rules.
 
 ## Crate responsibilities
 
@@ -50,7 +50,7 @@ Linux uses the system user that launches the program and opens the home page aft
 | [auto-admin](../crates/auto-admin/README.md) | Operation approval, password input, task finalization, and authorization connections |
 | [platform](../crates/platform/README.md) | Operating-system paths, files, processes, and system-management interfaces |
 | [storage](../crates/storage/README.md) | Application documents, format validation, atomic saves, migration, and corruption recovery |
-| [identity](../crates/identity/README.md) | The current Linux user and local Windows/macOS accounts |
+| [identity](../crates/identity/README.md) | The current system user and workspace permissions |
 | [system-services](../crates/system-services/README.md) | Shared system and weather snapshots, and optional background services |
 | [time](../crates/time/README.md) | HTTP time synchronization, time advancement, and timezone conversion |
 | [weathr](../crates/weathr/README.md) | Weather scenes and lockscreen views |

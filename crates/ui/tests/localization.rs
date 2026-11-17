@@ -11,10 +11,7 @@ use std::{
 use i18n::{LanguageSnapshot, LocalizedMessage, with_snapshot};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use ui::components::{UpdateActivity, UpdateActivityViewModel};
-use ui::{
-    HomeViewModel, LogsViewModel, RenderContext, TundraTheme, home_logout_area, logs_hit_test,
-    logs_layout,
-};
+use ui::{LogsViewModel, RenderContext, TundraTheme, logs_hit_test, logs_layout};
 use unicode_width::UnicodeWidthStr;
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
@@ -176,19 +173,12 @@ fn retained_update_labels_follow_the_render_snapshot_and_preserve_raw_output() {
 }
 
 #[test]
-fn localized_home_logout_and_log_controls_use_terminal_cell_widths() {
+fn localized_log_controls_use_terminal_cell_widths() {
     let fixture = LocaleFixture::new();
     for locale in ["en-US", "zh-CN"] {
         let snapshot = fixture.snapshot(locale);
         with_snapshot(&snapshot, || {
             let main = Rect::new(0, 0, 120, 32);
-            let home = HomeViewModel::user("张三🙂", "12:00", Vec::new())
-                .with_account_logout("张三🙂", false);
-            let area = home_logout_area(main, &home);
-            assert_eq!(
-                usize::from(area.width),
-                i18n::tr!("ui-home-logout-button").width() + 2
-            );
             let mut model = LogsViewModel {
                 can_view_system: true,
                 linux_available: true,

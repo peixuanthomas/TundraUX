@@ -40,7 +40,6 @@ pub(super) enum WindowApplication {
     Management(ManagementKind),
     Settings,
     SystemStatus,
-    UserManagement,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,7 +78,6 @@ pub(super) enum WindowLaunch {
     Script,
     Settings,
     SystemStatus,
-    UserManagement,
 }
 
 impl WindowLaunch {
@@ -158,7 +156,6 @@ impl WindowLaunch {
             Self::Management(query) => WindowApplication::Management(query.kind),
             Self::Settings => WindowApplication::Settings,
             Self::SystemStatus => WindowApplication::SystemStatus,
-            Self::UserManagement => WindowApplication::UserManagement,
         }
     }
 
@@ -178,7 +175,6 @@ impl WindowLaunch {
                 WindowApplication::Management(kind) => kind.id(),
                 WindowApplication::Settings => "settings",
                 WindowApplication::SystemStatus => "system-status",
-                WindowApplication::UserManagement => "users",
             },
         }
     }
@@ -202,7 +198,6 @@ impl WindowLaunch {
                 WindowApplication::Management(kind) => management_title(kind),
                 WindowApplication::Settings => i18n::tr!("settings-title"),
                 WindowApplication::SystemStatus => i18n::tr!("shell-system-status"),
-                WindowApplication::UserManagement => i18n::tr!("shell-user-management"),
             },
         }
     }
@@ -275,7 +270,6 @@ impl WindowLaunch {
             Self::Script => state.open_script_editor(),
             Self::Settings => state.open_settings(),
             Self::SystemStatus => state.open_system_status(),
-            Self::UserManagement => state.open_user_management(),
         }
     }
 }

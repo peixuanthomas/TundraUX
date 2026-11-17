@@ -1047,7 +1047,7 @@ fn remediation_for_environment(status: CheckStatus) -> Option<String> {
 pub const fn storage_document_label(kind: StorageDocumentKind) -> &'static str {
     match kind {
         StorageDocumentKind::Config => "Configuration",
-        StorageDocumentKind::Users => "Users",
+        StorageDocumentKind::Profiles => "Profiles",
         StorageDocumentKind::State => "State",
         StorageDocumentKind::RecentFiles => "Recent files",
         StorageDocumentKind::Sessions => "Sessions",
@@ -1059,7 +1059,7 @@ pub const fn storage_document_label(kind: StorageDocumentKind) -> &'static str {
 const fn storage_document_id(kind: StorageDocumentKind) -> &'static str {
     match kind {
         StorageDocumentKind::Config => "config",
-        StorageDocumentKind::Users => "users",
+        StorageDocumentKind::Profiles => "profiles",
         StorageDocumentKind::State => "state",
         StorageDocumentKind::RecentFiles => "recent-files",
         StorageDocumentKind::Sessions => "sessions",

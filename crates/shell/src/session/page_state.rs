@@ -67,34 +67,10 @@ impl Default for ClockPageState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct LoginPageState {
-    pub(super) login_selected_user: usize,
-    pub(super) login_user_window_start: usize,
-    pub(super) login_username: String,
-    pub(super) login_password: String,
-    pub(super) login_password_visible_until: Option<Instant>,
-}
-impl Default for LoginPageState {
-    fn default() -> Self {
-        Self {
-            login_selected_user: 0,
-            login_user_window_start: 0,
-            login_username: String::new(),
-            login_password: String::new(),
-            login_password_visible_until: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SetupPageState {
     pub(super) setup_step: ui::SetupStep,
     pub(super) setup_selected_language_index: usize,
     pub(super) setup_selected_timezone_index: usize,
-    pub(super) setup_admin_username: String,
-    pub(super) setup_admin_password: String,
-    pub(super) setup_admin_password_confirm: String,
-    pub(super) setup_admin_password_hint: String,
     pub(super) setup_focused_field: ui::SetupField,
     pub(super) setup_timezone_window_start: usize,
     pub(super) setup_border_shape: storage::BorderShape,
@@ -111,10 +87,6 @@ impl Default for SetupPageState {
             setup_step: ui::SetupStep::Language,
             setup_selected_language_index: 0,
             setup_selected_timezone_index: 0,
-            setup_admin_username: String::new(),
-            setup_admin_password: String::new(),
-            setup_admin_password_confirm: String::new(),
-            setup_admin_password_hint: String::new(),
             setup_focused_field: ui::SetupField::LanguageList,
             setup_timezone_window_start: 0,
             setup_border_shape: storage::AppearanceConfig::default().border_shape,
@@ -124,46 +96,6 @@ impl Default for SetupPageState {
             setup_custom_color_input: String::new(),
             setup_custom_color_editing: Default::default(),
             setup_custom_color_error: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct BootstrapPageState {
-    pub(super) bootstrap_username: String,
-    pub(super) bootstrap_password: String,
-}
-impl Default for BootstrapPageState {
-    fn default() -> Self {
-        Self {
-            bootstrap_username: String::new(),
-            bootstrap_password: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct UserManagementPageState {
-    pub(super) user_management_selected: usize,
-    pub(super) user_management_window_start: usize,
-    pub(super) user_management_focus: UserManagementPageFocus,
-    pub(super) user_management_more_open: bool,
-    pub(super) user_management_message: Option<i18n::LocalizedText>,
-    pub(super) user_management_feedback_tone: UserManagementFeedbackTone,
-    pub(super) user_management_mode: UserManagementMode,
-    pub(super) user_management_job: Option<UserManagementJob>,
-}
-impl Default for UserManagementPageState {
-    fn default() -> Self {
-        Self {
-            user_management_selected: 0,
-            user_management_window_start: 0,
-            user_management_focus: UserManagementPageFocus::UserList,
-            user_management_more_open: false,
-            user_management_message: None,
-            user_management_feedback_tone: UserManagementFeedbackTone::Info,
-            user_management_mode: UserManagementMode::Browse,
-            user_management_job: None,
         }
     }
 }
@@ -503,10 +435,7 @@ pub(super) struct ShellPages {
     pub(super) common: PageInstances<CommonPageState>,
     pub(super) home: PageInstances<HomePageState>,
     pub(super) clock: PageInstances<ClockPageState>,
-    pub(super) login: PageInstances<LoginPageState>,
     pub(super) setup: PageInstances<SetupPageState>,
-    pub(super) bootstrap: PageInstances<BootstrapPageState>,
-    pub(super) user_management: PageInstances<UserManagementPageState>,
     pub(super) settings: PageInstances<SettingsPageState>,
     pub(super) system_status: PageInstances<SystemStatusPageState>,
     pub(super) launcher: PageInstances<LauncherPageState>,
@@ -528,14 +457,6 @@ impl ShellPages {
             ShellScreen::FirstRunSetup => {
                 self.setup.create(id);
                 self.setup.select(Some(id));
-            }
-            ShellScreen::BootstrapAdmin => {
-                self.bootstrap.create(id);
-                self.bootstrap.select(Some(id));
-            }
-            ShellScreen::Login => {
-                self.login.create(id);
-                self.login.select(Some(id));
             }
             ShellScreen::Home => {
                 self.home.create(id);
@@ -587,18 +508,12 @@ impl ShellPages {
                 self.settings.create(id);
                 self.settings.select(Some(id));
             }
-            ShellScreen::UserManagement => {
-                self.user_management.create(id);
-                self.user_management.select(Some(id));
-            }
             ShellScreen::ExitConfirm => {}
         }
     }
     pub(super) fn select(&mut self, id: Option<PageInstanceId>, screen: ShellScreen) {
         match screen {
             ShellScreen::FirstRunSetup => self.setup.select(id),
-            ShellScreen::BootstrapAdmin => self.bootstrap.select(id),
-            ShellScreen::Login => self.login.select(id),
             ShellScreen::Home => self.home.select(id),
             ShellScreen::Clock => self.clock.select(id),
             ShellScreen::Diagnostics => self.diagnostics.select(id),
@@ -614,7 +529,6 @@ impl ShellPages {
                 self.logs.select(id);
             }
             ShellScreen::Settings => self.settings.select(id),
-            ShellScreen::UserManagement => self.user_management.select(id),
             ShellScreen::ExitConfirm => {}
         }
     }
@@ -623,10 +537,7 @@ impl ShellPages {
         self.common.remove(id);
         self.home.remove(id);
         self.clock.remove(id);
-        self.login.remove(id);
         self.setup.remove(id);
-        self.bootstrap.remove(id);
-        self.user_management.remove(id);
         self.settings.remove(id);
         self.system_status.remove(id);
         self.launcher.remove(id);
@@ -644,10 +555,7 @@ pub(super) struct PageSelection {
     pub(super) common: Option<PageInstanceId>,
     pub(super) home: Option<PageInstanceId>,
     pub(super) clock: Option<PageInstanceId>,
-    pub(super) login: Option<PageInstanceId>,
     pub(super) setup: Option<PageInstanceId>,
-    pub(super) bootstrap: Option<PageInstanceId>,
-    pub(super) user_management: Option<PageInstanceId>,
     pub(super) settings: Option<PageInstanceId>,
     pub(super) system_status: Option<PageInstanceId>,
     pub(super) launcher: Option<PageInstanceId>,
@@ -665,10 +573,7 @@ impl ShellPages {
             common: self.common.selected_id(),
             home: self.home.selected_id(),
             clock: self.clock.selected_id(),
-            login: self.login.selected_id(),
             setup: self.setup.selected_id(),
-            bootstrap: self.bootstrap.selected_id(),
-            user_management: self.user_management.selected_id(),
             settings: self.settings.selected_id(),
             system_status: self.system_status.selected_id(),
             launcher: self.launcher.selected_id(),
@@ -687,20 +592,8 @@ impl ShellPages {
             .select(selected.home.filter(|id| self.home.get(*id).is_some()));
         self.clock
             .select(selected.clock.filter(|id| self.clock.get(*id).is_some()));
-        self.login
-            .select(selected.login.filter(|id| self.login.get(*id).is_some()));
         self.setup
             .select(selected.setup.filter(|id| self.setup.get(*id).is_some()));
-        self.bootstrap.select(
-            selected
-                .bootstrap
-                .filter(|id| self.bootstrap.get(*id).is_some()),
-        );
-        self.user_management.select(
-            selected
-                .user_management
-                .filter(|id| self.user_management.get(*id).is_some()),
-        );
         self.settings.select(
             selected
                 .settings

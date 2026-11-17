@@ -68,7 +68,6 @@ impl ShellSession {
         received_at: Instant,
     ) -> Option<ShellAction> {
         self.notification_expire(received_at);
-        self.expire_login_password_visibility_at(received_at);
         if self.consume_screen_saver_input(input, received_at) {
             return Some(ShellAction::Redraw);
         }
@@ -255,33 +254,6 @@ impl ShellSession {
         platform: &dyn Platform,
         received_at: Instant,
     ) -> ShellAction {
-        if self.identity_backend == identity::IdentityBackend::Linux
-            && matches!(
-                routed.command,
-                ShellCommand::Logout
-                    | ShellCommand::LogoutToLockscreen
-                    | ShellCommand::SubmitLogin
-                    | ShellCommand::SubmitBootstrapAdmin
-                    | ShellCommand::AppendAuthChar(_)
-                    | ShellCommand::AuthBackspace
-                    | ShellCommand::LoginPreviousUser
-                    | ShellCommand::LoginNextUser
-                    | ShellCommand::LoginPageUserUp
-                    | ShellCommand::LoginPageUserDown
-                    | ShellCommand::LoginFirstUser
-                    | ShellCommand::LoginLastUser
-                    | ShellCommand::LoginFocusUserList
-                    | ShellCommand::LoginFocusPassword
-                    | ShellCommand::LoginFocusPasswordVisibility
-                    | ShellCommand::ToggleLoginPasswordVisibility
-                    | ShellCommand::ActivateLogin { .. }
-                    | ShellCommand::AppendSetupAdminChar(_)
-                    | ShellCommand::SetupAdminBackspace
-                    | ShellCommand::UnlockManagedUser
-            )
-        {
-            return ShellAction::Redraw;
-        }
         self.record_input_diagnostics(&routed);
         // A refresh between press and release must not cancel the click.
         if !matches!(routed.input, InputEvent::Mouse(_) | InputEvent::Tick) {
@@ -293,9 +265,7 @@ impl ShellSession {
         if self.windows_active
             && matches!(
                 routed.command,
-                ShellCommand::Logout
-                    | ShellCommand::LogoutToLockscreen
-                    | ShellCommand::ConfirmExit
+                ShellCommand::ConfirmExit
                     | ShellCommand::Restart
                     | ShellCommand::PowerOff
                     | ShellCommand::Reboot
@@ -305,7 +275,7 @@ impl ShellSession {
             return ShellAction::Redraw;
         }
 
-        if (self.pending_login_reset.is_some() || self.pending_session_exit.is_some())
+        if self.pending_session_exit.is_some()
             && !matches!(
                 routed.command,
                 ShellCommand::Tick | ShellCommand::RefreshHitMap { .. } | ShellCommand::Shutdown
@@ -413,12 +383,6 @@ impl ShellSession {
                 self.last_resize_event = Some(format!("{width}x{height}"));
                 if self.active_screen() == ShellScreen::FirstRunSetup {
                     self.sync_setup_timezone_window();
-                }
-                if self.active_screen() == ShellScreen::Login {
-                    self.sync_login_user_window();
-                }
-                if self.active_screen() == ShellScreen::UserManagement {
-                    self.ensure_user_management_selection_visible();
                 }
                 self.refresh_hit_map();
                 ShellAction::Redraw
@@ -588,67 +552,6 @@ impl ShellSession {
                 )));
                 ShellAction::Redraw
             }
-            ShellCommand::AppendAuthChar(character) => {
-                self.append_auth_char(character);
-                ShellAction::Redraw
-            }
-            ShellCommand::AuthBackspace => {
-                self.auth_backspace();
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginPreviousUser => {
-                self.select_login_user_delta(-1);
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginNextUser => {
-                self.select_login_user_delta(1);
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginPageUserUp => {
-                self.select_login_user_delta(-(self.login_user_visible_row_count() as isize));
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginPageUserDown => {
-                self.select_login_user_delta(self.login_user_visible_row_count() as isize);
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginFirstUser => {
-                self.select_first_login_user();
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginLastUser => {
-                self.select_last_login_user();
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginFocusUserList => {
-                self.pages.common.focused_component = ShellComponent::LoginUserList;
-                self.pages.common.error_message = None;
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginFocusPassword => {
-                self.pages.common.focused_component = ShellComponent::LoginPassword;
-                self.pages.common.error_message = None;
-                ShellAction::Redraw
-            }
-            ShellCommand::LoginFocusPasswordVisibility => {
-                self.pages.common.focused_component = ShellComponent::LoginPasswordVisibility;
-                self.pages.common.error_message = None;
-                ShellAction::Redraw
-            }
-            ShellCommand::ToggleLoginPasswordVisibility => {
-                self.pages.common.focused_component = ShellComponent::LoginPasswordVisibility;
-                self.toggle_login_password_visibility_at(received_at);
-                ShellAction::Redraw
-            }
-            ShellCommand::SubmitLogin => {
-                self.pages.login.login_password_visible_until = None;
-                self.submit_login();
-                ShellAction::Redraw
-            }
-            ShellCommand::SubmitBootstrapAdmin => {
-                self.submit_bootstrap_admin();
-                ShellAction::Redraw
-            }
             ShellCommand::SetupPreviousLanguage => {
                 self.setup_previous_language();
                 ShellAction::Redraw
@@ -700,23 +603,11 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::SetupFocusNext => {
-                self.move_setup_admin_focus(1);
+                self.move_setup_appearance_focus(1);
                 ShellAction::Redraw
             }
             ShellCommand::SetupFocusPrevious => {
-                self.move_setup_admin_focus(-1);
-                ShellAction::Redraw
-            }
-            ShellCommand::AppendSetupAdminChar(character) => {
-                self.append_setup_admin_char(character);
-                ShellAction::Redraw
-            }
-            ShellCommand::SetupAdminBackspace => {
-                self.setup_admin_backspace();
-                ShellAction::Redraw
-            }
-            ShellCommand::SubmitSetup => {
-                self.submit_first_run_setup();
+                self.move_setup_appearance_focus(-1);
                 ShellAction::Redraw
             }
             ShellCommand::SetupPreviousAppearanceChoice => {
@@ -756,13 +647,6 @@ impl ShellSession {
                 coordinates,
             } => {
                 self.activate_setup(target, coordinates);
-                ShellAction::Redraw
-            }
-            ShellCommand::ActivateLogin {
-                target,
-                coordinates,
-            } => {
-                self.activate_login(target, coordinates);
                 ShellAction::Redraw
             }
             ShellCommand::HomeEdit => {
@@ -812,17 +696,6 @@ impl ShellSession {
             ShellCommand::ActivateSelectedHomeEntry => {
                 self.activate_selected_home_entry(platform);
                 ShellAction::Redraw
-            }
-            ShellCommand::Logout => {
-                self.logout_at(received_at);
-                ShellAction::Redraw
-            }
-            ShellCommand::LogoutToLockscreen => {
-                if self.logout_to_lockscreen_at(received_at) {
-                    ShellAction::Exit
-                } else {
-                    ShellAction::Redraw
-                }
             }
             ShellCommand::SelectHomeEntryAt(coordinates) => {
                 if let Some(index) = self.home_entry_index_at(coordinates) {
@@ -1556,10 +1429,6 @@ impl ShellSession {
                 self.open_user_management();
                 ShellAction::Redraw
             }
-            ShellCommand::CloseUserManagement => {
-                self.close_user_management();
-                ShellAction::Redraw
-            }
             ShellCommand::OpenClock => {
                 self.open_clock();
                 ShellAction::Redraw
@@ -2080,161 +1949,6 @@ impl ShellSession {
             }
             ShellCommand::ClockSnoozeFiveMinutes(id) => {
                 self.snooze_clock_alarm(id);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementNext => {
-                self.select_user_management_row(1);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementPrevious => {
-                self.select_user_management_row(-1);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementPageUp => {
-                self.select_user_management_page(-1);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementPageDown => {
-                self.select_user_management_page(1);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementFirst => {
-                self.select_user_management_edge(false);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementLast => {
-                self.select_user_management_edge(true);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementSelectRow(index) => {
-                if index < self.app.managed_users().len() {
-                    self.pages.user_management.user_management_selected = index;
-                    self.pages.user_management.user_management_focus =
-                        UserManagementPageFocus::UserList;
-                    self.ensure_user_management_selection_visible();
-                }
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementFocusAction(action) => {
-                self.focus_user_management_action(action);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementActivateFocused => {
-                self.activate_focused_user_management_control();
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementActivateAction(action) => {
-                self.focus_user_management_action(action);
-                self.activate_user_management_action(action);
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementSetFormFocus(field) => {
-                self.set_user_management_form_focus(field);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementActivateFormControl(field) => {
-                self.set_user_management_form_focus(field);
-                match field {
-                    ui::UserManagementField::Role => {
-                        self.toggle_user_management_form_role();
-                    }
-                    ui::UserManagementField::Submit => {
-                        self.submit_user_management_form();
-                    }
-                    ui::UserManagementField::Cancel => {
-                        self.cancel_user_management_form();
-                    }
-                    ui::UserManagementField::Username
-                    | ui::UserManagementField::DisplayName
-                    | ui::UserManagementField::Password => {}
-                }
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementToggleFormRole => {
-                self.toggle_user_management_form_role();
-                ShellAction::Redraw
-            }
-            ShellCommand::CreateManagedUser => {
-                self.begin_create_managed_user();
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::EditManagedUserInfo => {
-                self.begin_edit_selected_user_info();
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::DisableManagedUser => {
-                self.disable_selected_user();
-                ShellAction::Redraw
-            }
-            ShellCommand::UnlockManagedUser => {
-                self.unlock_selected_user();
-                ShellAction::Redraw
-            }
-            ShellCommand::ResetManagedPassword => {
-                self.reset_selected_password();
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::CycleManagedRole => {
-                self.cycle_selected_role();
-                self.normalize_user_management_focus();
-                ShellAction::Redraw
-            }
-            ShellCommand::RequestDeleteManagedUser => {
-                self.request_delete_selected_user();
-                ShellAction::Redraw
-            }
-            ShellCommand::DeleteManagedUser => {
-                self.delete_selected_user();
-                self.normalize_user_management_focus();
-                ShellAction::Redraw
-            }
-            ShellCommand::AppendUserManagementChar(character) => {
-                self.append_user_management_char(character);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementBackspace => {
-                self.user_management_backspace();
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementFormInput(event) => {
-                self.handle_user_management_form_input(event);
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::EditUserManagementText(key) => {
-                self.edit_user_management_text(&key);
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementFocusNext => {
-                if self.pages.user_management.user_management_mode == UserManagementMode::Browse {
-                    self.move_user_management_page_focus(1);
-                } else {
-                    self.move_user_management_form_focus(1);
-                }
-                ShellAction::Redraw
-            }
-            ShellCommand::UserManagementFocusPrevious => {
-                if self.pages.user_management.user_management_mode == UserManagementMode::Browse {
-                    self.move_user_management_page_focus(-1);
-                } else {
-                    self.move_user_management_form_focus(-1);
-                }
-                ShellAction::Redraw
-            }
-            ShellCommand::SubmitUserManagementForm => {
-                self.submit_user_management_form();
-                self.refresh_hit_map();
-                ShellAction::Redraw
-            }
-            ShellCommand::CancelUserManagementForm => {
-                self.cancel_user_management_form();
-                self.refresh_hit_map();
                 ShellAction::Redraw
             }
             ShellCommand::Hover(target) => {

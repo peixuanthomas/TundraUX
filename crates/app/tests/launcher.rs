@@ -223,7 +223,7 @@ fn invalid_or_unauthorized_launcher_edits_leave_the_saved_entry_unchanged() {
         assert!(state.error.is_some());
         assert_eq!(storage.load_config().unwrap().launcher, before);
     }
-    for actor in [None, Some(user())] {
+    for actor in [None, Some(session(UserRole::Guest))] {
         for edit in [
             LauncherEntryEdit::Name("denied".into()),
             LauncherEntryEdit::Command("denied".into()),
@@ -818,7 +818,7 @@ fn terminal_launch_preserves_argument_boundaries_and_working_directory() {
 }
 
 #[test]
-fn terminal_settings_require_management_permission_and_launch_requires_command_line_permission() {
+fn terminal_settings_and_launch_use_the_system_session() {
     let fixture = Fixture::new("terminal-permissions");
     let executable = fixture.file("terminal.exe", b"program");
     fixture.approve(&executable, ExecutableKind::NativeBinary);
@@ -839,7 +839,7 @@ fn terminal_settings_require_management_permission_and_launch_requires_command_l
             id: id.clone(),
             settings: Some(LauncherTerminalSettings::default()),
         },
-        Some(&user()),
+        None,
         &fixture.platform,
         &storage,
     );
@@ -855,12 +855,12 @@ fn terminal_settings_require_management_permission_and_launch_requires_command_l
             id: id.clone(),
             settings: Some(LauncherTerminalSettings::default()),
         },
-        Some(&admin()),
+        Some(&user()),
         &fixture.platform,
         &storage,
     );
     assert!(state.error.is_none());
-    assert_eq!(
+    assert!(matches!(
         controller.apply(
             &mut state,
             LauncherCommand::RequestLaunch(id),
@@ -868,9 +868,9 @@ fn terminal_settings_require_management_permission_and_launch_requires_command_l
             &fixture.platform,
             &storage,
         ),
-        LauncherEffect::None
-    );
-    assert!(state.error.is_some());
+        LauncherEffect::OpenTerminalRequested { .. }
+    ));
+    assert!(state.error.is_none());
 }
 
 #[test]
@@ -1116,7 +1116,7 @@ fn user() -> AuthSession {
 }
 fn session(role: UserRole) -> AuthSession {
     AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "session".into(),
         user_id: "user".into(),
         username: "tester".into(),

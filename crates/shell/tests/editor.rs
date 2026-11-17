@@ -55,7 +55,7 @@ fn vim_toggle_stays_in_the_current_editor_and_waits_for_the_engine() {
         "the real runtime owns Vim commands; a pending engine must not edit the source"
     );
 
-    let mut reopened = logged_in_state(&platform);
+    let mut reopened = system_home(&platform);
     open_editor_from_home(&mut reopened, &platform);
     assert_eq!(reopened.to_editor_view_model().vim_mode, None);
     assert_eq!(
@@ -95,10 +95,10 @@ fn vim_toggle_stays_in_the_current_editor_and_waits_for_the_engine() {
 fn completed_save_updates_the_status_and_the_original_explorer_metadata() {
     let fixture = FixtureRoot::new("save-refreshes-explorer");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents/note.txt");
     fs::write(&path, "old").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "saved prefix ");
     state.apply_input_with_platform(ctrl('s'), &platform);
@@ -222,11 +222,11 @@ fn search_field_clipboard_and_word_keys_never_edit_the_document() {
 fn soft_wrap_keyboard_navigation_resize_and_save_keep_source_unchanged() {
     let fixture = FixtureRoot::new("soft-wrap-navigation");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("notes.txt");
     let source = "中文e\u{301}👩‍💻 abc ".repeat(60);
     fs::write(&path, &source).unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     let toggle = InputEvent::Key(KeyInput::with_phase(
         InputKey::Char('z'),
@@ -269,10 +269,10 @@ fn soft_wrap_keyboard_navigation_resize_and_save_keep_source_unchanged() {
 fn completed_background_wrap_reveals_the_caret_in_a_large_file() {
     let fixture = FixtureRoot::new("large-soft-wrap");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("large.txt");
     fs::write(&path, "a".repeat(100_000)).unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     state.apply_input_with_platform(InputEvent::from_key_label("End"), &platform);
     state.apply_input_with_platform(
@@ -309,10 +309,10 @@ fn completed_background_wrap_reveals_the_caret_in_a_large_file() {
 fn json_shortcut_is_reachable_and_undo_restores_compact_source() {
     let fixture = FixtureRoot::new("json-format-shortcut");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("data.json");
     fs::write(&path, "{\"a\":1,\"b\":{\"c\":2}}").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     state.apply_input_with_platform(ctrl_shift('j'), &platform);
     let model = state.to_editor_view_model();
@@ -331,9 +331,9 @@ fn json_shortcut_is_reachable_and_undo_restores_compact_source() {
 fn inline_find_replace_cancel_and_atomic_undo_work_from_keyboard() {
     let fixture = FixtureRoot::new("search-keyboard");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(fixture.path().join("Documents/notes.txt"), "cat cat").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     state.apply_input_with_platform(ctrl('f'), &platform);
     type_text(&mut state, &platform, "cat");
@@ -403,9 +403,9 @@ fn launcher_editor_entry_opens_a_plain_text_document() {
 fn explorer_opens_c_with_cached_highlights_that_update_after_typing() {
     let fixture = FixtureRoot::new("c-highlights");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(fixture.path().join("Documents/main.c"), "int x = 42;").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     let model = state.to_editor_view_model();
     assert!(model.line_markers.is_empty());
@@ -460,13 +460,13 @@ fn editor_accepts_unicode_and_inserts_spaces_to_the_next_tab_stop() {
 fn source_caret_reveals_a_long_line_and_the_horizontal_scrollbar_moves_the_viewport() {
     let fixture = FixtureRoot::new("source-horizontal-caret");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(
         fixture.path().join("Documents").join("wide.log"),
         "0123456789".repeat(30),
     )
     .expect("seed wide log");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     assert!(state.to_editor_view_model().read_only);
 
@@ -532,7 +532,7 @@ fn source_caret_follows_vertical_navigation_in_editable_and_read_only_files() {
     for name in ["notes.txt", "service.log"] {
         let fixture = FixtureRoot::new("source-vertical-caret");
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         // Long lines reserve a horizontal scrollbar, reducing the visible height.
         let source = (0..100)
             .map(|line| format!("line {line:03} {}", "x".repeat(150)))
@@ -540,7 +540,7 @@ fn source_caret_follows_vertical_navigation_in_editable_and_read_only_files() {
             .join("\n");
         let path = fixture.path().join("Documents").join(name);
         fs::write(&path, &source).unwrap();
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
         open_only_document_in_editor(&mut state, &platform);
         assert_eq!(
             state.to_editor_view_model().read_only,
@@ -632,12 +632,12 @@ fn source_caret_follows_newlines_beyond_the_bottom_edge() {
 fn unicode_document_can_scroll_horizontally_past_short_lines() {
     let fixture = FixtureRoot::new("unicode-horizontal-scroll");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let short_line = format!("{}好", "a".repeat(106));
     let source = format!("{short_line}\n{}", "x".repeat(300));
     let path = fixture.path().join("Documents/mixed.txt");
     fs::write(&path, &source).unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
 
     // Revealing the caret on the long line also clips the shorter Unicode line.
@@ -680,13 +680,13 @@ fn unicode_document_can_scroll_horizontally_past_short_lines() {
 fn editor_vertical_scrollbar_thumb_drags_to_both_ends() {
     let fixture = FixtureRoot::new("vertical-scrollbar-drag");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let contents = (0..160)
         .map(|index| format!("line-{index:03}"))
         .collect::<Vec<_>>()
         .join("\n");
     fs::write(fixture.path().join("Documents").join("long.log"), contents).expect("seed long log");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
 
     let scrollbar = current_editor_layout(&state)
@@ -962,14 +962,14 @@ fn held_direction_keys_accelerate_non_linearly_with_slower_vertical_shift_select
 fn editor_settings_restore_defaults_and_persist_saved_acceleration_values() {
     let fixture = FixtureRoot::new("cursor-acceleration-settings");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let manager = storage::StorageManager::open(app_paths(fixture.path()))
         .expect("open storage")
         .manager;
     let mut config = manager.load_config().expect("load config");
     config.editor.explorer_open_extensions = vec!["rs".to_string()];
     manager.save_config(&config).expect("save custom suffix");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
 
     open_editor_preferences(&mut state, &platform);
@@ -1014,7 +1014,7 @@ fn editor_settings_restore_defaults_and_persist_saved_acceleration_values() {
     assert!(stored.cursor_vertical_max_step < stored.cursor_horizontal_max_step);
     assert_eq!(stored.explorer_open_extensions, vec!["rs".to_string()]);
 
-    let mut reloaded = logged_in_state(&platform);
+    let mut reloaded = system_home(&platform);
     open_editor_from_home(&mut reloaded, &platform);
     open_editor_preferences(&mut reloaded, &platform);
     let loaded = reloaded
@@ -1141,12 +1141,12 @@ fn opening_the_picker_keeps_the_dirty_document_and_cancel_returns_to_it() {
 fn opening_another_file_keeps_the_original_buffer_and_recovery() {
     let fixture = FixtureRoot::new("dirty-open-discard");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let documents = fixture.path().join("Documents");
     let current = documents.join("note.md");
     let replacement = documents.join("other.md");
     fs::write(&current, "original").expect("seed current document");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     fs::write(&replacement, "replacement").expect("seed replacement document");
     type_text(&mut state, &platform, "local ");
@@ -1204,10 +1204,10 @@ fn opening_another_file_keeps_the_original_buffer_and_recovery() {
 fn failed_picker_replacement_keeps_the_original_document_and_recovery() {
     let fixture = FixtureRoot::new("failed-replacement-recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let documents = fixture.path().join("Documents");
     fs::write(documents.join("original.txt"), "original").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     let original_page = state.active_page_id();
     type_text(&mut state, &platform, "unsaved ");
@@ -1262,12 +1262,12 @@ fn failed_picker_replacement_keeps_the_original_document_and_recovery() {
 fn save_then_open_continues_to_the_picker_after_the_save_succeeds() {
     let fixture = FixtureRoot::new("dirty-open-save");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let documents = fixture.path().join("Documents");
     let current = documents.join("note.md");
     let replacement = documents.join("other.md");
     fs::write(&current, "original").expect("seed current document");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     fs::write(&replacement, "replacement").expect("seed replacement document");
     type_text(&mut state, &platform, "saved ");
@@ -1306,10 +1306,10 @@ fn save_then_open_continues_to_the_picker_after_the_save_succeeds() {
 fn explorer_opens_markdown_and_ctrl_s_saves_the_edited_document() {
     let fixture = FixtureRoot::new("open-save");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("note.md");
     fs::write(&path, "original").expect("seed markdown");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
 
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "edited ");
@@ -1344,10 +1344,10 @@ fn explorer_opens_markdown_and_ctrl_s_saves_the_edited_document() {
 fn save_locks_editor_input_until_the_background_write_finishes() {
     let fixture = FixtureRoot::new("save-locks-input");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("notes.txt");
     fs::write(&path, "original").expect("seed text document");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "saved ");
 
@@ -1380,13 +1380,13 @@ fn log_name_variants_open_read_only_at_the_document_bottom() {
     ] {
         let fixture = FixtureRoot::new(case);
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         let contents = (0..100)
             .map(|line| format!("line {line}"))
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(fixture.path().join("Documents").join(file_name), contents).expect("seed log");
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
 
         open_only_document_in_editor(&mut state, &platform);
 
@@ -1422,10 +1422,10 @@ fn log_name_variants_open_read_only_at_the_document_bottom() {
 fn log_snapshot_changes_only_after_r_reload() {
     let fixture = FixtureRoot::new("log-reload-snapshot");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("service.log");
     fs::write(&path, "first\nsecond").expect("seed log");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
 
     assert_eq!(
@@ -1464,13 +1464,13 @@ fn log_snapshot_changes_only_after_r_reload() {
 fn non_log_text_document_remains_editable() {
     let fixture = FixtureRoot::new("editable-text");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(
         fixture.path().join("Documents").join("notes.txt"),
         "editable",
     )
     .expect("seed text document");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
 
     let opened = state.to_editor_view_model();
@@ -1488,13 +1488,13 @@ fn nested_file_picker_returns_to_the_original_directory_and_selection() {
     for select_file in [false, true] {
         let fixture = FixtureRoot::new("nested-picker-navigation");
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         fs::write(
             fixture.path().join("Documents").join("original.txt"),
             "original contents",
         )
         .expect("seed document");
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
         open_home_entry(&mut state, &platform, "explorer");
         let original = state.to_explorer_view_model();
         state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
@@ -1538,13 +1538,13 @@ fn nested_file_picker_returns_to_the_original_directory_and_selection() {
 fn escape_cancels_an_in_flight_large_file_open() {
     let fixture = FixtureRoot::new("cancel-large-open");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(
         fixture.path().join("Documents").join("large.txt"),
         vec![b'x'; 8 * 1024 * 1024],
     )
     .expect("seed large log");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_home_entry(&mut state, &platform, "explorer");
     assert_eq!(state.active_screen(), ShellScreen::Explorer);
 
@@ -1566,7 +1566,7 @@ fn escape_cancels_an_in_flight_large_file_open() {
 fn editor_rejects_documents_above_the_one_gibibyte_limit_without_allocating_them() {
     let fixture = FixtureRoot::new("open-size-limit");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("oversized.txt");
     let file = fs::OpenOptions::new()
         .create(true)
@@ -1576,7 +1576,7 @@ fn editor_rejects_documents_above_the_one_gibibyte_limit_without_allocating_them
         .expect("create sparse oversized document");
     file.set_len(platform::MAX_DOCUMENT_BYTES + 1)
         .expect("size sparse oversized document");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
 
     open_home_entry(&mut state, &platform, "explorer");
     state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
@@ -1613,10 +1613,10 @@ fn closing_editor_returns_to_the_original_explorer_for_markdown_and_text_files()
     ] {
         let fixture = FixtureRoot::new(case);
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         fs::write(fixture.path().join("Documents").join(file_name), contents)
             .expect("seed editor document");
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
 
         open_home_entry(&mut state, &platform, "explorer");
         assert_eq!(state.active_screen(), ShellScreen::Explorer);
@@ -1661,10 +1661,10 @@ fn closing_editor_returns_to_the_original_explorer_for_markdown_and_text_files()
 fn save_refuses_to_overwrite_a_file_changed_outside_the_editor() {
     let fixture = FixtureRoot::new("external-change");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("note.md");
     fs::write(&path, "original").expect("seed markdown");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "local ");
     fs::write(&path, "external").expect("external update");
@@ -1691,10 +1691,10 @@ fn save_picker_keeps_filename_visible_while_browsing_and_saves_to_the_chosen_dir
     for (width, height, save_as) in [(140, 40, false), (108, 20, true)] {
         let fixture = FixtureRoot::new("save-picker-browse");
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         let folder = fixture.path().join("Documents/destination");
         fs::create_dir_all(&folder).unwrap();
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
         state.apply_input_with_platform(InputEvent::Resize { width, height }, &platform);
         open_editor_from_home(&mut state, &platform);
         type_text(&mut state, &platform, "saved content");
@@ -1751,8 +1751,8 @@ fn save_picker_keeps_filename_visible_while_browsing_and_saves_to_the_chosen_dir
 fn save_picker_browse_shift_f10_opens_context_menu_and_f10_saves() {
     let fixture = FixtureRoot::new("save-picker-context-shortcut");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut state = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "save only on F10");
     state.apply_input_with_platform(ctrl('s'), &platform);
@@ -1784,8 +1784,8 @@ fn save_picker_browse_shift_f10_opens_context_menu_and_f10_saves() {
 fn save_picker_cancel_preserves_the_unsaved_document() {
     let fixture = FixtureRoot::new("save-picker-cancel");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut state = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "keep this draft");
     state.apply_input_with_platform(ctrl('s'), &platform);
@@ -1804,10 +1804,10 @@ fn save_picker_cancel_preserves_the_unsaved_document() {
 fn save_as_does_not_clobber_an_existing_document() {
     let fixture = FixtureRoot::new("save-as-no-clobber");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let existing = fixture.path().join("Documents").join("taken.md");
     fs::write(&existing, "keep me").expect("seed existing file");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "new contents");
 
@@ -1835,11 +1835,11 @@ fn save_as_does_not_clobber_an_existing_document() {
 fn failed_save_keeps_the_document_dirty() {
     let fixture = FixtureRoot::new("save-failure-dirty");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let documents = fixture.path().join("Documents");
     let path = documents.join("note.md");
     fs::write(&path, "original").expect("seed markdown");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "local ");
     fs::remove_file(&path).expect("remove opened document");
@@ -1865,12 +1865,12 @@ fn failed_save_keeps_the_document_dirty() {
 fn recovery_tick_never_writes_or_touches_the_open_markdown_file() {
     let fixture = FixtureRoot::new("recovery-does-not-save");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents").join("note.md");
     let original = b"original markdown\n";
     fs::write(&path, original).expect("seed markdown");
     let before = fs::metadata(&path).expect("metadata before recovery tick");
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     type_text(&mut state, &platform, "unsaved ");
 
@@ -1897,15 +1897,15 @@ fn recovery_tick_never_writes_or_touches_the_open_markdown_file() {
 fn unsaved_document_is_recovered_dirty_after_a_new_login_session() {
     let fixture = FixtureRoot::new("recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut state = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "需要恢复的内容");
 
     state.apply_input_at(InputEvent::Tick, Instant::now() + Duration::from_secs(3));
     drop(state);
 
-    let mut restored = logged_in_state(&platform);
+    let mut restored = system_home(&platform);
     open_editor_from_home(&mut restored, &platform);
     restored.apply_input_with_platform(ctrl_shift('m'), &platform);
     let editor = restored.to_editor_view_model();
@@ -1924,12 +1924,12 @@ fn undo_to_saved_checkpoint_removes_stale_recovery_before_shutdown() {
     for opened_file in [false, true] {
         let fixture = FixtureRoot::new("undo-stale-recovery");
         let platform = mock_platform(fixture.path());
-        bootstrap_with_shell(&platform);
+        initialize_system_profile(&platform);
         let path = fixture.path().join("Documents/note.txt");
         if opened_file {
             fs::write(&path, b"saved text").unwrap();
         }
-        let mut state = logged_in_state(&platform);
+        let mut state = system_home(&platform);
         if opened_file {
             open_only_document_in_editor(&mut state, &platform);
         } else {
@@ -1963,7 +1963,7 @@ fn undo_to_saved_checkpoint_removes_stale_recovery_before_shutdown() {
         );
         drop(state);
 
-        let mut restored = logged_in_state(&platform);
+        let mut restored = system_home(&platform);
         open_editor_from_home(&mut restored, &platform);
         assert!(!restored.to_editor_view_model().dirty);
         assert_eq!(restored.to_editor_view_model().source_lines.join("\n"), "");
@@ -1977,13 +1977,13 @@ fn undo_to_saved_checkpoint_removes_stale_recovery_before_shutdown() {
 fn clean_editor_navigation_does_not_clear_another_sessions_recovery() {
     let fixture = FixtureRoot::new("clean-keeps-other-recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut clean = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut clean = system_home(&platform);
     open_editor_from_home(&mut clean, &platform);
     let user_key = clean.auth_session().unwrap().user_id.clone();
     let paths = app_paths(fixture.path());
 
-    let mut dirty = logged_in_state(&platform);
+    let mut dirty = system_home(&platform);
     open_editor_from_home(&mut dirty, &platform);
     type_text(&mut dirty, &platform, "other draft");
     dirty.apply_input_at(InputEvent::Tick, Instant::now() + Duration::from_secs(3));
@@ -2006,10 +2006,10 @@ fn clean_editor_navigation_does_not_clear_another_sessions_recovery() {
 fn saving_and_discarding_recovery_only_clear_the_owning_editor() {
     let fixture = FixtureRoot::new("separate-editor-recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let path = fixture.path().join("Documents/note.txt");
     fs::write(&path, b"saved text").unwrap();
-    let mut first = logged_in_state(&platform);
+    let mut first = system_home(&platform);
     open_only_document_in_editor(&mut first, &platform);
     let paths = app_paths(fixture.path());
     let user_key = first.auth_session().unwrap().user_id.clone();
@@ -2018,7 +2018,7 @@ fn saving_and_discarding_recovery_only_clear_the_owning_editor() {
     let first_records = app::editor_recovery::read_editor_recoveries(&paths, &user_key).unwrap();
     assert_eq!(first_records.len(), 1);
 
-    let mut second = logged_in_state(&platform);
+    let mut second = system_home(&platform);
     open_editor_from_home(&mut second, &platform);
     assert!(
         !second.to_editor_view_model().dirty,
@@ -2065,8 +2065,8 @@ fn saving_and_discarding_recovery_only_clear_the_owning_editor() {
 fn failed_recovery_cleanup_keeps_the_editor_open_until_retry_succeeds() {
     let fixture = FixtureRoot::new("failed-recovery-cleanup");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut state = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     let paths = app_paths(fixture.path());
     let user_key = state.auth_session().unwrap().user_id.clone();
@@ -2122,9 +2122,9 @@ fn failed_recovery_cleanup_keeps_the_editor_open_until_retry_succeeds() {
 fn read_only_log_does_not_claim_or_write_editor_recovery() {
     let fixture = FixtureRoot::new("log-preserves-recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(fixture.path().join("Documents/service.log"), b"log line\n").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     let user_key = state.auth_session().unwrap().user_id.clone();
     let paths = app_paths(fixture.path());
     let lease = app::editor_recovery::acquire_editor_recovery(
@@ -2161,14 +2161,14 @@ fn read_only_log_does_not_claim_or_write_editor_recovery() {
 fn abandoned_recovery_drafts_are_claimed_once_per_new_editor() {
     let fixture = FixtureRoot::new("several-abandoned-recoveries");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     let paths = app_paths(fixture.path());
-    let mut first = logged_in_state(&platform);
+    let mut first = system_home(&platform);
     open_editor_from_home(&mut first, &platform);
     let user_key = first.auth_session().unwrap().user_id.clone();
     type_text(&mut first, &platform, "first abandoned draft");
     first.apply_input_at(InputEvent::Tick, Instant::now() + Duration::from_secs(3));
-    let mut second = logged_in_state(&platform);
+    let mut second = system_home(&platform);
     open_editor_from_home(&mut second, &platform);
     type_text(&mut second, &platform, "second abandoned draft");
     second.apply_input_at(InputEvent::Tick, Instant::now() + Duration::from_secs(3));
@@ -2190,7 +2190,7 @@ fn abandoned_recovery_drafts_are_claimed_once_per_new_editor() {
     drop(first);
     drop(second);
 
-    let mut restored_first = logged_in_state(&platform);
+    let mut restored_first = system_home(&platform);
     open_editor_from_home(&mut restored_first, &platform);
     assert_eq!(
         restored_first
@@ -2199,7 +2199,7 @@ fn abandoned_recovery_drafts_are_claimed_once_per_new_editor() {
             .join("\n"),
         expected_text[0]
     );
-    let mut restored_second = logged_in_state(&platform);
+    let mut restored_second = system_home(&platform);
     open_editor_from_home(&mut restored_second, &platform);
     assert_eq!(
         restored_second
@@ -2227,8 +2227,8 @@ fn abandoned_recovery_drafts_are_claimed_once_per_new_editor() {
 fn shutdown_flushes_recovery_without_waiting_for_the_autosave_tick() {
     let fixture = FixtureRoot::new("shutdown-recovery");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
-    let mut state = logged_in_state(&platform);
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "immediate recovery");
 
@@ -2238,7 +2238,7 @@ fn shutdown_flushes_recovery_without_waiting_for_the_autosave_tick() {
     );
     drop(state);
 
-    let mut restored = logged_in_state(&platform);
+    let mut restored = system_home(&platform);
     open_editor_from_home(&mut restored, &platform);
     restored.apply_input_with_platform(ctrl_shift('m'), &platform);
     let editor = restored.to_editor_view_model();
@@ -2260,8 +2260,8 @@ fn editor_canvas_point(state: &ShellSession) -> (u16, u16) {
 }
 
 fn new_user_home_state(platform: &MockPlatform) -> ShellSession {
-    bootstrap_with_shell(platform);
-    logged_in_state(platform)
+    initialize_system_profile(platform);
+    system_home(platform)
 }
 
 fn current_editor_layout(state: &ShellSession) -> ui::EditorLayout {
@@ -2417,78 +2417,22 @@ fn mock_platform(base: &Path) -> MockPlatform {
     }
     MockPlatform::new(user_dirs(base), app_paths(base))
         .with_kind(PlatformKind::Windows)
+        .with_current_username("AdminUser")
         .with_capabilities(PlatformCapabilities::native_supported())
 }
 
-fn bootstrap_with_shell(platform: &MockPlatform) {
+fn initialize_system_profile(platform: &MockPlatform) {
     let startup = prepare_shell_startup(platform).expect("startup");
     let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    complete_first_run_setup(
-        &mut state,
-        platform,
-        "AdminUser",
-        "StrongPass123",
-        "Recovery hint",
-    );
+    state.apply_input_with_platform(InputEvent::from_key_label("F9"), platform);
     assert_eq!(state.active_screen(), ShellScreen::Home);
 }
 
-fn logged_in_state(platform: &MockPlatform) -> ShellSession {
+fn system_home(platform: &MockPlatform) -> ShellSession {
     let startup = prepare_shell_startup(platform).expect("startup");
-    let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    select_login_user(&mut state, platform, "AdminUser");
-    state.apply_input_with_platform(InputEvent::from_key_label("Tab"), platform);
-    type_text(&mut state, platform, "StrongPass123");
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
+    let state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
     assert_eq!(state.active_screen(), ShellScreen::Home);
     state
-}
-
-fn select_login_user(state: &mut ShellSession, platform: &MockPlatform, username: &str) {
-    assert_eq!(state.active_screen(), ShellScreen::Login);
-    if state.focused_component() != ShellComponent::LoginUserList {
-        state.apply_input_with_platform(InputEvent::from_key_label("Shift+Tab"), platform);
-    }
-    let target = state
-        .to_login_view_model()
-        .users
-        .iter()
-        .position(|user| user.username.eq_ignore_ascii_case(username))
-        .unwrap_or_else(|| panic!("missing login user: {username}"));
-    while state.to_login_view_model().selected_index < target {
-        state.apply_input_with_platform(InputEvent::from_key_label("Down"), platform);
-    }
-    while state.to_login_view_model().selected_index > target {
-        state.apply_input_with_platform(InputEvent::from_key_label("Up"), platform);
-    }
-}
-
-fn complete_first_run_setup(
-    state: &mut ShellSession,
-    platform: &MockPlatform,
-    username: &str,
-    password: &str,
-    hint: &str,
-) {
-    assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    type_text(state, platform, username);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    type_text(state, platform, password);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    type_text(state, platform, password);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    type_text(state, platform, hint);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
-    for _ in 0..5 {
-        state.apply_input_with_platform(InputEvent::from_key_label("Tab"), platform);
-    }
-    assert_eq!(
-        state.focused_component(),
-        ShellComponent::SetupAppearanceSubmit
-    );
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), platform);
 }
 
 fn user_dirs(base: &Path) -> UserDirs {
@@ -2629,9 +2573,9 @@ fn ordinary_editor_context_menu_preserves_selection_and_reuses_clipboard_actions
 fn readonly_editor_context_menu_allows_copy_and_keyboard_escape_restores_document() {
     let fixture = FixtureRoot::new("readonly-editor-context");
     let platform = mock_platform(fixture.path());
-    bootstrap_with_shell(&platform);
+    initialize_system_profile(&platform);
     fs::write(fixture.path().join("Documents/service.log"), "read only").unwrap();
-    let mut state = logged_in_state(&platform);
+    let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
     state.apply_input_with_platform(ctrl('a'), &platform);
     state.apply_input_with_platform(

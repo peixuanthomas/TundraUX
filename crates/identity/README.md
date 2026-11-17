@@ -1,31 +1,8 @@
 # identity
 
-`identity` handles application identity and UX permissions: Linux attaches to the current process's system user, while Windows/macOS use Tundra local accounts.
+`identity` attaches each Shell run to the operating-system user that launched it. It records the system username and an in-memory session identifier for worker coordination. Workspace operations use the current process's OS permissions. Linux user management delegates to `platform::management::users` and system authorization.
 
-## Modules
-
-| Module | Responsibility |
-| --- | --- |
-| `identity` | `AuthSession`, identity sources, and user accounts |
-| `backend` | Identity backend interface |
-| `credentials` | Password validation, Argon2 hashing, and verification |
-| `session_service` | Login sessions, failure counts, and lockouts |
-| `user_service` | Local account management |
-| `authorization` | Guest/User/Admin roles and permission checks |
-| `linux` | Current Linux process user |
-
-## Local account rules
-
-The following rules apply to Windows/macOS and test backends:
-
-- Passwords use Argon2 hashes with random salts. They must contain 10–256 characters and cannot consist entirely of whitespace or equal the normalized username.
-- Username matching is case-insensitive. Unknown users and incorrect passwords return the same invalid-credentials result.
-- Five consecutive authentication failures cause a five-minute lockout. Failure and lockout information is persisted.
-- Authentication sessions are kept only in memory. Their serialized form is used over the run's authenticated local IPC to initialize app workers; it is not a persisted login token.
-
-UX roles are Guest, User, and Admin. File and profile operations are available to User/Admin; user management, Command Line, Launcher management, diagnostic repairs, and settings management require Admin.
-
-Linux system accounts, passwords, and lockout policies are managed by the operating system. Saved UX roles do not grant Linux permissions. System accounts are managed through `tundra-cli users` and the system authorization workflow; CLI `config` does not read or write identity fields.
+`platform` reads the username from Linux NSS, the macOS account database, or the Windows logon API. Account-specific appearance, dashboard, and clock preferences are stored by username in [storage](../storage/README.md). The process session carries neither a password nor a saved login token.
 
 ## Validation
 

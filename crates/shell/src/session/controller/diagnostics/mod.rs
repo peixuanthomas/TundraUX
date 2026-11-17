@@ -339,7 +339,7 @@ impl ShellSession {
         status: &ui::TerminalGraphicsProbeStatus,
     ) {
         if self.active_screen() == ShellScreen::FirstRunSetup
-            || self.selected_login_icon_display_mode() == storage::IconDisplayMode::Ascii
+            || self.startup_icon_display_mode() == storage::IconDisplayMode::Ascii
         {
             return;
         }
@@ -348,10 +348,15 @@ impl ShellSession {
             ui::TerminalGraphicsProbeStatus::Unsupported
                 if self.ascii_assets.theme_id() == ui::DEFAULT_THEME_ID =>
             {
-                if self.selected_login_icon_display_mode() != storage::IconDisplayMode::Image {
-                    return;
+                if let Some(username) = self.current_home_username().map(str::to_owned)
+                    && let Some(mut appearance) = self.app.active_appearance().cloned()
+                {
+                    self.apply_ascii_icon_fallback(&username, &mut appearance);
+                    self.app.dispatch_at(
+                        app::AppCommand::SetActiveAppearance(Some(appearance)),
+                        Instant::now(),
+                    );
                 }
-                self.pending_default_ascii_icon_fallback = true;
                 self.notify_modal(
                     i18n::LocalizedText::from(i18n::msg!("shell-terminal-graphics-unsupported")),
                     i18n::LocalizedText::from(i18n::msg!("shell-this-terminal-responded-but-does-not-support-a-compatible-graphics-protocol-the-default-theme-will-use-ascii-i")),
@@ -378,21 +383,10 @@ impl ShellSession {
         }
     }
 
-    fn selected_login_icon_display_mode(&self) -> storage::IconDisplayMode {
-        self.storage_manager
-            .as_ref()
-            .and_then(|storage| {
-                UserService::new(storage.clone())
-                    .with_backend(self.identity_backend)
-                    .login_records()
-                    .ok()
-            })
-            .and_then(|users| {
-                users
-                    .into_iter()
-                    .find(|user| user.username == self.pages.login.login_username)
-            })
-            .map(|user| user.appearance.icon_display_mode)
+    fn startup_icon_display_mode(&self) -> storage::IconDisplayMode {
+        self.app
+            .active_appearance()
+            .map(|appearance| appearance.icon_display_mode)
             .unwrap_or(self.default_icon_display_mode)
     }
 

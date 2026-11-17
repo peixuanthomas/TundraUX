@@ -106,6 +106,28 @@ unsafe extern "C" {
 pub struct MacosPlatform;
 
 impl Platform for MacosPlatform {
+    #[cfg(target_os = "macos")]
+    fn current_username(&self) -> Result<String, PlatformError> {
+        // SAFETY: macOS keeps this result in thread-local storage. Copy the name immediately.
+        let account = unsafe { libc::getpwuid(libc::getuid()) };
+        if account.is_null() {
+            return Err(PlatformError::from_io(
+                "getpwuid",
+                None,
+                &std::io::ErrorKind::NotFound.into(),
+            ));
+        }
+        // SAFETY: a successful lookup supplies a NUL-terminated name.
+        let username = unsafe { CStr::from_ptr((*account).pw_name) };
+        username
+            .to_str()
+            .map(str::to_owned)
+            .map_err(|error| PlatformError::Native {
+                operation: "getpwuid",
+                message: error.to_string(),
+            })
+    }
+
     fn create_system_monitor(&self) -> Result<Box<dyn crate::SystemMonitor>, PlatformError> {
         crate::NativeSystemMonitor::new().map(|monitor| Box::new(monitor) as Box<_>)
     }

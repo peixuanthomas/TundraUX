@@ -120,7 +120,6 @@ pub enum AppPageKind {
     Launcher,
     Editor,
     Diagnostics,
-    UserManagement,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -131,7 +130,6 @@ pub(super) struct EditorPageModel {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(super) struct AppPageModels {
-    pub managed_users: PageInstances<Vec<identity::UserAccount>>,
     pub explorer: PageInstances<Option<crate::explorer::ExplorerState>>,
     pub launcher: PageInstances<Option<crate::launcher::LauncherState>>,
     pub editor: PageInstances<EditorPageModel>,
@@ -141,7 +139,6 @@ pub(super) struct AppPageModels {
 impl AppPageModels {
     pub fn register(&mut self, id: PageInstanceId, kind: AppPageKind) {
         match kind {
-            AppPageKind::UserManagement => self.managed_users.create(id),
             AppPageKind::Explorer => self.explorer.create(id),
             AppPageKind::Launcher => self.launcher.create(id),
             AppPageKind::Editor => self.editor.create(id),
@@ -151,7 +148,6 @@ impl AppPageModels {
     }
     pub fn select(&mut self, id: Option<PageInstanceId>, kind: AppPageKind) {
         match kind {
-            AppPageKind::UserManagement => self.managed_users.select(id),
             AppPageKind::Explorer => self.explorer.select(id),
             AppPageKind::Launcher => self.launcher.select(id),
             AppPageKind::Editor => self.editor.select(id),
@@ -159,7 +155,6 @@ impl AppPageModels {
         }
     }
     pub fn remove(&mut self, id: PageInstanceId) {
-        self.managed_users.remove(id);
         self.explorer.remove(id);
         self.launcher.remove(id);
         self.editor.remove(id);

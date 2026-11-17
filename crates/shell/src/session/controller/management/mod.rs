@@ -602,8 +602,11 @@ impl ShellSession {
         }
         let kind = query.kind;
         let supported = kind == ManagementKind::Tasks
-            || cfg!(target_os = "linux")
-            || (cfg!(any(target_os = "macos", windows)) && kind == ManagementKind::Packages);
+            || self.platform_kind == PlatformKind::Linux
+            || (matches!(
+                self.platform_kind,
+                PlatformKind::Macos | PlatformKind::Windows
+            ) && kind == ManagementKind::Packages);
         if !supported || self.app.auth_session().is_none() || self.is_strict_guest() {
             return;
         }

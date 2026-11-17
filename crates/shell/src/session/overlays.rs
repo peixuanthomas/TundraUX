@@ -435,25 +435,6 @@ impl ShellSession {
                 component,
             ));
         }
-        let user_management_mode = match &self.pages.user_management.user_management_mode {
-            UserManagementMode::Browse if self.pages.user_management.user_management_more_open => {
-                Some("user-management:more")
-            }
-            UserManagementMode::Browse => None,
-            UserManagementMode::Create(_) => Some("user-management:create"),
-            UserManagementMode::EditInfo(_) => Some("user-management:edit-info"),
-        };
-        if self.content_screen() == ShellScreen::UserManagement
-            && let Some(id) = user_management_mode
-        {
-            return Some(ShellOverlayDescriptor {
-                kind: ui::MotionOverlayKind::Dialog,
-                id: id.into(),
-                category: ShellOverlayCategory::PageDialog,
-                target: Some(RoutedTarget::Component(ShellComponent::UserManagement)),
-                immediate: false,
-            });
-        }
         None
     }
 }

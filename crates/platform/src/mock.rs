@@ -53,6 +53,7 @@ pub enum MockCall {
 }
 
 pub struct MockPlatform {
+    username: String,
     kind: PlatformKind,
     capabilities: PlatformCapabilities,
     user_dirs: UserDirs,
@@ -84,6 +85,7 @@ pub struct MockPlatform {
 impl MockPlatform {
     pub fn new(user_dirs: UserDirs, app_paths: AppPaths) -> Self {
         Self {
+            username: "operator".into(),
             kind: PlatformKind::Unsupported,
             capabilities: PlatformCapabilities::native_supported(),
             user_dirs,
@@ -110,6 +112,11 @@ impl MockPlatform {
             empty_trash_result: Mutex::new(Ok(())),
             restore_results: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    pub fn with_current_username(mut self, username: impl Into<String>) -> Self {
+        self.username = username.into();
+        self
     }
 
     pub fn with_kind(mut self, kind: PlatformKind) -> Self {
@@ -321,6 +328,10 @@ impl MockPlatform {
 }
 
 impl Platform for MockPlatform {
+    fn current_username(&self) -> Result<String, PlatformError> {
+        Ok(self.username.clone())
+    }
+
     fn kind(&self) -> PlatformKind {
         self.kind
     }

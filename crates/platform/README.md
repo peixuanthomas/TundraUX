@@ -7,6 +7,7 @@
 | Module | Responsibility |
 | --- | --- |
 | `paths` | Platform-specific configuration, state, cache, log, and temporary directories |
+| `Platform::current_username` | The operating-system account running the application |
 | `document` | Regular-file checks, chunked reads, document fingerprints, and atomic writes |
 | `file_operations` | File identity and atomic renames that never overwrite the destination |
 | `platform` | Directories, volumes, trash, opening files, and platform capabilities |
@@ -31,7 +32,7 @@ Explorer moves, renames, and undo share `file_operations`: Linux uses `renameat2
 
 `ManagementQuery`, `ManagementSnapshot`, `ManagementAction`, and `ManagementCommand` describe queries, page data, available operations, and execution requests. Action IDs, field IDs, and target identities remain stable; display text uses the caller's language.
 
-Current management types cover services, processes, packages, networks, disks, users, system configuration, configuration backups, firewalls, SSH, scheduled tasks, task history, file permissions, and operating-system settings.
+Current management types cover services, processes, packages, networks, disks, users, system configuration, configuration backups, firewalls, SSH, scheduled tasks, task history, file permissions, and operating-system settings. User management is Linux-only.
 
 - Queries use the current process's permissions; operations requiring additional permissions first go through AA and system authorization.
 - Batch operations check all targets first. Services use one systemctl invocation, processes are bound to their original identity, and changes from the same cron source are saved together.

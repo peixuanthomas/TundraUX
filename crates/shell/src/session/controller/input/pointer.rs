@@ -8,9 +8,6 @@ impl ShellSession {
     fn active_form_dialog(&self) -> Option<ui::components::FormDialog> {
         match self.content_screen() {
             ShellScreen::Settings => self.to_settings_view_model()?.form_dialog(),
-            ShellScreen::UserManagement => {
-                Some(self.to_user_management_view_model().form?.dialog())
-            }
             ShellScreen::Management => self.to_management_view_model().form,
             ShellScreen::Logs => self.to_logs_view_model().filter_form,
             ShellScreen::Launcher => self.launcher_run_settings_form().or_else(|| {
@@ -221,13 +218,7 @@ impl ShellSession {
                 disabled: false,
             });
         }
-        if self.pages.user_management.user_management_more_open
-            && self.active_screen() == ShellScreen::UserManagement
-        {
-            return self.user_management_button_at(point);
-        }
-        self.user_management_button_at(point)
-            .or_else(|| self.management_button_at(point))
+        self.management_button_at(point)
             .or_else(|| self.logs_button_at(point))
             .or_else(|| self.table_sort_button_at(point))
             .or_else(|| self.explorer_selection_button_at(point))

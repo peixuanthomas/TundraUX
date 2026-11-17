@@ -512,7 +512,7 @@ fn same_volume_move_returns_history_that_the_file_service_can_undo() {
     .unwrap()
     .manager;
     let actor = identity::AuthSession {
-        source: identity::IdentitySource::LocalAccount,
+        source: identity::IdentitySource::SystemCurrentProcess,
         session_id: "undo-test".into(),
         user_id: "admin".into(),
         username: "admin".into(),

@@ -566,19 +566,20 @@ impl ShellSession {
             }
             return;
         }
-        let saved = UserService::with_debug_policy(storage, self.debug_policy)
-            .with_backend(self.identity_backend)
-            .update_user_system_status_dashboard(&actor, &actor.username, dashboard)
-            .map(|account| {
+        let saved = storage
+            .update_profile(&actor.username, |profile| {
+                profile.system_status_dashboard = dashboard
+            })
+            .map(|profile| {
                 self.app.dispatch_at(
                     app::AppCommand::SetActiveSystemStatusDashboard(Some(
-                        account.system_status_dashboard,
+                        profile.system_status_dashboard,
                     )),
                     Instant::now(),
                 )
             })
             .map(|_| ())
-            .map_err(|error| format_core_error(&error));
+            .map_err(|error| error.to_string().into());
         self.finish_system_status_dashboard_save(saved);
     }
 

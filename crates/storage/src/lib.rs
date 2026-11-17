@@ -9,6 +9,7 @@ mod error;
 mod initialization;
 mod layout;
 mod manager;
+mod profile_document;
 mod recovery;
 mod reset;
 mod schema;
@@ -16,7 +17,6 @@ mod session_store;
 mod state_documents;
 mod system_status_dashboard;
 mod trash_document;
-mod user_document;
 
 pub use animation::{AnimationTimingsConfig, MAX_ANIMATION_PHASE_MS, MIN_ANIMATION_PHASE_MS};
 pub use clock_document::{ClockDocument, ClockEntryRecord, ClockProfile};
@@ -43,8 +43,9 @@ pub use document_health::{
 pub use error::StorageError;
 pub use layout::StorageLayout;
 pub use manager::{RecoveredFile, StorageLoadReport, StorageManager, StorageOpen};
+pub use profile_document::UserProfile;
 pub use reset::{StorageResetReport, reset_saved_content};
-pub use schema::{SCHEMA_VERSION, StorageFormat, USERS_SCHEMA_VERSION, VersionedDocument};
+pub use schema::{SCHEMA_VERSION, StorageFormat, VersionedDocument};
 pub use session_store::{SessionConfigStore, install_session_config_store};
 pub use state_documents::{RecentFilesDocument, SessionsDocument, StateDocument};
 pub use system_status_dashboard::{
@@ -52,4 +53,3 @@ pub use system_status_dashboard::{
     SystemStatusWidgetSize, WidgetPlacement,
 };
 pub use trash_document::{TrashDocument, TrashRecord};
-pub use user_document::{UserRecord, UsersDocument};

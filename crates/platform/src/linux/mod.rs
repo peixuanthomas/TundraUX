@@ -58,6 +58,12 @@ static LIFECYCLE_EVENTS: OnceLock<Mutex<LifecycleEvents>> = OnceLock::new();
 pub struct LinuxPlatform;
 
 impl Platform for LinuxPlatform {
+    fn current_username(&self) -> Result<String, PlatformError> {
+        identity::LinuxUserContext::current()
+            .map(|user| user.username)
+            .map_err(|error| PlatformError::from_io("resolve current user", None, &error))
+    }
+
     fn create_system_monitor(&self) -> Result<Box<dyn crate::SystemMonitor>, PlatformError> {
         crate::NativeSystemMonitor::new().map(|monitor| Box::new(monitor) as Box<_>)
     }

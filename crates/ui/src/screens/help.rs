@@ -6,9 +6,6 @@ use crate::{
 pub enum PageHelpScreen {
     Home,
     Setup,
-    Login,
-    BootstrapAdmin,
-    UserManagement,
     Explorer,
     Launcher,
     CommandLine,
@@ -27,12 +24,9 @@ pub enum PageHelpScreen {
 }
 
 impl PageHelpScreen {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 17] = [
         Self::Home,
         Self::Setup,
-        Self::Login,
-        Self::BootstrapAdmin,
-        Self::UserManagement,
         Self::Explorer,
         Self::Launcher,
         Self::CommandLine,
@@ -166,7 +160,6 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("←→↑↓", i18n::tr!("ui-help-home-move")),
                     row("Shift+←→", i18n::tr!("ui-help-home-reorder")),
                     row("Esc", i18n::tr!("ui-help-home-edit-cancel")),
-                    row("Ctrl+L", i18n::tr!("ui-help-home-logout")),
                 ]),
             ],
         ),
@@ -236,24 +229,6 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("←→↑↓", i18n::tr!("ui-help-settings-adjust")),
                     row("Tab / Shift+Tab", i18n::tr!("ui-help-settings-section")),
                     row("←→ / 0–9 / Enter", i18n::tr!("ui-help-settings-number")),
-                ]),
-            ],
-        ),
-        PageHelpScreen::UserManagement => (
-            i18n::tr!("ui-help-users-title"),
-            vec![
-                actions(vec![
-                    row("N", i18n::tr!("ui-help-users-new")),
-                    row("E", i18n::tr!("ui-help-users-edit")),
-                    row("R", i18n::tr!("ui-help-users-password")),
-                    row("M", i18n::tr!("ui-help-users-more")),
-                    row("D / U", i18n::tr!("ui-help-users-enabled")),
-                    row("C", i18n::tr!("ui-help-users-role")),
-                    row("Del", i18n::tr!("ui-help-users-delete")),
-                ]),
-                advanced(vec![
-                    row("Tab", i18n::tr!("ui-help-users-focus")),
-                    row("Enter", i18n::tr!("ui-help-users-activate")),
                 ]),
             ],
         ),
@@ -368,25 +343,14 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                 ]),
             ],
         ),
-        PageHelpScreen::Setup | PageHelpScreen::Login | PageHelpScreen::BootstrapAdmin => (
-            i18n::tr!(match screen {
-                PageHelpScreen::Setup => "ui-help-setup-title",
-                PageHelpScreen::BootstrapAdmin => "ui-help-bootstrap-title",
-                _ => "ui-help-auth-title",
-            }),
+        PageHelpScreen::Setup => (
+            i18n::tr!("ui-help-setup-title"),
             vec![
                 actions(vec![
                     row("Enter", i18n::tr!("ui-help-auth-submit")),
                     row("Esc", i18n::tr!("ui-help-auth-back")),
                 ]),
-                advanced(if screen == PageHelpScreen::Login {
-                    vec![
-                        row("Tab / ←→↑↓", i18n::tr!("ui-help-auth-focus")),
-                        row("F2", i18n::tr!("ui-help-auth-password")),
-                    ]
-                } else {
-                    vec![row("Tab / ←→↑↓", i18n::tr!("ui-help-auth-focus"))]
-                }),
+                advanced(vec![row("Tab / ←→↑↓", i18n::tr!("ui-help-auth-focus"))]),
             ],
         ),
         PageHelpScreen::Script => (
@@ -439,10 +403,7 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
     };
     let mut sections = pages;
     sections.push(navigation());
-    if !matches!(
-        screen,
-        PageHelpScreen::Setup | PageHelpScreen::Login | PageHelpScreen::BootstrapAdmin
-    ) {
+    if screen != PageHelpScreen::Setup {
         sections.push(workspace_navigation());
     }
     PageHelpViewModel {

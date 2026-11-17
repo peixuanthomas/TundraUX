@@ -6,18 +6,18 @@ use serde::de::DeserializeOwned;
 use crate::atomic_write::{create_dir, tighten_file};
 use crate::clock_document::ClockDocument;
 use crate::config_document::StorageConfig;
-use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR};
+use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, PROFILES_DESCRIPTOR};
 use crate::document_io::{
     load_json_document, load_toml_document, save_json_document, save_toml_document,
     validate_existing_schema, validate_json_document, validate_toml_document,
 };
 use crate::error::StorageError;
 use crate::manager::{StorageLoadReport, StorageManager};
+use crate::profile_document::ProfilesDocument;
 use crate::recovery::recover_document;
-use crate::schema::{StorageFormat, VersionedDocument, json_schema_version};
+use crate::schema::{StorageFormat, VersionedDocument};
 use crate::state_documents::{RecentFilesDocument, SessionsDocument, StateDocument};
 use crate::trash_document::TrashDocument;
-use crate::user_document::{UsersDocument, UsersV1Document};
 
 impl StorageManager {
     pub(crate) fn initialize(&self) -> Result<StorageLoadReport, StorageError> {
@@ -33,7 +33,12 @@ impl StorageManager {
             &StorageConfig::default(),
         )?;
         self.normalize_config_language(&mut report)?;
-        self.ensure_users_document(&mut report)?;
+        self.ensure_json_document(
+            &mut report,
+            &self.layout.profiles_path,
+            PROFILES_DESCRIPTOR.name,
+            &ProfilesDocument::default(),
+        )?;
         self.ensure_json_document(
             &mut report,
             &self.layout.state_path,
@@ -93,8 +98,8 @@ impl StorageManager {
                 StorageFormat::Toml,
             ),
             (
-                self.layout.users_path.as_path(),
-                "users",
+                self.layout.profiles_path.as_path(),
+                PROFILES_DESCRIPTOR.name,
                 StorageFormat::VersionedJson,
             ),
             (
@@ -139,64 +144,6 @@ impl StorageManager {
         Ok(())
     }
 
-    fn ensure_users_document(&self, report: &mut StorageLoadReport) -> Result<(), StorageError> {
-        if self.layout.users_path.exists() {
-            return match self.users_schema_version() {
-                Ok(1) => {
-                    let legacy =
-                        load_json_document::<UsersV1Document>(&self.layout.users_path, "users")?;
-                    let users = UsersDocument::from_legacy_v1(legacy);
-                    save_json_document(&self.layout.users_path, "users", &users)?;
-                    report.migrated_files.push(self.layout.users_path.clone());
-                    Ok(())
-                }
-                Ok(_) => {
-                    let mut users =
-                        load_json_document::<UsersDocument>(&self.layout.users_path, "users")?;
-                    if users.normalize() {
-                        save_json_document(&self.layout.users_path, "users", &users)?;
-                        report.migrated_files.push(self.layout.users_path.clone());
-                    }
-                    Ok(())
-                }
-                Err(error @ StorageError::UnsupportedSchema { .. }) => Err(error),
-                Err(error) => {
-                    recover_document(report, &self.layout.users_path, "users", error)?;
-                    save_json_document(
-                        &self.layout.users_path,
-                        "users",
-                        &UsersDocument::default(),
-                    )?;
-                    report.created_files.push(self.layout.users_path.clone());
-                    Ok(())
-                }
-            };
-        }
-
-        if self.layout.legacy_users_path.exists() {
-            let legacy =
-                load_json_document::<UsersV1Document>(&self.layout.legacy_users_path, "users")?;
-            let users = UsersDocument::from_legacy_v1(legacy);
-            save_json_document(&self.layout.users_path, "users", &users)?;
-            report.migrated_files.push(self.layout.users_path.clone());
-            return Ok(());
-        }
-
-        save_json_document(&self.layout.users_path, "users", &UsersDocument::default())?;
-        report.created_files.push(self.layout.users_path.clone());
-        Ok(())
-    }
-
-    fn users_schema_version(&self) -> Result<u32, StorageError> {
-        let contents =
-            std::fs::read_to_string(&self.layout.users_path).map_err(|error| StorageError::Io {
-                operation: "read JSON document",
-                path: self.layout.users_path.clone(),
-                message: error.to_string(),
-            })?;
-        json_schema_version(&contents, &self.layout.users_path, "users")
-    }
-
     fn create_directories(&self) -> Result<(), StorageError> {
         let config_parent =
             self.layout
@@ -222,8 +169,7 @@ impl StorageManager {
     fn tighten_existing_application_files(&self) -> Result<(), StorageError> {
         for path in [
             &self.layout.config_path,
-            &self.layout.users_path,
-            &self.layout.legacy_users_path,
+            &self.layout.profiles_path,
             &self.layout.state_path,
             &self.layout.recent_files_path,
             &self.layout.sessions_path,
@@ -254,7 +200,7 @@ impl StorageManager {
 
         match validate_toml_document::<T>(path, document) {
             Ok(schema_version) => {
-                if schema_version < crate::schema::supported_schema_version(document) {
+                if schema_version < crate::schema::SCHEMA_VERSION {
                     let mut document_value = load_toml_document::<T>(path, document)?;
                     document_value.upgrade_schema();
                     save_toml_document(path, document, &document_value)?;
@@ -290,7 +236,7 @@ impl StorageManager {
 
         match validate_json_document::<T>(path, document) {
             Ok(schema_version) => {
-                if schema_version < crate::schema::supported_schema_version(document) {
+                if schema_version < crate::schema::SCHEMA_VERSION {
                     let mut document_value = load_json_document::<T>(path, document)?;
                     document_value.upgrade_schema();
                     save_json_document(path, document, &document_value)?;

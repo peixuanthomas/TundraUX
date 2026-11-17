@@ -41,7 +41,6 @@ pub(crate) static EMBEDDED_DEFAULT_THEME_FILES: &[EmbeddedDefaultThemeFile] = &[
         "home_icons/user_management.png",
         "home_icons/user_management.png"
     ),
-    embedded_default_theme_file!("home_icons/user_profile.png", "home_icons/user_profile.png"),
     embedded_default_theme_file!(
         "launcher_icons/command_line.png",
         "launcher_icons/command_line.png"

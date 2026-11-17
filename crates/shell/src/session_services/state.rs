@@ -1,9 +1,6 @@
 use super::{SessionProfile, SystemStatusRequests, clock::ServerClockState};
 use app::explorer::{ExplorerFileService, ExplorerSharedRequest};
-use identity::{
-    AuthSession, CoreError, IdentityBackend, IdentitySource, PermissionAction, PermissionService,
-    UserRole, UserService,
-};
+use identity::{AuthSession, PermissionAction, PermissionService, UserRole};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use storage::{StorageConfig, StorageManager};
@@ -205,34 +202,26 @@ impl ServiceState {
                     && profile.appearance.is_some()
                     && profile.dashboard.is_some()
                 {
-                    // Shell has already loaded the account profile at login.
+                    // Shell has already loaded these preferences from disk.
                     profile
                 } else {
-                    let backend = match actor.source {
-                        IdentitySource::LocalAccount => IdentityBackend::Local,
-                        IdentitySource::LinuxCurrentProcess => IdentityBackend::Linux,
-                    };
-                    let users = UserService::new(self.storage.clone()).with_backend(backend);
-                    let account = match (profile.appearance, profile.dashboard) {
-                        (Some(appearance), None) => {
-                            users.update_user_appearance(actor, &actor.username, appearance)
-                        }
-                        (None, Some(dashboard)) => users.update_user_system_status_dashboard(
-                            actor,
-                            &actor.username,
-                            dashboard,
-                        ),
-                        _ => return Err(ServiceError::InvalidRequest),
+                    if profile.appearance.is_some() == profile.dashboard.is_some() {
+                        return Err(ServiceError::InvalidRequest);
                     }
-                    .map_err(|error| match error {
-                        CoreError::PermissionDenied { .. }
-                        | CoreError::UserNotFound
-                        | CoreError::AccountDisabled => ServiceError::Forbidden,
-                        _ => ServiceError::Unavailable,
-                    })?;
+                    let saved = self
+                        .storage
+                        .update_profile(&actor.username, |saved| {
+                            if let Some(appearance) = profile.appearance {
+                                saved.appearance = appearance;
+                            }
+                            if let Some(dashboard) = profile.dashboard {
+                                saved.system_status_dashboard = dashboard;
+                            }
+                        })
+                        .map_err(|_| ServiceError::Unavailable)?;
                     SessionProfile {
-                        appearance: Some(account.appearance),
-                        dashboard: Some(account.system_status_dashboard),
+                        appearance: Some(saved.appearance),
+                        dashboard: Some(saved.system_status_dashboard),
                     }
                 };
                 self.profile = (self.profile.0 + 1, profile);
@@ -240,7 +229,6 @@ impl ServiceState {
             }
             operation @ (ServiceOperation::ReadClockProfile
             | ServiceOperation::WriteClockProfile { .. }
-            | ServiceOperation::DeleteClockProfile { .. }
             | ServiceOperation::ReadClockTime
             | ServiceOperation::WriteClockTime { .. }) => {
                 self.clock

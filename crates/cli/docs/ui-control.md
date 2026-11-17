@@ -1,6 +1,6 @@
 # External CLI control
 
-`tundra-cli ui` reads the interface of a running Shell and sends normal keyboard, mouse, and paste input. Page commands, confirmation dialogs, login, and system authorization remain handled by the existing interface.
+`tundra-cli ui` reads the interface of a running Shell and sends normal keyboard, mouse, and paste input. Page commands, confirmation dialogs, and system authorization use the same interface as local input.
 
 ## Enabling control and selecting a session
 
@@ -31,7 +31,7 @@ Coordinates use terminal character cells, with `(0, 0)` at the top left. Read th
 | --- | --- |
 | `sessions` | List sessions |
 | `snapshot` | Read the control tree and character screen |
-| `wake` | Close idle weather or the weather lockscreen; on ordinary pages, only read a snapshot |
+| `wake` | Close idle weather and return a snapshot. On ordinary pages, read the current snapshot. |
 | `click` | `--id TARGET_ID` or `--x COL --y ROW`, with optional `--button left\|right\|middle` and `--double` |
 | `move` | `--id TARGET_ID` or `--x COL --y ROW` |
 | `drag` | `--from-id/--from-x/--from-y` specifies the start, `--to-id/--to-x/--to-y` the end; optional `--duration MS` and `--button` |

@@ -47,7 +47,7 @@ The English and Chinese `modules/` files include:
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through title-bar Tasks |
 | `ui-explorer.ftl` | Save-picker filename, Save, and Cancel labels, separate from creating a file |
-| `ui-shell.ftl`, `ui-auth.ftl` | Global tasks and approval status, the shared terminal-size prompt, completion with default appearance, and the application administrator's scope |
+| `ui-shell.ftl`, `ui-auth.ftl` | Global tasks and approval status, the shared terminal-size prompt, and first-time setup including completion with default appearance |
 | `shell-command-line.ftl` | Command Line close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |
 | `settings.ftl` | Animation phase fields, validation, reset, save, and cancel actions |

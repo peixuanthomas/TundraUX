@@ -73,7 +73,7 @@ fn motion_dispatch_consumes_weather_wakeup_and_leaves_entering_surfaces_interact
         let theme = ui::ThemeTokens::glacier_night();
         let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
         while state.notification_dismiss_active_modal_without_response() {}
-        state.set_navigation_path(vec![ShellScreen::Login]);
+        state.set_navigation_path(vec![ShellScreen::FirstRunSetup]);
         state.refresh_hit_map();
         let mut motion = ShellMotionEffects::default();
         motion.update(&state, full, full, None, theme, false);
@@ -102,7 +102,6 @@ fn motion_dispatch_consumes_weather_wakeup_and_leaves_entering_surfaces_interact
         now,
     );
     assert!(!motion_blocked);
-    assert!(!expired.return_to_lockscreen_requested());
     assert!(!expired.screen_saver_active());
     assert_eq!(expired.active_screen(), ShellScreen::ExitConfirm);
     assert!(expired_motion.deferred_close.is_none());

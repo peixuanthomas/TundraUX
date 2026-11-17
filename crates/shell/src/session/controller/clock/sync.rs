@@ -160,7 +160,7 @@ impl ShellSession {
         &mut self,
         mut config: storage::StorageConfig,
     ) {
-        if self.identity_backend == identity::IdentityBackend::Linux {
+        if self.platform_kind == PlatformKind::Linux {
             config.time_sync.source = storage::TimeSyncSource::OperatingSystem;
             config.time_sync.server_url = None;
         }

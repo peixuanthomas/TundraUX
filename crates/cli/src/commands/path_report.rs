@@ -53,5 +53,5 @@ pub(crate) fn write_storage_files(output: &mut impl Write, layout: &StorageLayou
         layout.recent_files_path.display()
     );
     let _ = writeln!(output, "Sessions file: {}", layout.sessions_path.display());
-    let _ = writeln!(output, "Users file:   {}", layout.users_path.display());
+    let _ = writeln!(output, "Profiles file: {}", layout.profiles_path.display());
 }

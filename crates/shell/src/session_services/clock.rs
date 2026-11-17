@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use chrono::{DateTime, NaiveDate, Utc};
-use identity::{AuthSession, PermissionAction, PermissionService, UserRole};
+use identity::{AuthSession, UserRole};
 use serde::{Deserialize, Serialize};
 use storage::{ClockEntryRecord, ClockProfile, StorageManager};
 use workspace_protocol::{ServiceError, ServiceOperation, ServiceValue};
@@ -54,16 +54,16 @@ impl ServerClockState {
                 versioned(self.anchor_revision, self.anchor)
             }
             ServiceOperation::ReadClockProfile => {
-                let user_id = authorized_clock_user(authorization, storage)?;
+                let username = authorized_clock_user(authorization)?;
                 let mut document = storage.load_clock().map_err(storage_error)?;
                 let profile = SharedClockProfile {
-                    profile: document.profiles.remove(user_id).unwrap_or_default(),
-                    alarm_dates: self.alarm_dates.get(user_id).cloned().unwrap_or_default(),
+                    profile: document.profiles.remove(username).unwrap_or_default(),
+                    alarm_dates: self.alarm_dates.get(username).cloned().unwrap_or_default(),
                 };
                 versioned(self.profile_revision, profile)
             }
             ServiceOperation::WriteClockProfile { revision, profile } => {
-                let user_id = authorized_clock_user(authorization, storage)?;
+                let username = authorized_clock_user(authorization)?;
                 if revision != self.profile_revision {
                     return Err(ServiceError::Conflict);
                 }
@@ -72,13 +72,13 @@ impl ServerClockState {
                     alarm_dates,
                 } = serde_json::from_value(profile).map_err(|_| ServiceError::InvalidRequest)?;
                 let mut document = storage.load_clock().map_err(storage_error)?;
-                let saved = document.profiles.get(user_id);
+                let saved = document.profiles.get(username);
                 let next_ids = daily_alarm_ids(&profile).collect::<HashSet<_>>();
                 let existing_ids = saved
                     .into_iter()
                     .flat_map(daily_alarm_ids)
                     .collect::<HashSet<_>>();
-                let stored_dates = self.alarm_dates.get(user_id).cloned().unwrap_or_default();
+                let stored_dates = self.alarm_dates.get(username).cloned().unwrap_or_default();
                 let mut next_dates = stored_dates.clone();
                 next_dates.retain(|id, _| next_ids.contains(id));
                 next_dates.extend(alarm_dates.into_iter().filter(|(id, _)| {
@@ -86,14 +86,14 @@ impl ServerClockState {
                 }));
                 let changed_profile = saved != Some(&profile);
                 if changed_profile {
-                    document.profiles.insert(user_id.to_owned(), profile);
+                    document.profiles.insert(username.to_owned(), profile);
                     storage.save_clock(&document).map_err(storage_error)?;
                 }
                 if changed_profile || next_dates != stored_dates {
                     if next_dates.is_empty() {
-                        self.alarm_dates.remove(user_id);
+                        self.alarm_dates.remove(username);
                     } else {
-                        self.alarm_dates.insert(user_id.to_owned(), next_dates);
+                        self.alarm_dates.insert(username.to_owned(), next_dates);
                     }
                     self.profile_revision += 1;
                 }
@@ -101,27 +101,6 @@ impl ServerClockState {
                     revision: self.profile_revision,
                     value: serde_json::Value::Null,
                 })
-            }
-            ServiceOperation::DeleteClockProfile { user_id } => {
-                if !PermissionService::default()
-                    .authorize(authorization, PermissionAction::ManageUsers, None)
-                    .allowed
-                    || storage
-                        .load_users()
-                        .map_err(storage_error)?
-                        .users
-                        .iter()
-                        .any(|user| user.id == user_id)
-                {
-                    return Err(ServiceError::Forbidden);
-                }
-                let mut document = storage.load_clock().map_err(storage_error)?;
-                if document.profiles.remove(&user_id).is_some() {
-                    storage.save_clock(&document).map_err(storage_error)?;
-                    self.alarm_dates.remove(&user_id);
-                    self.profile_revision += 1;
-                }
-                Ok(ServiceValue::Empty)
             }
             _ => Err(ServiceError::Forbidden),
         }
@@ -135,22 +114,11 @@ fn daily_alarm_ids(profile: &ClockProfile) -> impl Iterator<Item = u64> + '_ {
     })
 }
 
-fn authorized_clock_user<'a>(
-    authorization: Option<&'a AuthSession>,
-    storage: &StorageManager,
-) -> Result<&'a str, ServiceError> {
-    let auth = authorization
+fn authorized_clock_user(authorization: Option<&AuthSession>) -> Result<&str, ServiceError> {
+    authorization
         .filter(|auth| auth.role != UserRole::Guest)
-        .ok_or(ServiceError::Forbidden)?;
-    let users = storage.load_users().map_err(storage_error)?;
-    if !users
-        .users
-        .iter()
-        .any(|user| user.id == auth.user_id && user.enabled)
-    {
-        return Err(ServiceError::Forbidden);
-    }
-    Ok(&auth.user_id)
+        .map(|auth| auth.username.as_str())
+        .ok_or(ServiceError::Forbidden)
 }
 
 fn versioned(revision: u64, value: impl Serialize) -> Result<ServiceValue, ServiceError> {

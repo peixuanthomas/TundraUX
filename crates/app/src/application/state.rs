@@ -12,7 +12,7 @@ use crate::explorer::{
     ExplorerCommand, ExplorerController, ExplorerEffect, ExplorerFileService, ExplorerState,
 };
 use crate::launcher::{LauncherCommand, LauncherController, LauncherEffect, LauncherState};
-use identity::{AuthSession, UserAccount};
+use identity::AuthSession;
 use time::{ClockDisplay, ClockSnapshot, NetworkClock, TimeSyncResult};
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -43,7 +43,6 @@ pub enum AppCommand {
     Notification(NotificationCommand),
     ApplyTimeSync(TimeSyncResult),
     SetAuthSession(Option<AuthSession>),
-    SetManagedUsers(Vec<UserAccount>),
     SetStorageConfig {
         config: storage::StorageConfig,
         synchronized_utc: Option<chrono::DateTime<chrono::Utc>>,
@@ -86,7 +85,6 @@ pub struct AppSnapshot<'a> {
     pub exit_confirmation_requested: bool,
     pub notifications: &'a NotificationCenter,
     pub auth_session: Option<&'a AuthSession>,
-    pub managed_users: &'a [UserAccount],
     pub storage_config: &'a storage::StorageConfig,
     pub active_appearance: Option<&'a storage::AppearanceConfig>,
     pub active_system_status_dashboard: Option<&'a storage::SystemStatusDashboardConfig>,
@@ -167,10 +165,6 @@ impl AppState {
                     self.sync_explorer_clipboard();
                 }
                 self.auth_session = auth_session;
-                AppAction::Redraw
-            }
-            AppCommand::SetManagedUsers(managed_users) => {
-                *self.page_models.managed_users = managed_users;
                 AppAction::Redraw
             }
             AppCommand::SetStorageConfig {
@@ -287,7 +281,6 @@ impl AppState {
             exit_confirmation_requested: self.exit_confirmation_requested,
             notifications: &self.notifications,
             auth_session: self.auth_session.as_ref(),
-            managed_users: &self.page_models.managed_users,
             storage_config: &self.storage_config,
             active_appearance: self.active_appearance.as_ref(),
             active_system_status_dashboard: self.active_system_status_dashboard.as_ref(),
@@ -371,9 +364,6 @@ impl AppState {
 
     pub fn auth_session(&self) -> Option<&AuthSession> {
         self.auth_session.as_ref()
-    }
-    pub fn managed_users(&self) -> &[UserAccount] {
-        &self.page_models.managed_users
     }
     pub fn storage_config(&self) -> &storage::StorageConfig {
         &self.storage_config

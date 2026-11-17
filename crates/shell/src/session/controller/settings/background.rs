@@ -236,8 +236,6 @@ impl ShellSession {
                 if let Some(TaskOwner::Page(page)) = owner {
                     self.pending_page_closes.remove(&page);
                 }
-                self.pending_login_reset = None;
-                self.pending_lockscreen_after_logout = false;
                 self.pending_session_exit = None;
                 self.set_update_error(error);
                 continue;
@@ -408,7 +406,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn change_time_sync_source(&mut self, platform: &dyn Platform) {
-        if self.identity_backend == identity::IdentityBackend::Linux {
+        if self.platform_kind == PlatformKind::Linux {
             self.toggle_system_time_sync();
             return;
         }

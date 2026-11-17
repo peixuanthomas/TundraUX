@@ -43,7 +43,7 @@ fn shared_back_cancels_aa_confirmation_on_release_without_leaving_page() {
         ShellHomeMode::User,
     );
     state.enter_screen(ShellScreen::Launcher);
-    state.enter_screen(ShellScreen::UserManagement);
+    state.enter_screen(ShellScreen::Management);
     let (tx, rx) = mpsc::channel();
     let job = state
         .begin_auto_admin("Enable demo".into(), true, tx)
@@ -70,7 +70,7 @@ fn shared_back_cancels_aa_confirmation_on_release_without_leaving_page() {
         &[
             ShellScreen::Home,
             ShellScreen::Launcher,
-            ShellScreen::UserManagement
+            ShellScreen::Management
         ]
     );
 }

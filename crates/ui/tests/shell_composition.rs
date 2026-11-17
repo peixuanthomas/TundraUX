@@ -180,9 +180,6 @@ fn assert_page_leaves_shell_chrome_untouched(content: ScreenContent<'_>) {
     let name = match content {
         ScreenContent::Home(_) => "Home",
         ScreenContent::Setup(_) => "Setup",
-        ScreenContent::Login(_) => "Login",
-        ScreenContent::BootstrapAdmin(_) => "BootstrapAdmin",
-        ScreenContent::UserManagement(_) => "UserManagement",
         ScreenContent::Explorer(_) => "Explorer",
         ScreenContent::Launcher(_) => "Launcher",
         ScreenContent::CommandLine(_) => "CommandLine",
@@ -239,8 +236,6 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
         "09:30",
         vec![ShellEntry::new("Editor", "Edit text")],
     );
-    let login = LoginViewModel::new(Vec::new(), 0, 0, 0, LoginField::Password, None);
-    let bootstrap = BootstrapAdminViewModel::new("Admin", 0, AuthField::Username, None);
     let mut setup = SetupViewModel {
         scroll_offset: 0,
         step: SetupStep::Language,
@@ -249,13 +244,7 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
         selected_language_index: 0,
         selected_timezone_index: 0,
         timezone_window_start: 0,
-        admin_username: "Admin".into(),
-        admin_password_len: 12,
-        admin_password_confirm_len: 12,
-        password_requirements: Vec::new(),
-        password_hint: String::new(),
-        focused_field: SetupField::Submit,
-        can_submit: true,
+        focused_field: SetupField::LanguageList,
         defaults_available: false,
         border_shape: BorderShape::Rounded,
         theme_color: ratatui::style::Color::White,
@@ -270,7 +259,6 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
         custom_color_error: None,
         error: None,
     };
-    let mut users = UserManagementViewModel::new("Admin", Vec::new(), 0, None, true, None);
     let mut explorer = ExplorerViewModel::new("/tmp", Vec::new(), None);
     let mut launcher = LauncherViewModel::new(Vec::new(), None, LauncherViewMode::Details, true);
     let command_line = CommandLineViewModel::new(CommandLineTerminalSnapshot::blank(120, 40));
@@ -331,9 +319,6 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
     for content in [
         ScreenContent::Home(&home),
         ScreenContent::Setup(&setup),
-        ScreenContent::Login(&login),
-        ScreenContent::BootstrapAdmin(&bootstrap),
-        ScreenContent::UserManagement(&users),
         ScreenContent::Explorer(&explorer),
         ScreenContent::Launcher(&launcher),
         ScreenContent::CommandLine(&command_line),
@@ -347,25 +332,12 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
     ] {
         assert_page_leaves_shell_chrome_untouched(content);
     }
-    for step in [SetupStep::Timezone, SetupStep::Admin, SetupStep::Appearance] {
+    for step in [SetupStep::Timezone, SetupStep::Appearance] {
         setup.step = step;
         assert_page_leaves_shell_chrome_untouched(ScreenContent::Setup(&setup));
     }
     setup.custom_color_target = Some(SetupCustomColorTarget::Theme);
     assert_page_leaves_shell_chrome_untouched(ScreenContent::Setup(&setup));
-    users.form = Some(UserManagementFormViewModel {
-        interaction: Default::default(),
-        editing: Default::default(),
-        kind: UserManagementFormKind::Create,
-        title: "Create user".into(),
-        username: "User".into(),
-        display_name: "User".into(),
-        role: "User".into(),
-        password_len: 12,
-        focused_field: UserManagementField::Username,
-        error: None,
-    });
-    assert_page_leaves_shell_chrome_untouched(ScreenContent::UserManagement(&users));
     explorer.overlay = Some(ExplorerOverlayViewModel::Properties(
         ExplorerPropertiesViewModel {
             title: "Properties".into(),

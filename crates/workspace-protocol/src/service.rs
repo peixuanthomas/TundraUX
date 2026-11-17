@@ -51,9 +51,6 @@ pub enum ServiceOperation {
         revision: u64,
         profile: Value,
     },
-    DeleteClockProfile {
-        user_id: String,
-    },
     ReadClockTime,
     WriteClockTime {
         anchor: Value,

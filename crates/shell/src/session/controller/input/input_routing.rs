@@ -103,18 +103,6 @@ impl ShellSession {
             return self.route_setup_key(key);
         }
 
-        if self.active_screen() == ShellScreen::Login {
-            return self.route_login_key(key);
-        }
-
-        if self.active_screen() == ShellScreen::BootstrapAdmin {
-            return self.route_auth_key(key);
-        }
-
-        if self.active_screen() == ShellScreen::UserManagement {
-            return self.route_user_management_key(key);
-        }
-
         if self.active_screen() == ShellScreen::Explorer {
             return self.route_explorer_key(key);
         }
@@ -137,20 +125,6 @@ impl ShellSession {
             );
         }
 
-        if self.active_screen() == ShellScreen::Home
-            && key.phase == InputPhase::Press
-            && self.identity_backend != identity::IdentityBackend::Linux
-            && self.current_home_username().is_some()
-            && key.modifiers.is_control()
-            && !key.modifiers.alt
-            && !key.modifiers.super_key
-            && !key.modifiers.hyper
-            && !key.modifiers.meta
-            && !key.modifiers.shift
-            && matches!(key.key, InputKey::Char('l' | 'L'))
-        {
-            return (RoutedTarget::Global, ShellCommand::Logout);
-        }
         if self.active_screen() == ShellScreen::Home
             && (key.has_non_shift_modifier()
                 || (key.phase != InputPhase::Press
@@ -193,15 +167,6 @@ impl ShellSession {
                 (
                     RoutedTarget::Component(ShellComponent::Home),
                     ShellCommand::HomeMove(if key.key == InputKey::Left { -1 } else { 1 }),
-                )
-            }
-            ShellScreen::Home
-                if self.pages.common.focused_component == ShellComponent::HomeLogout
-                    && matches!(&key.key, InputKey::Enter | InputKey::Char(' ')) =>
-            {
-                (
-                    RoutedTarget::Component(ShellComponent::HomeLogout),
-                    ShellCommand::Logout,
                 )
             }
             _ if self.pages.common.focused_component == ShellComponent::ClockButton
@@ -270,13 +235,6 @@ impl ShellSession {
                 RoutedTarget::Component(ShellComponent::Home),
                 ShellCommand::ActivateSelectedHomeEntry,
             ),
-            ShellScreen::Home
-                if self.identity_backend != identity::IdentityBackend::Linux
-                    && self.current_home_username().is_some()
-                    && (key.is_character('l') || key.is_character('L')) =>
-            {
-                (RoutedTarget::Global, ShellCommand::LogoutToLockscreen)
-            }
             ShellScreen::Home if key.is_character('q') || matches!(&key.key, InputKey::Escape) => {
                 (RoutedTarget::Global, ShellCommand::RequestExit)
             }
@@ -526,10 +484,6 @@ impl ShellSession {
             return self.route_setup_mouse(mouse, hit_target);
         }
 
-        if self.active_screen() == ShellScreen::Login {
-            return self.route_login_mouse(mouse, hit_target);
-        }
-
         if self.active_screen() == ShellScreen::Clock {
             return self.route_clock_mouse(mouse, hit_target);
         }
@@ -539,10 +493,6 @@ impl ShellSession {
         }
         if self.active_screen() == ShellScreen::SystemStatus {
             return self.route_system_status_mouse(mouse, hit_target, received_at);
-        }
-
-        if self.active_screen() == ShellScreen::UserManagement {
-            return self.route_user_management_mouse(mouse, hit_target);
         }
 
         if self.active_screen() == ShellScreen::Explorer {
@@ -610,9 +560,6 @@ impl ShellSession {
                     let click = self.register_click(hit_target, coordinates, button, received_at);
                     if target == ShellComponent::HomeEdit {
                         return (RoutedTarget::Component(target), ShellCommand::HomeEdit);
-                    }
-                    if target == ShellComponent::HomeLogout && button == PointerButton::Left {
-                        return (RoutedTarget::Component(target), ShellCommand::Logout);
                     }
                     if target == ShellComponent::ClockButton {
                         return (

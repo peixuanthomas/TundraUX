@@ -8,9 +8,6 @@ mod screen_keyboard;
 pub(super) enum ScreenViewModel {
     Home(Box<ui::HomeViewModel>),
     Setup(Box<ui::SetupViewModel>),
-    Login(Box<ui::LoginViewModel>),
-    BootstrapAdmin(Box<ui::BootstrapAdminViewModel>),
-    UserManagement(Box<ui::UserManagementViewModel>),
     Explorer(Box<ui::ExplorerViewModel>),
     Launcher(Box<ui::LauncherViewModel>),
     CommandLine(Box<ui::CommandLineViewModel>),
@@ -35,13 +32,6 @@ impl ScreenViewModel {
                 Self::Home(Box::new(state.to_home_view_model()))
             }
             ShellScreen::FirstRunSetup => Self::Setup(Box::new(state.to_setup_view_model())),
-            ShellScreen::Login => Self::Login(Box::new(state.to_login_view_model_at(now))),
-            ShellScreen::BootstrapAdmin => {
-                Self::BootstrapAdmin(Box::new(state.to_bootstrap_admin_view_model()))
-            }
-            ShellScreen::UserManagement => {
-                Self::UserManagement(Box::new(state.to_user_management_view_model()))
-            }
             ShellScreen::Explorer => Self::Explorer(Box::new(state.to_explorer_view_model())),
             ShellScreen::Launcher => Self::Launcher(Box::new(state.to_launcher_view_model())),
             ShellScreen::CommandLine => Self::CommandLine(Box::new(command_line.view_model())),
@@ -75,9 +65,6 @@ impl ScreenViewModel {
         match self {
             Self::Home(model) => ui::ScreenContent::Home(model),
             Self::Setup(model) => ui::ScreenContent::Setup(model),
-            Self::Login(model) => ui::ScreenContent::Login(model),
-            Self::BootstrapAdmin(model) => ui::ScreenContent::BootstrapAdmin(model),
-            Self::UserManagement(model) => ui::ScreenContent::UserManagement(model),
             Self::Explorer(model) => ui::ScreenContent::Explorer(model),
             Self::Launcher(model) => ui::ScreenContent::Launcher(model),
             Self::CommandLine(model) => ui::ScreenContent::CommandLine(model),

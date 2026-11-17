@@ -418,7 +418,7 @@ settings-number-help = 左右键移动光标 · 直接输入数字 · −/+ 调�
 
 ui-control-settings-title = 外部 CLI 控制
 ui-control-settings-enable = 允许外部 CLI 控制
-ui-control-settings-help = 允许当前操作系统用户读取和操作此 Shell，包括登录界面。修改立即生效。
+ui-control-settings-help = 允许当前操作系统用户读取和操作此 Shell界面。修改立即生效。
 ui-control-invalid-boolean = 请使用 true 或 false。
 ui-control-config-saved = 已保存外部 CLI 控制设置。通过 CLI 修改后，需重启正在运行的 Shell。
 ui-control-unavailable = 无法连接 Shell 控制接口：{ $reason }
@@ -435,7 +435,7 @@ ui-control-help = 用法：tundra-cli ui <sessions|snapshot|wake|click|move|drag
     key 按键：--modifiers ctrl,alt,shift,super,hyper,meta；--phase press|repeat|release
     text 文字 或 text --stdin：向当前焦点输入文字
     wait --id ID：--state present|absent|actionable（默认 actionable）
-    wake：关闭空闲天气或天气锁屏，返回进入 Shell 后的快照。
+    wake：关闭空闲天气，返回进入 Shell 后的快照。
     drag 也支持 --button；时长范围为 16..10000 毫秒，滚动次数为 1..1000。
     多会话必须指定 --session。超时后不会重放输入。
     用户操作后需重新执行 snapshot 或 wait，使用 --snapshot 时也一样。
@@ -451,7 +451,6 @@ ui-control-invalid-arguments = UI 命令参数不正确，请查看 tundra-cli u
 ui-control-input-failed = 无法从标准输入读取文字。
 ui-control-busy = 另一个外部输入正在执行，请稍后重试。
 
-ui-control-lockscreen = 进入 Shell
 settings-screen-timeout = 屏幕超时时间
 settings-screen-timeout-never = 永不
 settings-screen-timeout-seconds = { $value } 秒

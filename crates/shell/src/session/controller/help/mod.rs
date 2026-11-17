@@ -35,9 +35,6 @@ impl ShellSession {
         let screen = match self.content_screen() {
             ShellScreen::Home | ShellScreen::ExitConfirm => ui::PageHelpScreen::Home,
             ShellScreen::FirstRunSetup => ui::PageHelpScreen::Setup,
-            ShellScreen::Login => ui::PageHelpScreen::Login,
-            ShellScreen::BootstrapAdmin => ui::PageHelpScreen::BootstrapAdmin,
-            ShellScreen::UserManagement => ui::PageHelpScreen::UserManagement,
             ShellScreen::Explorer => ui::PageHelpScreen::Explorer,
             ShellScreen::Launcher => ui::PageHelpScreen::Launcher,
             ShellScreen::CommandLine => ui::PageHelpScreen::CommandLine,

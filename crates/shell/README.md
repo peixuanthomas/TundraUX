@@ -4,13 +4,13 @@
 
 ## Main responsibilities
 
-- Initialize identity, assets, storage, system services, and the terminal, and complete first-time setup and startup.
+- Attach to the current system user, initialize assets, storage and system services, and open first-time setup or Home. Users is available on Linux.
 - The Shell manages global input, window layout and focus, the terminal display, and idle weather. AppHosts leave idle weather to the Shell so waking does not consume the next dialog key.
 - Each AppHost runs an application's page controllers, navigation, task ownership, and off-screen rendering. Editors and terminals own their child processes.
 - The explicit embedded Command Line `/debug test-watchdog-panic` request is forwarded to Shell's fullscreen panic boundary. Ordinary command exit codes and AppHost failures remain isolated to their window.
 - After initialization, AppHost performs its recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded editor drafts remain discarded.
 - Session services share configuration, the active profile, system status, and file operation state across windows.
-- Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the account file intact.
+- Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the saved preferences intact.
 - A background connection owns shared-service I/O. AppHosts build from one authoritative session snapshot, and runtime reads share an immutable cached snapshot. Interactive saves publish successful replies to their original session, page, and draft; pending saves participate in normal close checks. A failed background save cancels an ordinary close and retains its specific error. An explicit Stop and close choice applies only to that close request.
 - Shared-service operation jobs belong to the process watchdog. Dropping their owner cancels and wakes the worker without joining on the UI thread; process shutdown waits for managed work after the event loop returns. The RPC worker retains its own task owner during initialization and client lifetime.
 - The watchdog supervises the Shell and AppHosts independently and can terminate an unresponsive window and its child processes.
@@ -72,7 +72,7 @@ After an AppHost welcomes the Shell, its current viewport and initialization joi
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Logged-in non-guest users can open Tasks. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9 after required account validation.
+The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Tasks is available after first-time setup. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9.
 
 ## Windows
 
@@ -118,7 +118,7 @@ Floating toasts preserve keyboard focus and block pointer input in the area they
 
 ## Interface hosting
 
-- **Home:** The minimum terminal size is 108×20, shared by startup, runtime resizing, the lockscreen, and Command Line. Supported Home entries fit on one page, using name-only tiles when icons would force scrolling; smaller terminals show an error. Larger windows center the title, account, and grid while keeping the action footer at the bottom. F2 or the Edit icons button enters edit mode. Pointer drops and Shift+Left/Right save icon order in each user’s `home.order.<user_id>` state entry. Esc cancels a drag first, then finishes editing; focus loss, resizing, overlays, and navigation cancel pending drops.
+- **Home:** The minimum terminal size is 108×20, shared by startup, runtime resizing and Command Line. Supported Home entries fit on one page, using name-only tiles when icons would force scrolling; smaller terminals show an error. Larger windows center the title, account, and grid while keeping the action footer at the bottom. F2 or the Edit icons button enters edit mode. Pointer drops and Shift+Left/Right save icon order in each user’s `home.order.<username>` state entry. Esc cancels a drag first, then finishes editing; focus loss, resizing, overlays, and navigation cancel pending drops.
 - **Home and Launcher:** show supported system tasks directly on Home. Home uses plain names and opens entries by click or Enter/Space. Search Launcher by name, path/command, or type. Right-click an icon to open it or enter organize mode with **Move**. **New session** is available for built-in apps and embedded terminals. User-added entries offer editing and deletion.
 - **Files:** share copied/cut files across Explorer pages and undo safe moves or renames through the shared application service. First save and Save As keep directory browsing, filename, Save, and Cancel together.
 - **Editor and scripts:** keep common editing tools visible, preserve the text selection when opening the standard editor's context menu, manage multi-document pages and Vim, and host script execution and debugging. F8 switches Vim mode for the current editor window. New editor windows start with the configured default. macOS text editing follows Command and Option conventions.
@@ -144,7 +144,7 @@ After external CLI control is enabled in Settings → System, the same operating
 
 `session/automation.rs` sends requests through the normal input flow, and the compositor captures snapshots from actual rendered frames. The focused window retains its `page/` control IDs. Other visible windows use `session/<id>/` prefixes. Real user actions invalidate old snapshots, requiring another `snapshot` or `wait`. Passwords remain masked in exported content. See [CLI control](../cli/docs/ui-control.md) for the protocol and examples.
 
-Disabling external control waits for the setting's persistence receipt before completing the initiating request with `closed`. The receipt survives its Settings page closing, remains scoped to the login and authorization revision, and prevents an older configuration cache from reopening control. A failed save leaves control available and exposes its error; unrelated background saves do not delay input confirmation.
+Disabling external control waits for the setting's persistence receipt before completing the initiating request with `closed`. The receipt survives its Settings page closing, remains scoped to the Shell session and authorization revision, and prevents an older configuration cache from reopening control. A failed save leaves control available and exposes its error; unrelated background saves do not delay input confirmation.
 
 Already-due wheel steps from one external scroll request share a frame without dropping steps or advancing future events. Clicks and drags retain separate press and release frames.
 

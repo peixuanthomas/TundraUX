@@ -51,16 +51,6 @@ lines = [
   ' admin ',
 ]
 
-[items.user_profile]
-label = "User Profile"
-image = "home_icons/user_profile.png"
-lines = [
-  '   o   ',
-  '  /|\  ',
-  '  / \  ',
-  ' user  ',
-]
-
 [items.default]
 label = "Application"
 image = "home_icons/default.png"

@@ -1,5 +1,5 @@
 app-catalog-users-name = Users
-app-catalog-users-description = Manage accounts, groups and login settings
+app-catalog-users-description = Manage system accounts, groups and login settings
 management-action-user-create = Create account
 management-action-user-lookup = Find account
 management-action-user-info = Edit account name

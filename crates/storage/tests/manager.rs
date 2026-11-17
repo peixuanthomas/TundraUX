@@ -11,7 +11,6 @@ use storage::{
     LauncherExecutableKind, LauncherFingerprint, MotionPreference, RecentFilesDocument,
     SCHEMA_VERSION, SecurityConfig, SessionsDocument, StateDocument, StorageConfig, StorageError,
     StorageLayout, StorageManager, TimeSyncConfig, TimeSyncSource, TrashDocument, TrashRecord,
-    USERS_SCHEMA_VERSION, UserRecord, UsersDocument,
 };
 
 #[test]
@@ -28,7 +27,7 @@ fn first_open_creates_storage_directories_and_default_files() {
     assert!(layout.logs_path.is_dir());
     assert!(layout.temp_path.is_dir());
     assert!(layout.config_path.is_file());
-    assert!(layout.users_path.is_file());
+    assert!(layout.profiles_path.is_file());
     assert!(layout.state_path.is_file());
     assert!(layout.recent_files_path.is_file());
     assert!(layout.sessions_path.is_file());
@@ -47,7 +46,7 @@ fn first_open_creates_storage_directories_and_default_files() {
         sorted_paths(opened.report.created_files),
         sorted_paths(vec![
             layout.config_path,
-            layout.users_path,
+            layout.profiles_path,
             layout.state_path,
             layout.recent_files_path,
             layout.sessions_path,
@@ -73,7 +72,7 @@ fn reopening_storage_tightens_only_owned_paths() {
     StorageManager::open(paths.clone()).expect("initial storage open");
 
     fs::set_permissions(&layout.data_path, fs::Permissions::from_mode(0o755)).unwrap();
-    fs::set_permissions(&layout.users_path, fs::Permissions::from_mode(0o644)).unwrap();
+    fs::set_permissions(&layout.profiles_path, fs::Permissions::from_mode(0o644)).unwrap();
     let editor_document = base.join("document-owned-by-user.txt");
     fs::write(&editor_document, "leave this permission alone").unwrap();
     fs::set_permissions(&editor_document, fs::Permissions::from_mode(0o644)).unwrap();
@@ -89,7 +88,7 @@ fn reopening_storage_tightens_only_owned_paths() {
         0o700
     );
     assert_eq!(
-        fs::metadata(&layout.users_path)
+        fs::metadata(&layout.profiles_path)
             .unwrap()
             .permissions()
             .mode()
@@ -260,28 +259,18 @@ fn toml_and_json_documents_round_trip() {
     assert!(config_contents.contains("sort_field = \"modified\""));
     assert!(config_contents.contains("sort_direction = \"descending\""));
 
-    let users = UsersDocument {
-        schema_version: USERS_SCHEMA_VERSION,
-        users: vec![UserRecord {
-            id: "user-1".to_string(),
-            username: "local-user".to_string(),
-            display_name: "Local User".to_string(),
-            role: "User".to_string(),
-            password_hash: "$argon2id$placeholder".to_string(),
-            password_hint: Some("project password".to_string()),
-            appearance: AppearanceConfig::default(),
-            personalization_pending: false,
-            system_status_dashboard: storage::SystemStatusDashboardConfig::for_role("User"),
-            enabled: true,
-            failed_login_attempts: 0,
-            locked_until_epoch_ms: None,
-            created_at_epoch_ms: 1,
-            updated_at_epoch_ms: 1,
-            last_login_at_epoch_ms: None,
-        }],
+    let appearance = AppearanceConfig {
+        border_shape: BorderShape::Square,
+        ..AppearanceConfig::default()
     };
-    manager.save_users(&users).expect("users should save");
-    assert_eq!(manager.load_users().expect("users should reload"), users);
+    let saved = manager
+        .update_profile("系统用户", |profile| {
+            profile.appearance = appearance.clone()
+        })
+        .unwrap();
+    assert_eq!(saved.appearance, appearance);
+    assert_eq!(manager.load_profile("系统用户").unwrap(), Some(saved));
+    assert_eq!(manager.load_profile("other-user").unwrap(), None);
 
     let mut values = BTreeMap::new();
     values.insert("active_view".to_string(), "home".to_string());
@@ -564,61 +553,6 @@ fn existing_non_english_config_is_canonicalized_without_losing_language_on_open(
 }
 
 #[test]
-fn old_users_without_password_hint_load_with_none() {
-    let base = unique_temp_root("old-users-no-hint");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(&layout.data_path).expect("data path should be writable");
-    fs::write(
-        &layout.users_path,
-        "{\n  \"schema_version\": 2,\n  \"users\": [\n    {\n      \"id\": \"user-1\",\n      \"username\": \"AdminUser\",\n      \"display_name\": \"Admin User\",\n      \"role\": \"Admin\",\n      \"password_hash\": \"$argon2id$placeholder\",\n      \"enabled\": true,\n      \"failed_login_attempts\": 0,\n      \"locked_until_epoch_ms\": null,\n      \"created_at_epoch_ms\": 1,\n      \"updated_at_epoch_ms\": 1,\n      \"last_login_at_epoch_ms\": null\n    }\n  ]\n}\n",
-    )
-    .expect("old users fixture");
-
-    let opened = StorageManager::open(paths).expect("old users should load");
-    let users = opened.manager.load_users().expect("users should load");
-
-    assert_eq!(users.users.len(), 1);
-    assert_eq!(users.users[0].password_hint, None);
-    assert_eq!(users.users[0].appearance, AppearanceConfig::default());
-    assert_eq!(users.schema_version, USERS_SCHEMA_VERSION);
-    assert!(opened.report.recovered_files.is_empty());
-    assert!(opened.report.warnings.is_empty());
-
-    cleanup(&base);
-}
-
-#[test]
-fn v2_user_appearance_migration_preserves_custom_accent_and_border() {
-    let base = unique_temp_root("user-appearance-custom-migration");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(&layout.data_path).expect("data path should be writable");
-    fs::write(
-        &layout.users_path,
-        "{\n  \"schema_version\": 2,\n  \"users\": [{\n    \"id\": \"user-1\",\n    \"username\": \"AdminUser\",\n    \"display_name\": \"Admin User\",\n    \"role\": \"Admin\",\n    \"password_hash\": \"$argon2id$placeholder\",\n    \"appearance\": {\n      \"border_shape\": \"square\",\n      \"border_color\": \"#38BDF8\",\n      \"accent_color\": \"light-magenta\",\n      \"icon_display_mode\": \"ascii\"\n    },\n    \"enabled\": true,\n    \"failed_login_attempts\": 0,\n    \"locked_until_epoch_ms\": null,\n    \"created_at_epoch_ms\": 1,\n    \"updated_at_epoch_ms\": 1,\n    \"last_login_at_epoch_ms\": null\n  }]\n}\n",
-    )
-    .expect("legacy user fixture");
-
-    let opened = StorageManager::open(paths).expect("user migration should succeed");
-    let user = &opened.manager.load_users().expect("migrated users").users[0];
-    assert_eq!(user.appearance.border_shape, BorderShape::Square);
-    assert_eq!(
-        user.appearance.border_color,
-        BorderColor::Rgb(0x38, 0xBD, 0xF8)
-    );
-    assert_eq!(user.appearance.accent_color, BorderColor::LightMagenta);
-    assert_eq!(user.appearance.icon_display_mode, IconDisplayMode::Ascii);
-    assert_eq!(user.appearance.motion_preference, MotionPreference::Full);
-    let contents = fs::read_to_string(&layout.users_path).expect("migrated user contents");
-    assert!(contents.contains("\"schema_version\": 4"));
-    assert!(contents.contains("\"motion_preference\": \"full\""));
-    assert!(opened.report.migrated_files.contains(&layout.users_path));
-
-    cleanup(&base);
-}
-
-#[test]
 fn clock_fields_missing_from_hand_written_files_use_defaults() {
     let base = unique_temp_root("clock-field-defaults");
     let paths = app_paths(&base);
@@ -668,7 +602,7 @@ fn corrupt_toml_and_json_are_backed_up_and_replaced_with_defaults() {
     fs::create_dir_all(&layout.data_path).expect("data path should be writable");
     fs::create_dir_all(&layout.trash_path).expect("trash path should be writable");
     fs::write(&layout.config_path, b"schema_version =\n").expect("corrupt TOML fixture");
-    fs::write(&layout.users_path, b"{").expect("corrupt JSON fixture");
+    fs::write(&layout.profiles_path, b"{").expect("corrupt JSON fixture");
     fs::write(&layout.clock_path, b"{").expect("corrupt clock fixture");
     fs::write(&layout.trash_manifest_path, b"{").expect("corrupt trash fixture");
 
@@ -681,10 +615,9 @@ fn corrupt_toml_and_json_are_backed_up_and_replaced_with_defaults() {
     assert!(
         opened
             .manager
-            .load_users()
-            .expect("default users")
-            .users
-            .is_empty()
+            .load_profile("operator")
+            .expect("default profiles")
+            .is_none()
     );
     assert!(
         opened
@@ -830,53 +763,25 @@ fn future_json_schema_errors_without_modifying_file() {
         "schema_version = 1\ntheme = \"dark\"\n\n[shortcuts]\n\n[explorer]\nshow_hidden = false\n\n[launcher]\npinned_apps = []\npinned_dirs = []\n",
     )
     .expect("current TOML fixture");
-    let original = "{\n  \"schema_version\": 5,\n  \"users\": []\n}\n";
-    fs::write(&layout.users_path, original).expect("future JSON fixture");
+    let original = "{\n  \"schema_version\": 5,\n  \"profiles\": {}\n}\n";
+    fs::write(&layout.profiles_path, original).expect("future JSON fixture");
 
     let error = StorageManager::open(paths).expect_err("future JSON should fail");
 
     assert!(matches!(
         error,
         StorageError::UnsupportedSchema {
-            document: "users",
+            document: "profiles",
             found: 5,
-            supported: USERS_SCHEMA_VERSION,
+            supported: SCHEMA_VERSION,
             ..
         }
     ));
     assert_eq!(
-        fs::read_to_string(&layout.users_path).expect("future JSON should remain readable"),
+        fs::read_to_string(&layout.profiles_path).expect("future JSON should remain readable"),
         original
     );
     assert_no_corrupt_backups(&layout.data_path);
-
-    cleanup(&base);
-}
-
-#[test]
-fn legacy_v1_users_are_migrated_to_disabled_v2_records() {
-    let base = unique_temp_root("legacy-users");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(&layout.data_path).expect("data path should be writable");
-    fs::write(
-        &layout.legacy_users_path,
-        "{\n  \"schema_version\": 1,\n  \"users\": [\"Alice\", \"bob\"]\n}\n",
-    )
-    .expect("legacy users fixture");
-
-    let opened = StorageManager::open(paths).expect("storage should migrate legacy users");
-    let users = opened.manager.load_users().expect("migrated users");
-
-    assert_eq!(users.schema_version, USERS_SCHEMA_VERSION);
-    assert_eq!(users.users.len(), 2);
-    assert_eq!(users.users[0].username, "Alice");
-    assert_eq!(users.users[0].role, "User");
-    assert!(!users.users[0].enabled);
-    assert!(users.users[0].password_hash.is_empty());
-    assert_eq!(users.users[0].password_hint, None);
-    assert_eq!(users.users[0].appearance, AppearanceConfig::default());
-    assert_eq!(opened.report.migrated_files, vec![layout.users_path]);
 
     cleanup(&base);
 }

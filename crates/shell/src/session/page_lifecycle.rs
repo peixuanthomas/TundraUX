@@ -158,7 +158,6 @@ impl ShellSession {
         self.tasks.close_queries(id);
         self.detach_system_time_page(id);
         self.detach_management_page(id);
-        self.detach_user_management_page(id);
         self.detach_diagnostics_page(id);
         self.hide_background_auto_admin();
         self.approved_editor_closes.remove(&id);

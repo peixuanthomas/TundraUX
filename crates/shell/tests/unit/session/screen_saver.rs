@@ -26,9 +26,6 @@ fn every_page_enters_weather_at_the_configured_boundary_and_keeps_its_page() {
     for screen in [
         ShellScreen::Home,
         ShellScreen::FirstRunSetup,
-        ShellScreen::Login,
-        ShellScreen::BootstrapAdmin,
-        ShellScreen::UserManagement,
         ShellScreen::Explorer,
         ShellScreen::Launcher,
         ShellScreen::CommandLine,
@@ -55,7 +52,6 @@ fn every_page_enters_weather_at_the_configured_boundary_and_keeps_its_page() {
         assert!(!state.screen_saver_active(), "{screen:?}");
         state.apply_input_at(InputEvent::Tick, deadline);
         assert!(state.screen_saver_active(), "{screen:?}");
-        assert!(!state.return_to_lockscreen_requested());
         state.apply_input_at(InputEvent::from_key_label("Enter"), deadline);
         assert!(!state.screen_saver_active());
         assert_eq!(state.active_page_id(), page);

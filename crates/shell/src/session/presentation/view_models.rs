@@ -1198,7 +1198,7 @@ impl ShellSession {
         model.editing = self.pages.home.editing;
         model.edit_selected = self.pages.common.focused_component == ShellComponent::HomeEdit;
         model.drop_target = self.pages.home.drag.as_ref().and_then(|drag| drag.target);
-        let model = match self.home_mode {
+        match self.home_mode {
             ShellHomeMode::Debug => model.with_debug_diagnostics(ui::DebugDiagnosticsViewModel {
                 tick_count: self.tick_count,
                 last_key_event: self.last_key_event.clone(),
@@ -1211,16 +1211,6 @@ impl ShellSession {
                 platform_capability_summary: self.platform_capability_summary.render_current(),
             }),
             ShellHomeMode::User => model,
-        };
-        if self.identity_backend != identity::IdentityBackend::Linux
-            && let Some(username) = self.current_home_username()
-        {
-            model.with_account_logout(
-                username,
-                self.pages.common.focused_component == ShellComponent::HomeLogout,
-            )
-        } else {
-            model
         }
     }
 
@@ -1498,80 +1488,8 @@ impl ShellSession {
             .then(ui::TimeSyncDialogViewModel::new)
     }
 
-    pub fn to_login_view_model(&self) -> ui::LoginViewModel {
-        let _language = i18n::enter_snapshot(self.language.clone());
-        self.to_login_view_model_at(Instant::now())
-    }
-
-    pub fn to_login_view_model_at(&self, now: Instant) -> ui::LoginViewModel {
-        let _language = i18n::enter_snapshot(self.language.clone());
-        let mut model = ui::LoginViewModel::new(
-            self.login_users
-                .iter()
-                .map(|user| ui::LoginUserOptionViewModel {
-                    username: user.username.clone(),
-                    display_name: user.display_name.clone(),
-                    role: user.role.clone(),
-                    enabled: user.enabled,
-                    locked: user
-                        .locked_until_epoch_ms
-                        .map(|locked_until| locked_until > unix_millis())
-                        .unwrap_or(false),
-                })
-                .collect(),
-            self.pages.login.login_selected_user,
-            self.pages.login.login_user_window_start,
-            self.pages.login.login_password.chars().count(),
-            match self.pages.common.focused_component {
-                ShellComponent::LoginPassword => ui::LoginField::Password,
-                ShellComponent::LoginPasswordVisibility => ui::LoginField::PasswordVisibility,
-                _ => ui::LoginField::UserList,
-            },
-            self.pages
-                .common
-                .error_message
-                .as_ref()
-                .map(i18n::LocalizedText::render_current),
-        );
-        model.system_users = self.identity_backend == identity::IdentityBackend::Linux;
-        model.scroll_offset = self.pages.common.page_touch.login_scroll;
-        if self.login_password_is_visible_at(now) {
-            model.with_visible_password(self.pages.login.login_password.clone())
-        } else {
-            model
-        }
-    }
-
-    pub fn to_bootstrap_admin_view_model(&self) -> ui::BootstrapAdminViewModel {
-        let _language = i18n::enter_snapshot(self.language.clone());
-        let mut model = ui::BootstrapAdminViewModel::new(
-            self.pages.bootstrap.bootstrap_username.clone(),
-            self.pages.bootstrap.bootstrap_password.chars().count(),
-            match self.pages.common.focused_component {
-                ShellComponent::BootstrapPassword => ui::AuthField::Password,
-                _ => ui::AuthField::Username,
-            },
-            self.pages
-                .common
-                .error_message
-                .as_ref()
-                .map(i18n::LocalizedText::render_current),
-        );
-        model.scroll_offset = self.pages.common.page_touch.bootstrap_scroll;
-        model
-    }
-
     pub fn to_setup_view_model(&self) -> ui::SetupViewModel {
         let _language = i18n::enter_snapshot(self.language.clone());
-        let password_requirements = setup_password_requirements(
-            &self.pages.setup.setup_admin_username,
-            &self.pages.setup.setup_admin_password,
-            &self.pages.setup.setup_admin_password_confirm,
-        );
-        let can_submit = !self.pages.setup.setup_admin_username.trim().is_empty()
-            && password_requirements
-                .iter()
-                .all(|requirement| requirement.met);
         let custom_color = self
             .pages
             .setup
@@ -1597,18 +1515,7 @@ impl ShellSession {
             selected_language_index: self.pages.setup.setup_selected_language_index,
             selected_timezone_index: self.pages.setup.setup_selected_timezone_index,
             timezone_window_start: self.pages.setup.setup_timezone_window_start,
-            admin_username: self.pages.setup.setup_admin_username.clone(),
-            admin_password_len: self.pages.setup.setup_admin_password.chars().count(),
-            admin_password_confirm_len: self
-                .pages
-                .setup
-                .setup_admin_password_confirm
-                .chars()
-                .count(),
-            password_requirements,
-            password_hint: self.pages.setup.setup_admin_password_hint.clone(),
             focused_field: self.pages.setup.setup_focused_field,
-            can_submit,
             defaults_available: self.setup_defaults_available(),
             border_shape: match self.pages.setup.setup_border_shape {
                 storage::BorderShape::Rounded => ui::BorderShape::Rounded,
@@ -1638,63 +1545,6 @@ impl ShellSession {
                 .as_ref()
                 .map(i18n::LocalizedText::render_current),
         }
-    }
-
-    pub fn to_user_management_view_model(&self) -> ui::UserManagementViewModel {
-        let _language = i18n::enter_snapshot(self.language.clone());
-        let current_user = self
-            .app
-            .auth_session()
-            .map(|session| session.username.clone())
-            .unwrap_or_else(|| i18n::tr!("shell-unauthenticated"));
-        let message = self
-            .pages
-            .user_management
-            .user_management_message
-            .as_ref()
-            .map(i18n::LocalizedText::render_current)
-            .or_else(|| {
-                (self.identity_backend == identity::IdentityBackend::Linux)
-                    .then(|| i18n::tr!("shell-linux-system-accounts"))
-            });
-        let mut model = ui::UserManagementViewModel::new(
-            current_user.clone(),
-            self.app
-                .managed_users()
-                .iter()
-                .map(|user| ui::UserManagementUserViewModel {
-                    username: user.username.clone(),
-                    display_name: user.display_name.clone(),
-                    role: user.role.as_str().to_string(),
-                    enabled: user.enabled,
-                    locked: user
-                        .locked_until_epoch_ms
-                        .map(|locked_until| locked_until > unix_millis())
-                        .unwrap_or(false),
-                    is_current: self
-                        .identity_backend
-                        .usernames_match(&user.username, &current_user),
-                })
-                .collect(),
-            self.pages.user_management.user_management_selected,
-            message,
-            self.can_manage_all_users(),
-            self.user_management_form_view_model(),
-        );
-        model.sort = self.pages.common.table_sorts.get("users").copied();
-        model.user_window_start = self.pages.user_management.user_management_window_start;
-        model.focus = match self.pages.user_management.user_management_focus {
-            UserManagementPageFocus::UserList => ui::UserManagementFocus::UserList,
-            UserManagementPageFocus::Action(action) => ui::UserManagementFocus::Action(action),
-        };
-        model.actions = self.user_management_action_view_models();
-        model.more_open = self.pages.user_management.user_management_more_open;
-        model.feedback_tone = match self.pages.user_management.user_management_feedback_tone {
-            UserManagementFeedbackTone::Info => ui::UserManagementFeedbackTone::Info,
-            UserManagementFeedbackTone::Success => ui::UserManagementFeedbackTone::Success,
-            UserManagementFeedbackTone::Error => ui::UserManagementFeedbackTone::Error,
-        };
-        model
     }
 
     pub fn to_explorer_view_model(&self) -> ui::ExplorerViewModel {
@@ -2106,174 +1956,6 @@ impl ShellSession {
         }
 
         model
-    }
-
-    pub(in crate::session) fn can_manage_all_users(&self) -> bool {
-        PermissionService::new(self.debug_policy)
-            .authorize(self.app.auth_session(), PermissionAction::ManageUsers, None)
-            .allowed
-    }
-
-    pub(in crate::session) fn user_management_action_view_models(
-        &self,
-    ) -> Vec<ui::UserManagementActionViewModel> {
-        use ui::UserManagementAction;
-
-        let selected = self
-            .app
-            .managed_users()
-            .get(self.pages.user_management.user_management_selected);
-        let last_enabled_admin = self.selected_is_last_enabled_admin();
-        let mut actions = Vec::new();
-
-        if self.can_manage_all_users() {
-            actions.push(user_management_action_model(
-                UserManagementAction::NewUser,
-                i18n::tr!("shell-new-user"),
-                Some('N'),
-                true,
-                None,
-                false,
-            ));
-        }
-
-        actions.push(user_management_action_model(
-            UserManagementAction::EditInfo,
-            if self.can_manage_all_users() {
-                i18n::tr!("shell-edit")
-            } else {
-                i18n::tr!("shell-edit-profile")
-            },
-            Some('E'),
-            selected.is_some(),
-            None,
-            false,
-        ));
-        actions.push(user_management_action_model(
-            UserManagementAction::SetPassword,
-            if self.can_manage_all_users() {
-                i18n::tr!("shell-password")
-            } else {
-                i18n::tr!("shell-change-password")
-            },
-            Some('R'),
-            selected.is_some(),
-            None,
-            false,
-        ));
-
-        if self.can_manage_all_users() {
-            let locked = selected.is_some_and(user_is_locked);
-            let enabled = selected.is_some_and(|user| user.enabled);
-            let (toggle_label, toggle_shortcut, disabling) =
-                if self.identity_backend == identity::IdentityBackend::Linux {
-                    if locked {
-                        (i18n::tr!("shell-linux-unlock-password"), Some('U'), false)
-                    } else {
-                        (i18n::tr!("shell-linux-lock-password"), Some('D'), true)
-                    }
-                } else if !enabled {
-                    (i18n::tr!("shell-enable"), Some('U'), false)
-                } else if locked {
-                    (i18n::tr!("shell-unlock"), Some('U'), false)
-                } else {
-                    (i18n::tr!("shell-disable"), Some('D'), true)
-                };
-            actions.push(user_management_action_model(
-                UserManagementAction::ToggleEnabled,
-                toggle_label,
-                toggle_shortcut,
-                selected.is_some() && !(disabling && last_enabled_admin),
-                None,
-                disabling,
-            ));
-
-            let demoting = selected.is_some_and(|user| user.role == UserRole::Admin);
-            actions.push(user_management_action_model(
-                UserManagementAction::ToggleRole,
-                if demoting {
-                    i18n::tr!("shell-make-user")
-                } else {
-                    i18n::tr!("shell-make-admin")
-                },
-                Some('C'),
-                selected.is_some() && !(demoting && last_enabled_admin),
-                None,
-                demoting,
-            ));
-        }
-
-        actions.push(user_management_action_model(
-            UserManagementAction::Delete,
-            if self.can_manage_all_users() {
-                i18n::tr!("shell-delete")
-            } else {
-                i18n::tr!("shell-delete-account")
-            },
-            Some('X'),
-            selected.is_some() && !last_enabled_admin,
-            None,
-            true,
-        ));
-        if self.identity_backend == identity::IdentityBackend::Linux {
-            actions.retain(|action| {
-                action.action != UserManagementAction::Delete || self.can_manage_all_users()
-            });
-        }
-        for action in &mut actions {
-            action.disabled_reason = self
-                .user_management_disabled_reason(action.action)
-                .map(|reason| reason.render_current());
-            if self.identity_backend == identity::IdentityBackend::Linux
-                && action.disabled_reason.is_some()
-            {
-                action.enabled = false;
-            }
-        }
-        actions
-    }
-
-    fn user_management_form_view_model(&self) -> Option<ui::UserManagementFormViewModel> {
-        match &self.pages.user_management.user_management_mode {
-            UserManagementMode::Browse => None,
-            UserManagementMode::Create(form) => Some(ui::UserManagementFormViewModel {
-                interaction: form.interaction.clone(),
-                editing: form.editing.clone(),
-                kind: ui::UserManagementFormKind::Create,
-                title: i18n::tr!("shell-create-user"),
-                username: form.username.clone(),
-                display_name: form.display_name.clone(),
-                role: form.role.as_str().to_string(),
-                password_len: form.password.chars().count(),
-                focused_field: to_ui_user_management_field(form.focused_field),
-                error: self.user_management_form_error(),
-            }),
-            UserManagementMode::EditInfo(form) => Some(ui::UserManagementFormViewModel {
-                interaction: form.interaction.clone(),
-                editing: form.editing.clone(),
-                kind: ui::UserManagementFormKind::EditInfo,
-                title: i18n::tr!("shell-edit-user-info"),
-                username: form.username.clone(),
-                display_name: form.display_name.clone(),
-                role: String::new(),
-                password_len: 0,
-                focused_field: to_ui_user_management_field(form.focused_field),
-                error: self.user_management_form_error(),
-            }),
-        }
-    }
-
-    fn user_management_form_error(&self) -> Option<String> {
-        (self.pages.user_management.user_management_feedback_tone
-            == UserManagementFeedbackTone::Error)
-            .then(|| {
-                self.pages
-                    .user_management
-                    .user_management_message
-                    .as_ref()
-                    .map(i18n::LocalizedText::render_current)
-            })
-            .flatten()
     }
 
     pub fn to_shell_chrome_view_model(&self) -> ui::ShellChromeViewModel {

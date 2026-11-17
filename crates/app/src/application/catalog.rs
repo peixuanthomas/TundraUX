@@ -186,15 +186,11 @@ pub const BUILT_IN_APPLICATIONS: &[BuiltInApplicationDescriptor] = &[
     COMMAND_LINE_APPLICATION,
     EDITOR_APPLICATION,
     SCRIPT_EDITOR_APPLICATION,
-    BuiltInApplicationDescriptor {
-        id: "builtin.users",
-        name: "Users",
-        description: "Manage accounts, groups and login settings",
-        type_label: "Built-in application",
-        admin_only: false,
-        fixed_in_launcher: false,
-        platforms: ALL_PLATFORMS,
-    },
+    management_application(
+        "builtin.users",
+        "Users",
+        "Manage system accounts, groups and login settings",
+    ),
     BuiltInApplicationDescriptor {
         id: "builtin.logs",
         name: "Logs",
