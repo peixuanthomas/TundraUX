@@ -644,9 +644,14 @@ def check_crash_screen(master: int, output: bytearray, child: subprocess.Popen, 
     os.write(master, b"\x1b")
     wait_for_output_quiet(master, output, child, quiet_period=0.3)
     frame = open_home_entry(master, output, child, cli, env, "Launcher", "Launcher")
-    if not any("builtin.command-line" in item["id"] and item["actionable"]
-               for item in frame["nodes"]):
-        raise SystemExit(f"Launcher did not offer Command Line for the crash-page test: {frame}")
+    launcher_window = selected_window(frame)
+    wait_for_snapshot(master, output, child, cli, env,
+                      "Launcher did not offer Command Line for the crash-page test",
+                      lambda current: current["page"] == "Launcher"
+                      and selected_window(current) == launcher_window
+                      and any(item["id"] == "page/launcher.item.builtin.command-line"
+                              and item["enabled"] and item["actionable"] and item["selected"]
+                              for item in current["nodes"]))
     wait_for_output_quiet(master, output, child, quiet_period=0.3)
     offset = len(output)
     os.write(master, b"\r")
@@ -1366,9 +1371,12 @@ def main() -> int:
         # standalone REPL. Rebuilding Shell alone can leave an older CLI beside it.
         frame = open_home_entry(master, output, child, cli, env, "Launcher", "Launcher")
         launcher_window = selected_window(frame)
-        if not any("builtin.command-line" in item["id"] and item["actionable"]
-                   for item in frame["nodes"]):
-            raise SystemExit(f"Launcher did not offer Command Line: {frame}")
+        wait_for_snapshot(master, output, child, cli, env, "Launcher did not offer Command Line",
+                          lambda current: current["page"] == "Launcher"
+                          and selected_window(current) == launcher_window
+                          and any(item["id"] == "page/launcher.item.builtin.command-line"
+                                  and item["enabled"] and item["actionable"] and item["selected"]
+                                  for item in current["nodes"]))
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Launcher did not settle")
         prompt_offset = len(output)
