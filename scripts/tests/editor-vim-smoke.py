@@ -543,7 +543,6 @@ def main():
             editor = next(node for node in current["nodes"]
                           if node["id"].startswith("page/launcher.item.") and node["name"] == "Editor")
             shell.tap(current, editor["id"])
-            shell.send(b"\r")
             shell.wait("GUI-RECOVERY")
             shell.send(b"\x13")
             assert_file(shell, path, "GUI-RECOVERY\n")
