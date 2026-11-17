@@ -279,6 +279,14 @@ def main():
             shell.send(F10)
             shell.wait("Home")
             shell.send(b"\x1b[H\r")
+            shell.until_snapshot(lambda frame: frame["page"] == "Explorer" and any(
+                node["id"] == "page/explorer.address.edit" and node["actionable"]
+                for node in frame["nodes"]))
+            shell.send(b"\x0c")
+            shell.until_snapshot(lambda frame: any(
+                node["id"] == "page/explorer.address.input" and node["actionable"]
+                for node in frame["nodes"]))
+            shell.send(b"\x01\x1b[200~" + os.fsencode(files) + b"\x1b[201~\r")
             shell.wait("00-start.txt")
             explorer_id = focused_window(shell.until_snapshot(lambda frame: frame["page"] == "Explorer"))
             shell.send(b"\r")

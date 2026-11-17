@@ -306,9 +306,8 @@ def main():
             print("PASS: breakpoint, step-in, step-over and step-out followed a real Bash function", flush=True)
 
             shell.resize(108, 24)
-            current = until(lambda current: current["width"] == 108 and current["height"] == 24 and "Evaluate" in text(current))
-            tab = next(item for item in current["nodes"] if item["id"].endswith("script.tab.Expression"))
-            ui("click", "--id", tab["id"])
+            until(lambda current: current["width"] == 108 and current["height"] == 24 and "Evaluate" in text(current))
+            click("script.tab.Expression")
             current = until(lambda current: any(item["role"] == "textbox" and "script.expression" in item["id"] for item in current["nodes"]))
             if "--dump" in sys.argv:
                 print("SCREEN 108x24:\n" + text(current), flush=True)
