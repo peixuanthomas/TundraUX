@@ -5,7 +5,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const ROOT: &str = "/var/lib/tundraux3/ssh";
+const ROOT: &str = "/var/lib/tundraux/ssh";
 const BOOT_UNIT: &str = "/etc/systemd/system/tundra-ssh-recovery.service";
 
 pub(crate) fn active_backup_ids() -> Result<std::collections::BTreeSet<String>, ManagementError> {
@@ -107,7 +107,7 @@ fn private(path: &Path) -> Result<(), ManagementError> {
     Ok(())
 }
 fn prepare_root() -> Result<(), ManagementError> {
-    for path in ["/var/lib/tundraux3", ROOT] {
+    for path in ["/var/lib/tundraux", ROOT] {
         if !Path::new(path).exists() {
             fs::DirBuilder::new()
                 .mode(0o700)

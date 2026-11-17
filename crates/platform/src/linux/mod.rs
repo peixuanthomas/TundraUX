@@ -294,7 +294,7 @@ impl Platform for LinuxPlatform {
             .call::<_, _, u32>(
                 "Notify",
                 &(
-                    "TundraUX3",
+                    "TundraUX",
                     0_u32,
                     "",
                     title,
@@ -617,7 +617,7 @@ fn linux_runtime_dir() -> Result<PathBuf, PlatformError> {
     {
         return Ok(runtime);
     }
-    let fallback = PathBuf::from(format!("/tmp/tundraux3-{}", unsafe { libc::geteuid() }));
+    let fallback = PathBuf::from(format!("/tmp/tundraux-{}", unsafe { libc::geteuid() }));
     ensure_private_dir(&fallback)?;
     Ok(fallback)
 }

@@ -1770,7 +1770,7 @@ fn home_entry_single_click_shows_complete_page_immediately_and_returns_without_m
     }
 
     let root = platform::create_temp_dir(
-        &std::env::temp_dir().join("TundraUX3-shell-tests"),
+        &std::env::temp_dir().join("TundraUX-shell-tests"),
         "home-launcher-click",
     )
     .expect("create private Launcher storage fixture");

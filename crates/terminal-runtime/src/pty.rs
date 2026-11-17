@@ -206,7 +206,7 @@ impl PtyProcess {
             [
                 ("TERM", "xterm-256color"),
                 ("COLORTERM", "truecolor"),
-                ("TERM_PROGRAM", "TundraUX3"),
+                ("TERM_PROGRAM", "TundraUX"),
                 ("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION")),
             ]
             .map(|(name, value)| (name.into(), value.into())),

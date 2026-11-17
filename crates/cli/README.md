@@ -2,6 +2,8 @@
 
 `cli` provides `tundra-cli`: configuration, diagnostics, logs, Linux operations commands, Shell interface control, managed-process recovery, and an interactive command line. It also hosts update and authorization helper entry points; these internal entry points are not part of the public scripting interface.
 
+CLI output and diagnostics use the TundraUX name and the renamed application paths.
+
 ## Common entry points
 
 | Usage | Example |

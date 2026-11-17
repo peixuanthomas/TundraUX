@@ -4,7 +4,7 @@ use croner::parser::CronParser;
 use std::collections::{BTreeMap, BTreeSet};
 use std::os::unix::fs::MetadataExt;
 
-const PAUSED: &str = "# TUNDRAUX3-PAUSED ";
+const PAUSED: &str = "# TUNDRAUX-PAUSED ";
 
 #[derive(Clone, Debug)]
 struct Entry {

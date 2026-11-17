@@ -21,7 +21,7 @@ pub const BANNER_DISPLAY_DURATION: Duration = Duration::from_secs(2);
 pub const PASSWORD_REVEAL_DURATION: Duration = Duration::from_secs(5);
 /// Internal CLI-to-Shell request to exercise the real fullscreen panic boundary.
 pub const COMMAND_LINE_PANIC_EXIT_CODE: u32 = 76;
-const BANNER_ASSET_KEY: &str = "tundraux3";
+const BANNER_ASSET_KEY: &str = "tundraux";
 
 // Public models and low-coupling services live in regular modules. Re-exports
 // preserve the crate-root API used by the binary and integration tests.

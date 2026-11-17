@@ -240,7 +240,7 @@ fn is_parent_managed_command_line(args: &[String]) -> bool {
 fn start_watchdog(
     parent_managed: bool,
 ) -> Result<(WatchdogRuntime, ProcessWatchdog), watchdog::WatchdogError> {
-    let fallback = std::env::temp_dir().join("TundraUX3").join("watchdog");
+    let fallback = std::env::temp_dir().join("TundraUX").join("watchdog");
     let platform = platform::native_platform();
     let mut fallback_reason = None;
     let mut config = match platform.app_paths() {

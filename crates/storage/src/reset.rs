@@ -6,7 +6,7 @@ use platform::AppPaths;
 
 use crate::StorageManager;
 
-/// The result of removing all TundraUX3-owned saved content and recreating
+/// The result of removing all TundraUX-owned saved content and recreating
 /// the default storage documents.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageResetReport {

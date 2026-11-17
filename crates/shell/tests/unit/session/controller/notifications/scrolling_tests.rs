@@ -77,7 +77,7 @@ fn notification_scroll_returns_with_its_page_after_another_page_is_closed() {
 #[test]
 fn notification_public_text_uses_session_snapshot_outside_draw_scope() {
     let root = std::env::temp_dir().join(format!(
-        "tux3-notification-snapshot-{}-{}",
+        "tux-notification-snapshot-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

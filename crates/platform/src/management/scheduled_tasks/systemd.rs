@@ -566,7 +566,7 @@ fn definition(
     )
     .expect("task values serialize");
     let service = format!(
-        "# TundraUX3-Task={manifest}\n[Unit]\nDescription={}\n\n[Service]\nType=oneshot\nUser={}\nGroup={}\nWorkingDirectory=/\nEnvironment={} {} {} {}\nStandardInput=null\nExecStart=:/bin/sh -c {}\nExecStopPost=:/bin/sh -c {}\nTimeoutStartSec=infinity\n",
+        "# TundraUX-Task={manifest}\n[Unit]\nDescription={}\n\n[Service]\nType=oneshot\nUser={}\nGroup={}\nWorkingDirectory=/\nEnvironment={} {} {} {}\nStandardInput=null\nExecStart=:/bin/sh -c {}\nExecStopPost=:/bin/sh -c {}\nTimeoutStartSec=infinity\n",
         display_name.replace('%', "%%"),
         user.uid,
         user.gid,

@@ -6,7 +6,7 @@
 
 ## v1.5.1 — 2026-11-11
 
-标签：[`v1.5.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.5...v1.5.1) · [发布说明](packaging/releases/v1.5.1.md)。
+标签：[`v1.5.1`](https://github.com/peixuanthomas/TundraUX/tree/v1.5.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.5...v1.5.1) · [发布说明](packaging/releases/v1.5.1.md)。
 
 ### 新增与调整
 
@@ -22,7 +22,7 @@
 
 ## v1.5 — 2026-10-31
 
-标签：[`v1.5`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4.1...v1.5) · [发布说明](packaging/releases/v1.5.md)。
+标签：[`v1.5`](https://github.com/peixuanthomas/TundraUX/tree/v1.5)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.4.1...v1.5) · [发布说明](packaging/releases/v1.5.md)。
 
 ### 新增
 
@@ -52,7 +52,7 @@
 
 ## v1.4.1 — 2026-10-22
 
-标签：[`v1.4.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4...v1.4.1) · [发布说明](packaging/releases/v1.4.1.md)。
+标签：[`v1.4.1`](https://github.com/peixuanthomas/TundraUX/tree/v1.4.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.4...v1.4.1) · [发布说明](packaging/releases/v1.4.1.md)。
 
 ### 新增与调整
 
@@ -70,13 +70,13 @@
 
 ## v1.4 — 2026-10-21
 
-标签：[`v1.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.4...v1.4) · [发布说明](packaging/releases/v1.4.md)。
+标签：[`v1.4`](https://github.com/peixuanthomas/TundraUX/tree/v1.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.3.4...v1.4) · [发布说明](packaging/releases/v1.4.md)。
 
 ### 新增
 
 - **Linux 系统管理与恢复：**增加文件和目录权限、所有权、操作系统设置、系统时区与自动校时管理；补充防火墙端口规则、SSH 连接验证、systemd timer 与 cron 操作，以及配置、网络、账户和用户组的分组记录与恢复。
 - **源码编辑器：**增加多种语言的语法着色、正则查找替换、软换行、JSON 格式化、多文档操作和大文件优化；Explorer 默认用编辑器打开 106 种源码和配置后缀。
-- **命令行辅助：**增加命令提示、路径补全和导航；Shell 命令默认交给系统 shell，TundraUX3 命令改用 `/` 前缀。
+- **命令行辅助：**增加命令提示、路径补全和导航；Shell 命令默认交给系统 shell，TundraUX 命令改用 `/` 前缀。
 - **交互预览：**增加共享控件预览和渐变彩虹文字演示；屏幕键盘接入管理表单和搜索。
 
 ### 调整
@@ -92,7 +92,7 @@
 
 ## v1.3.4 — 2026-10-11
 
-标签：[`v1.3.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.3.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.3...v1.3.4) · [发布说明](packaging/releases/v1.3.4.md)。
+标签：[`v1.3.4`](https://github.com/peixuanthomas/TundraUX/tree/v1.3.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.3.3...v1.3.4) · [发布说明](packaging/releases/v1.3.4.md)。
 
 ### 新增
 
@@ -123,7 +123,7 @@
 
 ## v1.3.3 — 2026-10-04
 
-标签提交：`f2f5649`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.2...v1.3.3) · [发布说明](packaging/releases/v1.3.3.md)。
+标签提交：`f2f5649`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.3.2...v1.3.3) · [发布说明](packaging/releases/v1.3.3.md)。
 
 ### 新增
 
@@ -153,7 +153,7 @@
 
 ## v1.3.2 — 2026-09-27
 
-标签提交：`581eef4`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.1...v1.3.2) · [发布说明](packaging/releases/v1.3.2.md)。
+标签提交：`581eef4`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.3.1...v1.3.2) · [发布说明](packaging/releases/v1.3.2.md)。
 
 ### 新增
 
@@ -183,7 +183,7 @@
 
 ## v1.3.1 — 2026-09-12
 
-标签提交：`8504a7a`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3...v1.3.1) · [发布说明](packaging/releases/v1.3.1.md)。
+标签提交：`8504a7a`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.3...v1.3.1) · [发布说明](packaging/releases/v1.3.1.md)。
 
 ### 新增
 
@@ -207,7 +207,7 @@
 
 ## v1.3 — 2026-09-10
 
-标签提交：`5ffdf72`；程序版本为 `1.3.0`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.2...v1.3) · [发布说明](packaging/releases/v1.3.md)。
+标签提交：`5ffdf72`；程序版本为 `1.3.0`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.2...v1.3) · [发布说明](packaging/releases/v1.3.md)。
 
 ### 新增
 
@@ -227,7 +227,7 @@
 
 ## v1.2 — 2026-09-07
 
-标签提交：`ed30d64`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/V1.1...v1.2)。
+标签提交：`ed30d64`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/V1.1...v1.2)。
 
 ### 新增
 
@@ -258,7 +258,7 @@
 
 ## V1.1 — 2026-07-28
 
-标签提交：`41262ce`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/V1.0...V1.1)。
+标签提交：`41262ce`。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/V1.0...V1.1)。
 
 ### 新增
 
@@ -275,7 +275,7 @@
 
 ## V1.0 — 2026-07-23
 
-标签提交：`4fdb548`。[查看截至 V1.0 的提交](https://github.com/peixuanthomas/TundraUX3/commits/V1.0)。
+标签提交：`4fdb548`。[查看截至 V1.0 的提交](https://github.com/peixuanthomas/TundraUX/commits/V1.0)。
 
 ### 首个版本
 

@@ -1,10 +1,10 @@
-# TundraUX3
+# TundraUX
 
 **A terminal workspace for managing your device.**
 
 English | [Simplified Chinese](docs/README.zh-CN.md)
 
-TundraUX3 brings system tools, files, editors, and everyday utilities into one terminal interface. It is designed for Linux devices without a graphical desktop, with keyboard, mouse, and touchscreen support. Written in Rust with Ratatui and crossterm.
+TundraUX brings system tools, files, editors, and everyday utilities into one terminal interface. It is designed for Linux devices without a graphical desktop, with keyboard, mouse, and touchscreen support. Written in Rust with Ratatui and crossterm.
 
 ## Features
 
@@ -15,7 +15,7 @@ TundraUX3 brings system tools, files, editors, and everyday utilities into one t
 - **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output. The top bar shows status messages and the clock.
 - **Personal workspace:** search Launcher by name or command, organize custom entries, choose themes and languages, and use the built-in clock and weather apps.
 - **Independent app windows:** use each window's frame to minimize, split, or close it; full screen is in the Split menu. Restore background apps from the bottom window bar and split the current pane incrementally into at most a 2×2 grid. Layout changes retain app content while new frames arrive, and new windows show a starting hint only after 100ms. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
-- **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, using TundraUX3's Glacier Night blue palette.
+- **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, using TundraUX's Glacier Night blue palette.
 
 | Platform | Main support |
 | --- | --- |
@@ -29,13 +29,13 @@ Use an interactive terminal of at least **108 columns × 20 rows**. Mouse and to
 
 The workspace opens as the current system user. Home shows that username. The first run sets up personal preferences. Linux provides system user management.
 
-Version 2 uses the TundraUX3 data directories and does not migrate v1 data.
+Version 2 uses the TundraUX data directories and does not migrate v1 data.
 
 Each window has **Minimize, Split, and Close** buttons. Split left/right or top/bottom, then search the new pane's selector to restore a minimized app or start a new session. Cancel restores the previous layout. Full screen in that menu minimizes the other panes. Use **Ctrl+W, then v/s** to split and **h/j/k/l** after the prefix to focus neighbors; editors, Vim, and embedded terminals retain their native Ctrl+W and use the window buttons. The limit is a 2×2 grid, with unavailable directions shown disabled. Selection dialogs across the app have a top search field. Restore running apps from the bottom bar; its separate minus button closes a window normally. All living apps still contribute to the minimum dimensions, and background apps are cleaned up on exit.
 
 ### Run a Linux portable build
 
-1. Download and extract the Linux x86_64 archive from [GitHub Releases](https://github.com/peixuanthomas/TundraUX3/releases).
+1. Download and extract the Linux x86_64 archive from [GitHub Releases](https://github.com/peixuanthomas/TundraUX/releases).
 2. Keep the extracted files together and open a terminal in that directory.
 3. Install the `tux` command, then start the application:
 
@@ -52,7 +52,7 @@ To check the runtime environment:
 ./tundra-cli doctor
 ```
 
-Run TundraUX3 as your normal user. Administrative operations ask for authorization when needed.
+Run TundraUX as your normal user. Administrative operations ask for authorization when needed.
 
 ### Build from source
 

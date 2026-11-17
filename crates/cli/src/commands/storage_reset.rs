@@ -13,7 +13,7 @@ pub(crate) fn run_new<Stdout: Write, Stderr: Write>(
     match platform.app_paths() {
         Ok(paths) => match reset_saved_content(&paths) {
             Ok(report) => {
-                let _ = writeln!(stdout, "TundraUX3 storage reset");
+                let _ = writeln!(stdout, "{}", i18n::tr!("startup-brand-storage-reset"));
                 let _ = writeln!(stdout, "Removed paths:");
                 for path in &report.removed_paths {
                     let _ = writeln!(stdout, "  {}", path.display());

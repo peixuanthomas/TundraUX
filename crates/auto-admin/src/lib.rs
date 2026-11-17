@@ -273,7 +273,7 @@ impl AutoAdminJob {
                 history.event(event);
             }
             #[cfg(target_os = "linux")]
-            if matches!(event,OperationEvent::Connected{operation_id} if !operation_id.starts_with("/run/tundraux3-management/"))
+            if matches!(event,OperationEvent::Connected{operation_id} if !operation_id.starts_with("/run/tundraux-management/"))
                 && history
                     .store()
                     .read(history.id())

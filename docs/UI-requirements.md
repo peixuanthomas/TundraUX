@@ -35,7 +35,7 @@ The implementation reference is `anomalyco/opencode` at commit `5b131f5995a9f7fa
 - [Session sidebar](https://github.com/anomalyco/opencode/blob/5b131f5995a9f7fad458c59a7a5e39686237beb8/packages/tui/src/routes/session/sidebar.tsx): a distinct surface with shared padding and spacing between groups.
 - [Spinner](https://github.com/anomalyco/opencode/blob/5b131f5995a9f7fad458c59a7a5e39686237beb8/packages/tui/src/component/spinner.tsx), [shimmer text](https://github.com/anomalyco/opencode/blob/5b131f5995a9f7fad458c59a7a5e39686237beb8/packages/tui/src/component/shimmer-text.tsx), and [animation scheduling](https://github.com/anomalyco/opencode/blob/5b131f5995a9f7fad458c59a7a5e39686237beb8/packages/tui/src/ui/animation.ts): elapsed-time feedback, motion-disabled fallbacks, and scheduling only while motion remains active.
 
-OpenCode's dialog mounts directly; it does not supply TundraUX3's page/dialog entrance transitions. The existing configurable phases below remain TundraUX3 behavior. Keep TundraUX3's release-inside-target activation, safety confirmations, localization, terminal compatibility, and application workflows when adapting these visual patterns.
+OpenCode's dialog mounts directly; it does not supply TundraUX's page/dialog entrance transitions. The existing configurable phases below remain TundraUX behavior. Keep TundraUX's release-inside-target activation, safety confirmations, localization, terminal compatibility, and application workflows when adapting these visual patterns.
 
 ## Text and action entry points
 

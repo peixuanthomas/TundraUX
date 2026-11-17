@@ -1,4 +1,4 @@
-TundraUX3 Linux x86_64 runtime guide
+TundraUX Linux x86_64 runtime guide
 ====================================
 
 Running the portable build
@@ -97,9 +97,7 @@ data and themes are preserved. The previous executables and engine remain
 available until the new Shell starts successfully; failed or interrupted
 updates are restored on the next launch.
 
-The current update protocol is v3. Updaters from protocol v2 cannot install v3
-packages. When upgrading from those versions, fully extract the new portable
-archive once.
+The update protocol requires a complete portable archive.
 
 Diagnostics and development
 ---------------------------

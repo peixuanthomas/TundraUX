@@ -53,7 +53,7 @@ fn recover(
 ) -> Result<String, ManagementError> {
     let record: serde_json::Value = serde_json::from_str(
         &fs::read_to_string(format!(
-            "/var/lib/tundraux3/config-backups/operations/{id}.json"
+            "/var/lib/tundraux/config-backups/operations/{id}.json"
         ))
         .unwrap(),
     )

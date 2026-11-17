@@ -21,7 +21,7 @@ mod planning;
 mod query_tests;
 mod systemd;
 
-const RESULTS: &str = "/var/lib/tundraux3/scheduled-results";
+const RESULTS: &str = "/var/lib/tundraux/scheduled-results";
 const MAX_DATA: usize = 4 * 1024 * 1024;
 
 pub fn preview_plan(
@@ -298,7 +298,7 @@ fn result_command(key: &str, uid: u32) -> String {
 
 fn prepare_results(uid: u32, gid: u32) -> Result<(), ManagementError> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    for path in [Path::new("/var/lib/tundraux3"), Path::new(RESULTS)] {
+    for path in [Path::new("/var/lib/tundraux"), Path::new(RESULTS)] {
         match fs::create_dir(path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}

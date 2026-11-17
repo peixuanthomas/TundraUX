@@ -1,4 +1,4 @@
-# TundraUX3 crossterm input patch
+# TundraUX crossterm input patch
 
 This directory vendors the crates.io source for `crossterm` **0.29.0**, under
 its original MIT license. Upstream repository:
@@ -12,7 +12,7 @@ manifest requires Rust 1.85; the application workspace requires Rust 1.95.
 
 Upstream consumes both bytes of `ESC ESC` as a single Escape. When a user
 presses Escape immediately before a mouse report, `ESC ESC [ < 35 ; x ; y M`
-therefore becomes Escape followed by ordinary characters. In TundraUX3 the
+therefore becomes Escape followed by ordinary characters. In TundraUX the
 last `M` activates Home's System Status shortcut after leaving Explorer.
 
 Both Unix event sources now share `src/event/source/unix/parser.rs`. It wraps

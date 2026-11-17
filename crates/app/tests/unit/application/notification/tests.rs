@@ -60,7 +60,7 @@ fn removing_a_page_removes_its_alerts_and_preserves_other_owners() {
 
 fn language_snapshots() -> Vec<(std::sync::Arc<i18n::LanguageSnapshot>, &'static str)> {
     let root = std::env::temp_dir().join(format!(
-        "tux3-app-notifications-{}-{}",
+        "tux-app-notifications-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

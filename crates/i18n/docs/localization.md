@@ -1,6 +1,6 @@
 # Language resources and recovery
 
-TundraUX3 provides `en-US` and `zh-CN`, with `en-US` as the default language. A `zh-Hans` setting is normalized to `zh-CN`. Language and visual theme are saved separately.
+TundraUX provides `en-US` and `zh-CN`, with `en-US` as the default language. A `zh-Hans` setting is normalized to `zh-CN`. Language and visual theme are saved separately.
 
 ## Switching and reloading
 

@@ -118,7 +118,7 @@ fn asset_root_candidates(exe: &Path) -> Result<Vec<PathBuf>, AssetError> {
     // fallback Linux-only avoids surprising non-Linux development runs while
     // still allowing /usr/bin/tundra-* to work without an environment variable.
     #[cfg(target_os = "linux")]
-    candidates.push(PathBuf::from("/usr/share/tundraux3/assets"));
+    candidates.push(PathBuf::from("/usr/share/tundraux/assets"));
 
     Ok(candidates)
 }

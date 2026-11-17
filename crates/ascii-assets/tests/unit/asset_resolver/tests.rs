@@ -20,6 +20,6 @@ fn linux_candidates_include_system_install_location() {
 
     assert_eq!(
         candidates.last(),
-        Some(&PathBuf::from("/usr/share/tundraux3/assets"))
+        Some(&PathBuf::from("/usr/share/tundraux/assets"))
     );
 }

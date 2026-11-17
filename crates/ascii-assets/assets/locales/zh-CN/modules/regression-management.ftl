@@ -19,6 +19,6 @@ management-schedule-limitations = 执行记录
 management-backups-empty = 暂无配置备份
 management-backups-permission = 需要授权查看备份
 management-backups-how-title = 自动备份
-management-backups-how = 在 TundraUX3 中修改系统配置时，自动保存修改前的版本。
+management-backups-how = 在 TundraUX 中修改系统配置时，自动保存修改前的版本。
 management-backups-scope-title = 恢复内容
 management-backups-scope = 恢复所选记录中的配置、账户和用户组。网络与 SSH 恢复后需验证连接。

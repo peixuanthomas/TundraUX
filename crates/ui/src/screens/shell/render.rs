@@ -114,7 +114,9 @@ pub fn render_compact_home(
     }
 
     let context = RenderContext::from_theme(theme, Default::default(), Default::default());
-    let surface = Surface::new().titled(super::SHELL_TITLE).bordered(true);
+    let surface = Surface::new()
+        .titled(i18n::tr!("ui-shell-title"))
+        .bordered(true);
     let inner = surface.inner(area);
     surface.render_frame(frame, area, &context);
     if inner.width == 0 || inner.height == 0 {
@@ -173,7 +175,7 @@ pub fn render_shell_chrome_with_status_focus(
         {
             status_presentation(&chrome.status, &theme)
         } else {
-            (super::SHELL_TITLE.to_owned(), theme.title_style())
+            (i18n::tr!("ui-shell-title"), theme.title_style())
         };
         frame.render_widget(
             Paragraph::new(Line::styled(

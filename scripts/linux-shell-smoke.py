@@ -1208,7 +1208,7 @@ def main() -> int:
     if not cli.is_file() or not os.access(cli, os.X_OK):
         raise SystemExit(f"companion CLI is not executable: {cli}")
 
-    isolated = Path(tempfile.mkdtemp(prefix="tundraux3-pty-"))
+    isolated = Path(tempfile.mkdtemp(prefix="tundraux-pty-"))
     env = os.environ.copy()
     if CHECK_CRASH_SCREEN:
         # Exercise a failed clipboard read without touching the user's clipboard.

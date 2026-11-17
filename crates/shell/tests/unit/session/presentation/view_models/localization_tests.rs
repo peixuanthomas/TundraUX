@@ -2,7 +2,7 @@ use super::*;
 
 fn snapshots() -> [std::sync::Arc<i18n::LanguageSnapshot>; 2] {
     let root = std::env::temp_dir().join(format!(
-        "tux3-shell-message-tests-{}-{}",
+        "tux-shell-message-tests-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

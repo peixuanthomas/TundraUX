@@ -15,13 +15,13 @@ if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--tar-only" ) ]]; then
   exit 2
 fi
 
-version="${TUNDRAUX3_VERSION:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)}"
+version="${TUNDRAUX_VERSION:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)}"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Expected a numeric major.minor.patch package version: $version" >&2
   exit 1
 fi
 
-out_dir="${TUNDRAUX3_DIST_DIR:-$repo_root/dist}"
+out_dir="${TUNDRAUX_DIST_DIR:-$repo_root/dist}"
 mkdir -p "$out_dir"
 out_dir="$(cd "$out_dir" && pwd -P)"
 if [[ "$out_dir" == "/" || "$out_dir" == "$repo_root" ]]; then
@@ -29,7 +29,7 @@ if [[ "$out_dir" == "/" || "$out_dir" == "$repo_root" ]]; then
   exit 1
 fi
 release_dir="${CARGO_TARGET_DIR:-$repo_root/target}/release"
-portable_name="tundraux3-${version}-linux-x86_64"
+portable_name="tundraux-${version}-linux-x86_64"
 stage_root="$out_dir/.stage"
 
 rm -rf "$stage_root"
@@ -37,7 +37,7 @@ mkdir -p "$stage_root/$portable_name"
 
 cargo build --release --locked -p shell -p cli
 
-vim_dir="${TUNDRAUX3_VIM_DIR:-$release_dir/vim}"
+vim_dir="${TUNDRAUX_VIM_DIR:-$release_dir/vim}"
 if [[ ! -x "$vim_dir/vim" ]]; then
   echo "Build bundled Vim first: python3 scripts/build-vim.py --output '$vim_dir'" >&2
   exit 1

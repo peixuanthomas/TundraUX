@@ -8,8 +8,8 @@ fn release() -> Release {
         prerelease: false,
         body: None,
         assets: [
-            "TundraUX3-v1.3.2-linux-x86_64.tar.gz",
-            "TundraUX3-v1.3.2-linux-x86_64.sha256",
+            "TundraUX-v1.3.2-linux-x86_64.tar.gz",
+            "TundraUX-v1.3.2-linux-x86_64.sha256",
         ]
         .into_iter()
         .map(|name| Asset {

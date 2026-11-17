@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn presentation_rerenders_scoped_messages_without_mutating_notifications_or_bindings() {
     let root = std::env::temp_dir().join(format!(
-        "tux3-shell-notifications-{}-{}",
+        "tux-shell-notifications-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

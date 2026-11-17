@@ -87,7 +87,7 @@ fn compact_chrome_shows_toasts_and_preserves_page_header_without_notifications()
             line.starts_with(if has_toast {
                 "Compact toast"
             } else {
-                "TundraUX 3"
+                "TundraUX"
             }),
             "{line}"
         );
@@ -137,7 +137,7 @@ fn minimum_full_chrome_keeps_alert_in_the_header_with_title_and_controls() {
         .draw(|frame| render_shell_chrome(frame, &layout, &chrome, &context))
         .unwrap();
     let header = first_line(&terminal, 108);
-    for text in ["TundraUX 3", "Tasks", "F1 Help", "09:30", "◀ Esc"] {
+    for text in ["TundraUX", "Tasks", "F1 Help", "09:30", "◀ Esc"] {
         assert!(header.contains(text), "{header}");
     }
     let status: String = layout

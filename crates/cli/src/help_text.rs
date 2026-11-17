@@ -34,7 +34,7 @@ pub(crate) fn write_ui_style_help(output: &mut impl Write) -> std::io::Result<()
 }
 
 pub(crate) fn write_explain(output: &mut impl Write) -> std::io::Result<()> {
-    writeln!(output, "TundraUX3 startup and boundary model")?;
+    writeln!(output, "{}", i18n::tr!("startup-brand-explain"))?;
     writeln!(output)?;
     writeln!(output, "Startup flow:")?;
     writeln!(
@@ -77,7 +77,7 @@ pub(crate) fn write_explain(output: &mut impl Write) -> std::io::Result<()> {
 }
 
 pub(crate) fn write_asset_help(output: &mut impl Write) -> std::io::Result<()> {
-    writeln!(output, "TundraUX3 asset test command")?;
+    writeln!(output, "{}", i18n::tr!("startup-brand-asset-help"))?;
     writeln!(output, "Usage:")?;
     writeln!(output, "  tundra-cli debug asset <name>")?;
     writeln!(output, "  tundra-cli debug asset <name> -a")?;
@@ -202,15 +202,15 @@ pub(crate) fn write_topic_help(output: &mut impl Write, topic: &str) -> std::io:
         return writeln!(output, "{}", i18n::tr!(message));
     }
     writeln!(output, "Usage: tundra-cli {topic}")?;
+    if topic == "new" {
+        return writeln!(output, "{}", i18n::tr!("startup-brand-reset-help"));
+    }
     let detail = match topic {
         "debug paths" => {
             "Show path templates and the resolved config, data, state, logs, cache, and temporary paths."
         }
         "debug explain" => {
             "Describe CLI startup and which parts handle storage, OS calls, and the UI."
-        }
-        "new" => {
-            "Erase saved TundraUX3 configuration and state, then create defaults. Requires typing RESET.\nFirst use debug paths and back up the displayed config/state directories. To reset one setting, use config reset <field>."
         }
         "cls" => {
             "Clear terminal scrollback and screen, then move the cursor home. Saved logs are kept."

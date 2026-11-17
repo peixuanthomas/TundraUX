@@ -19,6 +19,6 @@ management-schedule-limitations = Run history
 management-backups-empty = No configuration backups
 management-backups-permission = Authorization required to view backups
 management-backups-how-title = Automatic backups
-management-backups-how = TundraUX3 saves the previous version when you change system configuration.
+management-backups-how = TundraUX saves the previous version when you change system configuration.
 management-backups-scope-title = Restore contents
 management-backups-scope = Restore configuration, accounts and groups in the selected record. Verify the connection after restoring network or SSH settings.

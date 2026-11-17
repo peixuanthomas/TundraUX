@@ -32,7 +32,7 @@ fn run_doctor_with_terminal_graphics_probe<Stdout: Write, Stderr: Write>(
     graphics_probe: &dyn TerminalGraphicsProbe,
 ) -> i32 {
     let terminal_check = terminal_environment_check_from_probe(platform.kind(), graphics_probe);
-    let _ = writeln!(stdout, "TundraUX3 doctor");
+    let _ = writeln!(stdout, "{}", i18n::tr!("startup-brand-doctor"));
     let _ = writeln!(stdout, "Platform kind: {}", platform.kind().as_str());
     let _ = writeln!(
         stdout,

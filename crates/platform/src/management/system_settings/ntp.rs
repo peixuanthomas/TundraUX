@@ -576,7 +576,7 @@ pub(super) fn configuration(
         }
         Ok(config)
     } else {
-        let main = PathBuf::from("/etc/systemd/timesyncd.conf.d/90-tundraux3.conf");
+        let main = PathBuf::from("/etc/systemd/timesyncd.conf.d/90-tundraux.conf");
         let output = native(
             "/usr/bin/systemd-analyze",
             &["cat-config", "systemd/timesyncd.conf"],

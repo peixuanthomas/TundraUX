@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[test]
 fn only_operations_are_saved_and_cancellation_waits_for_worker_completion() {
     let root =
-        platform::create_temp_dir(&std::env::temp_dir().join("TundraUX3"), "task-history-test")
+        platform::create_temp_dir(&std::env::temp_dir().join("TundraUX"), "task-history-test")
             .unwrap();
     let mut tasks = ShellTasks::with_history(Some(root.clone()));
     let page = PageInstanceId::new();

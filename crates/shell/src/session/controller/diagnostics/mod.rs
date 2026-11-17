@@ -1239,7 +1239,7 @@ impl ShellSession {
         let full = self.diagnostics_can_view_details();
         let (pass, unsupported, warning, fail) = snapshot.status_counts();
         let mut lines = vec![
-            "TundraUX3 Diagnostics".to_string(),
+            i18n::tr!("startup-brand-diagnostics"),
             format!("Status: {:?}", snapshot.overall_status()),
             format!(
                 "Checks: {pass} pass, {unsupported} unsupported, {warning} warning, {fail} fail"

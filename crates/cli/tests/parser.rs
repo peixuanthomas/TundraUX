@@ -506,7 +506,7 @@ fn asset_command_renders_art_sets_and_individual_items() {
     let banner = String::from_utf8(stdout).expect("banner output should be utf8");
     assert!(banner.contains("ooooooooooooo"));
     assert!(!banner.contains("schema_version"));
-    assert!(!banner.contains("[items.tundraux3]"));
+    assert!(!banner.contains("[items.tundraux]"));
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -731,7 +731,7 @@ fn config_set_border_theme_fields_normalizes_and_preserves_default_profile() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated border color: light-cyan\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated border color: light-cyan\n"
     );
     assert_eq!(
         opened
@@ -772,7 +772,7 @@ fn config_border_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated border color: #ABC123\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated border color: #ABC123\n"
     );
     assert_eq!(
         opened
@@ -798,7 +798,7 @@ fn config_border_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated border color: white\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated border color: white\n"
     );
     assert_eq!(
         opened
@@ -832,7 +832,7 @@ fn config_accent_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated accent color: #ABC123\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated accent color: #ABC123\n"
     );
     assert_eq!(
         opened
@@ -858,7 +858,7 @@ fn config_accent_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated accent color: #63D3E5\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated accent color: #63D3E5\n"
     );
     assert_eq!(
         opened
@@ -884,7 +884,7 @@ fn config_accent_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated accent color: light-magenta\n"
+        "Saved. Restart TundraUX to apply settings to an already running UI.\nUpdated accent color: light-magenta\n"
     );
 
     let mut stdout = Vec::new();
@@ -1082,7 +1082,7 @@ fn new_command_clears_saved_content_and_recreates_default_storage() {
     assert_eq!(exit_code, 0);
     assert!(stderr.is_empty());
     let stdout = String::from_utf8(stdout).expect("new output should be utf8");
-    assert!(stdout.contains("TundraUX3 storage reset"));
+    assert!(stdout.contains("TundraUX storage reset"));
     assert!(stdout.contains("Recreated storage files:"));
     assert!(layout.config_path.is_file());
     assert!(layout.profiles_path.is_file());
@@ -1124,7 +1124,7 @@ fn doctor_command_passes_and_bootstraps_storage_with_injected_macos_platform() {
     assert_eq!(exit_code, 0);
     assert!(stderr.is_empty());
     let stdout = String::from_utf8(stdout).expect("doctor output should be utf8");
-    assert!(stdout.contains("TundraUX3 doctor"));
+    assert!(stdout.contains("TundraUX doctor"));
     assert!(stdout.contains("Platform kind: macOS"));
     assert!(!stdout.contains("Path templates:"));
     assert!(stdout.contains("Resolved paths:"));
@@ -1144,12 +1144,12 @@ fn doctor_command_passes_and_bootstraps_storage_with_injected_macos_platform() {
 
     assert!(
         tree.path()
-            .join("Home/Library/Application Support/TundraUX3/config.toml")
+            .join("Home/Library/Application Support/TundraUX/config.toml")
             .exists()
     );
     assert!(
         tree.path()
-            .join("Home/Library/Application Support/TundraUX3/state/state.v1.json")
+            .join("Home/Library/Application Support/TundraUX/state/state.v1.json")
             .exists()
     );
 }
@@ -1201,7 +1201,7 @@ fn doctor_command_reports_checks_and_skips_storage_when_app_paths_fail() {
     assert_eq!(exit_code, 1);
     let stdout = String::from_utf8(stdout).expect("doctor output should be utf8");
     let stderr = String::from_utf8(stderr).expect("doctor error output should be utf8");
-    assert!(stdout.contains("TundraUX3 doctor"));
+    assert!(stdout.contains("TundraUX doctor"));
     assert!(stdout.contains("Platform kind: Unsupported"));
     assert!(!stdout.contains("Path templates:"));
     assert!(stdout.contains("Checks:"));
@@ -1232,11 +1232,11 @@ fn unknown_command_exits_two_and_writes_error_to_stderr() {
 fn assert_macos_resolved_path_markers(output: &str) {
     let normalized = output.replace('\\', "/");
 
-    assert!(normalized.contains("Home/Library/Application Support/TundraUX3/config.toml"));
-    assert!(normalized.contains("Home/Library/Application Support/TundraUX3/state"));
-    assert!(normalized.contains("Home/Library/Caches/TundraUX3"));
-    assert!(normalized.contains("Home/Library/Logs/TundraUX3"));
-    assert!(normalized.contains("Temp/TundraUX3"));
+    assert!(normalized.contains("Home/Library/Application Support/TundraUX/config.toml"));
+    assert!(normalized.contains("Home/Library/Application Support/TundraUX/state"));
+    assert!(normalized.contains("Home/Library/Caches/TundraUX"));
+    assert!(normalized.contains("Home/Library/Logs/TundraUX"));
+    assert!(normalized.contains("Temp/TundraUX"));
 }
 
 fn mock_windows_platform(base: &Path) -> MockPlatform {

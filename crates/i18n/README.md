@@ -14,7 +14,7 @@ native_name = "简体中文"
 
 `.ftl` files in `common`, `modules`, and `recovery` are loaded recursively. `zh-Hans` is an input alias for `zh-CN`; directories and manifests use the canonical code. `LanguageCatalog::built_in()` provides English and Chinese language choices without accessing the filesystem.
 
-The bundled Chinese and English packs include compact-interface preview descriptions, primary and danger action labels, and terminal-size messages with interpolated minimum dimensions. Keep both languages and their argument contracts in sync when changing these shared UI resources.
+The bundled Chinese and English packs include the TundraUX title and startup messages, compact-interface preview descriptions, primary and danger action labels, and terminal-size messages with interpolated minimum dimensions. Keep both languages and their argument contracts in sync when changing these shared UI resources.
 
 The bundled `modules/workspace.ftl` covers the Windows panel, window states and size requirements, close and cleanup prompts, and watchdog CLI help and errors. CLI flags and JSON status values are shared across languages.
 

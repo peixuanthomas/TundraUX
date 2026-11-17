@@ -3,7 +3,7 @@ use chrono::TimeZone;
 
 #[test]
 fn editing_and_deleting_one_entry_preserve_other_lines_and_pause_state() {
-    let original = "# keep\r\nCRON_TZ=Asia/Shanghai\r\n# TUNDRAUX3-PAUSED 0 9 * * 1-5 echo old\\%value\r\n@hourly echo untouched\r\n";
+    let original = "# keep\r\nCRON_TZ=Asia/Shanghai\r\n# TUNDRAUX-PAUSED 0 9 * * 1-5 echo old\\%value\r\n@hourly echo untouched\r\n";
     let entry = entries(original, false, "demo").remove(0);
     let values = BTreeMap::from([
         ("schedule".into(), "30 10 * * 1-5".into()),
@@ -12,7 +12,7 @@ fn editing_and_deleting_one_entry_preserve_other_lines_and_pause_state() {
     let changed = change_entry(original, &entry, &values, false, false).unwrap();
     assert_eq!(
         changed,
-        "# keep\r\nCRON_TZ=Asia/Shanghai\r\n# TUNDRAUX3-PAUSED 30 10 * * 1-5 echo 新任务\\%\r\n@hourly echo untouched\r\n"
+        "# keep\r\nCRON_TZ=Asia/Shanghai\r\n# TUNDRAUX-PAUSED 30 10 * * 1-5 echo 新任务\\%\r\n@hourly echo untouched\r\n"
     );
     assert_eq!(
         change_entry(original, &entry, &values, true, false).unwrap(),
@@ -39,7 +39,7 @@ fn multiple_lines_in_one_source_are_checked_and_changed_together() {
     let paused = changed_text(text, &indices, true).unwrap();
     assert_eq!(
         paused,
-        "# keep\r\nSHELL=/bin/sh\r\n# TUNDRAUX3-PAUSED @daily echo first\r\n@hourly echo untouched\r\n# TUNDRAUX3-PAUSED */5 * * * * echo second\r\n"
+        "# keep\r\nSHELL=/bin/sh\r\n# TUNDRAUX-PAUSED @daily echo first\r\n@hourly echo untouched\r\n# TUNDRAUX-PAUSED */5 * * * * echo second\r\n"
     );
     assert_eq!(changed_text(&paused, &indices, false).unwrap(), text);
     commands[1]
@@ -69,7 +69,7 @@ fn chinese_cron_labels_keep_native_task_identity_and_schedule() {
     .unwrap();
     let _language = i18n::enter_snapshot(std::sync::Arc::new(snapshot));
     let rows = rows(
-        "SHELL=/bin/sh\n# TUNDRAUX3-PAUSED @daily echo unchanged\n",
+        "SHELL=/bin/sh\n# TUNDRAUX-PAUSED @daily echo unchanged\n",
         "user:demo",
         false,
         "demo",
@@ -93,7 +93,7 @@ fn chinese_cron_labels_keep_native_task_identity_and_schedule() {
 
 #[test]
 fn parsing_preserves_environment_owner_aliases_and_paused_lines() {
-    let text = "# comment\nPATH = '/custom/bin:/usr/bin'\nCRON_TZ=Asia/Shanghai\n0 3 * * MON root echo one\n# TUNDRAUX3-PAUSED @daily nobody echo two\n";
+    let text = "# comment\nPATH = '/custom/bin:/usr/bin'\nCRON_TZ=Asia/Shanghai\n0 3 * * MON root echo one\n# TUNDRAUX-PAUSED @daily nobody echo two\n";
     let entries = entries(text, true, "");
     assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].user, "root");

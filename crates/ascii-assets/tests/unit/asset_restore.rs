@@ -166,7 +166,7 @@ fn automatic_recovery_repairs_corrupt_defaults_and_preserves_custom_content() {
     fs::write(&home_path, &custom_home).unwrap();
     let custom_image = fs::read(theme.join("home_icons/settings.png")).unwrap();
     fs::write(theme.join("home_icons/custom.png"), &custom_image).unwrap();
-    let custom_banner = "schema_version = 1\n[items.tundraux3]\nlines = [\"CUSTOM\"]\n";
+    let custom_banner = "schema_version = 1\n[items.tundraux]\nlines = [\"CUSTOM\"]\n";
     fs::write(theme.join("banner.toml"), custom_banner).unwrap();
     fs::write(theme.join("weathr/world/house.txt"), "CUSTOM HOUSE\n").unwrap();
 
@@ -192,7 +192,7 @@ fn automatic_recovery_repairs_corrupt_defaults_and_preserves_custom_content() {
         fs::read_to_string(theme.join("banner.toml")).unwrap(),
         custom_banner
     );
-    assert_eq!(store.banner_lines("tundraux3").unwrap(), &["CUSTOM"]);
+    assert_eq!(store.banner_lines("tundraux").unwrap(), &["CUSTOM"]);
     assert_eq!(
         store.text_art("weathr/world/house").unwrap().lines(),
         &["CUSTOM HOUSE"]
@@ -229,8 +229,8 @@ fn automatic_recovery_uses_memory_when_root_is_a_file_without_creating_asset_dir
     let expected =
         AsciiAssetStore::load_with_root(crate::CANONICAL_ASSETS_DIR, DEFAULT_THEME_ID).unwrap();
     assert_eq!(
-        store.banner_lines("tundraux3").unwrap(),
-        expected.banner_lines("tundraux3").unwrap()
+        store.banner_lines("tundraux").unwrap(),
+        expected.banner_lines("tundraux").unwrap()
     );
     assert_eq!(store.home_icon_catalog(), expected.home_icon_catalog());
     assert_eq!(store.clock_font(), expected.clock_font());
@@ -304,7 +304,7 @@ fn automatic_recovery_continues_after_individual_failures_and_cleans_staging_fil
                 .contents
         )
     );
-    assert!(store.banner_lines("tundraux3").is_ok());
+    assert!(store.banner_lines("tundraux").is_ok());
     for directory in [&theme, &theme.join("home_icons")] {
         for entry in fs::read_dir(directory).unwrap() {
             assert!(
@@ -392,7 +392,7 @@ fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_ca
     let unreadable = theme.join("custom/unreadable.png");
     fs::create_dir_all(&unreadable).unwrap();
     fs::write(unreadable.join("keep"), b"custom data").unwrap();
-    let custom_banner = "schema_version = 1\n[items.tundraux3]\nlines = [\"MY BANNER\"]\n";
+    let custom_banner = "schema_version = 1\n[items.tundraux]\nlines = [\"MY BANNER\"]\n";
     fs::write(theme.join("banner.toml"), custom_banner).unwrap();
     // Combine a missing custom image dependency with an unwritable default image.
     let blocked_default = theme.join("home_icons/explorer.png");
@@ -417,7 +417,7 @@ fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_ca
     assert!(!theme.join("custom/missing.png").exists());
     assert_eq!(fs::read(unreadable.join("keep")).unwrap(), b"custom data");
     assert_eq!(store.root(), root.path());
-    assert_eq!(store.banner_lines("tundraux3").unwrap(), &["MY BANNER"]);
+    assert_eq!(store.banner_lines("tundraux").unwrap(), &["MY BANNER"]);
     assert_eq!(
         store.home_icon_image_path("explorer"),
         Some(blocked_default)

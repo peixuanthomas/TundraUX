@@ -19,7 +19,7 @@ startup-shell-ui-automation-help = UI automation（供 agent 使用）：
     用户操作后需重新执行 snapshot 或 wait。界面自动刷新不会使快照失效。
     用 tundra-cli ui wake 关闭空闲天气。
     点击、拖动、滚动、按键、文字输入和等待的完整用法见 tundra-cli ui --help。
-startup-cli-help = TundraUX3 命令行
+startup-cli-help = TundraUX 命令行
     { cli-administration-root-usage }
     { "  " }config [get|set|reset|options]  设置
     { "  " }doctor                        检查运行环境
@@ -41,7 +41,7 @@ startup-cli-help = TundraUX3 命令行
     { "  " }watchdog [list|kill]          查看或强制终止受管进程
     { "  " }debug <command>               调试工具，见 debug --help
     { "  " }cls                           清空终端
-    { "  " }new                           重置已保存的 TundraUX3 数据
+    { "  " }new                           重置已保存的 TundraUX 数据
     { "  " }repl                          交互命令行
     { "  " }help [command ...]            命令帮助
     { "  " }-h, --help                    帮助
@@ -81,7 +81,7 @@ startup-cli-config-help = 用法：tundra-cli config [get [field] | set <field> 
     tundra-cli config set weather-location "Shanghai, China"
     tundra-cli config reset weather-location
     tundra-cli config set accent-color "#38bdf8"
-    修改当前操作系统用户的配置；运行中的 TundraUX3 需重启后生效。
+    修改当前操作系统用户的配置；运行中的 TundraUX 需重启后生效。
 startup-cli-packages-help = list [--scope installed|search|updates] 列出已安装、搜索或可更新的软件包；search TEXT 搜索。
     source-add --name NAME --url URL 添加软件源；APT 另需 --suite SUITE --components main --signed-by /key，DNF 使用 --gpgkey URL。
     sources add/enable/disable/remove 为添加、启用、禁用、删除软件源的别名。修改软件源先生成草稿，经审阅后使用 --apply --expected-version 保存。
@@ -101,3 +101,19 @@ startup-cli-launcher-help = 用法：tundra-cli launcher [list | pin <path> | un
 startup-cli-screen-keyboard-help = 用法：tundra-cli debug screen-keyboard
     在外部交互终端中预览屏幕键盘和 AA 输入。
     Tab/方向键选择，Enter/空格执行，Esc 退出。
+startup-brand-doctor = TundraUX 诊断
+startup-brand-storage-reset = TundraUX 存储重置
+startup-brand-config-saved = 已保存。请重启正在运行的 TundraUX 界面以应用设置。
+startup-brand-launcher-restart = 请重启 TundraUX 以刷新正在运行的启动器。
+startup-brand-explain = TundraUX 启动流程和模块边界
+startup-brand-asset-help = TundraUX 资源测试命令
+startup-brand-reset-requested = 已请求重置 TundraUX，正在返回启动器。
+startup-brand-reset-help = 清除已保存的 TundraUX 配置和状态并恢复默认值。需要输入 RESET。
+    请先使用 debug paths 备份显示的配置和状态目录。只重置单个设置时，可使用 config reset <field>。
+startup-brand-reset-prompt = 输入 RESET 清除 TundraUX 数据，或按回车取消：
+startup-brand-smoke = TundraUX Shell 初步测试
+startup-brand-shell = TundraUX Shell
+startup-brand-diagnostics = TundraUX 诊断
+startup-brand-macos-trash = TundraUX 文件管理器需要访问系统废纸篓。请在“系统设置 > 隐私与安全性 > 完全磁盘访问权限”中启用 TundraUX，然后退出并重新打开应用。
+startup-brand-macos-access-title = TundraUX 需要完全磁盘访问权限
+startup-brand-macos-access-message = 文件管理器需要完全磁盘访问权限才能列出、恢复和清空 macOS 废纸篓。请在系统设置中添加并启用 TundraUX，然后退出并重新打开应用。

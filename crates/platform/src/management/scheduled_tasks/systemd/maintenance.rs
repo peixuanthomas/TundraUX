@@ -12,7 +12,7 @@ fn field(id: &str, label: &str, value: String) -> ManagementField {
 
 pub(super) fn manifest(text: &str) -> Option<BTreeMap<String, String>> {
     text.lines()
-        .find_map(|line| line.strip_prefix("# TundraUX3-Task="))
+        .find_map(|line| line.strip_prefix("# TundraUX-Task="))
         .and_then(|text| serde_json::from_str(text).ok())
 }
 

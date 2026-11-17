@@ -2,6 +2,8 @@
 
 `terminal-runtime` manages host-terminal modes and isolated child terminals. Command Line, external programs, Vim, and scripts share this implementation of PTY/ConPTY, input encoding, terminal parsing, and process cleanup.
 
+Child terminals identify their host program as TundraUX.
+
 ## Modules
 
 | Module | Responsibility |

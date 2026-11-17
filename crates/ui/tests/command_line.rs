@@ -144,7 +144,7 @@ fn command_line_renders_snapshot_inside_the_standard_shell_chrome() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(output.contains("TundraUX 3"));
+    assert!(output.contains("TundraUX"));
     assert!(output.contains("Ready"));
     assert!(output.contains("2026-07-27 10:15"));
 }
@@ -328,7 +328,7 @@ fn undersized_command_line_is_blocked() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(output.contains("TundraUX 3"));
+    assert!(output.contains("TundraUX"));
     assert!(output.contains("Ready"));
     assert!(output.contains("Resize to continue"));
 }

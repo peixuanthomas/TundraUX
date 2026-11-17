@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const ROOT: &str = "/var/lib/tundraux3/config-backups";
+const ROOT: &str = "/var/lib/tundraux/config-backups";
 const MAX_RECORD: u64 = 16 * 1024 * 1024;
 
 mod history;

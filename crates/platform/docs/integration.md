@@ -4,11 +4,11 @@
 
 | Purpose | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| Configuration | `%APPDATA%\TundraUX3\config.toml` | `~/Library/Application Support/TundraUX3/config.toml` | `$XDG_CONFIG_HOME/TundraUX3/config.toml`, default `~/.config/TundraUX3/config.toml` |
-| State | `%LOCALAPPDATA%\TundraUX3\state` | `~/Library/Application Support/TundraUX3/state` | `$XDG_DATA_HOME/TundraUX3/state`, default `~/.local/share/TundraUX3/state` |
-| Cache | `%LOCALAPPDATA%\TundraUX3\cache` | `~/Library/Caches/TundraUX3` | `$XDG_CACHE_HOME/TundraUX3`, default `~/.cache/TundraUX3` |
-| Logs | `%LOCALAPPDATA%\TundraUX3\logs` | `~/Library/Logs/TundraUX3` | `$XDG_STATE_HOME/TundraUX3/logs`, default `~/.local/state/TundraUX3/logs` |
-| Temporary files | `%TEMP%\TundraUX3` | `TundraUX3` under the system temporary directory | `$XDG_RUNTIME_DIR/TundraUX3`; if unavailable, a private `/tmp` directory containing the UID |
+| Configuration | `%APPDATA%\TundraUX\config.toml` | `~/Library/Application Support/TundraUX/config.toml` | `$XDG_CONFIG_HOME/TundraUX/config.toml`, default `~/.config/TundraUX/config.toml` |
+| State | `%LOCALAPPDATA%\TundraUX\state` | `~/Library/Application Support/TundraUX/state` | `$XDG_DATA_HOME/TundraUX/state`, default `~/.local/share/TundraUX/state` |
+| Cache | `%LOCALAPPDATA%\TundraUX\cache` | `~/Library/Caches/TundraUX` | `$XDG_CACHE_HOME/TundraUX`, default `~/.cache/TundraUX` |
+| Logs | `%LOCALAPPDATA%\TundraUX\logs` | `~/Library/Logs/TundraUX` | `$XDG_STATE_HOME/TundraUX/logs`, default `~/.local/state/TundraUX/logs` |
+| Temporary files | `%TEMP%\TundraUX` | `TundraUX` under the system temporary directory | `$XDG_RUNTIME_DIR/TundraUX`; if unavailable, a private `/tmp` directory containing the UID |
 
 Run `tundra-cli debug paths` to view path templates and resolved absolute paths.
 

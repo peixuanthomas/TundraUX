@@ -15,7 +15,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 const MAX_TEXT: usize = 256 * 1024;
-const BACKUPS: &str = "/var/lib/tundraux3/config-backups";
+const BACKUPS: &str = "/var/lib/tundraux/config-backups";
 
 fn failure(error: std::io::Error) -> ManagementError {
     if error.kind() == std::io::ErrorKind::PermissionDenied {

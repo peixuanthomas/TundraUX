@@ -409,10 +409,7 @@ fn save_config(
 ) -> i32 {
     match storage.save_config(config) {
         Ok(()) => {
-            let _ = writeln!(
-                stdout,
-                "Saved. Restart TundraUX3 to apply settings to an already running UI."
-            );
+            let _ = writeln!(stdout, "{}", i18n::tr!("startup-brand-config-saved"));
             0
         }
         Err(error) => {

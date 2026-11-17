@@ -243,7 +243,7 @@ fn private_system_settings_and_time_configuration() {
         .insert("source_0".into(), "new.example".into());
     run(&servers, &mut review).unwrap();
     assert!(!active("systemd-timesyncd.service"));
-    let own = Path::new("/etc/systemd/timesyncd.conf.d/90-tundraux3.conf");
+    let own = Path::new("/etc/systemd/timesyncd.conf.d/90-tundraux.conf");
     assert!(fs::read_to_string(own).unwrap().contains("NTP=new.example"));
     let mut on = command("set_system_ntp", Some("systemd-timesyncd.service"));
     on.values.insert("enabled".into(), "true".into());
@@ -336,7 +336,7 @@ fn private_system_settings_and_time_configuration() {
         fs::read_to_string("/run/chrony-dhcp/network.sources").unwrap(),
         dynamic
     );
-    let record = fs::read_dir("/var/lib/tundraux3/config-backups/operations")
+    let record = fs::read_dir("/var/lib/tundraux/config-backups/operations")
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter_map(|path| {

@@ -133,7 +133,7 @@ impl Emulator {
         let terminal = Terminal::new(
             terminal_size(columns, rows, (8, 16)),
             Arc::new(Configuration { scrollback }),
-            "TundraUX3",
+            "TundraUX",
             env!("CARGO_PKG_VERSION"),
             Box::new(ChildWriter(writer.clone())),
         );

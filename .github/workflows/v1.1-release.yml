@@ -47,10 +47,10 @@ jobs:
           Copy-Item target/x86_64-pc-windows-msvc/release/tundra-cli.exe package/
           Copy-Item LICENSE package/
           Copy-Item crates/weathr/LICENSE.weathr package/
-          Compress-Archive -Path package/* -DestinationPath TundraUX3-V1.1-windows-x64.zip
-          $hash = (Get-FileHash TundraUX3-V1.1-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  TundraUX3-V1.1-windows-x64.zip" |
-            Out-File TundraUX3-V1.1-windows-x64.sha256 -Encoding ascii
+          Compress-Archive -Path package/* -DestinationPath TundraUX-V1.1-windows-x64.zip
+          $hash = (Get-FileHash TundraUX-V1.1-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  TundraUX-V1.1-windows-x64.zip" |
+            Out-File TundraUX-V1.1-windows-x64.sha256 -Encoding ascii
           Get-Item package/* | Format-Table Name,Length
 
       - name: Stage Windows release assets
@@ -58,8 +58,8 @@ jobs:
         with:
           name: release-windows-x64
           path: |
-            TundraUX3-V1.1-windows-x64.zip
-            TundraUX3-V1.1-windows-x64.sha256
+            TundraUX-V1.1-windows-x64.zip
+            TundraUX-V1.1-windows-x64.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -106,18 +106,18 @@ jobs:
           cp crates/weathr/LICENSE.weathr package/
           lipo -info package/tundra-shell
           lipo -info package/tundra-cli
-          tar -C package -czf TundraUX3-V1.1-macos-universal.tar.gz \
+          tar -C package -czf TundraUX-V1.1-macos-universal.tar.gz \
             tundra-shell tundra-cli LICENSE LICENSE.weathr
-          shasum -a 256 TundraUX3-V1.1-macos-universal.tar.gz \
-            > TundraUX3-V1.1-macos-universal.sha256
+          shasum -a 256 TundraUX-V1.1-macos-universal.tar.gz \
+            > TundraUX-V1.1-macos-universal.sha256
 
       - name: Stage macOS release assets
         uses: actions/upload-artifact@v7
         with:
           name: release-macos-universal
           path: |
-            TundraUX3-V1.1-macos-universal.tar.gz
-            TundraUX3-V1.1-macos-universal.sha256
+            TundraUX-V1.1-macos-universal.tar.gz
+            TundraUX-V1.1-macos-universal.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -141,28 +141,28 @@ jobs:
       - name: Build Linux packages
         shell: bash
         env:
-          TUNDRAUX3_VERSION: 0.1.1
+          TUNDRAUX_VERSION: 0.1.1
         run: |
           set -euo pipefail
           bash scripts/package-linux.sh
-          mv dist/tundraux3-0.1.1-linux-x86_64.tar.gz \
-            dist/TundraUX3-V1.1-linux-x86_64.tar.gz
-          mv dist/tundraux3_0.1.1_amd64.deb \
-            dist/TundraUX3-V1.1-linux-amd64.deb
+          mv dist/tundraux-0.1.1-linux-x86_64.tar.gz \
+            dist/TundraUX-V1.1-linux-x86_64.tar.gz
+          mv dist/tundraux_0.1.1_amd64.deb \
+            dist/TundraUX-V1.1-linux-amd64.deb
           cd dist
           sha256sum \
-            TundraUX3-V1.1-linux-x86_64.tar.gz \
-            TundraUX3-V1.1-linux-amd64.deb \
-            > TundraUX3-V1.1-linux-x86_64.sha256
+            TundraUX-V1.1-linux-x86_64.tar.gz \
+            TundraUX-V1.1-linux-amd64.deb \
+            > TundraUX-V1.1-linux-x86_64.sha256
 
       - name: Stage Linux release assets
         uses: actions/upload-artifact@v7
         with:
           name: release-linux-x64
           path: |
-            dist/TundraUX3-V1.1-linux-x86_64.tar.gz
-            dist/TundraUX3-V1.1-linux-amd64.deb
-            dist/TundraUX3-V1.1-linux-x86_64.sha256
+            dist/TundraUX-V1.1-linux-x86_64.tar.gz
+            dist/TundraUX-V1.1-linux-amd64.deb
+            dist/TundraUX-V1.1-linux-x86_64.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -187,13 +187,13 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          test -f TundraUX3-V1.1-windows-x64.zip
-          test -f TundraUX3-V1.1-windows-x64.sha256
-          test -f TundraUX3-V1.1-macos-universal.tar.gz
-          test -f TundraUX3-V1.1-macos-universal.sha256
-          test -f TundraUX3-V1.1-linux-x86_64.tar.gz
-          test -f TundraUX3-V1.1-linux-amd64.deb
-          test -f TundraUX3-V1.1-linux-x86_64.sha256
+          test -f TundraUX-V1.1-windows-x64.zip
+          test -f TundraUX-V1.1-windows-x64.sha256
+          test -f TundraUX-V1.1-macos-universal.tar.gz
+          test -f TundraUX-V1.1-macos-universal.sha256
+          test -f TundraUX-V1.1-linux-x86_64.tar.gz
+          test -f TundraUX-V1.1-linux-amd64.deb
+          test -f TundraUX-V1.1-linux-x86_64.sha256
           for checksum in *.sha256; do
             sha256sum -c "$checksum"
           done
@@ -205,7 +205,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
-          TundraUX3 V1.1 基于 `master` 分支提交 `@RELEASE_REF@` 发布。
+          TundraUX V1.1 基于 `master` 分支提交 `@RELEASE_REF@` 发布。
 
           ## 主要更新
 
@@ -217,10 +217,10 @@ jobs:
 
           ## 下载
 
-          - `TundraUX3-V1.1-windows-x64.zip`：Windows x64。
-          - `TundraUX3-V1.1-macos-universal.tar.gz`：macOS Universal（Intel x86_64 + Apple Silicon arm64）。
-          - `TundraUX3-V1.1-linux-x86_64.tar.gz`：Linux x86_64 便携包。
-          - `TundraUX3-V1.1-linux-amd64.deb`：Debian/Ubuntu amd64 安装包。
+          - `TundraUX-V1.1-windows-x64.zip`：Windows x64。
+          - `TundraUX-V1.1-macos-universal.tar.gz`：macOS Universal（Intel x86_64 + Apple Silicon arm64）。
+          - `TundraUX-V1.1-linux-x86_64.tar.gz`：Linux x86_64 便携包。
+          - `TundraUX-V1.1-linux-amd64.deb`：Debian/Ubuntu amd64 安装包。
           - 对应的 `.sha256` 文件用于校验下载内容。
 
           所有产物均由 GitHub Actions 从上述固定提交构建、校验并直接上传。未进行开发者签名或 Apple 公证。

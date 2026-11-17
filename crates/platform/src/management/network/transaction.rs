@@ -8,7 +8,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const ROOT: &str = "/run/tundraux3-network";
+const ROOT: &str = "/run/tundraux-network";
 
 pub(crate) fn active_backup_ids() -> Result<std::collections::BTreeSet<String>, ManagementError> {
     let mut ids = std::collections::BTreeSet::new();

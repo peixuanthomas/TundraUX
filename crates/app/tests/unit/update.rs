@@ -299,7 +299,7 @@ fn update_source_download_uses_codeload_pinned_to_a_full_sha() {
     let sha = "a".repeat(40);
     assert_eq!(
         source_archive_url(&sha).unwrap(),
-        format!("https://codeload.github.com/peixuanthomas/TundraUX3/zip/{sha}")
+        format!("https://codeload.github.com/peixuanthomas/TundraUX/zip/{sha}")
     );
     for invalid in ["master", "../master", "short", ""] {
         assert!(source_archive_url(invalid).is_err());
@@ -786,7 +786,7 @@ fn unrecognized_installation_cannot_stage_or_recover_portable_replacement() {
         .is_err()
     );
     assert!(!root.join(".tundra-update").exists());
-    // Test binaries have no official portable marker or tundraux3 RPM ownership.
+    // Test binaries have no official portable marker or tundraux RPM ownership.
     assert!(check_for_updates(&current_build_identity()).is_err());
     fs::remove_dir_all(root).unwrap();
 }

@@ -18,12 +18,12 @@ use serde::{Deserialize, Serialize};
 
 pub const UPDATE_PROTOCOL_VERSION: u32 = 3;
 pub const GITHUB_OWNER: &str = "peixuanthomas";
-pub const GITHUB_REPO: &str = "TundraUX3";
-pub const UPDATE_READY_FILE_ENV: &str = "TUNDRAUX3_UPDATE_READY_FILE";
-pub const UPDATE_TARGET_SHA_ENV: &str = "TUNDRAUX3_UPDATE_TARGET_SHA";
-pub const UPDATE_ROLLBACK_ENV: &str = "TUNDRAUX3_UPDATE_ROLLBACK";
+pub const GITHUB_REPO: &str = "TundraUX";
+pub const UPDATE_READY_FILE_ENV: &str = "TUNDRAUX_UPDATE_READY_FILE";
+pub const UPDATE_TARGET_SHA_ENV: &str = "TUNDRAUX_UPDATE_TARGET_SHA";
+pub const UPDATE_ROLLBACK_ENV: &str = "TUNDRAUX_UPDATE_ROLLBACK";
 const API_ROOT: &str = "https://api.github.com";
-const USER_AGENT: &str = "TundraUX3-updater/1";
+const USER_AGENT: &str = "TundraUX-updater/1";
 mod git;
 #[cfg(target_os = "linux")]
 mod release;
@@ -73,11 +73,11 @@ pub struct BuildIdentity {
 }
 
 pub fn current_build_identity() -> BuildIdentity {
-    let commit = env!("TUNDRAUX3_BUILD_COMMIT");
+    let commit = env!("TUNDRAUX_BUILD_COMMIT");
     BuildIdentity {
         package_version: env!("CARGO_PKG_VERSION").to_owned(),
         commit_sha: (commit != "unknown").then(|| commit.to_owned()),
-        dirty: env!("TUNDRAUX3_BUILD_DIRTY") == "true",
+        dirty: env!("TUNDRAUX_BUILD_DIRTY") == "true",
     }
 }
 
@@ -787,7 +787,7 @@ fn prepare_extracted_with_operations(
         ])
         .arg(target.to_string_lossy())
         .current_dir(&source_root)
-        .env("TUNDRAUX3_BUILD_COMMIT", &check.head_sha)
+        .env("TUNDRAUX_BUILD_COMMIT", &check.head_sha)
         .env("CARGO_TERM_COLOR", "never")
         .env("CARGO_TERM_PROGRESS_WHEN", "always")
         .env("CARGO_TERM_PROGRESS_WIDTH", "80")

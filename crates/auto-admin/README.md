@@ -2,6 +2,8 @@
 
 AutoAdmin (AA) handles approval before built-in management operations run, passes passwords, options, and terminal input while they run, and receives the final results.
 
+Linux helper handoff uses the TundraUX operation socket path.
+
 | Component | Responsibility |
 | --- | --- |
 | `auto-admin` | Approval state, task input, stop requests, results, and Linux authorization connections |

@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 #[path = "support/update_vim.rs"]
 mod vim;
 
-const HELPER_TEST_MANIFEST: &str = "TUNDRAUX3_TEST_HELPER_MANIFEST";
+const HELPER_TEST_MANIFEST: &str = "TUNDRAUX_TEST_HELPER_MANIFEST";
 
 fn executable(path: &Path, contents: &str) {
     fs::write(path, contents).unwrap();
@@ -60,7 +60,7 @@ fn linux_update_helper_replaces_or_restores_and_waits_for_shell() {
             if fail_start {
                 "#!/bin/sh\nexit 1\n"
             } else {
-                "#!/bin/sh\nprintf 'ready\\n' > \"$TUNDRAUX3_UPDATE_READY_FILE\"\nprintf 'new\\n'\nread answer\n"
+                "#!/bin/sh\nprintf 'ready\\n' > \"$TUNDRAUX_UPDATE_READY_FILE\"\nprintf 'new\\n'\nread answer\n"
             },
         );
         let staged = app::update::stage_update_for_apply(

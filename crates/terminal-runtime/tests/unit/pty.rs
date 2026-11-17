@@ -71,7 +71,7 @@ fn recorded_output_survives_beyond_the_terminal_scrollback_without_osc_controls(
     let temp_root = std::env::temp_dir()
         .canonicalize()
         .unwrap()
-        .join("TundraUX3");
+        .join("TundraUX");
     let root = platform::create_temp_dir(&temp_root, "recorded-pty-test").unwrap();
     let store = platform::task_history::HistoryStore::new(&root);
     let summary =
@@ -107,7 +107,7 @@ fn pty_minimum_size_updates_without_visible_output_and_clears_on_exit() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
     let root =
-        platform::create_temp_dir(&std::env::temp_dir().join("TundraUX3"), "pty-minimum").unwrap();
+        platform::create_temp_dir(&std::env::temp_dir().join("TundraUX"), "pty-minimum").unwrap();
     let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
         root.join("reports"),
         root.join("fallback"),

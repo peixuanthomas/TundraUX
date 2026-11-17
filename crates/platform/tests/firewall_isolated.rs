@@ -136,7 +136,7 @@ fn remove(port: &str, scope: &str, io: &mut Interaction) -> String {
 }
 fn restore(id: &str, io: &mut Interaction) -> String {
     io.backup = None;
-    let before = fs::read_dir("/var/lib/tundraux3/config-backups/operations")
+    let before = fs::read_dir("/var/lib/tundraux/config-backups/operations")
         .unwrap()
         .count();
     platform::management::execute(
@@ -153,7 +153,7 @@ fn restore(id: &str, io: &mut Interaction) -> String {
     )
     .unwrap();
     assert_eq!(
-        fs::read_dir("/var/lib/tundraux3/config-backups/operations")
+        fs::read_dir("/var/lib/tundraux/config-backups/operations")
             .unwrap()
             .count(),
         before + 1,
@@ -209,7 +209,7 @@ fn private_ufw_active_inactive_delete_and_complete_recovery() {
     assert!(tool("ufw", &["status"]).contains("inactive"));
     restore(&reverse, &mut io);
     assert!(!has("38121", ""));
-    assert!(Path::new("/var/lib/tundraux3/config-backups/operations").exists());
+    assert!(Path::new("/var/lib/tundraux/config-backups/operations").exists());
 }
 
 #[test]

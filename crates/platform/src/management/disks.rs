@@ -829,7 +829,7 @@ fn udisks_operation(
 }
 
 fn fallback_directory(uid: u32, device: &str) -> Result<PathBuf, ManagementError> {
-    let root = PathBuf::from("/run/tundraux3-mounts");
+    let root = PathBuf::from("/run/tundraux-mounts");
     let user = root.join(uid.to_string());
     let target = user.join(device.replace(':', "-"));
     for path in [&root, &user, &target] {

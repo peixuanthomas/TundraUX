@@ -14,7 +14,7 @@ pub fn local_store() -> Result<HistoryStore, ManagementError> {
 
 #[cfg(target_os = "linux")]
 pub fn system_store(actor: u32) -> HistoryStore {
-    HistoryStore::new(PathBuf::from("/var/lib/tundraux3/task-history").join(actor.to_string()))
+    HistoryStore::new(PathBuf::from("/var/lib/tundraux/task-history").join(actor.to_string()))
 }
 
 pub fn history_query(query: &ManagementQuery) -> HistoryQuery {
@@ -80,7 +80,7 @@ pub fn task_row(summary: &TaskSummary, bucket: &str, privileged: bool) -> Manage
         && summary
             .operation_id
             .as_ref()
-            .is_some_and(|id| id.starts_with("/run/tundraux3-management/"))
+            .is_some_and(|id| id.starts_with("/run/tundraux-management/"))
     {
         i18n::tr!("task-personal-copy-name", name = summary.name.clone())
     } else {
@@ -353,7 +353,7 @@ fn append_system(
     actor: u32,
 ) -> Result<(), ManagementError> {
     append_store(snapshot, query, &system_store(actor), "system", true)?;
-    let root = std::path::Path::new("/var/lib/tundraux3/scheduled-results");
+    let root = std::path::Path::new("/var/lib/tundraux/scheduled-results");
     if let Ok(entries) = std::fs::read_dir(root) {
         for entry in entries {
             let entry = entry.map_err(|e| ManagementError::Failed(e.to_string()))?;
@@ -403,7 +403,7 @@ fn command_store(command: &ManagementCommand, actor: u32) -> Result<HistoryStore
     {
         if uid == unsafe { libc::geteuid() } {
             return Ok(HistoryStore::new(
-                PathBuf::from("/var/lib/tundraux3/scheduled-results")
+                PathBuf::from("/var/lib/tundraux/scheduled-results")
                     .join(uid.to_string())
                     .join("history"),
             ));
@@ -424,7 +424,7 @@ fn command_store(command: &ManagementCommand, actor: u32) -> Result<HistoryStore
                 )));
             }
             return Ok(HistoryStore::new(
-                PathBuf::from("/var/lib/tundraux3/scheduled-results")
+                PathBuf::from("/var/lib/tundraux/scheduled-results")
                     .join(uid.to_string())
                     .join("history"),
             ));

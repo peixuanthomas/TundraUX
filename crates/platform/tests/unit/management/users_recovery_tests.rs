@@ -552,7 +552,7 @@ fn real_isolated_account_recovery_preserves_unrelated_changes_and_homes() {
     ));
     assert_eq!(capture().unwrap()["passwd"]["qa_collision"][6], "/bin/sh");
     assert!(
-        fs::read_dir("/var/lib/tundraux3/config-backups/operations")
+        fs::read_dir("/var/lib/tundraux/config-backups/operations")
             .unwrap()
             .any(|entry| {
                 let record: Value =

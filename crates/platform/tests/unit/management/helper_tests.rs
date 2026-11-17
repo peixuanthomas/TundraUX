@@ -140,13 +140,13 @@ fn helper_stop_reaches_a_blocked_worker() {
 #[test]
 fn elevated_reconnect_is_recognized_without_an_operation_command() {
     assert!(requires_authorized_attach(std::path::Path::new(
-        "/run/tundraux3-management/1000/operation/control.sock"
+        "/run/tundraux-management/1000/operation/control.sock"
     )));
     assert!(!requires_authorized_attach(std::path::Path::new(
-        "/tmp/tundraux3-management-1000/operation/control.sock"
+        "/tmp/tundraux-management-1000/operation/control.sock"
     )));
     assert!(!requires_authorized_attach(std::path::Path::new(
-        "/run/tundraux3-management-other/1000/operation/control.sock"
+        "/run/tundraux-management-other/1000/operation/control.sock"
     )));
 }
 
@@ -245,10 +245,10 @@ fn completed_read_only_helper_exits_after_delivering_result() {
 fn attach_rejects_paths_outside_the_actors_fixed_socket_namespace() {
     for path in [
         "/tmp/operation/control.sock",
-        "/run/tundraux3-management/1001/operation/control.sock",
-        "/run/tundraux3-management/1000/../1001/control.sock",
-        "/run/tundraux3-management/1000/operation/private/control.sock",
-        "/run/tundraux3-management/1000/operation/other.sock",
+        "/run/tundraux-management/1001/operation/control.sock",
+        "/run/tundraux-management/1000/../1001/control.sock",
+        "/run/tundraux-management/1000/operation/private/control.sock",
+        "/run/tundraux-management/1000/operation/other.sock",
     ] {
         assert!(check_attach_path(std::path::Path::new(path), 1000).is_err());
     }

@@ -2,6 +2,8 @@
 
 `watchdog` provides the workspace guardian and the in-process runtime for managed tasks, panic boundaries, operation journals, resource cleanup, and incident reports. Worker executables create a `WatchdogRuntime`; libraries use the existing instance through `AppWatchdog`.
 
+Fallback report directories and report titles use the TundraUX name.
+
 ## Workspace guardian
 
 `Supervisor` runs in the parent guardian and owns the Shell, application, and shared service processes. Workers report progress from their actual event loops every 250 ms. After two seconds without progress the guardian sends a probe, then allows two seconds for a matching reply carrying a newer progress counter. A scheduling pause on the guardian triggers a fresh probe.

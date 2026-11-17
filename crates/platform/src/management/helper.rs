@@ -60,9 +60,9 @@ fn checked_directory(path: &std::path::Path, owner: u32, mode: u32) -> Result<()
 
 fn base_directory(euid: u32, actor: u32) -> PathBuf {
     if euid == 0 {
-        PathBuf::from("/run/tundraux3-management").join(actor.to_string())
+        PathBuf::from("/run/tundraux-management").join(actor.to_string())
     } else {
-        std::env::temp_dir().join(format!("tundraux3-management-{actor}"))
+        std::env::temp_dir().join(format!("tundraux-management-{actor}"))
     }
 }
 
@@ -180,7 +180,7 @@ fn start(
     // No request text is retained in diagnostics or placed on a command line.
     request.clear();
     if euid == 0 {
-        checked_directory(std::path::Path::new("/run/tundraux3-management"), 0, 0o755)?;
+        checked_directory(std::path::Path::new("/run/tundraux-management"), 0, 0o755)?;
     }
     let base = base_directory(euid, actor);
     checked_directory(&base, euid, 0o755)?;
@@ -1108,7 +1108,7 @@ pub fn connect(path: &std::path::Path, actor: u32) -> Result<UnixStream, Managem
 /// The fixed elevated namespace also determines whether reconnect needs sudo.
 /// Do not infer this from the UI's operation flag: recovered tasks have no command.
 pub fn requires_authorized_attach(path: &std::path::Path) -> bool {
-    path.starts_with("/run/tundraux3-management")
+    path.starts_with("/run/tundraux-management")
 }
 
 pub(crate) fn check_attach_path(path: &std::path::Path, actor: u32) -> Result<(), ManagementError> {

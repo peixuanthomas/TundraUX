@@ -77,7 +77,7 @@ python3 scripts/build-vim.py --output target/release/vim
 bash scripts/package-linux.sh
 ```
 
-`TUNDRAUX3_VIM_DIR` can point to an already-built engine directory of the same version. When upgrading Vim, update both the pinned commit and source hash, then rerun build verification and real Vim regressions.
+`TUNDRAUX_VIM_DIR` can point to an already-built engine directory of the same version. When upgrading Vim, update both the pinned commit and source hash, then rerun build verification and real Vim regressions.
 
 Linux UI acceptance:
 

@@ -1,4 +1,4 @@
-# TundraUX3 WezTerm terminal-core patches
+# TundraUX WezTerm terminal-core patches
 
 This directory vendors `tattoy-wezterm-term` 0.1.0-fork.5 under its original MIT
 license. The upstream package metadata and license are retained.

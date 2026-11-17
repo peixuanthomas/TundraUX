@@ -95,8 +95,8 @@ fn select_payload(release: &Release) -> Result<ReleaseUpdate, UpdateError> {
         return Err(UpdateError::new("Invalid stable release version"));
     }
     let names = [
-        format!("TundraUX3-{}-linux-x86_64.tar.gz", release.tag_name),
-        format!("tundraux3-{version}-linux-x86_64.tar.gz"),
+        format!("TundraUX-{}-linux-x86_64.tar.gz", release.tag_name),
+        format!("tundraux-{version}-linux-x86_64.tar.gz"),
     ];
     let archives: Vec<_> = release
         .assets

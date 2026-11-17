@@ -14,7 +14,7 @@ The wizard has three steps: What to Do → When to Run → Review and Create.
 
 Tasks use the selected user and primary group, with HOME, USER, LOGNAME, and PATH set. systemd handles subsequent triggers, so tasks continue running after Tundra closes. Run Once After a Missed Schedule corresponds to `Persistent` and is off by default.
 
-Each execution writes to `/var/lib/tundraux3/scheduled-results/UID/history/` using the systemd invocation ID, saving its start, end, result, and output, which can be viewed on the Tasks page.
+Each execution writes to `/var/lib/tundraux/scheduled-results/UID/history/` using the systemd invocation ID, saving its start, end, result, and output, which can be viewed on the Tasks page.
 
 ## Editing and deletion
 
@@ -33,7 +33,7 @@ Multiple-selection actions handle all checked tasks and are available only when 
 - Pausing a timer stops future triggers and disables startup activation; a service already running continues.
 - Resuming a timer enables and starts it; timers without installation rules are only started.
 - Run Now starts the timer's corresponding service without changing its account, environment, or other definitions.
-- Pausing cron adds `# TUNDRAUX3-PAUSED `; resuming removes that marker without converting cron to a timer.
+- Pausing cron adds `# TUNDRAUX-PAUSED `; resuming removes that marker without converting cron to a timer.
 - Running cron immediately creates a separate temporary systemd service using the original entry's account, environment, and percent-sign input rules.
 
 cron usually does not retain exit codes for scheduled executions, so the list shows "Not recorded by cron"; manual execution results appear separately.

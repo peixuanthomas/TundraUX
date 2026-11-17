@@ -1,6 +1,7 @@
 # UI shell messages.
 
-ui-shell-minimum-terminal-size = TundraUX 3 needs at least { $width }x{ $height } terminal cells.
+ui-shell-title = TundraUX
+ui-shell-minimum-terminal-size = TundraUX needs at least { $width }x{ $height } terminal cells.
 ui-shell-help-button = F1 Help
 ui-shell-time-sync = Time Sync
 ui-shell-home = Home

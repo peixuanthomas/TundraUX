@@ -80,49 +80,49 @@ pub struct AppPaths {
 
 impl AppPaths {
     #[cfg(windows)]
-    pub const CONFIG_TEMPLATE: &'static str = "%APPDATA%\\TundraUX3\\config.toml";
+    pub const CONFIG_TEMPLATE: &'static str = "%APPDATA%\\TundraUX\\config.toml";
     #[cfg(target_os = "macos")]
-    pub const CONFIG_TEMPLATE: &'static str = "~/Library/Application Support/TundraUX3/config.toml";
+    pub const CONFIG_TEMPLATE: &'static str = "~/Library/Application Support/TundraUX/config.toml";
     #[cfg(target_os = "linux")]
-    pub const CONFIG_TEMPLATE: &'static str = "$XDG_CONFIG_HOME/TundraUX3/config.toml";
+    pub const CONFIG_TEMPLATE: &'static str = "$XDG_CONFIG_HOME/TundraUX/config.toml";
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    pub const CONFIG_TEMPLATE: &'static str = "<unsupported>/TundraUX3/config.toml";
+    pub const CONFIG_TEMPLATE: &'static str = "<unsupported>/TundraUX/config.toml";
 
     #[cfg(windows)]
-    pub const DATA_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX3\\state";
+    pub const DATA_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX\\state";
     #[cfg(target_os = "macos")]
-    pub const DATA_TEMPLATE: &'static str = "~/Library/Application Support/TundraUX3/state";
+    pub const DATA_TEMPLATE: &'static str = "~/Library/Application Support/TundraUX/state";
     #[cfg(target_os = "linux")]
-    pub const DATA_TEMPLATE: &'static str = "$XDG_DATA_HOME/TundraUX3/state";
+    pub const DATA_TEMPLATE: &'static str = "$XDG_DATA_HOME/TundraUX/state";
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    pub const DATA_TEMPLATE: &'static str = "<unsupported>/TundraUX3/state";
+    pub const DATA_TEMPLATE: &'static str = "<unsupported>/TundraUX/state";
 
     #[cfg(windows)]
-    pub const CACHE_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX3\\cache";
+    pub const CACHE_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX\\cache";
     #[cfg(target_os = "macos")]
-    pub const CACHE_TEMPLATE: &'static str = "~/Library/Caches/TundraUX3";
+    pub const CACHE_TEMPLATE: &'static str = "~/Library/Caches/TundraUX";
     #[cfg(target_os = "linux")]
-    pub const CACHE_TEMPLATE: &'static str = "$XDG_CACHE_HOME/TundraUX3";
+    pub const CACHE_TEMPLATE: &'static str = "$XDG_CACHE_HOME/TundraUX";
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    pub const CACHE_TEMPLATE: &'static str = "<unsupported>/TundraUX3/cache";
+    pub const CACHE_TEMPLATE: &'static str = "<unsupported>/TundraUX/cache";
 
     #[cfg(windows)]
-    pub const LOGS_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX3\\logs";
+    pub const LOGS_TEMPLATE: &'static str = "%LOCALAPPDATA%\\TundraUX\\logs";
     #[cfg(target_os = "macos")]
-    pub const LOGS_TEMPLATE: &'static str = "~/Library/Logs/TundraUX3";
+    pub const LOGS_TEMPLATE: &'static str = "~/Library/Logs/TundraUX";
     #[cfg(target_os = "linux")]
-    pub const LOGS_TEMPLATE: &'static str = "$XDG_STATE_HOME/TundraUX3/logs";
+    pub const LOGS_TEMPLATE: &'static str = "$XDG_STATE_HOME/TundraUX/logs";
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    pub const LOGS_TEMPLATE: &'static str = "<unsupported>/TundraUX3/logs";
+    pub const LOGS_TEMPLATE: &'static str = "<unsupported>/TundraUX/logs";
 
     #[cfg(windows)]
-    pub const TEMP_TEMPLATE: &'static str = "%TEMP%\\TundraUX3";
+    pub const TEMP_TEMPLATE: &'static str = "%TEMP%\\TundraUX";
     #[cfg(target_os = "macos")]
-    pub const TEMP_TEMPLATE: &'static str = "<temp-dir>/TundraUX3";
+    pub const TEMP_TEMPLATE: &'static str = "<temp-dir>/TundraUX";
     #[cfg(target_os = "linux")]
-    pub const TEMP_TEMPLATE: &'static str = "<temp-dir>/TundraUX3";
+    pub const TEMP_TEMPLATE: &'static str = "<temp-dir>/TundraUX";
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-    pub const TEMP_TEMPLATE: &'static str = "<unsupported>/TundraUX3/temp";
+    pub const TEMP_TEMPLATE: &'static str = "<unsupported>/TundraUX/temp";
 
     pub fn from_environment() -> Result<Self, PathResolutionError> {
         crate::native_platform()
@@ -193,7 +193,7 @@ pub fn build_binary_dir_app_paths(
     binary_dir: impl Into<PathBuf>,
 ) -> Result<AppPaths, PathResolutionError> {
     let binary_dir = require_absolute("binary directory", binary_dir.into())?;
-    let app_dir = binary_dir.join("TundraUX3");
+    let app_dir = binary_dir.join("TundraUX");
 
     AppPaths::from_parts(
         app_dir.join("config.toml"),
@@ -212,15 +212,15 @@ pub fn build_windows_app_paths(
     let roaming_app_data = require_absolute("roaming app data directory", roaming_app_data.into())?;
     let local_app_data = require_absolute("local app data directory", local_app_data.into())?;
     let temp_dir = require_absolute("temporary directory", temp_dir.into())?;
-    let roaming_app_dir = roaming_app_data.join("TundraUX3");
-    let local_app_dir = local_app_data.join("TundraUX3");
+    let roaming_app_dir = roaming_app_data.join("TundraUX");
+    let local_app_dir = local_app_data.join("TundraUX");
 
     AppPaths::from_parts(
         roaming_app_dir.join("config.toml"),
         local_app_dir.join("state"),
         local_app_dir.join("cache"),
         local_app_dir.join("logs"),
-        temp_dir.join("TundraUX3"),
+        temp_dir.join("TundraUX"),
     )
 }
 
@@ -233,14 +233,14 @@ pub fn build_macos_app_paths(
     let app_support = home_dir
         .join("Library")
         .join("Application Support")
-        .join("TundraUX3");
+        .join("TundraUX");
 
     AppPaths::from_parts(
         app_support.join("config.toml"),
         app_support.join("state"),
-        home_dir.join("Library").join("Caches").join("TundraUX3"),
-        home_dir.join("Library").join("Logs").join("TundraUX3"),
-        temp_dir.join("TundraUX3"),
+        home_dir.join("Library").join("Caches").join("TundraUX"),
+        home_dir.join("Library").join("Logs").join("TundraUX"),
+        temp_dir.join("TundraUX"),
     )
 }
 
@@ -258,11 +258,11 @@ pub fn build_linux_app_paths(
     let temp_dir = require_absolute("temporary directory", temp_dir.into())?;
 
     AppPaths::from_parts(
-        config_home.join("TundraUX3").join("config.toml"),
-        data_home.join("TundraUX3").join("state"),
-        cache_home.join("TundraUX3"),
-        state_home.join("TundraUX3").join("logs"),
-        temp_dir.join("TundraUX3"),
+        config_home.join("TundraUX").join("config.toml"),
+        data_home.join("TundraUX").join("state"),
+        cache_home.join("TundraUX"),
+        state_home.join("TundraUX").join("logs"),
+        temp_dir.join("TundraUX"),
     )
 }
 
@@ -404,7 +404,7 @@ pub(crate) fn home_dir_from_env() -> Result<PathBuf, PathResolutionError> {
 
 fn unique_temp_name(prefix: &str, suffix: &str) -> String {
     format!(
-        ".tundraux3-{prefix}-{}-{}-{suffix}",
+        ".tundraux-{prefix}-{}-{}-{suffix}",
         process::id(),
         timestamp_nanos()
     )

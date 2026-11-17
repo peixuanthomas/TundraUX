@@ -21,7 +21,7 @@ Release shows release notes and download progress without compilation or live-ou
 
 Each source update writes Cargo and Vim stdout and stderr to a separate `update-*.log` in the application log directory, before the UI applies its 200-line tail and line-length limits. Build progress output and long diagnostic lines are retained. The file includes the target commit, build stages, and exit results, and remains after failure or cancellation even when temporary build files are removed.
 
-Build failures include the log path. Open **Logs → Open folder** to find the file and view it in the editor. On Linux the directory is `$XDG_STATE_HOME/TundraUX3/logs`, or `~/.local/state/TundraUX3/logs` when `XDG_STATE_HOME` is unset. These separate text logs can be removed with the existing `tundra-cli debug clear-logs legacy --yes` command; runtime JSONL rotation does not manage them.
+Build failures include the log path. Open **Logs → Open folder** to find the file and view it in the editor. On Linux the directory is `$XDG_STATE_HOME/TundraUX/logs`, or `~/.local/state/TundraUX/logs` when `XDG_STATE_HOME` is unset. These separate text logs can be removed with the existing `tundra-cli debug clear-logs legacy --yes` command; runtime JSONL rotation does not manage them.
 
 ## Replacement and rollback
 

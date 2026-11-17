@@ -294,7 +294,7 @@ fn elevated_helper_rejects_actor_injection_and_allows_authorized_reconnect() {
         String::from_utf8_lossy(&output.stderr)
     );
     let ready: HelperReady = serde_json::from_slice(&output.stdout).unwrap();
-    let root = PathBuf::from(format!("/run/tundraux3-management/{actor}"));
+    let root = PathBuf::from(format!("/run/tundraux-management/{actor}"));
     let directory = ready.socket.parent().unwrap();
     assert_eq!(directory.parent(), Some(root.as_path()));
     assert_eq!(ready.socket.file_name().unwrap(), "control.sock");
@@ -415,7 +415,7 @@ fn private_authorization_session_reuses_authority_and_exits_on_revoke() {
         let directory = socket.parent().unwrap();
         assert_eq!(
             directory.parent(),
-            Some(std::path::Path::new("/run/tundraux3-management/0"))
+            Some(std::path::Path::new("/run/tundraux-management/0"))
         );
         // The directory names the launcher, not its forked child. Query children
         // holding the listening socket; Fixture verifies UID, cmdline and inode.
@@ -477,7 +477,7 @@ fn private_authorization_session_reuses_authority_and_exits_on_revoke() {
     }
     assert!(matches!(
         client.connect(Request::Attach(
-            "/run/tundraux3-management/0/missing/control.sock".into()
+            "/run/tundraux-management/0/missing/control.sock".into()
         )),
         Err(platform::management::ManagementError::Conflict(_))
     ));
@@ -485,7 +485,7 @@ fn private_authorization_session_reuses_authority_and_exits_on_revoke() {
     assert!(
         client
             .connect(Request::Attach(
-                "/run/tundraux3-management/0/missing/control.sock".into()
+                "/run/tundraux-management/0/missing/control.sock".into()
             ))
             .is_err()
     );

@@ -1,4 +1,4 @@
-//! Bounded framing around the upstream event decoder (TundraUX3 patch).
+//! Bounded framing around the upstream event decoder (TundraUX patch).
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},

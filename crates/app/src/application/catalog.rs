@@ -139,7 +139,7 @@ impl BuiltInApplicationDescriptor {
 pub const COMMAND_LINE_APPLICATION: BuiltInApplicationDescriptor = BuiltInApplicationDescriptor {
     id: "builtin.command-line",
     name: "Command Line",
-    description: "TundraUX3 CLI and operating-system commands",
+    description: "TundraUX CLI and operating-system commands",
     type_label: "Built-in application",
     admin_only: true,
     fixed_in_launcher: true,

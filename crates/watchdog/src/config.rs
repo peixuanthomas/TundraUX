@@ -73,7 +73,7 @@ impl WatchdogConfig {
 
 impl Default for WatchdogConfig {
     fn default() -> Self {
-        let root = std::env::temp_dir().join("TundraUX3").join("watchdog");
+        let root = std::env::temp_dir().join("TundraUX").join("watchdog");
         Self::new(
             root.join("crashes"),
             root.join("fallback"),

@@ -1,4 +1,4 @@
-# TundraUX3 interprocess patch
+# TundraUX interprocess patch
 
 This directory vendors the published `interprocess` 2.4.6 crate from crates.io. Its upstream revision is `dc7bf100a1fba7062c024b26b6a23091d387a761`; original source, README, and licenses are retained.
 

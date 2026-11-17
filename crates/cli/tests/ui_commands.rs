@@ -656,7 +656,7 @@ fn binary_stdin_preserves_text_and_sends_it_only_once() {
 
     let fixture = Fixture::new();
     let server = MockServer::start(
-        &fixture.root.join("TundraUX3/shell-control"),
+        &fixture.root.join("TundraUX/shell-control"),
         |info, _, _| Some(Response::success(snapshot(info, 1))),
     );
     let text = "中文 😀\r\nnext line\n";

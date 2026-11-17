@@ -28,21 +28,21 @@ fn windows_app_paths_follow_roaming_local_and_temp_roots() {
 
     assert_eq!(
         paths.config_path(),
-        roaming.join("TundraUX3").join("config.toml").as_path()
+        roaming.join("TundraUX").join("config.toml").as_path()
     );
     assert_eq!(
         paths.data_path(),
-        local.join("TundraUX3").join("state").as_path()
+        local.join("TundraUX").join("state").as_path()
     );
     assert_eq!(
         paths.cache_path(),
-        local.join("TundraUX3").join("cache").as_path()
+        local.join("TundraUX").join("cache").as_path()
     );
     assert_eq!(
         paths.logs_path(),
-        local.join("TundraUX3").join("logs").as_path()
+        local.join("TundraUX").join("logs").as_path()
     );
-    assert_eq!(paths.temp_path(), temp.join("TundraUX3").as_path());
+    assert_eq!(paths.temp_path(), temp.join("TundraUX").as_path());
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn macos_app_paths_follow_library_and_temp_roots() {
     let app_support = home
         .join("Library")
         .join("Application Support")
-        .join("TundraUX3");
+        .join("TundraUX");
 
     assert_eq!(
         paths.config_path(),
@@ -66,17 +66,14 @@ fn macos_app_paths_follow_library_and_temp_roots() {
         paths.cache_path(),
         home.join("Library")
             .join("Caches")
-            .join("TundraUX3")
+            .join("TundraUX")
             .as_path()
     );
     assert_eq!(
         paths.logs_path(),
-        home.join("Library")
-            .join("Logs")
-            .join("TundraUX3")
-            .as_path()
+        home.join("Library").join("Logs").join("TundraUX").as_path()
     );
-    assert_eq!(paths.temp_path(), temp.join("TundraUX3").as_path());
+    assert_eq!(paths.temp_path(), temp.join("TundraUX").as_path());
 }
 
 #[test]
@@ -93,18 +90,18 @@ fn linux_app_paths_follow_xdg_roots_and_temp_directory() {
 
     assert_eq!(
         paths.config_path(),
-        config.join("TundraUX3").join("config.toml").as_path()
+        config.join("TundraUX").join("config.toml").as_path()
     );
     assert_eq!(
         paths.data_path(),
-        data.join("TundraUX3").join("state").as_path()
+        data.join("TundraUX").join("state").as_path()
     );
-    assert_eq!(paths.cache_path(), cache.join("TundraUX3").as_path());
+    assert_eq!(paths.cache_path(), cache.join("TundraUX").as_path());
     assert_eq!(
         paths.logs_path(),
-        state.join("TundraUX3").join("logs").as_path()
+        state.join("TundraUX").join("logs").as_path()
     );
-    assert_eq!(paths.temp_path(), temp.join("TundraUX3").as_path());
+    assert_eq!(paths.temp_path(), temp.join("TundraUX").as_path());
 }
 
 #[test]
@@ -142,7 +139,7 @@ fn binary_dir_app_paths_remain_available_for_portable_mode() {
 
     let paths = build_binary_dir_app_paths(&binary_dir)
         .expect("absolute fake binary directory should resolve");
-    let app_dir = binary_dir.join("TundraUX3");
+    let app_dir = binary_dir.join("TundraUX");
 
     assert_eq!(paths.config_path(), app_dir.join("config.toml").as_path());
     assert_eq!(paths.data_path(), app_dir.join("state").as_path());
@@ -300,7 +297,7 @@ fn default_file_attributes_preserve_basic_metadata_and_dotfile_hidden() {
     let base = unique_temp_root("default-file-attributes");
     fs::create_dir_all(&base).expect("test directory should be creatable");
     let path = base.join(".profile");
-    fs::write(&path, b"tux3").expect("test file should be writable");
+    fs::write(&path, b"tux").expect("test file should be writable");
 
     let attributes =
         default_file_attributes(&path).expect("default file attributes should read the test file");
@@ -384,7 +381,7 @@ fn platform_temp_helpers_create_under_app_temp_path_and_cleanup() {
 #[test]
 fn temp_file_and_dir_helpers_create_unique_paths_and_cleanup() {
     let base = unique_temp_root("temp-helpers");
-    let temp_root = base.join("TundraUX3");
+    let temp_root = base.join("TundraUX");
 
     let first_file =
         create_temp_file(&temp_root, "export").expect("first temp file should be created");
@@ -413,7 +410,7 @@ fn unix_temp_helpers_use_private_modes_and_cleanup_does_not_follow_links() {
     use std::os::unix::fs::{PermissionsExt, symlink};
 
     let base = unique_temp_root("temp-private");
-    let temp_root = base.join("TundraUX3");
+    let temp_root = base.join("TundraUX");
     let file = create_temp_file(&temp_root, "secret").expect("private file");
     let directory = create_temp_dir(&temp_root, "private").expect("private directory");
     assert_eq!(
@@ -489,7 +486,7 @@ fn binary_dir_backed_path_checks_pass_and_cleanup_created_app_directory() {
     fs::create_dir_all(&binary_dir).expect("binary directory should be creatable");
     let paths = AppPaths::from_binary_dir(&binary_dir)
         .expect("absolute fake binary directory should resolve");
-    let app_dir = binary_dir.join("TundraUX3");
+    let app_dir = binary_dir.join("TundraUX");
 
     let config_check = check_directory_read_write(
         "Config parent",
@@ -636,7 +633,7 @@ fn directory_permission_check_preserves_preexisting_directory() {
             entry
                 .file_name()
                 .to_string_lossy()
-                .starts_with(".tundraux3-doctor-probe")
+                .starts_with(".tundraux-doctor-probe")
         })
         .collect();
     assert!(probe_files.is_empty());
@@ -709,7 +706,7 @@ fn assert_temp_child(path: &Path, temp_root: &Path, prefix: &str, suffix: &str) 
         .expect("temp child should have file name")
         .to_string_lossy();
     assert!(
-        file_name.starts_with(&format!(".tundraux3-{prefix}-")),
+        file_name.starts_with(&format!(".tundraux-{prefix}-")),
         "unexpected temp child name: {file_name}"
     );
     assert!(

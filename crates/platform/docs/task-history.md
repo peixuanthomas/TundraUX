@@ -11,8 +11,8 @@ States include awaiting approval, awaiting input, running, canceling, succeeded,
 | Source | Location |
 | --- | --- |
 | Ordinary pages | `task-history/` in the current user's data directory |
-| Linux authorization helper | `/var/lib/tundraux3/task-history/UID/` |
-| Scheduled tasks | `/var/lib/tundraux3/scheduled-results/UID/history/` |
+| Linux authorization helper | `/var/lib/tundraux/task-history/UID/` |
+| Scheduled tasks | `/var/lib/tundraux/scheduled-results/UID/history/` |
 
 Pages and helpers use the same stable ID; the list merges duplicate results and gives precedence to system archives. Scheduled tasks use separate systemd invocation IDs and can record results while Tundra is closed.
 

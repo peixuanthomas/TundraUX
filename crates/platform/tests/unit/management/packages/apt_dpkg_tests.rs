@@ -2,7 +2,7 @@ use super::*;
 use crate::management::{ManagementCommand, ManagementKind};
 use std::{collections::BTreeMap, fs, path::Path};
 
-const PACKAGE: &str = "tundraux3-pty-regression";
+const PACKAGE: &str = "tundraux-pty-regression";
 
 /// Real apt and dpkg operate only on this empty package's private database.
 /// No sudo, downloads, host package files, maintainer scripts or host APT hooks.
@@ -27,7 +27,7 @@ impl AptFixture {
             return None;
         }
         let directory = tempfile::Builder::new()
-            .prefix("tundraux3-apt-pty-")
+            .prefix("tundraux-apt-pty-")
             .tempdir()
             .unwrap();
         let root = directory.path();

@@ -1,5 +1,7 @@
 # ui
 
+Shell chrome uses the localized TundraUX title and sizes its header from the translated text.
+
 System Status offers its current metrics and Diagnostics; log and incident browsing is handled by Logs.
 
 `ui` converts interface data into Ratatui layouts and frames, providing shared controls, themes, focus, hit testing, animations, and automation snapshots. It does not manage the host terminal, perform system operations, or modify application state while rendering.
@@ -114,7 +116,7 @@ Callers retain animation state and advance the clock with the same `MotionFrame`
 
 Defaults are 160ms for pages, 180ms for dialogs and details, and 120ms for menus. The keyboard expands over 160ms. Progress graphics interpolate for 200ms without overshoot while numeric values update immediately. Busy indicators occupy one character with an 80ms step; visible truecolor loading labels refresh at 20Hz for the sweep. ANSI keeps the spinner without RGB interpolation. Animation speed applies to both, and reduced motion uses a static ellipsis with no animation timer.
 
-OpenCode's dialogs mount directly; the configurable page/dialog/menu transitions above remain TundraUX3 behavior. The inspected upstream revision, source links, and MIT attribution are documented in [UI requirements](../../docs/UI-requirements.md#opencode-source-reference) and [OpenCode reference](../../third_party/opencode/README.md).
+OpenCode's dialogs mount directly; the configurable page/dialog/menu transitions above remain TundraUX behavior. The inspected upstream revision, source links, and MIT attribution are documented in [UI requirements](../../docs/UI-requirements.md#opencode-source-reference) and [OpenCode reference](../../third_party/opencode/README.md).
 
 Advanced animation settings reuse `FormDialog` for nine numeric fields in three columns, Tab navigation, range checks, and small-window scrolling. Reset changes the draft; Save validates and commits all values together, while Cancel leaves configuration unchanged. Reset, Save, and Cancel remain visible.
 

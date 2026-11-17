@@ -152,15 +152,15 @@ impl Platform for MacosPlatform {
         } else {
             Ok(StartupPermissionStatus::action_required(
                 "Full Disk Access",
-                "TundraUX3 Explorer needs access to the system Trash. Enable TundraUX3 in System Settings > Privacy & Security > Full Disk Access, then quit and reopen the application.",
+                i18n::tr!("startup-brand-macos-trash"),
             ))
         }
     }
 
     fn request_startup_permissions(&self) -> Result<(), PlatformError> {
         let dialog_error = macos_show_critical_error(
-            "TundraUX3 needs Full Disk Access",
-            "Explorer needs Full Disk Access to list, restore, and empty the macOS Trash. Add and enable TundraUX3 in System Settings, then quit and reopen the application.",
+            &i18n::tr!("startup-brand-macos-access-title"),
+            &i18n::tr!("startup-brand-macos-access-message"),
         )
         .err();
         let settings_result = run_open([OsString::from(FULL_DISK_ACCESS_SETTINGS_URI)]);

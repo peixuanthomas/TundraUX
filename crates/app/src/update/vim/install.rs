@@ -52,7 +52,7 @@ pub fn install_vim_engine(
     let pin: serde_json::Value =
         serde_json::from_str(PIN).map_err(|error| UpdateError::new(error.to_string()))?;
     let version = pin["version"].as_str().unwrap();
-    let name = format!("TundraUX3-vim-{version}-{target}.zip");
+    let name = format!("TundraUX-vim-{version}-{target}.zip");
     let prefix = format!(
         "https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/vim-v{version}/"
     );

@@ -19,7 +19,7 @@ startup-shell-ui-automation-help = UI automation (for agents):
     After user operations, run snapshot or wait again. Automatic updates do not invalidate the snapshot.
     Run tundra-cli ui wake to close idle weather.
     See tundra-cli ui --help for click, drag, scroll, key, text, and wait commands.
-startup-cli-help = TundraUX3 CLI
+startup-cli-help = TundraUX CLI
     { cli-administration-root-usage }
     { "  " }config [get|set|reset|options]  Settings
     { "  " }doctor                        Check the runtime environment
@@ -41,7 +41,7 @@ startup-cli-help = TundraUX3 CLI
     { "  " }watchdog [list|kill]          List or force kill managed processes
     { "  " }debug <command>               Debug tools; see debug --help
     { "  " }cls                           Clear the terminal
-    { "  " }new                           Reset saved TundraUX3 data
+    { "  " }new                           Reset saved TundraUX data
     { "  " }repl                          Interactive command line
     { "  " }help [command ...]            Command help
     { "  " }-h, --help                    Help
@@ -85,7 +85,7 @@ startup-cli-config-help = Usage: tundra-cli config [get [field] | set <field> <v
     { "  " }tundra-cli config set weather-location "Shanghai, China"
     { "  " }tundra-cli config reset weather-location
     { "  " }tundra-cli config set accent-color "#38bdf8"
-    Changes use the current OS user's config. Restart a running TundraUX3 UI to apply them.
+    Changes use the current OS user's config. Restart a running TundraUX UI to apply them.
 startup-cli-packages-help = list [--scope installed|search|updates]; search TEXT; source-add --name NAME --url URL [APT: --suite SUITE --components main --signed-by /key; DNF: --gpgkey URL]. sources add/enable/disable/remove are aliases. Source changes output drafts; --apply --expected-version saves. Script changes retain current config; --config-policy replace is APT-only. Arch install/upgrade always upgrades the full system.
 
 startup-cli-doctor-help = Usage: tundra-cli doctor
@@ -102,3 +102,19 @@ startup-cli-launcher-help = Usage: tundra-cli launcher [list | pin <path> | unpi
 startup-cli-screen-keyboard-help = Usage: tundra-cli debug screen-keyboard
     Keyboard and AA input preview in an external interactive terminal.
     Tab/arrow keys select; Enter/Space activate; Esc exits.
+startup-brand-doctor = TundraUX doctor
+startup-brand-storage-reset = TundraUX storage reset
+startup-brand-config-saved = Saved. Restart TundraUX to apply settings to an already running UI.
+startup-brand-launcher-restart = Restart TundraUX to refresh an already running Launcher.
+startup-brand-explain = TundraUX startup and boundary model
+startup-brand-asset-help = TundraUX asset test command
+startup-brand-reset-requested = TundraUX reset requested; returning control to Launcher.
+startup-brand-reset-help = Erase saved TundraUX configuration and state, then create defaults. Requires typing RESET.
+    First use debug paths and back up the displayed config/state directories. To reset one setting, use config reset <field>.
+startup-brand-reset-prompt = Type RESET to erase TundraUX data, or press Enter to cancel:{ " " }
+startup-brand-smoke = TundraUX shell - Phase 0 smoke
+startup-brand-shell = TundraUX Shell
+startup-brand-diagnostics = TundraUX Diagnostics
+startup-brand-macos-trash = TundraUX Explorer needs access to the system Trash. Enable TundraUX in System Settings > Privacy & Security > Full Disk Access, then quit and reopen the application.
+startup-brand-macos-access-title = TundraUX needs Full Disk Access
+startup-brand-macos-access-message = Explorer needs Full Disk Access to list, restore, and empty the macOS Trash. Add and enable TundraUX in System Settings, then quit and reopen the application.

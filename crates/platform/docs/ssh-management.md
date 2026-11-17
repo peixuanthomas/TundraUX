@@ -29,7 +29,7 @@ tundra-cli ssh confirm TRANSACTION_ID
 
 Confirmation checks the calling process and its start time, the root-owned sshd parent process, the kernel's established TCP connection, and the server port. The sshd session must have been created after loading the new configuration; old sessions and channels reused through ControlMaster cannot confirm. Newly added ports must be confirmed through a connection to a newly added port.
 
-On timeout, cancellation, loading failure, or exit of the original application, the independent task restores files and loads the old settings. Pending-confirmation records are in `/var/lib/tundraux3/ssh`; the boot recovery service processes unconfirmed records before SSH and the firewall start. Rebooting does not restart the timer.
+On timeout, cancellation, loading failure, or exit of the original application, the independent task restores files and loads the old settings. Pending-confirmation records are in `/var/lib/tundraux/ssh`; the boot recovery service processes unconfirmed records before SSH and the firewall start. Rebooting does not restart the timer.
 
 ## Services and firewall
 

@@ -4,8 +4,6 @@ mod layout;
 mod model;
 mod render;
 
-const SHELL_TITLE: &str = "TundraUX 3";
-
 pub use layout::{
     MIN_SHELL_TERMINAL_HEIGHT, MIN_SHELL_TERMINAL_WIDTH, ShellFrameLayout, ShellLayout,
     command_line_terminal_area, command_line_terminal_area_in, compute_shell_layout,

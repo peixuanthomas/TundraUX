@@ -338,7 +338,7 @@ where
             Ok(CliCommand::New) => {
                 if confirm_reset(&mut editor) {
                     if embedded {
-                        println!("TundraUX3 reset requested; returning control to Launcher.");
+                        println!("{}", i18n::tr!("startup-brand-reset-requested"));
                         return EMBEDDED_RESET_EXIT_CODE;
                     }
                     execute_cli(&arguments)
@@ -462,7 +462,7 @@ fn is_safe_prompt_username(username: &str) -> bool {
 }
 
 fn confirm_reset(editor: &mut Editor<PromptDisplay, MemHistory>) -> bool {
-    match editor.readline("Type RESET to erase TundraUX3 data, or press Enter to cancel: ") {
+    match editor.readline(&i18n::tr!("startup-brand-reset-prompt")) {
         Ok(answer) => is_reset_confirmation(&answer),
         Err(ReadlineError::Interrupted | ReadlineError::Eof) => false,
         Err(error) => {

@@ -22,7 +22,7 @@ This connection accepts only fixed requests. Normal users' own profile and passw
 | Exit, logout, or communication failure | Revoke the connection and terminate the authorized program |
 | Normal service errors or expired tasks | Return an error and retain an authorization session that is still valid |
 
-A task's `control.sock` is owned by root and accepts only root. The authorized program checks the ownership, permissions, and task identity of `/run/tundraux3-management/<actor>/<operation>/control.sock`, then passes the connected descriptor to Shell. A new Shell must authorize again before reconnecting.
+A task's `control.sock` is owned by root and accepts only root. The authorized program checks the ownership, permissions, and task identity of `/run/tundraux-management/<actor>/<operation>/control.sock`, then passes the connected descriptor to Shell. A new Shell must authorize again before reconnecting.
 
 Tasks started by a supervised workspace worker wait for guardian registration. The authorized helper holds a pidfd for that worker and uses its own permissions to stop its children if the worker exits. The guardian observes the registered helper until it stops. Closing a page or disconnecting its operation viewer preserves the operation while the worker is alive.
 

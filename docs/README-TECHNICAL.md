@@ -1,4 +1,4 @@
-# TundraUX3 technical documentation
+# TundraUX technical documentation
 
 This document covers the project architecture, building, testing, and packaging. See the [Chinese README](README.zh-CN.md) for installation and interface controls, and each crate's documentation for module implementation details.
 
@@ -127,7 +127,7 @@ python3 scripts/build-vim.py --output target/release/vim
 bash scripts/package-linux.sh
 ```
 
-The packaging script runs on Linux x86_64, builds release versions of Shell and CLI, and writes to `dist/` by default. The version comes from the workspace and can be overridden with `TUNDRAUX3_VERSION`.
+The packaging script runs on Linux x86_64, builds release versions of Shell and CLI, and writes to `dist/` by default. The version comes from the workspace and can be overridden with `TUNDRAUX_VERSION`.
 
 Releases use portable archives containing both programs, `assets/`, `vim/`, `tundra-installation.json`, licenses, runtime notes, and `SHA256SUMS`. Keep these files together when running the application. See the [app update guide](../crates/app/docs/update.md) for update and recovery workflows.
 

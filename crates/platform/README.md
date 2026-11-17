@@ -2,6 +2,7 @@
 
 `platform` provides operating-system query and read/write interfaces, including application paths, files, processes, terminal capabilities, system metrics, accounts, services, packages, networks, and disks. Shell and CLI perform operations through these interfaces rather than assembling privilege-elevation commands in page code.
 
+Native paths use `TundraUX` for configuration, state, cache, logs, and temporary files.
 System configuration history uses the shared transaction records; v1 backup files are not imported.
 
 ## Module structure

@@ -335,7 +335,7 @@ fn toml_and_json_documents_round_trip() {
         schema_version: SCHEMA_VERSION,
         records: vec![TrashRecord {
             original_path: PathBuf::from("C:/Projects/readme.md"),
-            trash_path: PathBuf::from("C:/TundraUX3/trash/readme.md"),
+            trash_path: PathBuf::from("C:/TundraUX/trash/readme.md"),
             actor: "local-user".to_string(),
             timestamp_epoch_ms: 42,
         }],

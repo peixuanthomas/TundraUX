@@ -106,7 +106,7 @@ pub(crate) fn lock_rules(flag: &AtomicBool) -> Result<std::fs::File, ManagementE
         .truncate(false)
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open("/run/tundraux3-firewall.lock")
+        .open("/run/tundraux-firewall.lock")
         .map_err(super::network::io_error)?;
     let metadata = file.metadata().map_err(super::network::io_error)?;
     if !metadata.is_file()

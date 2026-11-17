@@ -11,7 +11,7 @@ pub(crate) struct TaskFixture {
 impl TaskFixture {
     pub(crate) fn new() -> Self {
         let root =
-            platform::create_temp_dir(&std::env::temp_dir().join("TundraUX3"), "aa-task-test")
+            platform::create_temp_dir(&std::env::temp_dir().join("TundraUX"), "aa-task-test")
                 .unwrap();
         let config = watchdog::WatchdogConfig::new(
             root.join("reports"),

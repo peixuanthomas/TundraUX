@@ -15,7 +15,7 @@ fn main() {
     )
     .expect("write LSH definitions");
     println!("cargo:rerun-if-changed={}", definitions.display());
-    println!("cargo:rerun-if-env-changed=TUNDRAUX3_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=TUNDRAUX_BUILD_COMMIT");
     let workspace = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../..");
     println!(
         "cargo:rerun-if-changed={}",
@@ -38,7 +38,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
-    let explicit = std::env::var("TUNDRAUX3_BUILD_COMMIT")
+    let explicit = std::env::var("TUNDRAUX_BUILD_COMMIT")
         .ok()
         .filter(|value| !value.trim().is_empty());
     let commit = explicit
@@ -51,8 +51,8 @@ fn main() {
     };
 
     println!(
-        "cargo:rustc-env=TUNDRAUX3_BUILD_COMMIT={}",
+        "cargo:rustc-env=TUNDRAUX_BUILD_COMMIT={}",
         commit.unwrap_or_else(|| "unknown".into())
     );
-    println!("cargo:rustc-env=TUNDRAUX3_BUILD_DIRTY={dirty}");
+    println!("cargo:rustc-env=TUNDRAUX_BUILD_DIRTY={dirty}");
 }

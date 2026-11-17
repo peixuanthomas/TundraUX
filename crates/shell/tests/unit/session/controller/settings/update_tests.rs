@@ -162,7 +162,7 @@ fn busy_update_disables_mode_switch_and_start() {
 
 fn settings_language_snapshots() -> Vec<std::sync::Arc<i18n::LanguageSnapshot>> {
     let root = std::env::temp_dir().join(format!(
-        "tux3-settings-locales-{}-{}",
+        "tux-settings-locales-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

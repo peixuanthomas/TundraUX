@@ -17,7 +17,7 @@ Candidate content appears only in private connections and temporary validation d
 
 Before writing, recheck the original file and its parent directory. Save through atomic replacement, preserving owner, group, permissions, ACLs, and extended attributes. New files inherit the owner of the nearest existing parent directory; symbolic links are rejected at every level of the path.
 
-Recovery records are in `/var/lib/tundraux3/config-backups/operations`, with directory permissions `0700` and file permissions `0600`. Records contain original content, attributes, and the version after modification.
+Recovery records are in `/var/lib/tundraux/config-backups/operations`, with directory permissions `0700` and file permissions `0600`. Records contain original content, attributes, and the version after modification.
 
 Before recovery, preview the diff again, check the current version, and validate the candidate configuration. Restoring an originally absent file deletes the file created by the operation and retains a recovery record for that deletion.
 

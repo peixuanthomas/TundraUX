@@ -29,12 +29,13 @@ The default manifest contains 25 items: 20 text assets, 4 TOML art sets, and 1 c
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
 - Home resolves system-application icons from the existing built-in application artwork and images when no Home-specific icon is defined.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
+- The default banner displays TundraUX.
 
 Asset roots are resolved in this order:
 
 1. `TUNDRA_ASCII_ASSETS_DIR`;
 2. `assets/` alongside the program;
-3. `/usr/share/tundraux3/assets` on Linux.
+3. `/usr/share/tundraux/assets` on Linux.
 
 ## Interface language resources
 

@@ -189,7 +189,7 @@ pub fn check_directory_read_write(label: impl Into<String>, directory: &Path) ->
     }
 
     let probe_path = directory.join(format!(
-        ".tundraux3-doctor-probe-{}-{}.tmp",
+        ".tundraux-doctor-probe-{}-{}.tmp",
         process::id(),
         timestamp_nanos()
     ));

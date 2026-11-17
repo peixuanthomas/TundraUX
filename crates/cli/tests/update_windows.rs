@@ -6,9 +6,9 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const MANIFEST_ENV: &str = "TUNDRAUX3_TEST_WINDOWS_UPDATE_MANIFEST";
-const FAIL_ENV: &str = "TUNDRAUX3_TEST_WINDOWS_UPDATE_FAIL";
-const RECOVERY_ENV: &str = "TUNDRAUX3_TEST_WINDOWS_UPDATE_RECOVERY";
+const MANIFEST_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_MANIFEST";
+const FAIL_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_FAIL";
+const RECOVERY_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_RECOVERY";
 
 #[test]
 fn windows_update_keeps_original_process_alive_through_replacement_and_rollback() {

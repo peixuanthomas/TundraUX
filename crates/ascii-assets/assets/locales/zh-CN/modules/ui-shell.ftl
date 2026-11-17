@@ -1,6 +1,8 @@
 # UI shell messages.
 
-ui-shell-minimum-terminal-size = TundraUX 3 至少需要 { $width }x{ $height } 个终端单元格。
+ui-shell-title = TundraUX
+
+ui-shell-minimum-terminal-size = TundraUX 至少需要 { $width }x{ $height } 个终端单元格。
 ui-shell-help-button = F1 帮助
 ui-shell-time-sync = 时间同步
 ui-shell-home = 主页

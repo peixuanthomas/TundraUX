@@ -252,7 +252,8 @@ impl ShellFrameLayout {
             self.title = area;
             return;
         };
-        let title_width = usize_to_u16(terminal_width(super::SHELL_TITLE)).min(area.width);
+        let title_width =
+            usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title"))).min(area.width);
         self.title = Rect::new(area.x, area.y, title_width, area.height);
         let title_space = title_width.saturating_add(1).min(area.width);
         area.x += title_space;

@@ -1,14 +1,14 @@
 # Binaries are compiled with Cargo.lock by scripts/package-linux.sh.
 %global debug_package %{nil}
 
-Name:           tundraux3
+Name:           tundraux
 Version:        %{tundra_version}
 Release:        1
 Summary:        Terminal desktop environment experiment
 License:        GPL-3.0-only AND GPL-3.0-or-later
-URL:            https://github.com/peixuanthomas/TundraUX3
+URL:            https://github.com/peixuanthomas/TundraUX
 Source0:        %{name}-%{version}-linux-x86_64.tar.gz
-Source1:        tundraux3.desktop
+Source1:        tundraux.desktop
 ExclusiveArch:  x86_64
 Requires:       xdg-utils
 Requires:       glib2
@@ -21,7 +21,7 @@ Recommends:     xdg-desktop-portal
 Recommends:     xorg-x11-server-Xwayland
 
 %description
-TundraUX3 provides a full-screen terminal shell and its management CLI.
+TundraUX provides a full-screen terminal shell and its management CLI.
 This package includes the default assets and a Fedora PackageKit update frontend.
 Start Tundra from an already logged-in ordinary user session.
 
@@ -37,7 +37,7 @@ ln -s tundra-shell %{buildroot}%{_bindir}/tux
 install -Dm755 tundra-cli %{buildroot}%{_bindir}/tundra-cli
 install -d %{buildroot}%{_datadir}/%{name}
 cp -a assets %{buildroot}%{_datadir}/%{name}/assets
-install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/applications/tundraux3.desktop
+install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/applications/tundraux.desktop
 
 %files
 %license LICENSE LICENSE.weathr LICENSE.opencode
@@ -46,4 +46,4 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/applications/tundraux3.desktop
 %{_bindir}/tux
 %{_bindir}/tundra-cli
 %{_datadir}/%{name}/
-%{_datadir}/applications/tundraux3.desktop
+%{_datadir}/applications/tundraux.desktop

@@ -1,4 +1,4 @@
-//! Metadata-only diagnostics for discarded terminal input (TundraUX3 patch).
+//! Metadata-only diagnostics for discarded terminal input (TundraUX patch).
 
 use parking_lot::Mutex;
 

@@ -89,10 +89,7 @@ pub(crate) fn run_launcher(
                 );
             }
         }
-        let _ = writeln!(
-            stdout,
-            "Restart TundraUX3 to refresh an already running Launcher."
-        );
+        let _ = writeln!(stdout, "{}", i18n::tr!("startup-brand-launcher-restart"));
         Ok(())
     })();
     match result {

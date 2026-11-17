@@ -11,7 +11,7 @@ fn default_store_loads_canonical_assets() {
     let store = AsciiAssetStore::load_with_root(CANONICAL_ASSETS_DIR, DEFAULT_THEME_ID)
         .expect("canonical assets should load");
 
-    assert_eq!(store.banner_lines("tundraux3").unwrap().len(), 10);
+    assert_eq!(store.banner_lines("tundraux").unwrap().len(), 7);
     let explorer = store
         .home_icon_catalog()
         .icon("explorer")
@@ -78,7 +78,7 @@ fn default_store_loads_canonical_assets() {
     assert_eq!(
         store.max_asset_dimensions(),
         AssetDimensions {
-            width: 108,
+            width: 96,
             height: 10,
         }
     );
@@ -241,7 +241,7 @@ fn max_asset_dimensions_follow_larger_runtime_theme_assets() {
         .join("\n");
     let banner = format!(
         "schema_version = 1\nname = \"test-banners\"\n\n\
-         [items.tundraux3]\nlabel = \"TundraUX3\"\nbody = '''\n{body}\n'''\n"
+         [items.tundraux]\nlabel = \"TundraUX\"\nbody = '''\n{body}\n'''\n"
     );
     fs::write(
         root.path.join("themes/default/banner.toml"),

@@ -340,7 +340,7 @@ fn write_report_pair(
 
 fn render_text(incident: &IncidentRecord) -> String {
     let mut text = String::new();
-    let _ = writeln!(text, "TundraUX3 crash report");
+    let _ = writeln!(text, "TundraUX crash report");
     let _ = writeln!(text, "Incident: {}", incident.incident_id);
     let _ = writeln!(text, "Occurred: {}", incident.occurred_at.to_rfc3339());
     let _ = writeln!(text, "Kind: {:?} / {:?}", incident.kind, incident.severity);

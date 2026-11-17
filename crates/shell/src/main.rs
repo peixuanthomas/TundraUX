@@ -14,11 +14,12 @@ fn main() {
     match &command {
         Ok(shell::ShellLaunchCommand::Help) => {
             println!(
-                "TundraUX3 Shell\n\
+                "{}\n\
                  Usage: tundra-shell [OPTIONS]\n\n\
                  Start the fullscreen UI when no options are supplied.\n\n\
                  Options:\n  -h, --help     Show help\n  -V, --version  Show version\n\n\
                  Use tundra-cli for commands and configuration.\n\n{}",
+                i18n::tr!("startup-brand-shell"),
                 i18n::tr!("startup-shell-ui-automation-help")
             );
             return;
@@ -256,7 +257,7 @@ fn restart_error(executable: &std::path::Path, error: std::io::Error) -> std::io
 fn start_watchdog(
     role: WorkerRole,
 ) -> Result<(WatchdogRuntime, ProcessWatchdog), watchdog::WatchdogError> {
-    let fallback = std::env::temp_dir().join("TundraUX3").join("watchdog");
+    let fallback = std::env::temp_dir().join("TundraUX").join("watchdog");
     let platform = platform::native_platform();
     let paths_result = platform.app_paths();
     let path_failure = paths_result.as_ref().err().map(ToString::to_string);

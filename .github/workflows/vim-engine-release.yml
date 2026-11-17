@@ -48,7 +48,7 @@ jobs:
       - name: Build and package Windows or Linux Vim
         if: startsWith(matrix.target, 'windows-') || startsWith(matrix.target, 'linux-')
         shell: bash
-        run: python scripts/build-vim.py --output target/vim --package dist/TundraUX3-vim-${{ steps.pin.outputs.version }}-${{ matrix.target }}.zip
+        run: python scripts/build-vim.py --output target/vim --package dist/TundraUX-vim-${{ steps.pin.outputs.version }}-${{ matrix.target }}.zip
       - name: Build native macOS Vim
         if: startsWith(matrix.target, 'macos-')
         shell: bash
@@ -101,7 +101,7 @@ jobs:
           mv target/vim-universal target/vim/vim
           lipo target/vim/vim -verify_arch arm64 x86_64
           python scripts/build-vim.py --verify-only --output target/vim \
-            --package dist/TundraUX3-vim-${{ steps.pin.outputs.version }}-macos-universal.zip
+            --package dist/TundraUX-vim-${{ steps.pin.outputs.version }}-macos-universal.zip
       - uses: actions/upload-artifact@v7
         with:
           name: vim-package-macos-universal
@@ -132,4 +132,4 @@ jobs:
           fi
           test "$(find dist -name '*.zip' | wc -l)" -eq 3
           test "$(find dist -name '*.zip.sha256' | wc -l)" -eq 3
-          gh release create "$tag" dist/* --target "$GITHUB_SHA" --latest=false --title "Vim $version engines" --notes "Pinned Vim engines for TundraUX3. Includes runtime, Vim License, UPSTREAM.json and SHA-256 checksums."
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --latest=false --title "Vim $version engines" --notes "Pinned Vim engines for TundraUX. Includes runtime, Vim License, UPSTREAM.json and SHA-256 checksums."

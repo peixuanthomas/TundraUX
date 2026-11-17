@@ -168,7 +168,7 @@ fn editor_screen_content_uses_the_shared_main_without_erasing_shell_chrome() {
             render_shell_chrome(frame, &layout, &model, &context);
         })
         .unwrap();
-    assert!(row(&terminal, 0).contains("TundraUX 3"));
+    assert!(row(&terminal, 0).contains("TundraUX"));
     assert!(row(&terminal, 0).contains("09:30"));
     assert!(
         (layout.main.y..layout.main.bottom())
@@ -557,7 +557,7 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
             let expected = model.status.full_message();
             assert!(status.starts_with(expected.chars().next().unwrap()));
             assert_eq!(status.replace(' ', ""), expected.replace(' ', ""));
-            assert!(row(&terminal, 0).starts_with("TundraUX 3"));
+            assert!(row(&terminal, 0).starts_with("TundraUX"));
             assert!(row(&terminal, 0).contains("09:30"));
             let shown = layout.with_input_keyboard(Rect::new(0, 10, width, height - 10), 1_000);
             assert!(shown.workspace_taskbar.is_none());
