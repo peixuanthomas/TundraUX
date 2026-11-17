@@ -2,62 +2,45 @@
 
 **A terminal workspace for managing your device.**
 
-English | [Simplified Chinese](docs/README.zh-CN.md)
+English | [简体中文](docs/README.zh-CN.md)
 
-TundraUX brings system tools, files, editors, and everyday utilities into one terminal interface. It is designed for Linux devices without a graphical desktop, with keyboard, mouse, and touchscreen support. Written in Rust with Ratatui and crossterm.
+TundraUX brings system tools, files, and everyday apps together in one terminal workspace. It is designed primarily for Linux devices, including those without a graphical desktop, and also runs on macOS and Windows. Some system management features are available only on Linux.
 
-## Features
+Use it with a keyboard, mouse, or touchscreen.
 
-- **Linux system management:** manage services, processes, packages, networks, disks, users, firewall rules, SSH, and scheduled tasks. Review configuration history and restore previous changes.
-- **Cross-platform packages:** search, install, remove, and upgrade software using native Linux package tools, Homebrew on macOS, or WinGet on Windows.
-- **Files and editing:** browse directories, share copied or cut files between pages, undo same-filesystem moves and renames, and manage permissions. Edit text with syntax highlighting, search and replace, soft wrap, and JSON formatting. Press F8 to switch between the built-in editor and Vim.
-- **Development tools:** run programs in an embedded terminal and debug Bash scripts with breakpoints, stepping, variables, and call stacks.
-- **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output. The top bar shows status messages and the clock.
-- **Application updates:** install Linux releases with download progress and update notes, or choose a pushed commit from the Git tree and watch the local build.
-- **Personal workspace:** search Launcher by name or command, organize custom entries, choose themes and languages, and use the built-in clock and weather apps.
-- **Independent app windows:** use each window's frame to minimize, split, or close it; full screen is in the Split menu. Restore background apps from the bottom window bar and split the current pane incrementally into at most a 2×2 grid. Layout changes retain app content while new frames arrive, and new windows show a starting hint only after 100ms. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
-- **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, with slim scrollbars and TundraUX's Glacier Night blue palette.
+## Home
 
-| Platform | Main support |
-| --- | --- |
-| Linux | Device operation and system management |
-| macOS | Terminal workspace and Homebrew package management |
-| Windows | Terminal workspace and WinGet package management |
+Find apps and settings, and manage software, services, networks, and more.
 
-## Get started
+![TundraUX home screen](docs/screenshots/Main_menu.png)
 
-Use an interactive terminal of at least **108 columns × 20 rows**. Mouse and touch input require a terminal that forwards pointer events.
+## File explorer
 
-The workspace opens as the current system user. Home shows that username. The first run sets up personal preferences. Linux provides system user management.
+Browse, search, and organize files and folders.
 
-Each window has **Minimize, Split, and Close** buttons. Split left/right or top/bottom, then search the new pane's selector to restore a minimized app or start a new session. Cancel restores the previous layout. Full screen in that menu minimizes the other panes. Use **Ctrl+W, then v/s** to split and **h/j/k/l** after the prefix to focus neighbors; editors, Vim, and embedded terminals retain their native Ctrl+W and use the window buttons. The limit is a 2×2 grid, with unavailable directions shown disabled. Selection dialogs across the app have a top search field. Restore running apps from the bottom bar; its separate minus button closes a window normally. All living apps still contribute to the minimum dimensions, and background apps are cleaned up on exit.
+![File explorer](docs/screenshots/Explorer.png)
 
-### Run a Linux portable build
+## Split view
 
-1. Download and extract the Linux x86_64 archive from [GitHub Releases](https://github.com/peixuanthomas/TundraUX/releases).
-2. Keep the extracted files together and open a terminal in that directory.
-3. Install the `tux` command, then start the application:
+Open several apps in the same workspace and use them at the same time.
 
-```sh
-./install-tux.sh
-tux
-```
+![Editor and command line in split view](docs/screenshots/Split_View.png)
 
-Keep the extracted directory in place. If prompted, add `~/.local/bin` to your `PATH`.
+## Scheduled tasks
 
-To check the runtime environment:
+View and manage scheduled tasks on Linux.
 
-```sh
-./tundra-cli doctor
-```
+![Scheduled tasks](docs/screenshots/Tasks.png)
 
-Run TundraUX as your normal user. Administrative operations ask for authorization when needed.
+## Clock
 
-### Build from source
+Check the time and use alarms and countdowns.
 
-Install **Rust 1.95 or newer**. Building the bundled Vim also requires **Python 3.12 or newer** and a native C build toolchain.
+![Clock with alarms and countdowns](docs/screenshots/Clock.png)
 
-From the repository root:
+## Build from source
+
+From the project directory:
 
 ```sh
 cargo build --locked -p shell -p cli
@@ -65,47 +48,13 @@ python3 scripts/build-vim.py --output target/debug/vim
 cargo run --locked -p shell --bin tundra-shell
 ```
 
-On Windows, use `python` if `python3` is unavailable. After pulling updates, rebuild both Shell and CLI; rebuild Vim when `packaging/vim.json` changes.
+On Windows, use `python` if `python3` is unavailable.
 
-To run the environment check from a source build:
+See the [build guide](docs/README-TECHNICAL.md#building-and-running) for requirements.
 
-```sh
-cargo run --locked -p cli --bin tundra-cli -- doctor
-```
+## Learn more
 
-## Companion CLI
-
-`tundra-cli` provides diagnostics, configuration, logs, system-management commands, and control of a running interface:
-
-```sh
-tundra-cli --help
-tundra-cli doctor
-tundra-cli watchdog list
-```
-
-In Command Line or `tundra-cli repl`, press Right to cycle through suggested commands and Tab to accept the gray completion.
-
-To control the interface from another terminal, enable **Settings → System → External CLI control**, then use commands such as:
-
-```sh
-tundra-cli ui snapshot
-tundra-cli ui wake
-```
-
-See the [UI control guide](crates/cli/docs/ui-control.md) for click, input, scrolling, and automation examples.
-
-New app windows reuse the language resources Shell validates during startup and the shared session settings. Inspect first-frame acceptance and terminal output timings with `tundra-cli logs query --module ux.workspace --format jsonl`. See the [timing fields](crates/shell/README.md#app-startup-timings) and [repeatable performance checks](docs/testing.md#workspace-performance-acceptance).
-
-The [2026-11-17 Linux measurements](docs/performance-linux-2026-11-17.md) show all six built-in AppHost startup P95 values below 100ms and all single/two/four-window feedback P95 values below 50ms, with full animation and independent processes. The later debug-panic routing fix has separate functional validation in that report.
-
-## Documentation
-
-- [Simplified Chinese README](docs/README.zh-CN.md)
-- [Build, architecture, testing, and packaging](docs/README-TECHNICAL.md)
-- [Linux system management](crates/platform/docs/linux-management.md)
-- [Editor and script debugging](docs/source-editor.md)
-- [CLI commands and operations](crates/cli/docs/operations.md)
-- [Documentation index](docs/README.md)
+[Download TundraUX](https://github.com/peixuanthomas/TundraUX/releases) · [Documentation](docs/README.md)
 
 ## License
 

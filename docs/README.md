@@ -6,7 +6,8 @@
 
 | Topic | Documentation |
 | --- | --- |
-| Features, installation, and interface controls | [Chinese README](README.zh-CN.md) · [English README](../README.md) |
+| Project overview | [Chinese README](README.zh-CN.md) · [English README](../README.md) |
+| Installation and window controls | [Linux installation guide](packaging/linux/README-LINUX.txt) · [Window controls](../crates/shell/docs/session.md#common-shortcuts) |
 | Architecture, building, testing, and packaging overview | [Technical documentation](README-TECHNICAL.md) |
 | Automated tests, real terminals, and platform acceptance checks | [Testing guide](testing.md) |
 | Interface interaction and acceptance criteria | [UI requirements](UI-requirements.md) |

@@ -1,6 +1,6 @@
 # TundraUX technical documentation
 
-This document covers the project architecture, building, testing, and packaging. See the [Chinese README](README.zh-CN.md) for installation and interface controls, and each crate's documentation for module implementation details.
+This document covers the project architecture, building, testing, and packaging. See the [Linux installation guide](packaging/linux/README-LINUX.txt) and [window controls](../crates/shell/docs/session.md#common-shortcuts) for usage, and each crate's documentation for module implementation details.
 
 ## Building and running
 
