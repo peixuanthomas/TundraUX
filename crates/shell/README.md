@@ -2,6 +2,8 @@
 
 `shell` provides `tundra-shell`, the terminal workspace, its independent application hosts, and shared session services. The initial process keeps control of terminal recovery and starts the Shell, SessionServices, and AppHost workers. The Shell worker reads and draws the interactive terminal. On Windows the watchdog launches external graphical applications through the OS.
 
+Linux portable packages include an installer for the `tux` command.
+
 ## Main responsibilities
 
 - Attach to the current system user, initialize assets, storage and system services, and open first-time setup or Home. Users is available on Linux.

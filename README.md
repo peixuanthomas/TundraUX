@@ -35,11 +35,14 @@ Each window has **Minimize, Split, and Close** buttons. Split left/right or top/
 
 1. Download and extract the Linux x86_64 archive from [GitHub Releases](https://github.com/peixuanthomas/TundraUX3/releases).
 2. Keep the extracted files together and open a terminal in that directory.
-3. Start the application:
+3. Install the `tux` command, then start the application:
 
 ```sh
-./tundra-shell
+./install-tux.sh
+tux
 ```
+
+Keep the extracted directory in place. If prompted, add `~/.local/bin` to your `PATH`.
 
 To check the runtime environment:
 

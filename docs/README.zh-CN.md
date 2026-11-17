@@ -35,11 +35,14 @@ TundraUX3 把系统工具、文件、编辑器和日常实用程序整合到一�
 
 1. 从 [GitHub Releases](https://github.com/peixuanthomas/TundraUX3/releases) 下载并解压 Linux x86_64 压缩包。
 2. 保持解压后的文件在同一目录，在该目录打开终端。
-3. 启动程序：
+3. 安装 `tux` 命令，然后启动程序：
 
 ```sh
-./tundra-shell
+./install-tux.sh
+tux
 ```
+
+请保留解压后的目录。如果安装时提示，将 `~/.local/bin` 加入 `PATH`。
 
 检查运行环境：
 

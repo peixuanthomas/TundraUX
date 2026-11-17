@@ -33,6 +33,7 @@ Start Tundra from an already logged-in ordinary user session.
 
 %install
 install -Dm755 tundra-shell %{buildroot}%{_bindir}/tundra-shell
+ln -s tundra-shell %{buildroot}%{_bindir}/tux
 install -Dm755 tundra-cli %{buildroot}%{_bindir}/tundra-cli
 install -d %{buildroot}%{_datadir}/%{name}
 cp -a assets %{buildroot}%{_datadir}/%{name}/assets
@@ -42,6 +43,7 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_datadir}/applications/tundraux3.desktop
 %license LICENSE LICENSE.weathr LICENSE.opencode
 %doc README-LINUX.txt
 %{_bindir}/tundra-shell
+%{_bindir}/tux
 %{_bindir}/tundra-cli
 %{_datadir}/%{name}/
 %{_datadir}/applications/tundraux3.desktop

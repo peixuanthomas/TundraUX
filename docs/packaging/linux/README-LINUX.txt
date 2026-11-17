@@ -6,8 +6,13 @@ Running the portable build
 Extract the archive and keep both binaries, assets/, vim/, and
 tundra-installation.json together. Open a terminal in that directory and run:
 
-  ./tundra-shell
+  ./install-tux.sh
+  tux
   ./tundra-cli doctor
+
+The installer links ~/.local/bin/tux to this directory without replacing an
+existing command. Keep the directory in place and add ~/.local/bin to PATH if
+the installer reports it is missing.
 
 The archive includes the full Vim engine and runtime, the GNU GPL v3 license,
 and the Weathr component license. Vim's upstream license and source details are
