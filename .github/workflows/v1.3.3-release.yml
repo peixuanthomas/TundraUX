@@ -82,10 +82,10 @@ jobs:
           }
           Copy-Item LICENSE package/
           Copy-Item crates/weathr/LICENSE.weathr package/
-          Compress-Archive -Path package/* -DestinationPath TundraUX-v1.3.3-windows-x64.zip
-          $hash = (Get-FileHash TundraUX-v1.3.3-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  TundraUX-v1.3.3-windows-x64.zip" |
-            Out-File TundraUX-v1.3.3-windows-x64.sha256 -Encoding ascii
+          Compress-Archive -Path package/* -DestinationPath TundraUX3-v1.3.3-windows-x64.zip
+          $hash = (Get-FileHash TundraUX3-v1.3.3-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  TundraUX3-v1.3.3-windows-x64.zip" |
+            Out-File TundraUX3-v1.3.3-windows-x64.sha256 -Encoding ascii
           Get-Item package/* | Format-Table Name,Length
 
       - name: Stage Windows release assets
@@ -93,8 +93,8 @@ jobs:
         with:
           name: release-windows-x64
           path: |
-            TundraUX-v1.3.3-windows-x64.zip
-            TundraUX-v1.3.3-windows-x64.sha256
+            TundraUX3-v1.3.3-windows-x64.zip
+            TundraUX3-v1.3.3-windows-x64.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -148,18 +148,18 @@ jobs:
           cp crates/weathr/LICENSE.weathr package/
           lipo -info package/tundra-shell
           lipo -info package/tundra-cli
-          tar -C package -czf TundraUX-v1.3.3-macos-universal.tar.gz \
+          tar -C package -czf TundraUX3-v1.3.3-macos-universal.tar.gz \
             tundra-shell tundra-cli assets LICENSE LICENSE.weathr
-          shasum -a 256 TundraUX-v1.3.3-macos-universal.tar.gz \
-            > TundraUX-v1.3.3-macos-universal.sha256
+          shasum -a 256 TundraUX3-v1.3.3-macos-universal.tar.gz \
+            > TundraUX3-v1.3.3-macos-universal.sha256
 
       - name: Stage macOS release assets
         uses: actions/upload-artifact@v7
         with:
           name: release-macos-universal
           path: |
-            TundraUX-v1.3.3-macos-universal.tar.gz
-            TundraUX-v1.3.3-macos-universal.sha256
+            TundraUX3-v1.3.3-macos-universal.tar.gz
+            TundraUX3-v1.3.3-macos-universal.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -186,24 +186,24 @@ jobs:
       - name: Build Linux portable archive
         shell: bash
         env:
-          TUNDRAUX_VERSION: 1.3.3
+          TUNDRAUX3_VERSION: 1.3.3
         run: |
           set -euo pipefail
           bash scripts/package-linux.sh --tar-only
-          mv dist/tundraux-1.3.3-linux-x86_64.tar.gz \
-            dist/TundraUX-v1.3.3-linux-x86_64.tar.gz
+          mv dist/tundraux3-1.3.3-linux-x86_64.tar.gz \
+            dist/TundraUX3-v1.3.3-linux-x86_64.tar.gz
           cd dist
           sha256sum \
-            TundraUX-v1.3.3-linux-x86_64.tar.gz \
-            > TundraUX-v1.3.3-linux-x86_64.sha256
+            TundraUX3-v1.3.3-linux-x86_64.tar.gz \
+            > TundraUX3-v1.3.3-linux-x86_64.sha256
 
       - name: Stage Linux release assets
         uses: actions/upload-artifact@v7
         with:
           name: release-linux-x64
           path: |
-            dist/TundraUX-v1.3.3-linux-x86_64.tar.gz
-            dist/TundraUX-v1.3.3-linux-x86_64.sha256
+            dist/TundraUX3-v1.3.3-linux-x86_64.tar.gz
+            dist/TundraUX3-v1.3.3-linux-x86_64.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -235,7 +235,7 @@ jobs:
             windows-x64.zip windows-x64.sha256 \
             macos-universal.tar.gz macos-universal.sha256 \
             linux-x86_64.tar.gz linux-x86_64.sha256; do
-            test -s "TundraUX-v1.3.3-$asset"
+            test -s "TundraUX3-v1.3.3-$asset"
           done
           test "$(find . -maxdepth 1 -type f | wc -l)" -eq 6
           for checksum in *.sha256; do
