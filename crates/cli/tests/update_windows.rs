@@ -103,11 +103,11 @@ fn windows_update_keeps_original_process_alive_through_replacement_and_rollback(
             "committed"
         };
         let deadline = Instant::now() + Duration::from_secs(5);
+        // Windows can briefly lock the journal while the helper replaces it.
         while ready.is_ok()
-            && !fs::read_to_string(&staged.manifest_path)
-                .unwrap()
-                .contains(expected_state)
             && Instant::now() < deadline
+            && !fs::read_to_string(&staged.manifest_path)
+                .is_ok_and(|journal| journal.contains(expected_state))
         {
             std::thread::sleep(Duration::from_millis(20));
         }
