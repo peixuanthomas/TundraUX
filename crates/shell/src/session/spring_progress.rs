@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use std::time::Duration;
 use ui::animate::{Time, Tween};
-use ui::{MotionFrame, SettingsViewModel, SystemStatusViewModel};
+use ui::{MotionFrame, SettingsUpdatePanel, SettingsViewModel, SystemStatusViewModel};
 
 /// Frame-persistent visual state, kept out of AppState and persisted preferences.
 #[derive(Default)]
@@ -29,9 +29,14 @@ impl SpringProgress {
         frame: MotionFrame,
     ) -> bool {
         let mut seen = HashSet::new();
-        if let Some(activity) = settings
-            .and_then(|model| model.update.as_mut())
-            .and_then(|update| update.activity.as_mut())
+        if let Some(activity) =
+            settings
+                .and_then(|model| model.update.as_mut())
+                .and_then(|update| match &mut update.panel {
+                    SettingsUpdatePanel::Idle => None,
+                    SettingsUpdatePanel::Release { activity, .. }
+                    | SettingsUpdatePanel::Source { activity, .. } => Some(activity),
+                })
         {
             for (key, meter) in [
                 ("update.download", &mut activity.download),

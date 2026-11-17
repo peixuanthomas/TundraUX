@@ -10,26 +10,38 @@ impl ShellSession {
         let global_enabled = self.can_change_global_settings();
         let identity = app::update::current_build_identity();
         let unavailable_reason = self.system_settings_unavailable_reason(state.category);
-        let cards = if let Some(reason) = unavailable_reason.as_deref() {
-            system_device_cards(state.category, reason)
-        } else if state.category == ui::SettingsCategory::Update {
-            update_settings_cards(
+        let (cards, update) = if state.category == ui::SettingsCategory::Update {
+            let update_platform = if cfg!(target_os = "linux") {
+                PlatformKind::Linux
+            } else if cfg!(windows) {
+                PlatformKind::Windows
+            } else {
+                PlatformKind::Unsupported
+            };
+            let (cards, update) = update_settings_view(
                 &identity,
                 &self.settings_update_state,
+                update_platform,
                 self.settings_task_runtime.update_supported(),
                 global_enabled,
-            )
+            );
+            (cards, Some(update))
         } else {
-            settings_cards(
-                state,
-                config,
-                appearance,
-                global_enabled,
-                self.ascii_assets.theme_id(),
-                self.terminal_image_support,
-                &self.language_options(),
-                (self.platform_kind == PlatformKind::Linux).then_some(&state.system_time),
-            )
+            let cards = if let Some(reason) = unavailable_reason.as_deref() {
+                system_device_cards(state.category, reason)
+            } else {
+                settings_cards(
+                    state,
+                    config,
+                    appearance,
+                    global_enabled,
+                    self.ascii_assets.theme_id(),
+                    self.terminal_image_support,
+                    &self.language_options(),
+                    (self.platform_kind == PlatformKind::Linux).then_some(&state.system_time),
+                )
+            };
+            (cards, None)
         };
         let picker = state.picker.as_ref().map(|picker| {
             let options = settings_picker_options(picker, &self.language_options());
@@ -95,62 +107,6 @@ impl ShellSession {
                 validating: editor.validating,
             }
         });
-        let update = (state.category == ui::SettingsCategory::Update).then(|| {
-            let check = self.settings_update_state.check_result.as_ref();
-            let replacement = identity.dirty
-                || check.is_some_and(|result| {
-                    !matches!(result.relation, app::update::UpdateRelation::Behind { .. })
-                });
-            ui::SettingsUpdateViewModel {
-                summary_title: check
-                    .filter(|result| result.release.is_some())
-                    .map(|_| i18n::tr!("settings-release-latest")),
-                activity: self
-                    .settings_update_state
-                    .activity
-                    .clone()
-                    .map(|mut activity| {
-                        activity.show_build_details = cfg!(windows)
-                            || self.settings_update_state.mode == storage::LinuxUpdateMode::Beta;
-                        activity
-                    }),
-                commits: check
-                    .map(|result| {
-                        result
-                            .commits
-                            .iter()
-                            .map(|commit| ui::SettingsUpdateCommitViewModel {
-                                sha: short_sha(&commit.sha),
-                                message: commit.message.clone(),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                empty_message: self.settings_update_state.status.render_current(),
-                confirmation: self.settings_update_state.confirmation_open.then(|| {
-                    ui::SettingsUpdateConfirmationViewModel {
-                        title: if replacement {
-                            i18n::tr!("settings-replace-github")
-                        } else {
-                            i18n::tr!("settings-install-update")
-                        },
-                        body: if check.is_some_and(|value| value.release.is_some()) {
-                            i18n::tr!("settings-release-install-body")
-                        } else if replacement {
-                            i18n::tr!("settings-update-replace-body")
-                        } else {
-                            i18n::tr!("settings-update-install-body")
-                        },
-                        confirm_label: if replacement {
-                            i18n::tr!("settings-replace-restart")
-                        } else {
-                            i18n::tr!("settings-update-restart")
-                        },
-                        confirm_selected: self.settings_update_state.confirm_selected,
-                    }
-                }),
-            }
-        });
         Some(ui::SettingsViewModel {
             focus: state.focus,
             form_selected: state.form_selected,
@@ -162,7 +118,16 @@ impl ShellSession {
             status: if let Some(reason) = unavailable_reason.as_ref() {
                 reason.clone()
             } else if state.category == ui::SettingsCategory::Update {
-                self.settings_update_state.status.render_current()
+                if update
+                    .as_ref()
+                    .is_some_and(|update| update.panel == ui::SettingsUpdatePanel::Idle)
+                    && self.settings_update_state.check_result.is_some()
+                    && self.settings_update_state.error.is_none()
+                {
+                    String::new()
+                } else {
+                    self.settings_update_state.status.render_current()
+                }
             } else {
                 state.status.render_current()
             },
@@ -199,179 +164,156 @@ impl ShellSession {
     }
 }
 
-pub(super) fn update_settings_cards(
+pub(super) fn update_settings_view(
     identity: &app::update::BuildIdentity,
     update: &SettingsUpdateState,
+    platform: PlatformKind,
     supported: bool,
     admin: bool,
-) -> Vec<ui::SettingsCardViewModel> {
+) -> (Vec<ui::SettingsCardViewModel>, ui::SettingsUpdateViewModel) {
+    use app::update::{UpdatePhase, UpdateRelation};
     use ui::{
         SettingsCardViewModel as Card, SettingsControlKind as Kind, SettingsField as Field,
-        SettingsItemViewModel as Item,
+        SettingsItemViewModel as Item, SettingsUpdatePanel as Panel,
     };
-    let release_mode =
-        cfg!(target_os = "linux") && update.mode == storage::LinuxUpdateMode::Release;
+    let source = platform == PlatformKind::Windows
+        || platform == PlatformKind::Linux && update.mode == storage::LinuxUpdateMode::Beta;
+    let check = update.check_result.as_ref();
+    let release = check.and_then(|check| check.release.as_ref());
+    let available = update.build_available(identity);
+    let working = update.busy || update.phase == Some(UpdatePhase::WaitingForRestart);
     let local_sha = identity
         .commit_sha
         .as_deref()
-        .map(str::to_string)
+        .map(short_sha)
         .unwrap_or_else(|| i18n::tr!("settings-unknown"));
-    let local_state = if identity.dirty {
-        i18n::tr!("settings-dirty")
-    } else {
-        i18n::tr!("settings-clean")
-    };
-    let (remote_value, remote_description) = update
-        .check_result
-        .as_ref()
-        .map(|result| {
-            let checked = update
-                .checked_at
-                .map(|value| value.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                .unwrap_or_else(|| i18n::tr!("settings-unknown-time"));
-            (
-                format!(
-                    "{} @ {}",
-                    result.default_branch,
-                    short_sha(&result.head_sha)
-                ),
-                i18n::tr!(
-                    "settings-remote-build-details",
-                    sha = result.head_sha.clone(),
-                    checked = checked,
-                    relation = checked_update_label(result).render_current()
-                ),
-            )
-        })
-        .unwrap_or_else(|| {
-            (
-                i18n::tr!("settings-not-checked"),
-                i18n::tr!("settings-check-help"),
-            )
-        });
-    let identity_requires_replacement = identity.dirty
-        || identity.commit_sha.is_none()
-        || update.check_result.as_ref().is_some_and(|result| {
-            matches!(
-                result.relation,
-                app::update::UpdateRelation::Ahead { .. }
-                    | app::update::UpdateRelation::Diverged { .. }
-                    | app::update::UpdateRelation::Unknown
-            )
-        });
-    let can_start = supported
-        && admin
-        && !update.busy
-        && update.check_result.as_ref().is_some_and(|result| {
-            identity.dirty || !matches!(result.relation, app::update::UpdateRelation::Identical)
-        });
-    let start_label = if update
-        .check_result
-        .as_ref()
-        .is_some_and(|result| matches!(result.relation, app::update::UpdateRelation::Identical))
-        && !identity.dirty
+    let mut build = format!("{} ({local_sha})", identity.package_version);
+    if !source
+        && available
+        && let Some((release, check)) = release.zip(check)
     {
-        i18n::tr!("settings-up-to-date")
-    } else if identity_requires_replacement {
-        i18n::tr!("settings-replace-github")
-    } else {
-        i18n::tr!("settings-start-update")
-    };
-    let mut cards = vec![
-        Card::new(
-            i18n::tr!("settings-installed-build"),
-            vec![Item::new(
-                Field::InstalledVersion,
-                i18n::tr!("settings-version"),
-                format!("{} ({})", identity.package_version, short_sha(&local_sha)),
-                i18n::tr!(
-                    "settings-local-build-details",
-                    sha = local_sha,
-                    state = local_state
-                ),
-                Kind::ReadOnly,
-            )],
-        ),
-        Card::new(
-            if release_mode {
-                i18n::tr!("settings-release-latest")
-            } else if cfg!(target_os = "linux") {
-                "GitHub master".into()
-            } else {
-                i18n::tr!("settings-github-default-branch")
-            },
-            vec![Item::new(
-                Field::RemoteVersion,
-                if release_mode {
-                    i18n::tr!("settings-version")
-                } else {
-                    i18n::tr!("settings-latest-commit")
-                },
-                remote_value,
-                remote_description,
-                Kind::ReadOnly,
-            )],
-        ),
-        Card::new(
-            i18n::tr!("settings-actions"),
-            vec![
-                Item::new(
-                    Field::CheckUpdates,
-                    i18n::tr!("settings-check-again"),
-                    if update.busy {
-                        i18n::tr!("settings-working")
-                    } else {
-                        i18n::tr!("settings-check-github")
-                    },
-                    if cfg!(target_os = "linux") {
-                        i18n::tr!("settings-check-mode-description")
-                    } else {
-                        i18n::tr!("settings-check-description")
-                    },
-                    Kind::Action,
-                )
-                .enabled(supported && !update.busy),
-                Item::new(
-                    Field::StartUpdate,
-                    start_label,
-                    if admin {
-                        i18n::tr!("settings-confirm-once")
-                    } else {
-                        i18n::tr!("settings-admin-only")
-                    },
-                    "",
-                    Kind::Action,
-                )
-                .enabled(can_start),
-            ],
-        ),
-    ];
-    if cfg!(target_os = "linux") {
-        cards.insert(
-            0,
-            Card::new(
-                i18n::tr!("settings-update-mode"),
-                vec![
-                    Item::new(
-                        Field::UpdateMode,
-                        i18n::tr!("settings-update-mode"),
-                        match update.mode {
-                            storage::LinuxUpdateMode::Release => {
-                                i18n::tr!("settings-update-mode-release")
-                            }
-                            storage::LinuxUpdateMode::Beta => {
-                                i18n::tr!("settings-update-mode-beta")
-                            }
-                        },
-                        i18n::tr!("settings-update-mode-help"),
-                        Kind::Action,
-                    )
-                    .enabled(admin && !update.busy),
-                ],
-            ),
+        build = format!(
+            "{build} → {} ({})",
+            release.version,
+            short_sha(&check.head_sha)
         );
     }
-    cards
+    let mut items = Vec::new();
+    if matches!(platform, PlatformKind::Linux | PlatformKind::Windows) {
+        let linux = platform == PlatformKind::Linux;
+        items.push(
+            Item::new(
+                Field::UpdateMode,
+                i18n::tr!("settings-update-mode"),
+                if !linux {
+                    i18n::tr!("settings-update-mode-source")
+                } else if source {
+                    i18n::tr!("settings-update-mode-beta")
+                } else {
+                    i18n::tr!("settings-update-mode-release")
+                },
+                i18n::tr!("settings-update-mode-help"),
+                if linux { Kind::Action } else { Kind::ReadOnly },
+            )
+            .enabled(!linux || admin && !working),
+        );
+    }
+    items.push(Item::new(
+        Field::InstalledVersion,
+        i18n::tr!("settings-current-build"),
+        build,
+        "",
+        Kind::ReadOnly,
+    ));
+    if source {
+        items.push(Item::new(
+            Field::RemoteVersion,
+            i18n::tr!("settings-remote-build"),
+            check
+                .map(|check| format!("{} @ {}", check.default_branch, short_sha(&check.head_sha)))
+                .unwrap_or_else(|| i18n::tr!("settings-not-checked")),
+            "",
+            Kind::ReadOnly,
+        ));
+    }
+
+    let mut activity = update.activity.clone().unwrap_or_default();
+    activity.show_build_details = source;
+    let panel = if source {
+        let tree = check.and_then(|check| check.git_tree.as_ref());
+        let message = match tree {
+            Some(Err(reason)) => {
+                i18n::tr!("settings-git-tree-unavailable", reason = reason.clone())
+            }
+            _ => update.status.render_current(),
+        };
+        Panel::Source {
+            rows: tree
+                .and_then(|tree| tree.as_ref().ok())
+                .cloned()
+                .unwrap_or_default(),
+            message,
+            selected: update.git_selected,
+            offset: update.git_offset,
+            selectable: !working,
+            activity,
+        }
+    } else if available && release.is_some() {
+        Panel::Release {
+            notes: check
+                .and_then(|check| check.commits.first())
+                .map(|notes| notes.message.clone())
+                .unwrap_or_default(),
+            activity,
+        }
+    } else {
+        Panel::Idle
+    };
+    let action = (!matches!(panel, Panel::Idle)).then(|| {
+        Item::new(
+            Field::StartUpdate,
+            if source {
+                i18n::tr!("settings-build-selected")
+            } else {
+                i18n::tr!("settings-start-update")
+            },
+            "",
+            "",
+            Kind::Action,
+        )
+        .enabled(supported && admin && available && !working)
+    });
+    let confirmation = update
+        .confirmed_sha
+        .as_ref()
+        .zip(check)
+        .map(|(sha, check)| {
+            let replacement = identity.dirty
+                || !matches!(check.relation, UpdateRelation::Behind { .. })
+                || sha != &check.head_sha;
+            ui::SettingsUpdateConfirmationViewModel {
+                title: if replacement {
+                    i18n::tr!("settings-replace-github")
+                } else {
+                    i18n::tr!("settings-install-update")
+                },
+                body: if release.is_some() {
+                    i18n::tr!("settings-release-install-body")
+                } else {
+                    i18n::tr!("settings-build-selected-body", sha = sha.clone())
+                },
+                confirm_label: i18n::tr!("settings-confirm"),
+                confirm_selected: update.confirm_selected,
+            }
+        });
+    (
+        vec![Card::new("", items)],
+        ui::SettingsUpdateViewModel {
+            panel,
+            action,
+            confirmation,
+        },
+    )
 }
 
 pub(super) fn short_sha(value: &str) -> String {

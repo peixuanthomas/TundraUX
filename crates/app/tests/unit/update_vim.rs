@@ -222,6 +222,7 @@ fn source_updates_build_vim_only_when_its_pin_changes_or_no_complete_engine_exis
         }
         let check = UpdateCheckResult {
             release: None,
+            git_tree: None,
             default_branch: "master".into(),
             head_sha: "a".repeat(40),
             relation: UpdateRelation::Behind { remote_ahead: 1 },

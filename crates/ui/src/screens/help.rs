@@ -229,6 +229,11 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("←→↑↓", i18n::tr!("ui-help-settings-adjust")),
                     row("Tab / Shift+Tab", i18n::tr!("ui-help-settings-section")),
                     row("←→ / 0–9 / Enter", i18n::tr!("ui-help-settings-number")),
+                    row("F5", i18n::tr!("ui-help-settings-update-refresh")),
+                    row(
+                        "↑↓ / PgUp PgDn / Enter",
+                        i18n::tr!("ui-help-settings-update-tree"),
+                    ),
                 ]),
             ],
         ),

@@ -46,15 +46,12 @@ impl<'a> UpdateActivity<'a> {
         Self(model)
     }
 
-    pub fn height(&self) -> u16 {
-        if self.0.show_build_details { 15 } else { 2 }
-    }
-
     pub fn render_scrolled(
         &self,
         frame: &mut Frame<'_>,
         clip: Rect,
         y: i32,
+        height: u16,
         context: &RenderContext,
     ) {
         let progress_height = if self.0.show_build_details { 3 } else { 2 };
@@ -92,27 +89,31 @@ impl<'a> UpdateActivity<'a> {
         if !self.0.show_build_details {
             return;
         }
-        let log_y = y + 4;
+        let log_y = y + i32::from(progress_height);
+        let log_height = height.saturating_sub(progress_height);
+        let output_height = log_height.saturating_sub(1);
         Surface::new()
             .titled(i18n::tr!("ui-components-live-output-padded"))
-            .render_scrolled_frame(frame, clip, log_y, 11, context);
+            .render_scrolled_frame(frame, clip, log_y, log_height, context);
         if let Some((area, skipped)) =
-            visible_scrolled_rect(clip.x, log_y + 1, clip.width, 10, clip)
+            visible_scrolled_rect(clip.x, log_y + 1, clip.width, output_height, clip)
         {
-            let rows = self
-                .0
-                .output
-                .iter()
-                .map(|line| vec![line.clone()])
-                .collect::<Vec<_>>();
-            let start = rows
+            let lines = &self.0.output;
+            let start = lines
                 .len()
-                .saturating_sub(10)
+                .saturating_sub(usize::from(output_height))
                 .saturating_add(usize::from(skipped));
+            let rows = lines
+                .iter()
+                .skip(start)
+                .take(usize::from(area.height))
+                .map(|line| vec![line.clone()]);
             let mut table = DataTable::new("settings.update.output", Vec::<String>::new(), rows)
                 .show_header(false)
-                .bordered(false)
-                .with_viewport_start(start);
+                .bordered(false);
+            table.row_ids = (start..start + table.rows.len())
+                .map(|index| index.to_string())
+                .collect();
             table.selected = None;
             table.interactive = false;
             table.render_frame(frame, area, context);

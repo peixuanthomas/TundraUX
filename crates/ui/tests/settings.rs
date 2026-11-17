@@ -14,10 +14,9 @@ use ui::{
     SettingsColorEditorViewModel, SettingsControlKind, SettingsField,
     SettingsFileExtensionsEditorViewModel, SettingsHitTarget, SettingsItemViewModel,
     SettingsPickerKind, SettingsPickerOptionViewModel, SettingsPickerViewModel,
-    SettingsTimeSyncServerEditorViewModel, SettingsUpdateCommitViewModel,
-    SettingsUpdateConfirmationViewModel, SettingsUpdateViewModel, SettingsViewModel,
-    ShellChromeViewModel, StatusViewModel, TundraTheme, render_settings, settings_hit_test,
-    settings_layout,
+    SettingsTimeSyncServerEditorViewModel, SettingsUpdateConfirmationViewModel,
+    SettingsUpdatePanel, SettingsUpdateViewModel, SettingsViewModel, ShellChromeViewModel,
+    StatusViewModel, TundraTheme, render_settings, settings_hit_test, settings_layout,
 };
 
 #[test]
@@ -680,21 +679,19 @@ fn sample_model() -> SettingsViewModel {
 }
 
 #[test]
-fn update_commits_wrap_complete_messages_and_follow_detail_scroll() {
+fn release_notes_wrap_and_follow_detail_scroll() {
     let mut model = sample_model();
     model.selected_category = SettingsCategory::Update;
     model.cards.clear();
     model.update = Some(SettingsUpdateViewModel {
-        summary_title: None,
-        activity: None,
-        commits: vec![SettingsUpdateCommitViewModel {
-            sha: "1234567890abcdef".to_string(),
-            message: format!(
-                "First line\nsecond line keeps all of the commit message visible {}",
+        panel: SettingsUpdatePanel::Release {
+            notes: format!(
+                "First line\nsecond line keeps all of the release notes visible {}",
                 "with additional details ".repeat(80)
             ),
-        }],
-        empty_message: "No new commits".to_string(),
+            activity: Default::default(),
+        },
+        action: None,
         confirmation: None,
     });
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal");
@@ -710,7 +707,7 @@ fn update_commits_wrap_complete_messages_and_follow_detail_scroll() {
         })
         .expect("render update commits");
     let output = terminal_output(&terminal);
-    assert!(output.contains("12345678"));
+    assert!(output.contains("First line"));
     let main = match ui::compute_shell_layout(Rect::new(0, 0, 80, 24)) {
         ui::ShellLayout::Full { main, .. } | ui::ShellLayout::Compact(main) => main,
     };
@@ -726,10 +723,10 @@ fn update_commits_wrap_complete_messages_and_follow_detail_scroll() {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    for part in ["First line", "second line", "commit message visible"] {
+    for part in ["First line", "second line", "release notes visible"] {
         assert!(
             content.contains(part),
-            "missing wrapped commit text: {part}: {content}"
+            "missing wrapped release notes: {part}: {content}"
         );
     }
 
@@ -742,7 +739,7 @@ fn update_commits_wrap_complete_messages_and_follow_detail_scroll() {
             row.iter()
                 .map(|cell| cell.symbol())
                 .collect::<String>()
-                .contains("12345678")
+                .contains("First line")
         })
         .expect("commit row");
     model.scroll_offset = 1;
@@ -766,7 +763,7 @@ fn update_commits_wrap_complete_messages_and_follow_detail_scroll() {
             row.iter()
                 .map(|cell| cell.symbol())
                 .collect::<String>()
-                .contains("12345678")
+                .contains("First line")
         })
         .expect("scrolled commit row");
     assert!(second_row < first_row);
@@ -778,10 +775,8 @@ fn update_confirmation_draws_complete_buttons_and_blocks_underlying_hits() {
         for (width, height) in [(50, 12), (80, 24), (120, 32)] {
             let mut model = sample_model();
             model.update = Some(SettingsUpdateViewModel {
-        summary_title: None,
-                activity: None,
-                commits: Vec::new(),
-                empty_message: "Up to date".to_string(),
+                panel: SettingsUpdatePanel::Idle,
+                action: None,
                 confirmation: Some(SettingsUpdateConfirmationViewModel {
                     title: "Install update?".to_string(),
                     body: "The source will be downloaded and compiled.\nThe app will restart immediately.".to_string(),
@@ -852,16 +847,20 @@ fn release_update_shows_download_and_notes_without_build_panels_or_blank_space()
     model.selected_category = SettingsCategory::Update;
     model.cards.clear();
     model.update = Some(SettingsUpdateViewModel {
-        summary_title: Some("Release notes".into()),
-        activity: Some(ui::components::UpdateActivityViewModel {
-            output: vec!["compiler diagnostic".into()],
-            ..Default::default()
-        }),
-        commits: vec![ui::SettingsUpdateCommitViewModel {
-            sha: "1.5.0".into(),
-            message: "Update fixes".into(),
-        }],
-        empty_message: String::new(),
+        panel: SettingsUpdatePanel::Release {
+            notes: "Update fixes".into(),
+            activity: ui::components::UpdateActivityViewModel {
+                output: vec!["compiler diagnostic".into()],
+                ..Default::default()
+            },
+        },
+        action: Some(SettingsItemViewModel::new(
+            SettingsField::StartUpdate,
+            "Start update",
+            "",
+            "",
+            SettingsControlKind::Action,
+        )),
         confirmation: None,
     });
     for (width, height) in [(120, 40), (108, 20)] {
@@ -869,7 +868,19 @@ fn release_update_shows_download_and_notes_without_build_panels_or_blank_space()
         let main = match ui::compute_shell_layout(area) {
             ui::ShellLayout::Full { main, .. } | ui::ShellLayout::Compact(main) => main,
         };
-        assert_eq!(settings_layout(main, &model).max_scroll_offset, 0);
+        let layout = settings_layout(main, &model);
+        assert_eq!(layout.max_scroll_offset, 0);
+        let action = layout
+            .fields
+            .iter()
+            .find(|row| row.field == SettingsField::StartUpdate)
+            .unwrap();
+        assert_eq!(action.area.height, 3);
+        assert!(action.area.width >= 32);
+        assert_eq!(
+            settings_hit_test(&layout, (action.area.x, action.area.bottom() - 1)),
+            Some(SettingsHitTarget::Field(SettingsField::StartUpdate))
+        );
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
@@ -884,7 +895,7 @@ fn release_update_shows_download_and_notes_without_build_panels_or_blank_space()
             .unwrap();
         let output = terminal_output(&terminal);
         assert!(output.contains("Download: waiting"));
-        assert!(output.contains("Release notes"));
+        assert!(output.contains("Update notes"));
         assert!(output.contains("Update fixes"));
         assert!(!output.contains("Compilation"));
         assert!(!output.contains("Live output"));
@@ -900,23 +911,28 @@ fn update_activity_shows_both_meters_and_latest_output_with_page_scrolling() {
     model.cards.clear();
     model.status = "Compiling release executables".into();
     model.update = Some(SettingsUpdateViewModel {
-        summary_title: None,
-        activity: Some(UpdateActivityViewModel {
-            show_build_details: true,
-            download: UpdateMeterViewModel {
-                percent: Some(100),
-                display_basis_points: None,
-                label: "Download: 100%".into(),
+        panel: SettingsUpdatePanel::Source {
+            rows: Default::default(),
+            message: "Checking Git history".into(),
+            selected: None,
+            offset: 0,
+            selectable: false,
+            activity: UpdateActivityViewModel {
+                show_build_details: true,
+                download: UpdateMeterViewModel {
+                    percent: Some(100),
+                    display_basis_points: None,
+                    label: "Download: 100%".into(),
+                },
+                compilation: UpdateMeterViewModel {
+                    percent: Some(42),
+                    display_basis_points: Some(1200),
+                    label: "Compilation: 42%".into(),
+                },
+                output: (0..200).map(|n| format!("Compiling crate-{n}")).collect(),
             },
-            compilation: UpdateMeterViewModel {
-                percent: Some(42),
-                display_basis_points: Some(1200),
-                label: "Compilation: 42%".into(),
-            },
-            output: (0..200).map(|n| format!("Compiling crate-{n}")).collect(),
-        }),
-        commits: Vec::new(),
-        empty_message: "No new commits".into(),
+        },
+        action: None,
         confirmation: None,
     });
     for theme in [
@@ -947,7 +963,6 @@ fn update_activity_shows_both_meters_and_latest_output_with_page_scrolling() {
             ui::ShellLayout::Compact(main) => main,
         };
         let layout = settings_layout(main, &model);
-        assert!(layout.max_scroll_offset > 0);
         let mut small = Terminal::new(TestBackend::new(108, 20)).unwrap();
         model.scroll_offset = layout.max_scroll_offset;
         small
@@ -957,6 +972,95 @@ fn update_activity_shows_both_meters_and_latest_output_with_page_scrolling() {
             .unwrap();
         assert!(terminal_output(&small).contains("Compiling crate-199"));
         model.scroll_offset = 0;
+    }
+}
+
+#[test]
+fn update_git_tree_renders_merge_lines_and_only_targets_commit_rows() {
+    use app::update::{UpdateGitCommit, UpdateGitRow};
+
+    let commit = |sha: char, graph: &str, branches: &str, subject: &str| UpdateGitRow {
+        graph: graph.to_owned(),
+        commit: Some(UpdateGitCommit {
+            sha: sha.to_string().repeat(40),
+            branches: branches.to_owned(),
+            subject: subject.to_owned(),
+        }),
+    };
+    let rows: std::sync::Arc<[_]> = [
+        commit('a', "*   ", "master", "合并更新"),
+        UpdateGitRow {
+            graph: "|\\  ".into(),
+            commit: None,
+        },
+        commit('b', "| * ", "feature", "分支提交"),
+    ]
+    .into_iter()
+    .chain((0..20).map(|_| commit('c', "* ", "", "Earlier build")))
+    .collect();
+    let mut model = sample_model();
+    model.cards.clear();
+    model.selected_category = SettingsCategory::Update;
+    model.update = Some(SettingsUpdateViewModel {
+        panel: SettingsUpdatePanel::Source {
+            rows,
+            message: String::new(),
+            selected: Some(2),
+            offset: 0,
+            selectable: true,
+            activity: ui::components::UpdateActivityViewModel {
+                show_build_details: true,
+                ..Default::default()
+            },
+        },
+        action: None,
+        confirmation: None,
+    });
+    for (width, height) in [(108, 20), (64, 18)] {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let mut layout = None;
+        terminal
+            .draw(|frame| {
+                layout = Some(render_settings(
+                    frame,
+                    frame.area(),
+                    &chrome(),
+                    &model,
+                    &TundraTheme::default_dark(),
+                ));
+            })
+            .unwrap();
+        let layout = layout.unwrap();
+        let graph = layout
+            .update_content
+            .as_ref()
+            .unwrap()
+            .graph
+            .as_ref()
+            .unwrap();
+        let row = graph.rows;
+        assert!(graph.scrollbar.is_some());
+        assert_eq!(
+            settings_hit_test(&layout, (row.x, row.y)),
+            Some(SettingsHitTarget::UpdateCommit(0))
+        );
+        assert_eq!(settings_hit_test(&layout, (row.x, row.y + 1)), None);
+        assert_eq!(
+            settings_hit_test(&layout, (row.right() - 1, row.y + 2)),
+            Some(SettingsHitTarget::UpdateCommit(2))
+        );
+        for text in ["Git tree", "●", "│\\", "bbbbbbbb (feature)"] {
+            assert!(terminal_output(&terminal).contains(text), "missing {text}");
+        }
+        let buffer = terminal.backend().buffer();
+        let mut x = row.x;
+        let mut line = String::new();
+        while x < row.right() {
+            let cell = &buffer[(x, row.y + 2)];
+            line.push_str(cell.symbol());
+            x += cell.cell_width().max(1);
+        }
+        assert!(line.contains("bbbbbbbb (feature) 分支提交"), "{line}");
     }
 }
 

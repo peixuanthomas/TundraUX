@@ -447,6 +447,7 @@ pub(in crate::session) fn build_shell_hit_map(
                     .or(layout.weather_location_editor)
                     .or(layout.file_extensions_editor)
                     .or(layout.time_sync_server_editor)
+                    .or(layout.update_confirmation)
             }),
             _ => None,
         };

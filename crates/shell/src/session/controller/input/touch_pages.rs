@@ -5,6 +5,7 @@ enum TouchScroll {
     Settings,
     SettingsPicker,
     SettingsCategories,
+    SettingsUpdateTree,
     Clock,
     SetupPage,
     SetupZones,
@@ -179,6 +180,16 @@ impl ShellSession {
                             layout.category_capacity,
                             layout.category_window_start,
                         );
+                        if let Some(graph) = layout.update_content.and_then(|content| content.graph)
+                        {
+                            add(
+                                TouchScroll::SettingsUpdateTree,
+                                graph.scrollbar,
+                                graph.total,
+                                graph.capacity,
+                                graph.offset,
+                            );
+                        }
                     }
                 }
             }
@@ -429,6 +440,7 @@ impl ShellSession {
                     state.scroll_offset = offset.min(usize::from(u16::MAX)) as u16;
                 }
             }
+            TouchScroll::SettingsUpdateTree => self.settings_update_state.git_offset = offset,
             TouchScroll::SettingsPicker => {
                 if let Some(picker) = self
                     .pages

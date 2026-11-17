@@ -2,6 +2,88 @@ use super::*;
 use crate::session::*;
 
 impl ShellSession {
+    pub(super) fn select_update_commit(&mut self, index: usize) {
+        let update = &self.settings_update_state;
+        if update.busy || update.phase == Some(app::update::UpdatePhase::WaitingForRestart) {
+            return;
+        }
+        let Some(state) = self.pages.settings.settings_state.as_mut() else {
+            return;
+        };
+        state.focus = ui::SettingsFocus::Content;
+        state.selected_field = ui::SettingsField::UpdateGitTree;
+        self.settings_update_state.git_selected = Some(index);
+        self.reveal_selected_update_commit();
+    }
+
+    pub(super) fn reveal_selected_update_commit(&mut self) {
+        let Some(selected) = self.settings_update_state.git_selected else {
+            return;
+        };
+        let Some(graph) = self
+            .current_settings_layout()
+            .and_then(|layout| layout.update_content)
+            .and_then(|content| content.graph)
+        else {
+            return;
+        };
+        self.settings_update_state.git_offset = graph.offset.clamp(
+            selected.saturating_add(1).saturating_sub(graph.capacity),
+            selected,
+        );
+    }
+
+    pub(super) fn handle_update_graph_key(&mut self, key: &InputKey) -> bool {
+        let capacity = if matches!(key, InputKey::PageUp | InputKey::PageDown) {
+            self.current_settings_layout()
+                .and_then(|layout| layout.update_content)
+                .and_then(|content| content.graph)
+                .map_or(1, |graph| graph.capacity)
+        } else {
+            1
+        };
+        let update = &self.settings_update_state;
+        let Some(check) = &update.check_result else {
+            return false;
+        };
+        let rows = check.git_rows();
+        let Some(index) = update.git_selected.filter(|index| *index < rows.len()) else {
+            return false;
+        };
+        let first = || rows.iter().position(|row| row.commit.is_some());
+        let last = || rows.iter().rposition(|row| row.commit.is_some());
+        let selected = match key {
+            InputKey::Up => rows[..index].iter().rposition(|row| row.commit.is_some()),
+            InputKey::Down => rows[index + 1..]
+                .iter()
+                .position(|row| row.commit.is_some())
+                .map(|next| index + 1 + next),
+            InputKey::Home => first(),
+            InputKey::End => last(),
+            InputKey::PageUp => rows[..=index.saturating_sub(capacity)]
+                .iter()
+                .rposition(|row| row.commit.is_some())
+                .or_else(first),
+            InputKey::PageDown => {
+                let start = (index + capacity).min(rows.len() - 1);
+                rows[start..]
+                    .iter()
+                    .position(|row| row.commit.is_some())
+                    .map(|next| start + next)
+                    .or_else(last)
+            }
+            InputKey::Enter | InputKey::Char(' ') => {
+                self.open_update_confirmation();
+                return true;
+            }
+            _ => return false,
+        };
+        if let Some(index) = selected {
+            self.select_update_commit(index);
+        }
+        true
+    }
+
     pub(in crate::session) fn cancel_update(&mut self) {
         self.update_restart_requested = false;
         match self.settings_task_runtime.cancel_update() {
@@ -10,7 +92,7 @@ impl ShellSession {
                 // Clear the restart request immediately. The worker remains
                 // registered until its processes and private files are gone.
                 self.update_apply_manifest = None;
-                self.settings_update_state.confirmation_open = false;
+                self.settings_update_state.confirmed_sha = None;
                 self.settings_update_state.busy = true;
                 self.settings_update_state.phase = Some(app::update::UpdatePhase::Cancelling);
                 self.settings_update_state.status = i18n::msg!("settings-update-cancelling").into();
@@ -79,9 +161,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn begin_update_check(&mut self) {
-        self.settings_update_state.checked_once = true;
-        self.settings_update_state.confirmation_open = false;
-        self.settings_update_state.error = None;
+        self.settings_update_state.confirmed_sha = None;
         if !self.settings_task_runtime.update_supported() {
             self.settings_update_state.status = i18n::msg!("settings-update-unsupported").into();
             self.settings_update_state.phase = None;
@@ -91,8 +171,11 @@ impl ShellSession {
             self.settings_update_state.status = i18n::msg!("settings-update-running").into();
             return;
         }
+        self.settings_update_state.error = None;
+        self.settings_update_state.activity = None;
         self.settings_update_state.check_result = None;
-        self.settings_update_state.checked_at = None;
+        self.settings_update_state.git_selected = None;
+        self.settings_update_state.git_offset = 0;
         match self.settings_task_runtime.submit_update_check(
             app::update::current_build_identity(),
             self.settings_update_state.mode,
@@ -109,6 +192,10 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn open_update_confirmation(&mut self) {
+        if self.settings_update_state.busy || self.settings_task_runtime.update_busy() {
+            self.notify_status(i18n::msg!("settings-update-wait"));
+            return;
+        }
         if !self.settings_task_runtime.update_supported() {
             self.set_update_error(i18n::msg!("settings-update-unsupported"));
             return;
@@ -117,39 +204,39 @@ impl ShellSession {
             self.set_update_error(i18n::msg!("settings-update-admin-required"));
             return;
         }
-        if self.settings_update_state.busy {
-            self.set_update_error(i18n::msg!("settings-update-wait"));
-            return;
-        }
-        let Some(check) = self.settings_update_state.check_result.as_ref() else {
+        let Some(sha) = self.settings_update_state.selected_build() else {
             self.set_update_error(i18n::msg!("settings-update-check-first"));
             return;
         };
         let identity = app::update::current_build_identity();
-        if matches!(check.relation, app::update::UpdateRelation::Identical) && !identity.dirty {
+        if !self.settings_update_state.build_available(&identity) {
             self.settings_update_state.status = i18n::msg!("settings-update-current-build").into();
             return;
         }
-        self.settings_update_state.confirmation_open = true;
+        self.settings_update_state.confirmed_sha = Some(sha.to_owned());
         self.settings_update_state.confirm_selected = true;
     }
 
     pub(in crate::session) fn cancel_update_confirmation(&mut self) {
-        self.settings_update_state.confirmation_open = false;
+        self.settings_update_state.confirmed_sha = None;
         self.settings_update_state.confirm_selected = true;
         self.settings_update_state.status = i18n::msg!("settings-update-cancelled").into();
     }
 
     pub(in crate::session) fn begin_confirmed_update(&mut self) {
-        if !self.settings_update_state.confirmation_open {
+        let Some(sha) = self.settings_update_state.confirmed_sha.take() else {
             return;
-        }
-        self.settings_update_state.confirmation_open = false;
+        };
         if !self.can_change_global_settings() {
             self.set_update_error(i18n::msg!("settings-update-admin-required"));
             return;
         }
-        let Some(check) = self.settings_update_state.check_result.clone() else {
+        let Some(check) = self
+            .settings_update_state
+            .check_result
+            .as_ref()
+            .and_then(|check| check.for_selected_build(&sha))
+        else {
             self.set_update_error(i18n::msg!("settings-update-check-expired"));
             return;
         };
@@ -259,9 +346,15 @@ impl ShellSession {
                     self.settings_update_state.busy = false;
                     self.settings_update_state.phase = None;
                     self.settings_update_state.error = None;
-                    self.settings_update_state.checked_at = Some(Utc::now());
                     self.settings_update_state.status = checked_update_label(&result).into();
+                    self.settings_update_state.git_selected =
+                        result.git_rows().iter().position(|row| {
+                            row.commit
+                                .as_ref()
+                                .is_some_and(|commit| commit.sha == result.head_sha)
+                        });
                     self.settings_update_state.check_result = Some(result);
+                    self.reveal_selected_update_commit();
                 }
                 SettingsUpdateTaskEvent::CheckCompleted(Err(error))
                 | SettingsUpdateTaskEvent::PrepareCompleted(Err(error)) => {

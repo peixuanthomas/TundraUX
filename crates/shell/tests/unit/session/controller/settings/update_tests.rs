@@ -1,47 +1,37 @@
 use super::*;
 
 #[test]
-fn update_view_shows_build_details_only_for_source_updates() {
-    let mut session = ShellSession::new_for_home_mode(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        ShellHomeMode::User,
+fn release_view_only_shows_metadata_until_an_update_is_available() {
+    use ui::{SettingsField, SettingsUpdatePanel};
+    let identity = app::update::BuildIdentity {
+        package_version: "1.2.3".into(),
+        commit_sha: Some("a".repeat(40)),
+        dirty: false,
+    };
+    let mut state = checked_update_state(app::update::UpdateRelation::Identical);
+    let (cards, view) = update_settings_view(&identity, &state, PlatformKind::Linux, true, true);
+    assert_eq!(
+        cards[0]
+            .items
+            .iter()
+            .map(|item| item.field)
+            .collect::<Vec<_>>(),
+        [SettingsField::UpdateMode, SettingsField::InstalledVersion],
     );
-    session.app.dispatch_at(
-        app::AppCommand::SetActiveAppearance(Some(Default::default())),
-        Instant::now(),
-    );
-    session.pages.settings.settings_state = Some(SettingsState {
-        focus: Default::default(),
-        form_selected: 0,
-        form_interaction: Default::default(),
-        application: Default::default(),
-        system_time: Default::default(),
-        animation_editor: None,
-        number_editor: None,
-        category: ui::SettingsCategory::Update,
-        selected_field: ui::SettingsField::InstalledVersion,
-        status: "Ready".into(),
-        scroll_offset: 0,
-        picker: None,
-        color_editor: None,
-        weather_location_editor: None,
-        file_extensions_editor: None,
-        time_sync_server_editor: None,
-        time_sync_validation_request_id: None,
-    });
-    session.settings_update_state.activity = Some(Default::default());
-    for mode in [
-        storage::LinuxUpdateMode::Release,
-        storage::LinuxUpdateMode::Beta,
-    ] {
-        session.settings_update_state.mode = mode;
-        let model = session.to_settings_view_model().unwrap();
-        assert_eq!(
-            model.update.unwrap().activity.unwrap().show_build_details,
-            cfg!(windows) || mode == storage::LinuxUpdateMode::Beta,
-        );
-    }
+    assert_eq!(cards[0].items[1].value, "1.2.3 (aaaaaaa)");
+    assert_eq!(view.panel, SettingsUpdatePanel::Idle);
+    assert!(view.action.is_none());
+
+    state.check_result.as_mut().unwrap().relation =
+        app::update::UpdateRelation::Behind { remote_ahead: 1 };
+    let (cards, view) = update_settings_view(&identity, &state, PlatformKind::Linux, true, true);
+    assert_eq!(cards[0].items[1].value, "1.2.3 (aaaaaaa) → 1.3.0 (bbbbbbb)");
+    let SettingsUpdatePanel::Release { notes, activity } = view.panel else {
+        panic!("expected a release offer");
+    };
+    assert_eq!(notes, "Release notes\nwith body");
+    assert!(!activity.show_build_details);
+    assert!(view.action.unwrap().enabled);
 }
 
 #[test]
@@ -145,19 +135,15 @@ fn prepared_update_without_auto_admin_still_restarts_immediately() {
 fn busy_update_disables_mode_switch_and_start() {
     let mut state = checked_update_state(app::update::UpdateRelation::Behind { remote_ahead: 1 });
     state.busy = true;
-    let cards = update_settings_cards(&app::update::current_build_identity(), &state, true, true);
-    assert!(
-        cards
-            .iter()
-            .flat_map(|c| &c.items)
-            .filter(|i| matches!(
-                i.field,
-                ui::SettingsField::UpdateMode
-                    | ui::SettingsField::StartUpdate
-                    | ui::SettingsField::CheckUpdates
-            ))
-            .all(|i| !i.enabled)
+    let (cards, view) = update_settings_view(
+        &app::update::current_build_identity(),
+        &state,
+        PlatformKind::Linux,
+        true,
+        true,
     );
+    assert!(!cards[0].items[0].enabled);
+    assert!(!view.action.unwrap().enabled);
 }
 
 fn settings_language_snapshots() -> Vec<std::sync::Arc<i18n::LanguageSnapshot>> {
@@ -281,12 +267,8 @@ fn update_cards_and_picker_labels_rerender_without_changing_action_or_color_valu
         ("开始更新", "自定义颜色…"),
     ]) {
         let _language = i18n::enter_snapshot(snapshot);
-        let cards = update_settings_cards(&identity, &update, true, true);
-        let start = cards
-            .iter()
-            .flat_map(|card| &card.items)
-            .find(|item| item.field == ui::SettingsField::StartUpdate)
-            .unwrap();
+        let (_, view) = update_settings_view(&identity, &update, PlatformKind::Linux, true, true);
+        let start = view.action.unwrap();
         assert_eq!(start.label, start_label);
         assert!(start.enabled);
         let options = settings_picker_options(&picker, &[]);
@@ -299,95 +281,76 @@ fn update_cards_and_picker_labels_rerender_without_changing_action_or_color_valu
 
 fn checked_update_state(relation: app::update::UpdateRelation) -> SettingsUpdateState {
     SettingsUpdateState {
-        mode: storage::LinuxUpdateMode::default(),
-        activity: None,
         check_result: Some(app::update::UpdateCheckResult {
-            release: None,
-            default_branch: "master".to_string(),
-            head_sha: "abcdef1234567890".to_string(),
+            release: Some(app::update::ReleaseUpdate {
+                version: "1.3.0".into(),
+                archive_name: String::new(),
+                archive_url: String::new(),
+                checksum_url: String::new(),
+            }),
+            git_tree: None,
+            default_branch: "v1.3.0".into(),
+            head_sha: "b".repeat(40),
             relation,
             commits: vec![app::update::UpdateCommit {
-                sha: "abcdef1234567890".to_string(),
-                message: "Complete commit message\nwith body".to_string(),
+                sha: "b".repeat(40),
+                message: "Release notes\nwith body".into(),
             }],
         }),
-        checked_at: Some(Utc::now()),
-        phase: None,
-        status: "Checked".into(),
-        error: None,
-        confirmation_open: false,
-        confirm_selected: true,
-        busy: false,
-        checked_once: true,
+        ..Default::default()
     }
 }
 
 #[test]
 fn update_settings_enable_install_only_for_supported_admin_builds() {
     let identity = app::update::BuildIdentity {
-        package_version: "0.1.1".to_string(),
-        commit_sha: Some("1111111111111111".to_string()),
+        package_version: "1.2.3".into(),
+        commit_sha: Some("a".repeat(40)),
         dirty: false,
     };
     let update = checked_update_state(app::update::UpdateRelation::Behind { remote_ahead: 1 });
-    let admin_cards = update_settings_cards(&identity, &update, true, true);
-    let admin_start = admin_cards
-        .iter()
-        .flat_map(|card| &card.items)
-        .find(|item| item.field == ui::SettingsField::StartUpdate)
-        .unwrap();
-    assert!(admin_start.enabled);
-    assert_eq!(admin_start.label, "Start update");
-
-    let user_cards = update_settings_cards(&identity, &update, true, false);
-    let user_start = user_cards
-        .iter()
-        .flat_map(|card| &card.items)
-        .find(|item| item.field == ui::SettingsField::StartUpdate)
-        .unwrap();
-    assert!(!user_start.enabled);
-
-    let unsupported = update_settings_cards(&identity, &update, false, true);
-    assert!(
-        unsupported
-            .iter()
-            .flat_map(|card| &card.items)
-            .filter(|item| {
-                matches!(
-                    item.field,
-                    ui::SettingsField::CheckUpdates | ui::SettingsField::StartUpdate
-                )
-            })
-            .all(|item| !item.enabled)
-    );
+    for (supported, admin) in [(true, true), (true, false), (false, true)] {
+        let (_, view) =
+            update_settings_view(&identity, &update, PlatformKind::Linux, supported, admin);
+        assert_eq!(view.action.unwrap().enabled, supported && admin);
+    }
 }
 
 #[test]
-fn update_settings_warn_for_dirty_and_diverged_builds() {
-    let identity = app::update::BuildIdentity {
-        package_version: "0.1.1".to_string(),
-        commit_sha: Some("1111111111111111".to_string()),
-        dirty: true,
+fn beta_keeps_history_when_current_and_confirms_a_different_build() {
+    use app::update::{BuildIdentity, UpdateGitCommit, UpdateGitRow, UpdateRelation};
+    let identity = BuildIdentity {
+        package_version: "1.2.3".into(),
+        commit_sha: Some("b".repeat(40)),
+        dirty: false,
     };
-    let update = checked_update_state(app::update::UpdateRelation::Diverged {
-        remote_ahead: 2,
-        local_ahead: 3,
-    });
-    let cards = update_settings_cards(&identity, &update, true, true);
-    let start = cards
-        .iter()
-        .flat_map(|card| &card.items)
-        .find(|item| item.field == ui::SettingsField::StartUpdate)
-        .unwrap();
-    assert!(start.enabled);
-    assert_eq!(start.label, "Replace with GitHub version");
-    let remote = cards
-        .iter()
-        .flat_map(|card| &card.items)
-        .find(|item| item.field == ui::SettingsField::RemoteVersion)
-        .unwrap();
-    assert!(remote.description.contains("Builds diverged"));
-    assert!(remote.description.contains("abcdef1234567890"));
+    let mut update = checked_update_state(UpdateRelation::Identical);
+    update.mode = storage::LinuxUpdateMode::Beta;
+    let older = "a".repeat(40);
+    let check = update.check_result.as_mut().unwrap();
+    check.release = None;
+    check.git_tree = Some(Ok([UpdateGitRow {
+        graph: "* ".into(),
+        commit: Some(UpdateGitCommit {
+            sha: older.clone(),
+            branches: "another-branch".into(),
+            subject: "Choose this commit".into(),
+        }),
+    }]
+    .into()));
+    let (_, view) = update_settings_view(&identity, &update, PlatformKind::Linux, true, true);
+    assert!(
+        matches!(view.panel, ui::SettingsUpdatePanel::Source { ref rows, ref activity, .. }
+        if rows.len() == 1 && activity.show_build_details)
+    );
+    assert!(!view.action.unwrap().enabled);
+
+    update.git_selected = Some(0);
+    update.confirmed_sha = update.selected_build().map(str::to_owned);
+    let (cards, view) = update_settings_view(&identity, &update, PlatformKind::Linux, true, true);
+    assert!(cards[0].items[2].value.contains("bbbbbbb"));
+    assert!(view.action.unwrap().enabled);
+    assert!(view.confirmation.unwrap().body.contains(&older));
 }
 
 #[test]

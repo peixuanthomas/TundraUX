@@ -101,6 +101,7 @@ fn update_build_log_survives_failed_preparation_cleanup_and_reports_its_path() {
     fs::write(source.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
     let check = UpdateCheckResult {
         release: None,
+        git_tree: None,
         default_branch: "master".into(),
         head_sha: "a".repeat(40),
         relation: UpdateRelation::Unknown,

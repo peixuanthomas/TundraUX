@@ -62,7 +62,8 @@ pub use settings::{
     SettingsItemViewModel, SettingsLayout, SettingsNumberEditorViewModel, SettingsNumberLayout,
     SettingsPickerKind, SettingsPickerOptionLayout, SettingsPickerOptionViewModel,
     SettingsPickerViewModel, SettingsSliderLayout, SettingsTimeSyncServerEditorViewModel,
-    SettingsUpdateCommitViewModel, SettingsUpdateConfirmationViewModel, SettingsUpdateViewModel,
-    SettingsViewModel, SettingsWeatherLocationEditorViewModel, render_settings_content,
-    render_settings_overlay, settings_hit_test, settings_layout, settings_text_input_area,
+    SettingsUpdateConfirmationViewModel, SettingsUpdateGraphLayout, SettingsUpdateLayout,
+    SettingsUpdatePanel, SettingsUpdateViewModel, SettingsViewModel,
+    SettingsWeatherLocationEditorViewModel, render_settings_content, render_settings_overlay,
+    settings_hit_test, settings_layout, settings_text_input_area,
 };

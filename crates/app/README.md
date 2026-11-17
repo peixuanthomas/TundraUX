@@ -46,7 +46,7 @@ Updates prepare Shell, CLI, and the complete `vim/` together, validate assets, l
 
 Update checks use the TundraUX repository and its release and Vim archive names.
 
-Source updates compile Shell and CLI, reusing a complete installed Vim when its upstream metadata matches the target source's pin. Vim is rebuilt only when that pin changes or no complete matching engine exists. Cargo and Vim build output is saved to a private `update-*.log` in the application log directory. The file remains after build failure or cancellation, and build errors include its path.
+Source updates can build a commit from any branch in the public remote history. Git reads the history and draws its branches and merges without checking out files. After confirmation, the updater downloads and builds the selected commit. It reuses a complete installed Vim when its upstream metadata matches the selected source's pin. Cargo and Vim output goes to an `update-*.log` file that remains after build failure or cancellation.
 
 Runtime logs merge failure reports that the user is authorized to access at the highest severity, `Critical`, sort them by time, and respect report access restrictions.
 

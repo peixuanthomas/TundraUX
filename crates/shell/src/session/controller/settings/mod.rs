@@ -56,9 +56,6 @@ pub(in crate::session) const UPDATE_SETTINGS_FIELDS: &[ui::SettingsField] = &[
     #[cfg(target_os = "linux")]
     ui::SettingsField::UpdateMode,
     ui::SettingsField::InstalledVersion,
-    ui::SettingsField::RemoteVersion,
-    ui::SettingsField::CheckUpdates,
-    ui::SettingsField::StartUpdate,
 ];
 
 impl ShellSession {
@@ -206,7 +203,7 @@ impl ShellSession {
         {
             return;
         }
-        if self.settings_update_state.confirmation_open {
+        if self.settings_update_state.confirmed_sha.is_some() {
             if key.has_non_shift_modifier() {
                 return;
             }
@@ -278,6 +275,22 @@ impl ShellSession {
             }
             self.refresh_hit_map();
             return;
+        }
+
+        let state = self.pages.settings.settings_state.as_ref().unwrap();
+        if state.category == ui::SettingsCategory::Update {
+            if key.key == InputKey::F(5) && key.phase == InputPhase::Press {
+                self.begin_update_check();
+                self.refresh_hit_map();
+                return;
+            }
+            if focus == ui::SettingsFocus::Content
+                && state.selected_field == ui::SettingsField::UpdateGitTree
+                && self.handle_update_graph_key(&key.key)
+            {
+                self.refresh_hit_map();
+                return;
+            }
         }
 
         let choosing_application =
@@ -369,11 +382,30 @@ impl ShellSession {
             return;
         }
         if let Some(direction) = input.scroll_direction() {
+            if self.settings_update_state.confirmed_sha.is_some() {
+                return;
+            }
             let delta = match direction {
                 ScrollDirection::Up => -3,
                 ScrollDirection::Down => 3,
                 ScrollDirection::Left | ScrollDirection::Right => return,
             };
+            if self.active_overlay_descriptor().is_none()
+                && let Some(graph) = self
+                    .current_settings_layout()
+                    .and_then(|layout| layout.update_content)
+                    .and_then(|content| content.graph)
+                && graph
+                    .rows
+                    .contains((input.position.column, input.position.row).into())
+            {
+                self.settings_update_state.git_offset = graph
+                    .offset
+                    .saturating_add_signed(delta)
+                    .min(graph.total.saturating_sub(graph.capacity));
+                self.refresh_hit_map();
+                return;
+            }
             if self.active_overlay_descriptor().is_none()
                 && self.current_settings_layout().is_some_and(|layout| {
                     layout.applications.is_some_and(|applications| {
@@ -450,6 +482,9 @@ impl ShellSession {
             }
             Some(ui::SettingsHitTarget::UpdateConfirm) => self.begin_confirmed_update(),
             Some(ui::SettingsHitTarget::UpdateCancel) => self.cancel_update_confirmation(),
+            Some(ui::SettingsHitTarget::UpdateCommit(index)) => {
+                self.select_update_commit(index);
+            }
             Some(ui::SettingsHitTarget::Category(category)) => {
                 self.select_settings_category(category);
                 if let Some(state) = self.pages.settings.settings_state.as_mut() {
@@ -535,7 +570,10 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn select_settings_category(&mut self, category: ui::SettingsCategory) {
+        let mut entering_update = false;
         if let Some(state) = self.pages.settings.settings_state.as_mut() {
+            entering_update =
+                category == ui::SettingsCategory::Update && state.category != category;
             state.category = category;
             state.selected_field = settings_fields(category)[0];
             state.scroll_offset = 0;
@@ -553,8 +591,14 @@ impl ShellSession {
             "settings-category-status",
             category = format!("{category:?}")
         ));
-        if category == ui::SettingsCategory::Update && !self.settings_update_state.checked_once {
-            self.begin_update_check();
+        if category == ui::SettingsCategory::Update {
+            if entering_update
+                && !self.settings_update_state.busy
+                && !self.settings_task_runtime.update_busy()
+            {
+                self.begin_update_check();
+            }
+            self.reveal_selected_update_commit();
         }
         if category == ui::SettingsCategory::RegionTime
             && self
@@ -586,12 +630,13 @@ impl ShellSession {
         if fields.is_empty() {
             return;
         }
+        let field = fields[index.min(fields.len() - 1)];
         {
             let Some(state) = self.pages.settings.settings_state.as_mut() else {
                 return;
             };
             state.focus = ui::SettingsFocus::Content;
-            state.selected_field = fields[index.min(fields.len().saturating_sub(1))];
+            state.selected_field = field;
         }
         if let Some(layout) = self.current_settings_layout()
             && let Some(row) = layout.selected_field_row
@@ -610,6 +655,9 @@ impl ShellSession {
             .min(layout.max_scroll_offset);
         }
         self.clamp_settings_scroll();
+        if field == ui::SettingsField::UpdateGitTree {
+            self.reveal_selected_update_commit();
+        }
     }
 
     fn settings_visible_fields(&self) -> Vec<ui::SettingsField> {
@@ -618,10 +666,25 @@ impl ShellSession {
                 let mut fields: Vec<_> = model
                     .cards
                     .into_iter()
-                    .flat_map(|card| card.items.into_iter().map(|item| item.field))
+                    .flat_map(|card| card.items)
+                    .filter(|item| {
+                        item.field != ui::SettingsField::UpdateMode
+                            || item.kind != ui::SettingsControlKind::ReadOnly
+                    })
+                    .map(|item| item.field)
                     .collect();
                 if model.selected_category == ui::SettingsCategory::Applications {
                     fields.insert(0, ui::SettingsField::ApplicationList);
+                }
+                if let Some(update) = model.update {
+                    if let ui::SettingsUpdatePanel::Source { rows, .. } = update.panel
+                        && !rows.is_empty()
+                    {
+                        fields.push(ui::SettingsField::UpdateGitTree);
+                    }
+                    if update.action.is_some() {
+                        fields.push(ui::SettingsField::StartUpdate);
+                    }
                 }
                 fields
             })
@@ -716,7 +779,8 @@ impl ShellSession {
             ui::SettingsField::StartUpdate => self.open_update_confirmation(),
             ui::SettingsField::ApplicationList
             | ui::SettingsField::InstalledVersion
-            | ui::SettingsField::RemoteVersion => {}
+            | ui::SettingsField::RemoteVersion
+            | ui::SettingsField::UpdateGitTree => {}
             _ => self.change_selected_setting(platform),
         }
     }

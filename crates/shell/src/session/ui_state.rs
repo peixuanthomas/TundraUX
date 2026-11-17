@@ -213,14 +213,14 @@ pub(super) struct SettingsUpdateState {
     pub(super) mode: storage::LinuxUpdateMode,
     pub(super) activity: Option<ui::components::UpdateActivityViewModel>,
     pub(super) check_result: Option<app::update::UpdateCheckResult>,
-    pub(super) checked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(super) git_selected: Option<usize>,
+    pub(super) git_offset: usize,
     pub(super) phase: Option<app::update::UpdatePhase>,
     pub(super) status: i18n::LocalizedText,
     pub(super) error: Option<i18n::LocalizedText>,
-    pub(super) confirmation_open: bool,
+    pub(super) confirmed_sha: Option<String>,
     pub(super) confirm_selected: bool,
     pub(super) busy: bool,
-    pub(super) checked_once: bool,
 }
 
 impl Default for SettingsUpdateState {
@@ -229,19 +229,41 @@ impl Default for SettingsUpdateState {
             mode: storage::LinuxUpdateMode::default(),
             activity: None,
             check_result: None,
-            checked_at: None,
+            git_selected: None,
+            git_offset: 0,
             phase: None,
             status: i18n::msg!("startup-update-unchecked").into(),
             error: None,
-            confirmation_open: false,
+            confirmed_sha: None,
             confirm_selected: true,
             busy: false,
-            checked_once: false,
         }
     }
 }
 
 impl SettingsUpdateState {
+    pub(super) fn selected_build(&self) -> Option<&str> {
+        let check = self.check_result.as_ref()?;
+        Some(
+            self.git_selected
+                .and_then(|index| check.git_rows().get(index))
+                .and_then(|row| row.commit.as_ref())
+                .map_or(check.head_sha.as_str(), |commit| commit.sha.as_str()),
+        )
+    }
+
+    pub(super) fn build_available(&self, identity: &app::update::BuildIdentity) -> bool {
+        let Some(check) = &self.check_result else {
+            return false;
+        };
+        identity.dirty
+            || if check.release.is_some() {
+                check.relation != app::update::UpdateRelation::Identical
+            } else {
+                self.selected_build() != identity.commit_sha.as_deref()
+            }
+    }
+
     pub(super) fn append_output(&mut self, text: &str) {
         let activity = self.activity.get_or_insert_with(Default::default);
         for line in text.lines() {

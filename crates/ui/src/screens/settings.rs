@@ -7,6 +7,11 @@ mod number;
 pub use number::{SettingsNumberEditorViewModel, SettingsNumberLayout};
 mod slider;
 pub use slider::SettingsSliderLayout;
+mod update;
+pub use update::{
+    SettingsUpdateConfirmationViewModel, SettingsUpdateGraphLayout, SettingsUpdateLayout,
+    SettingsUpdatePanel, SettingsUpdateViewModel,
+};
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, HorizontalAlignment, Layout, Rect};
@@ -16,7 +21,7 @@ use ratatui::widgets::{Paragraph, Wrap};
 use crate::components::{
     Button, ButtonEmphasis, ComponentTone, DataTable, DialogLayout, List as ComponentList,
     ListItem as ComponentListItem, Scrollbar, SidebarWorkspaceLayout, Surface, TextInput,
-    UpdateActivity, terminal_width, truncate_to_terminal_width, visible_scrolled_rect,
+    terminal_width, truncate_to_terminal_width, visible_scrolled_rect,
 };
 use crate::{RenderContext, TimezoneMapWidget, TundraTheme};
 
@@ -171,6 +176,7 @@ pub enum SettingsField {
     CheckUpdates,
     StartUpdate,
     UpdateMode,
+    UpdateGitTree,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -389,29 +395,6 @@ pub struct SettingsViewModel {
     pub update: Option<SettingsUpdateViewModel>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SettingsUpdateCommitViewModel {
-    pub sha: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SettingsUpdateConfirmationViewModel {
-    pub title: String,
-    pub body: String,
-    pub confirm_label: String,
-    pub confirm_selected: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SettingsUpdateViewModel {
-    pub summary_title: Option<String>,
-    pub activity: Option<crate::components::UpdateActivityViewModel>,
-    pub commits: Vec<SettingsUpdateCommitViewModel>,
-    pub empty_message: String,
-    pub confirmation: Option<SettingsUpdateConfirmationViewModel>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SettingsCategoryLayout {
     pub category: SettingsCategory,
@@ -446,6 +429,7 @@ pub enum SettingsHitTarget {
     FileExtensionsEditor,
     TimeSyncServerEditor,
     NumberEditor,
+    UpdateCommit(usize),
     UpdateConfirm,
     UpdateCancel,
 }
@@ -485,6 +469,7 @@ pub struct SettingsLayout {
     pub update_confirmation: Option<Rect>,
     pub update_confirm_button: Option<Rect>,
     pub update_cancel_button: Option<Rect>,
+    pub update_content: Option<SettingsUpdateLayout>,
 }
 
 pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout {
@@ -537,7 +522,7 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
     if let Some(applications) = &applications {
         detail_area = applications.detail;
     }
-    let mut content_height = settings_content_height(detail_area.width, model);
+    let mut content_height = settings_content_height(detail_area, model);
     let scrollbar = (content_height > usize::from(detail_area.height)
         && detail_area.width > 0
         && detail_area.height > 0)
@@ -549,7 +534,7 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
                 detail_area.height,
             );
             detail_area.width = detail_area.width.saturating_sub(2);
-            content_height = settings_content_height(detail_area.width, model);
+            content_height = settings_content_height(detail_area, model);
             track
         });
     let max_scroll_offset = if scrollbar.is_some() {
@@ -600,7 +585,7 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
     let mut y = i32::from(detail_area.y) - i32::from(scroll_offset);
     for card in &model.cards {
         let height = settings_card_height(card);
-        let mut row_y = y + 1;
+        let mut row_y = y + i32::from(settings_card_heading(card));
         for item in &card.items {
             let item_height = settings_item_height(item);
             if item.field == model.selected_field {
@@ -623,6 +608,29 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
         }
         y += i32::from(height) + 1;
     }
+    let update_content = model.update.as_ref().map(|update| {
+        let row = (y - i32::from(detail_area.y) + i32::from(scroll_offset)) as u16;
+        let content = SettingsUpdateLayout::new(detail_area, scroll_offset, row, update);
+        if let Some(area) = content.action.filter(|area| !area.is_empty()) {
+            fields.push(SettingsFieldLayout {
+                field: SettingsField::StartUpdate,
+                area,
+            });
+        }
+        if model.selected_field == SettingsField::StartUpdate
+            && let Some((row, height)) = content.action_rows
+        {
+            selected_field_row = Some(row);
+            selected_field_height = height;
+        }
+        if model.selected_field == SettingsField::UpdateGitTree
+            && let Some(graph) = &content.graph
+        {
+            selected_field_row = Some(row);
+            selected_field_height = (graph.capacity as u16 + 1).min(detail_area.height);
+        }
+        content
+    });
 
     let mut picker_options = Vec::new();
     let mut picker_dialog = None;
@@ -748,6 +756,7 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
         update_confirmation,
         update_confirm_button,
         update_cancel_button,
+        update_content,
     }
 }
 
@@ -782,7 +791,7 @@ pub fn settings_hit_test(layout: &SettingsLayout, point: (u16, u16)) -> Option<S
         };
     }
 
-    if layout.update_confirmation.is_some() {
+    if let Some(dialog) = layout.update_confirmation {
         if layout
             .update_confirm_button
             .is_some_and(|area| contains(area, point))
@@ -792,6 +801,7 @@ pub fn settings_hit_test(layout: &SettingsLayout, point: (u16, u16)) -> Option<S
         if layout
             .update_cancel_button
             .is_some_and(|area| contains(area, point))
+            || contains(update_confirmation_chrome(dialog).close, point)
         {
             return Some(SettingsHitTarget::UpdateCancel);
         }
@@ -869,6 +879,14 @@ pub fn settings_hit_test(layout: &SettingsLayout, point: (u16, u16)) -> Option<S
     {
         return Some(SettingsHitTarget::Field(field.field));
     }
+    if let Some(index) = layout
+        .update_content
+        .as_ref()
+        .and_then(|content| content.graph.as_ref())
+        .and_then(|graph| graph.commit_at(point))
+    {
+        return Some(SettingsHitTarget::UpdateCommit(index));
+    }
     layout
         .category_cards
         .iter()
@@ -940,6 +958,9 @@ pub fn render_settings_content(
     }
     let detail_area = layout.detail;
     render_cards(frame, detail_area, layout.scroll_offset, model, context);
+    if let (Some(content), Some(update)) = (&layout.update_content, &model.update) {
+        content.render(frame, detail_area, update, model, context);
+    }
     if let Some(scrollbar) = layout.scrollbar {
         Scrollbar::new(
             layout.content_height,
@@ -1041,14 +1062,17 @@ fn render_cards(
     for (card_index, card) in model.cards.iter().enumerate() {
         let height = settings_card_height(card);
         Surface::new().render_scrolled_frame(frame, detail_area, y, height, context);
-        Surface::new()
-            .titled(format!("  {}", card.title))
-            .raised(true)
-            .render_scrolled_frame(frame, detail_area, y, 1, context);
-        let rows_height = height.saturating_sub(1);
+        let heading = settings_card_heading(card);
+        if heading > 0 {
+            Surface::new()
+                .titled(format!("  {}", card.title))
+                .raised(true)
+                .render_scrolled_frame(frame, detail_area, y, heading, context);
+        }
+        let rows_height = height.saturating_sub(heading);
         let Some((visible_rows, skipped_rows)) = visible_scrolled_rect(
             detail_area.x,
-            y + 1,
+            y + i32::from(heading),
             detail_area.width,
             rows_height,
             detail_area,
@@ -1062,7 +1086,17 @@ fn render_cards(
             .map(settings_control_width)
             .max()
             .unwrap_or(0)
-            .min(visible_rows.width / 2);
+            .min(if model.selected_category == SettingsCategory::Update {
+                let label_width = card
+                    .items
+                    .iter()
+                    .map(|item| terminal_width(&item.label))
+                    .max()
+                    .unwrap_or(0) as u16;
+                visible_rows.width.saturating_sub(label_width + 1)
+            } else {
+                visible_rows.width / 2
+            });
         let rows = card
             .items
             .iter()
@@ -1141,7 +1175,7 @@ fn render_cards(
         table.state.focused = selected.is_some();
         table.render_frame(frame, visible_rows, context);
 
-        let mut next_row_y = y + 1;
+        let mut next_row_y = y + i32::from(heading);
         for item in &card.items {
             let row_y = next_row_y;
             next_row_y += i32::from(settings_item_height(item));
@@ -1174,114 +1208,19 @@ fn render_cards(
         }
         y += i32::from(height) + 1;
     }
-
-    if model.selected_category == SettingsCategory::Update
-        && let Some(update) = &model.update
-    {
-        if let Some(activity) = &update.activity {
-            let activity = UpdateActivity::new(activity);
-            activity.render_scrolled(frame, detail_area, y, context);
-            y += i32::from(activity.height()) + 1;
-        }
-        render_update_commits(frame, detail_area, y, update, context);
-    }
 }
 
-fn settings_content_height(detail_width: u16, model: &SettingsViewModel) -> usize {
-    let mut next_y = 0usize;
-    let mut content_height = 0usize;
-
+fn settings_content_height(detail: Rect, model: &SettingsViewModel) -> usize {
+    let mut next_row = 0u16;
+    let mut height = 0u16;
     for card in &model.cards {
-        let height = settings_card_height(card);
-        content_height = content_height.max(next_y.saturating_add(usize::from(height)));
-        next_y = next_y.saturating_add(usize::from(height)).saturating_add(1);
+        height = next_row.saturating_add(settings_card_height(card));
+        next_row = height.saturating_add(1);
     }
-
-    if model.selected_category == SettingsCategory::Update
-        && let Some(update) = &model.update
-    {
-        if let Some(activity) = &update.activity {
-            next_y += usize::from(UpdateActivity::new(activity).height()) + 1;
-        }
-        let lines = update_commit_lines(update);
-        content_height = content_height
-            .max(next_y.saturating_add(usize::from(update_commits_height(detail_width, &lines))));
+    if let Some(update) = &model.update {
+        height = height.max(SettingsUpdateLayout::new(detail, 0, next_row, update).end_row);
     }
-    content_height
-}
-
-fn update_commit_lines(update: &SettingsUpdateViewModel) -> Vec<String> {
-    if update.commits.is_empty() {
-        return vec![update.empty_message.clone()];
-    }
-
-    update
-        .commits
-        .iter()
-        .map(|commit| {
-            format!(
-                "{}  {}",
-                commit.sha.chars().take(8).collect::<String>(),
-                commit
-                    .message
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            )
-        })
-        .collect()
-}
-
-fn update_commits_height(detail_width: u16, lines: &[String]) -> u16 {
-    let width = detail_width.max(1);
-    let content_height = lines
-        .iter()
-        .map(|line| crate::management_wrapped_lines(line, width).len())
-        .sum::<usize>();
-    u16::try_from(content_height)
-        .unwrap_or(u16::MAX)
-        .saturating_add(1)
-        .max(2)
-}
-
-fn render_update_commits(
-    frame: &mut Frame<'_>,
-    detail_area: Rect,
-    y: i32,
-    update: &SettingsUpdateViewModel,
-    context: &RenderContext,
-) {
-    let theme = &context.compatibility_theme();
-    let lines = update_commit_lines(update);
-    let height = update_commits_height(detail_area.width, &lines);
-    Surface::new()
-        .titled(
-            update
-                .summary_title
-                .clone()
-                .unwrap_or_else(|| i18n::tr!("ui-settings-commits-padded")),
-        )
-        .render_scrolled_frame(frame, detail_area, y, height, context);
-    if let Some((content, skipped)) = visible_scrolled_rect(
-        detail_area.x,
-        y + 1,
-        detail_area.width,
-        height.saturating_sub(1),
-        detail_area,
-    ) {
-        frame.render_widget(
-            Paragraph::new(
-                lines
-                    .iter()
-                    .flat_map(|line| crate::management_wrapped_lines(line, detail_area.width))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-            .style(theme.body_style())
-            .scroll((skipped, 0)),
-            content,
-        );
-    }
+    usize::from(height)
 }
 
 fn render_update_confirmation(
@@ -1294,8 +1233,13 @@ fn render_update_confirmation(
         return;
     };
     let theme = &DialogLayout::footer_theme(context);
-    let chrome = DialogLayout::with_min_body(dialog, 1, None, 3);
+    let chrome = update_confirmation_chrome(dialog);
     chrome.render_frame(frame, &confirmation.title, context);
+    Button::new("settings.update.close", "×")
+        .with_bracketed_label(false)
+        .with_centered_label(true)
+        .with_capture_name(i18n::tr!("ui-settings-touch-cancel"))
+        .render_inline_frame(frame, chrome.close, &DialogLayout::close_theme(context));
     frame.render_widget(
         Paragraph::new(confirmation.body.clone()).wrap(Wrap { trim: true }),
         chrome.body,
@@ -1318,6 +1262,10 @@ fn render_update_confirmation(
         button.state.selected = !confirmation.confirm_selected;
         button.render_inline_frame(frame, area, theme);
     }
+}
+
+fn update_confirmation_chrome(dialog: Rect) -> DialogLayout {
+    DialogLayout::with_min_body(dialog, 1, Some("×"), 3)
 }
 
 fn render_settings_footer(
@@ -1555,8 +1503,11 @@ fn settings_card_height(card: &SettingsCardViewModel) -> u16 {
         .iter()
         .map(settings_item_height)
         .sum::<u16>()
-        .saturating_add(1)
-        .max(1)
+        .saturating_add(settings_card_heading(card))
+}
+
+fn settings_card_heading(card: &SettingsCardViewModel) -> u16 {
+    u16::from(!card.title.is_empty())
 }
 
 fn picker_list_area(dialog: Rect, timezone: bool, searchable: bool) -> Rect {

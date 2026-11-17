@@ -390,8 +390,14 @@ settings-device-not-obtained = 暂无
 
 settings-update-mode = 更新模式
 settings-update-mode-release = 正式版（Release）
-settings-update-mode-beta = 测试版（master）
-settings-update-mode-help = 按回车或左右键切换。正式版下载已发布的便携包；测试版使用 Rust 在本机编译 master 最新提交。
+settings-update-mode-beta = 测试版
+settings-update-mode-source = 源码构建
+settings-current-build = 当前构建
+settings-remote-build = 远端最新推送
+settings-build-selected = 下载并编译
+settings-build-selected-body = 下载提交 { $sha }，在本机编译，再用该构建重启 TundraUX。启动失败时会恢复当前构建。
+settings-git-tree-unavailable = 无法读取 Git 历史。请确认已安装 Git，然后按 F5 重试。{ $reason }
+settings-update-mode-help = 按回车切换。正式版下载已发布的便携包，测试版在本机编译选中的 Git 提交。
 settings-release-latest = GitHub 最新正式版
 settings-release-install-body = 下载并校验 Linux 便携包，替换 Shell 和 CLI 后重启。首次启动失败时会恢复旧版本，个人文件和主题不受影响。
 

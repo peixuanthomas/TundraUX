@@ -147,7 +147,13 @@ fn retained_update_labels_follow_the_render_snapshot_and_preserve_raw_output() {
             let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
             terminal
                 .draw(|frame| {
-                    UpdateActivity::new(&model).render_scrolled(frame, frame.area(), 0, &context)
+                    UpdateActivity::new(&model).render_scrolled(
+                        frame,
+                        frame.area(),
+                        0,
+                        frame.area().height,
+                        &context,
+                    )
                 })
                 .unwrap();
             terminal

@@ -390,8 +390,14 @@ settings-device-not-obtained = None
 
 settings-update-mode = Update mode
 settings-update-mode-release = Release
-settings-update-mode-beta = Beta (master)
-settings-update-mode-help = Switch with Enter or the arrow keys. Release downloads a published portable build; Beta builds the latest master commit locally with Rust.
+settings-update-mode-beta = Beta
+settings-update-mode-source = Source build
+settings-current-build = Current build
+settings-remote-build = Latest remote build
+settings-build-selected = Download and build
+settings-build-selected-body = Download commit { $sha }, build it on this device, and restart TundraUX with that build. The current build is restored if startup fails.
+settings-git-tree-unavailable = Could not load Git history. Check that Git is installed and try F5. { $reason }
+settings-update-mode-help = Press Enter to switch. Release downloads the published portable archive. Beta builds the selected Git commit on this device.
 settings-release-latest = Latest GitHub release
 settings-release-install-body = Download and verify the Linux portable release, replace Shell and CLI, then restart. If the first startup fails, the previous version is restored. Personal files and themes are not affected.
 

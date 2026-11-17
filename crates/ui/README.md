@@ -84,7 +84,7 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 - The ordinary editor keeps Save, Undo, and Find visible. Its context menu reuses edit actions, enabled states, and keyboard navigation, stays inside the window, and preserves the selection; Rich Markdown keeps its selection-formatting menu.
 - Launcher search uses `TextInput` and shares its region between rendering and hit testing. The entry menu offers Open, New session for managed apps, and Move. User-added entries also expose Delete and their editing actions. Right-click the blank area for launcher-wide actions.
 - Settings uses Tab/Shift+Tab across categories, the operating-system entry, and controls. Arrows switch categories when that region is focused and operate content otherwise; ordinary numeric options open the shared input dialog.
-- Update activity shows download progress for Release and adds compilation progress and live output for source builds. Hidden build panels take no space, keeping release notes close to the download meter.
+- The Release update page adds a large action, download meter, and update notes when an update is available. Source updates use a scrollable Git tree with full-row commit targets and a live output panel that moves below the graph in narrow windows.
 - The shared terminal minimum is 108×20, with all Home entries and the Command Line available at that size. First-time setup keeps completion with default appearance at the bottom of the visible area while its body scrolls. Home shows the system username as read-only text.
 
 ### Input and themes

@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::{Client, Response};
@@ -97,12 +98,50 @@ pub struct UpdateCommit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateGitCommit {
+    pub sha: String,
+    pub branches: String,
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateGitRow {
+    pub graph: String,
+    pub commit: Option<UpdateGitCommit>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateCheckResult {
     pub release: Option<ReleaseUpdate>,
     pub default_branch: String,
     pub head_sha: String,
     pub relation: UpdateRelation,
     pub commits: Vec<UpdateCommit>,
+    pub git_tree: Option<Result<Arc<[UpdateGitRow]>, String>>,
+}
+
+impl UpdateCheckResult {
+    pub fn git_rows(&self) -> &[UpdateGitRow] {
+        self.git_tree
+            .as_ref()
+            .and_then(|tree| tree.as_ref().ok())
+            .map_or(&[], Arc::as_ref)
+    }
+
+    pub fn for_selected_build(&self, sha: &str) -> Option<Self> {
+        if sha != self.head_sha
+            && (self.release.is_some()
+                || !self
+                    .git_rows()
+                    .iter()
+                    .any(|row| row.commit.as_ref().is_some_and(|commit| commit.sha == sha)))
+        {
+            return None;
+        }
+        let mut target = self.clone();
+        target.head_sha = sha.to_owned();
+        Some(target)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -330,16 +369,20 @@ pub fn check_for_updates_in_mode_cancellable(
 fn check_with_fallback(
     identity: &BuildIdentity,
     api_root: &str,
-    fallback: impl FnOnce() -> Result<UpdateCheckResult, UpdateError>,
+    check_git: impl FnOnce() -> Result<UpdateCheckResult, UpdateError>,
     cancel: &UpdateCancellation,
 ) -> Result<UpdateCheckResult, UpdateError> {
-    check_using_api(identity, api_root, cancel).or_else(|api_error| {
+    cancel.check()?;
+    check_git().or_else(|git_error| {
         cancel.check()?;
-        if api_error.is_cancelled() {
-            return Err(api_error);
+        if git_error.is_cancelled() {
+            return Err(git_error);
         }
-        fallback()
-            .map_err(|git_error| git_error.context(&format!("{api_error}; Git fallback failed")))
+        let mut result = check_using_api(identity, api_root, cancel).map_err(|api_error| {
+            api_error.context(&format!("{git_error}; GitHub API check failed"))
+        })?;
+        result.git_tree = Some(Err(git_error.to_string()));
+        Ok(result)
     })
 }
 
@@ -386,6 +429,7 @@ fn check_using_api(
         head_sha: branch.commit.sha,
         relation,
         commits,
+        git_tree: None,
     })
 }
 

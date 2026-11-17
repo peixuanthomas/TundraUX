@@ -59,6 +59,7 @@ pub(super) fn check(
             message: release.body.unwrap_or_default(),
         }],
         release: Some(payload),
+        git_tree: None,
     })
 }
 

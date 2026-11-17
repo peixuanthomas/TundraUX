@@ -178,6 +178,7 @@ fn update_cancelled_check_does_not_deliver_queued_success() {
         .send(SettingsUpdateTaskEvent::CheckCompleted(Ok(
             app::update::UpdateCheckResult {
                 release: None,
+                git_tree: None,
                 default_branch: "master".into(),
                 head_sha: "a".repeat(40),
                 relation: app::update::UpdateRelation::Identical,

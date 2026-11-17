@@ -403,7 +403,11 @@ impl ShellSession {
         } else if self.content_screen() == ShellScreen::Settings
             && let Some(settings) = self.pages.settings.settings_state.as_ref()
         {
-            if settings.number_editor.is_some() {
+            if settings.category == ui::SettingsCategory::Update
+                && self.settings_update_state.confirmed_sha.is_some()
+            {
+                Some(("settings-update-confirmation", ShellComponent::Settings))
+            } else if settings.number_editor.is_some() {
                 Some(("settings-editor:number", ShellComponent::Settings))
             } else if let Some(editor) = settings.color_editor.as_ref() {
                 Some((

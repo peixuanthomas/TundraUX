@@ -44,6 +44,8 @@ ui-help-logs-refresh = 刷新
 ui-help-logs-back = 返回
 
 ui-help-settings-title = 设置
+ui-help-settings-update-refresh = 在更新页重新检查更新
+ui-help-settings-update-tree = 在 Git 树中选择提交，再打开确认框
 ui-help-settings-open = 打开或修改值
 ui-help-settings-adjust = 上下切换分类或设置项，左右在应用列表和设置之间移动
 ui-help-settings-section = 在分类、操作系统入口和当前页控件之间移动

@@ -1,7 +1,7 @@
-//! Read public commit metadata when the REST API is unavailable or rate limited.
+//! Read public branch and commit metadata without checking out source code.
 use super::{
     BuildIdentity, GITHUB_OWNER, GITHUB_REPO, UpdateCancellation, UpdateCheckResult, UpdateCommit,
-    UpdateError, UpdateRelation, WorkDirectory,
+    UpdateError, UpdateGitCommit, UpdateGitRow, UpdateRelation, WorkDirectory,
 };
 use platform::ProcessSpec;
 #[cfg(test)]
@@ -46,13 +46,11 @@ fn check_in(
         deadline: Instant::now() + Duration::from_secs(60),
         cancel: cancel.clone(),
     };
-    // No checkout, hooks or source files are needed. Fetch complete commit history
-    // so an old installed build cannot be mistaken for an unrelated shallow tip.
+    // Fetch every branch and its ancestors without checkout or source files.
     git.run(&[
         "clone",
         "--bare",
         "--filter=tree:0",
-        "--single-branch",
         "--no-tags",
         // Linux beta updates always follow master, even if the remote default changes.
         #[cfg(target_os = "linux")]
@@ -68,29 +66,45 @@ fn check_in(
             "Git returned an invalid default branch commit",
         ));
     }
+    let git_tree = parse_graph(&git.repo(&[
+        "log",
+        "--graph",
+        "--topo-order",
+        "--no-color",
+        "--no-notes",
+        "--no-show-signature",
+        "--encoding=UTF-8",
+        "--decorate=short",
+        "--decorate-refs=refs/heads/*",
+        "--format=%x00%H%x00%D%x00%s",
+        "--branches",
+        "--",
+    ])?)?;
     let (relation, range) = match identity.commit_sha.as_deref() {
         Some(local) if local == head_sha => (UpdateRelation::Identical, None),
-        Some(local) if is_commit_sha(local) => {
-            // Only infer ancestry when the installed commit is reachable in the
-            // complete default-branch history. Ahead/diverged builds stay Unknown.
-            let history = git.repo(&["rev-list", &head_sha])?;
-            if history.lines().any(|sha| sha == local)
-                && git.repo(&["rev-parse", "--is-shallow-repository"])? == "false"
-            {
-                let range = format!("{local}..{head_sha}");
-                let count = git
-                    .repo(&["rev-list", "--count", &range])?
-                    .parse()
-                    .map_err(|_| UpdateError::new("Git returned an invalid commit count"))?;
-                (
-                    UpdateRelation::Behind {
-                        remote_ahead: count,
-                    },
-                    Some(range),
-                )
-            } else {
-                (UpdateRelation::Unknown, Some(head_sha.clone()))
-            }
+        Some(local)
+            if git_tree.iter().any(|row| {
+                row.commit
+                    .as_ref()
+                    .is_some_and(|commit| commit.sha == local)
+            }) && git.repo(&["rev-parse", "--is-shallow-repository"])? == "false" =>
+        {
+            let comparison = format!("{local}...{head_sha}");
+            let counts = git.repo(&["rev-list", "--left-right", "--count", &comparison])?;
+            let mut counts = counts.split_whitespace().map(str::parse);
+            let (Some(Ok(local_ahead)), Some(Ok(remote_ahead))) = (counts.next(), counts.next())
+            else {
+                return Err(UpdateError::new("Git returned invalid commit counts"));
+            };
+            let relation = match (local_ahead, remote_ahead) {
+                (0, _) => UpdateRelation::Behind { remote_ahead },
+                (_, 0) => UpdateRelation::Ahead { local_ahead },
+                _ => UpdateRelation::Diverged {
+                    remote_ahead,
+                    local_ahead,
+                },
+            };
+            (relation, Some(format!("{local}..{head_sha}")))
         }
         _ => (UpdateRelation::Unknown, Some(head_sha.clone())),
     };
@@ -112,7 +126,35 @@ fn check_in(
         head_sha,
         relation,
         commits,
+        git_tree: Some(Ok(git_tree.into())),
     })
+}
+
+fn parse_graph(output: &str) -> Result<Vec<UpdateGitRow>, UpdateError> {
+    output
+        .lines()
+        .map(|line| {
+            let mut parts = line.splitn(4, '\0');
+            let graph = parts.next().unwrap_or_default().to_owned();
+            let commit = match parts.next() {
+                Some(sha) if is_commit_sha(sha) => {
+                    let branches = parts.next().unwrap_or_default();
+                    let subject = parts.next().unwrap_or_default();
+                    Some(UpdateGitCommit {
+                        sha: sha.to_owned(),
+                        branches: branches
+                            .strip_prefix("HEAD -> ")
+                            .unwrap_or(branches)
+                            .to_owned(),
+                        subject: subject.chars().filter(|ch| !ch.is_control()).collect(),
+                    })
+                }
+                Some(_) => return Err(UpdateError::new("Git returned an invalid graph commit")),
+                None => None,
+            };
+            Ok(UpdateGitRow { graph, commit })
+        })
+        .collect()
 }
 
 fn parse_commits(output: &str) -> Result<Vec<UpdateCommit>, UpdateError> {
@@ -176,8 +218,9 @@ impl Git {
         if Instant::now() >= self.deadline {
             return Err(UpdateError::new("Git update check timed out"));
         }
-        let output = result
-            .map_err(|error| UpdateError::new(format!("could not run Git fallback: {error}")))?;
+        let output = result.map_err(|error| {
+            UpdateError::new(format!("could not read history with Git: {error}"))
+        })?;
         super::checked_exit(output, "git").map(|exit| {
             exit.stdout
                 .utf8_lossy()

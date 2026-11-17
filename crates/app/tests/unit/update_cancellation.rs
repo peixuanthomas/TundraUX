@@ -2,13 +2,13 @@ use super::*;
 use std::io::Write;
 
 #[test]
-fn update_cancelled_check_never_runs_git_fallback() {
+fn update_cancelled_check_never_reads_git_history() {
     let cancel = UpdateCancellation::default();
     cancel.cancel();
     let result = check_with_fallback(
         &current_build_identity(),
         "http://127.0.0.1:1",
-        || panic!("cancelled API request must not start Git"),
+        || panic!("cancelled check must not start Git"),
         &cancel,
     );
     assert!(result.unwrap_err().is_cancelled());

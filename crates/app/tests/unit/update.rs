@@ -220,6 +220,7 @@ fn update_preparation_failures_never_touch_installation() {
         }
         let check = UpdateCheckResult {
             release: None,
+            git_tree: None,
             default_branch: "master".to_owned(),
             head_sha: "target-sha".to_owned(),
             relation: UpdateRelation::Behind { remote_ahead: 1 },
@@ -368,6 +369,7 @@ fn update_preparation_uses_disk_cache_and_cleans_failed_work() {
         platform::mock::MockPlatform::new(dirs, paths.clone()).with_kind(PlatformKind::Linux);
     let check = UpdateCheckResult {
         release: None,
+        git_tree: None,
         default_branch: "master".into(),
         head_sha: "invalid-sha".into(),
         relation: UpdateRelation::Unknown,

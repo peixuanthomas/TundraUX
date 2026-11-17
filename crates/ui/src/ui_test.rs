@@ -645,7 +645,13 @@ impl UiTestGallery {
             "ui-test-update",
             context,
         );
-        UpdateActivity::new(&model).render_scrolled(frame, area, i32::from(area.y), context);
+        UpdateActivity::new(&model).render_scrolled(
+            frame,
+            area,
+            i32::from(area.y),
+            area.height,
+            context,
+        );
     }
 }
 
