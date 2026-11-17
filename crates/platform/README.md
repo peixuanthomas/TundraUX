@@ -50,6 +50,7 @@ Current management types cover services, processes, packages, networks, disks, u
 The Shell and app hosts request larger Unix socket buffers for window frames. Guardian traffic and external CLI control use separate connections with their own limits.
 
 `shell_control` provides local connections for the external CLI and for managed Shell, application, and service processes. Unix uses private sockets and checks the peer's UID and PID. Windows named pipes and registration directories allow only the current user's SID, and clients check the server PID.
+Shell control servers created in one process use different endpoints even when started within the same clock tick.
 
 Managed window and service traffic can use `AsyncLocalListener` and `AsyncLocalConnection`. They preserve those credential checks and use Tokio readiness notifications, including overlapped named pipes on Windows.
 
@@ -93,5 +94,6 @@ cargo test --locked -p platform --test shell_control
 ```
 
 Run Linux management tests on Linux or WSL. Use the corresponding isolated environment or test host for real authorization, service writes, wireless devices, mounts, and physical-disk operations; see each topic's document for specific entry points.
+The private D-Bus account test covers administrator visibility of root, service, local, and directory accounts. The watchdog connection test models the server poll between discovering the endpoint and connecting a client.
 
 `workspace_watchdog_constraints` checks raw task and process spawning separately from explicit owned bootstrap adapters; its regression fixtures keep unowned spawns forbidden.

@@ -255,7 +255,7 @@ fn account_service_reads_and_writes_respect_identity_and_system_authorization() 
             .iter()
             .map(|user| user.uid)
             .collect::<Vec<_>>(),
-        [1000, 1001]
+        [0, 1000, 1001, 1003, 999]
     );
     users[0].lock().unwrap().admin = false;
     calls.lock().unwrap().clear();
@@ -325,7 +325,7 @@ fn account_service_reads_and_writes_respect_identity_and_system_authorization() 
     );
     assert!(created.load(Ordering::Relaxed));
     assert!(!calls.lock().unwrap().contains(&"delete:1002:false".into()));
-    assert_eq!(accounts.visible().unwrap().len(), 3);
+    assert_eq!(accounts.visible().unwrap().len(), 6);
 
     // Shell session forwarding covers every mutation, including own password;
     // identity restrictions are still enforced before forwarding the request.

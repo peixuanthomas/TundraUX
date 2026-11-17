@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(windows)]
 use windows::Listener;
@@ -370,11 +371,17 @@ struct ServerLimits {
 
 impl Server {
     pub fn start(directory: &Path) -> io::Result<Self> {
+        static LAST_NONCE: Mutex<u128> = Mutex::new(0);
         let pid = std::process::id();
-        let nonce = SystemTime::now()
+        let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(io::Error::other)?
             .as_nanos();
+        let nonce = {
+            let mut last = LAST_NONCE.lock().unwrap();
+            *last = timestamp.max(*last + 1);
+            *last
+        };
         let session = format!("{pid:x}-{nonce:x}");
         #[cfg(unix)]
         let endpoint = directory

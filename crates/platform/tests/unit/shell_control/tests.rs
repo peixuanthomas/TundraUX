@@ -33,6 +33,9 @@ fn watchdog_discovers_a_separate_endpoint_and_expires_idle_clients_quickly() {
     assert_eq!(discovered[0].pid, server.info.pid);
     assert_eq!(discovered[0].endpoint, server.info.endpoint);
 
+    // Accept the closed discovery probe before opening a second Windows pipe client.
+    assert!(server.poll().is_empty());
+    assert!(server.clients.is_empty());
     let _client = LocalConnection::connect(&server.info.endpoint, server.info.pid).unwrap();
     assert!(server.poll().is_empty());
     assert_eq!(server.clients.len(), 1);

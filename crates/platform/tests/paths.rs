@@ -297,7 +297,8 @@ fn default_file_attributes_preserve_basic_metadata_and_dotfile_hidden() {
     let base = unique_temp_root("default-file-attributes");
     fs::create_dir_all(&base).expect("test directory should be creatable");
     let path = base.join(".profile");
-    fs::write(&path, b"tux").expect("test file should be writable");
+    let contents = b"tux";
+    fs::write(&path, contents).expect("test file should be writable");
 
     let attributes =
         default_file_attributes(&path).expect("default file attributes should read the test file");
@@ -305,7 +306,7 @@ fn default_file_attributes_preserve_basic_metadata_and_dotfile_hidden() {
     assert_eq!(attributes.path, path);
     assert!(attributes.is_file);
     assert!(!attributes.is_dir);
-    assert_eq!(attributes.len, 4);
+    assert_eq!(attributes.len, contents.len() as u64);
     assert!(attributes.modified.is_some());
     assert!(attributes.hidden);
     assert!(!attributes.system);
