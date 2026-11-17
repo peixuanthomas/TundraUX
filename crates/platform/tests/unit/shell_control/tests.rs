@@ -1,8 +1,16 @@
 use super::*;
 
+fn socket_tempdir() -> tempfile::TempDir {
+    #[cfg(unix)]
+    let temp = fs::canonicalize("/tmp").unwrap();
+    #[cfg(windows)]
+    let temp = std::env::temp_dir();
+    tempfile::tempdir_in(temp).unwrap()
+}
+
 #[test]
 fn expired_idle_connection_is_closed_without_waiting_for_input() {
-    let root = tempfile::tempdir().unwrap();
+    let root = socket_tempdir();
     let mut server = Server::start(&root.path().join("control")).unwrap();
     let _client = connect(&server.info).unwrap();
     assert!(server.poll().is_empty());
@@ -14,7 +22,7 @@ fn expired_idle_connection_is_closed_without_waiting_for_input() {
 
 #[test]
 fn watchdog_discovers_a_separate_endpoint_and_expires_idle_clients_quickly() {
-    let root = tempfile::tempdir().unwrap();
+    let root = socket_tempdir();
     let directory = root.path().join("watchdog-discovery");
     let session = "0123456789abcdef0123456789abcdef".to_string();
     #[cfg(unix)]
@@ -57,7 +65,7 @@ fn windows_registry_and_pipe_grant_only_current_user_and_deny_network() {
         },
         DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION,
     };
-    let root = tempfile::tempdir().unwrap();
+    let root = socket_tempdir();
     let server = Server::start(&root.path().join("control")).unwrap();
     let info = DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION;
     let check = |descriptor: windows_sys::Win32::Security::PSECURITY_DESCRIPTOR| {

@@ -42,3 +42,4 @@ cargo test --locked -p auto-admin
 ```
 
 Shell's AA tests cover dialogs, focus, password masking, and external control snapshots. Linux authorization interactions are validated in the corresponding test environment.
+The task history test resolves its temporary directory before opening the history store.

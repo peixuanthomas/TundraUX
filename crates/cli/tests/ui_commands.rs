@@ -360,7 +360,12 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
-        let root = std::env::temp_dir().join(format!(
+        // Use a short, link-free base for the Unix socket path.
+        #[cfg(unix)]
+        let temp = std::fs::canonicalize("/tmp").unwrap();
+        #[cfg(windows)]
+        let temp = std::env::temp_dir();
+        let root = temp.join(format!(
             "tu-cli-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)

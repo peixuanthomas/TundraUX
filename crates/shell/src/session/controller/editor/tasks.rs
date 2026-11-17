@@ -908,7 +908,8 @@ mod instance_tests {
             .lock()
             .unwrap()
             .insert(0, blocker_id);
-        let root = std::env::temp_dir().join(format!(
+        let temp = std::env::temp_dir().canonicalize().unwrap();
+        let root = temp.join(format!(
             "tundra-editor-save-slots-{}-{blocker_id}",
             std::process::id()
         ));

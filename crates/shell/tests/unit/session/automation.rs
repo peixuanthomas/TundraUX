@@ -216,8 +216,13 @@ fn disconnect_cancels_pointer_instead_of_activating_a_pressed_button() {
 struct TempDirectory(PathBuf);
 impl TempDirectory {
     fn new() -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "tundra-control-runtime-{}-{}",
+        // Use a short, link-free base for the Unix socket path.
+        #[cfg(unix)]
+        let temp = std::fs::canonicalize("/tmp").unwrap();
+        #[cfg(windows)]
+        let temp = std::env::temp_dir();
+        let root = temp.join(format!(
+            "tuxctl-{}-{:x}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

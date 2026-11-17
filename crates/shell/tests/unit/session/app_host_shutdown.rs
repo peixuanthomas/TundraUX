@@ -130,8 +130,9 @@ fn an_explicit_debug_request_is_forwarded_before_close_without_panicking_the_hos
 
 #[test]
 fn shutdown_preserves_latest_dirty_text_and_confirmed_discard_removes_it() {
+    let temp = std::env::temp_dir().canonicalize().unwrap();
     for discard in [false, true] {
-        let directory = TestDirectory(std::env::temp_dir().join(format!(
+        let directory = TestDirectory(temp.join(format!(
             "tundra-app-host-shutdown-{}-{}",
             std::process::id(),
             PageInstanceId::new().get()

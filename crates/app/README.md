@@ -66,3 +66,4 @@ cargo test --locked -p app
 
 Run workspace tests after changing cross-crate commands or shared types. Update tests use the current portable archive and transaction formats. Update and Vim installation tests run offline and cover validation, cancellation, file safety, and rollback.
 The recovery scan fixtures use the current transaction protocol and exercise equivalent install paths.
+Explorer file-operation fixtures resolve the temporary directory before testing file identity and undo.

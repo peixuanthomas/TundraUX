@@ -48,7 +48,11 @@ fn async_connection_rejects_an_unexpected_server_process() {
 }
 
 fn server() -> (tempfile::TempDir, Server) {
-    let root = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    let temp = fs::canonicalize("/tmp").unwrap();
+    #[cfg(windows)]
+    let temp = std::env::temp_dir();
+    let root = tempfile::tempdir_in(temp).unwrap();
     let server = Server::start(&root.path().join("control")).unwrap();
     (root, server)
 }

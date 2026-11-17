@@ -96,4 +96,6 @@ cargo test --locked -p platform --test shell_control
 Run Linux management tests on Linux or WSL. Use the corresponding isolated environment or test host for real authorization, service writes, wireless devices, mounts, and physical-disk operations; see each topic's document for specific entry points.
 The private D-Bus account test covers administrator visibility of root, service, local, and directory accounts. The watchdog connection test models the server poll between discovering the endpoint and connecting a client.
 
+Task history tests resolve the system temporary directory before opening the store. Shell control tests use short private socket paths on Unix.
+
 `workspace_watchdog_constraints` checks raw task and process spawning separately from explicit owned bootstrap adapters; its regression fixtures keep unowned spawns forbidden.

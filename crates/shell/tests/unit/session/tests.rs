@@ -6241,7 +6241,8 @@ fn explorer_terminal_test_fixture() -> (
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!(
+    let temp = std::env::temp_dir().canonicalize().unwrap();
+    let root = temp.join(format!(
         "tundra-shell-explorer-terminal-{}-{unique}",
         std::process::id()
     ));

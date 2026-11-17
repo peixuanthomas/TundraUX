@@ -44,8 +44,11 @@ fn structured_questions_edit_at_the_cursor_and_keep_passwords_masked() {
 #[test]
 fn history_keeps_output_and_result_without_secret_input_or_snapshot_contents() {
     use platform::task_history::{HistoryStore, TaskRecorder, TaskStatus, TaskSummary};
-    let root = platform::create_temp_dir(&std::env::temp_dir().join("TundraUX"), "aa-history-test")
-        .unwrap();
+    let temp = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join("TundraUX");
+    let root = platform::create_temp_dir(&temp, "aa-history-test").unwrap();
     let store = HistoryStore::new(&root);
     let recorder = TaskRecorder::new(
         store.clone(),

@@ -1,8 +1,12 @@
 use super::*;
 
+fn history_tempdir() -> tempfile::TempDir {
+    tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap()
+}
+
 #[test]
 fn history_survives_reopen_and_reads_only_requested_output_window() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let summary = TaskSummary::new("测试任务".into(), "script".into(), "editor".into());
     let recorder = TaskRecorder::new(store.clone(), summary.clone()).unwrap();
@@ -19,7 +23,7 @@ fn history_survives_reopen_and_reads_only_requested_output_window() {
 
 #[test]
 fn cleanup_requires_same_finished_records_as_preview() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let mut summary = TaskSummary::new("task".into(), "script".into(), "editor".into());
     store.save(&summary).unwrap();
@@ -38,7 +42,7 @@ fn cleanup_requires_same_finished_records_as_preview() {
 
 #[test]
 fn abandoned_running_task_is_unknown_and_cannot_be_reported_successful() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let mut summary = TaskSummary::new("task".into(), "script".into(), "editor".into());
     summary.process_id = 0;
@@ -53,7 +57,7 @@ fn abandoned_running_task_is_unknown_and_cannot_be_reported_successful() {
 #[test]
 fn questions_and_documents_are_not_output_history() {
     use crate::management::OperationEvent;
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let recorder = TaskRecorder::new(
         store.clone(),
@@ -75,7 +79,7 @@ fn questions_and_documents_are_not_output_history() {
 
 #[test]
 fn status_filter_and_page_marker_do_not_repeat_records() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     for n in 0..7 {
         let mut summary = TaskSummary::new(format!("task {n}"), "script".into(), "editor".into());
@@ -109,7 +113,7 @@ fn status_filter_and_page_marker_do_not_repeat_records() {
 
 #[test]
 fn launching_an_external_timer_is_only_a_submission_result() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let summary = TaskSummary::new(
         "Run timer".into(),
@@ -133,7 +137,7 @@ fn launching_an_external_timer_is_only_a_submission_result() {
 
 #[test]
 fn output_pages_keep_complete_chinese_characters_and_record_output_failures() {
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let store = HistoryStore::new(directory.path().join("history"));
     let summary = TaskSummary::new("中文任务".into(), "script".into(), "script".into());
     let recorder = TaskRecorder::new(store.clone(), summary).unwrap();
@@ -159,7 +163,7 @@ fn task_page_merges_correlated_archives_and_exposes_source_usage() {
         append_store, cleanup_message, empty_snapshot, finish_snapshot,
     };
     use crate::management::{ManagementKind, ManagementQuery};
-    let directory = tempfile::tempdir().unwrap();
+    let directory = history_tempdir();
     let local = HistoryStore::new(directory.path().join("local"));
     let system = HistoryStore::new(directory.path().join("system"));
     let mut summary = TaskSummary::new("重启服务".into(), "services".into(), "services".into());

@@ -199,7 +199,7 @@ python3 scripts/tests/workspace-clipboard.py target/debug/tundra-shell --output 
 python3 scripts/linux-shell-smoke.py target/debug/tundra-shell
 ```
 
-On macOS, Unix child-terminal tests can use `TMPDIR=/private/tmp cargo test --locked -p shell -p terminal-runtime --lib`.
+Automation tests use short Unix socket paths. File-operation fixtures resolve the system temporary directory before exercising save, undo, and recovery.
 
 ## Related documentation
 

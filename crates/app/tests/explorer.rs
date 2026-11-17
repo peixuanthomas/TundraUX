@@ -1307,8 +1307,10 @@ impl Drop for Fixture {
 
 fn unique_temp_root(name: &str) -> PathBuf {
     let millis = unix_millis();
-    let path =
-        std::env::temp_dir().join(format!("tundra-app-{name}-{millis}-{}", std::process::id()));
+    let path = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("tundra-app-{name}-{millis}-{}", std::process::id()));
     fs::create_dir_all(&path).expect("temp root");
     path
 }

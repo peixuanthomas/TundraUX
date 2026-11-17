@@ -52,6 +52,12 @@ fn real_cli_follow_observes_append_rotation_truncation_and_sigint() {
     fs::write(&path, "initial-line\n").unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_tundra-cli"))
         .args(["logs", "follow", "--file", path.to_str().unwrap(), "--json"])
+        .env("HOME", fixture.base.join("Home"))
+        .env("XDG_CONFIG_HOME", fixture.base.join("config"))
+        .env("XDG_DATA_HOME", fixture.base.join("data"))
+        .env("XDG_CACHE_HOME", fixture.base.join("cache"))
+        .env("XDG_STATE_HOME", fixture.base.join("state"))
+        .env("TMPDIR", &fixture.base)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
