@@ -19,7 +19,7 @@ Normal REPL input is passed to the system command interpreter; Tundra commands u
 
 On Linux the embedded REPL registers child process resources through its Command Line window's guardian. The guardian verifies the embedded CLI's process ancestry and tracks registered authorization helpers through cleanup if the window dies.
 
-Tab accepts the gray inline completion. Right cycles through the candidates below the input and previews the selection in gray; it moves the cursor normally within existing text. Typo suggestions remain informational.
+Tab accepts the gray inline completion on Windows and Unix. Right cycles through the candidates below the input and previews the selection in gray. It moves the cursor normally within existing text. Typo suggestions remain informational.
 
 ## Modules and responsibilities
 

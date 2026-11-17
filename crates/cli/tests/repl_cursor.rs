@@ -331,7 +331,8 @@ fn embedded_prompt_cursor_tracks_visible_text_and_editing() {
         let parser = parser.lock().unwrap();
         let screen = parser.screen();
         let (row, col) = screen.cursor_position();
-        for column in col..col + suffix_length {
+        // The visible candidate must be gray even if ConPTY skips painting its leading blank.
+        for column in col + 1..col + suffix_length {
             assert_eq!(
                 screen.cell(row, column).unwrap().fgcolor(),
                 vt100::Color::Idx(8)

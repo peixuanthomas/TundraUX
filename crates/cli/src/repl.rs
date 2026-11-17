@@ -43,6 +43,8 @@ impl CompletionSelection {
 
 struct CompletionKeys(Arc<Mutex<CompletionSelection>>);
 
+const TAB_KEY: KeyEvent = KeyEvent(KeyCode::Tab, Modifiers::NONE);
+
 impl ConditionalEventHandler for CompletionKeys {
     fn handle(
         &self,
@@ -51,7 +53,7 @@ impl ConditionalEventHandler for CompletionKeys {
         _positive: bool,
         context: &EventContext<'_>,
     ) -> Option<Cmd> {
-        if event.get(0) == Some(&KeyEvent::from('\t')) {
+        if event.get(0) == Some(&TAB_KEY) || event.get(0) == Some(&KeyEvent::from('\t')) {
             return Some(
                 if context.pos() == context.line().len() && context.hint_text().is_some() {
                     Cmd::CompleteHint
@@ -203,7 +205,9 @@ where
         };
     let helper = PromptDisplay::new(watchdog);
     editor.bind_sequence(KeyEvent(KeyCode::BackTab, Modifiers::NONE), Cmd::Noop);
+    // Windows reports the Tab key separately from Ctrl+I.
     for key in [
+        TAB_KEY,
         KeyEvent::from('\t'),
         KeyEvent(KeyCode::Right, Modifiers::NONE),
     ] {
