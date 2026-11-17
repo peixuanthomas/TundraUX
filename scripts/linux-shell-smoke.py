@@ -1578,13 +1578,30 @@ def main() -> int:
             raise SystemExit("drag cancellation did not settle")
         if not wait_for_painted_text(master, output, "Exit TundraUX", child, present=False, timeout=0):
             raise SystemExit("dragging out of Back activated it")
+        back_pressed_at = time.monotonic()
         os.write(master, f"\x1b[<0;{back_x};{back_y}M".encode())
         read_available(master, output, 0.2)
-        if not wait_for_painted_text(master, output, "Exit TundraUX", child, present=False, timeout=0):
+        back_replay_bytes = len(output)
+        back_replay_started = time.monotonic()
+        activated_before_release = not wait_for_painted_text(
+            master, output, "Exit TundraUX", child, present=False, timeout=0
+        )
+        back_replay_seconds = time.monotonic() - back_replay_started
+        if activated_before_release:
             raise SystemExit("second press activated Back before release")
+        back_held_seconds = time.monotonic() - back_pressed_at
         os.write(master, f"\x1b[<0;{back_x};{back_y}m".encode())
+        print(f"Back click held {back_held_seconds:.3f}s; "
+              f"replayed {back_replay_bytes} bytes in {back_replay_seconds:.3f}s")
         if not wait_for_painted_text(master, output, "Exit TundraUX", child):
-            raise SystemExit("releasing Back did not open the power dialog")
+            frame = control_snapshot(master, output, child, cli, env)
+            columns, rows = os.get_terminal_size(master)
+            painted = "\n".join(painted_screen_lines(output, columns, rows))
+            raise SystemExit(f"releasing Back did not open the power dialog; "
+                             f"pressed ({back_x}, {back_y}) for {back_held_seconds:.3f}s, "
+                             f"replayed {back_replay_bytes} bytes in {back_replay_seconds:.3f}s: "
+                             f"{json.dumps(frame, ensure_ascii=False)}\nPainted:\n{painted}\nPTY:\n"
+                             + output_diagnostic(output[pointer_offset:]))
 
         if CHECK_CRASH_SCREEN:
             check_crash_screen(master, output, child, isolated, cli, env)
