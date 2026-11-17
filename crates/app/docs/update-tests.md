@@ -21,4 +21,4 @@ Main test locations:
 
 The fixed test suite uses in-memory data and temporary portable directories, without making HTTP requests or starting local HTTP servers. Full Release downloads, Beta builds, and real restarts are checked during release acceptance on the corresponding platforms.
 
-Historical system-package validation records are in `docs/packaging/linux/VALIDATION-*.md`. For current update behavior, see [Application self-updates](update.md).
+See [Application self-updates](update.md) for update behavior.

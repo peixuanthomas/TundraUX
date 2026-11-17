@@ -7,7 +7,7 @@ Hot paths in `platform` include process output, log tails, document fingerprints
 - **Process waiting:** Unix uses `poll`; Linux uses `pidfd` to wait for exit when available. Fully read pipes leave the wait set. Windows waits on the process handle while idle, checking cancellation after at most 20ms per iteration.
 - **Log allocations:** When scanning a tail of at most 8 MiB, retain only the positions of needed lines before creating log objects, avoiding event, timestamp, and path-string allocations for old lines.
 - **Document fingerprints:** Compute XXH3-64 from `xxhash-rust` in chunks, with a 64 KiB buffer for writes. XXH3 detects changes; release verification still uses SHA-256.
-- **Recovery records:** New drafts save `saved_content_hash_algorithm = "xxh3-64-v1"`. Old drafts without this marker can still have their content read, but must be rebound to the target file when saved.
+- Recovery drafts save `saved_content_hash_algorithm = "xxh3-64-v1"` so the editor can validate the fingerprint before binding the draft to a file.
 - **Directory reads:** Query attributes only once for regular files, and combine ELF and script-header checks into one open. Read file headers nonblockingly without following a final-component link.
 - **Disk scans:** Linux uses one `statx` call to obtain type, size, block count, device, file ID, and mount ID. Directory cursors hold open handles; maximum depth is `min(256, max(1, RLIMIT_NOFILE - 32))`.
 
@@ -52,4 +52,4 @@ cargo fmt --all --check
 git diff --check
 ```
 
-Targeted coverage includes reading two pipes, cancellation, log truncation, different write chunk sizes, preserving the original file on failure, old drafts, symbolic links, hard links, bind mounts, directory renaming, and low handle limits. Isolated mount tests use separate user and mount namespaces.
+Targeted coverage includes reading two pipes, cancellation, log truncation, different write chunk sizes, preserving the original file on failure, symbolic links, hard links, bind mounts, directory renaming, and low handle limits. Isolated mount tests use separate user and mount namespaces.

@@ -4,7 +4,7 @@ Configuration Backups and Recovery lists time, source, related files, and result
 
 ## Records and recovery
 
-Shared records are in `/var/lib/tundraux/config-backups/operations`, with directory permissions `0700` and file permissions `0600`. They may contain pre-change text, UID/GID, permissions, ACLs, extended attributes, and post-change versions. System configuration history and recovery use these same transaction records. Version 1 backup files are not imported.
+Shared records are in `/var/lib/tundraux/config-backups/operations`, with directory permissions `0700` and file permissions `0600`. They may contain pre-change text, UID/GID, permissions, ACLs, extended attributes, and post-change versions. System configuration history and recovery use these same transaction records.
 
 Before recovery, recheck the current version and candidate configuration, and preview the diff. Stop if later external changes are found; when no validator is available, recovery without validation must be selected explicitly. Recovery itself also saves the current originals, then rereads and checks the result after completion.
 

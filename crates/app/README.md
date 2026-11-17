@@ -34,7 +34,7 @@ The shared application catalog supplies Home and Launcher. System applications s
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 
-Editor recovery reads the current per-document draft format and rejects older recovery schemas.
+Editor recovery uses the current per-document draft format.
 
 Editor calculations, Explorer tasks, and diagnostic results notify an optional host event loop after publishing their results. Domain code uses the platform notifier and does not depend on Shell.
 
@@ -64,5 +64,5 @@ Runtime logs merge failure reports that the user is authorized to access at the 
 cargo test --locked -p app
 ```
 
-Run workspace tests after changing cross-crate commands or shared types. Update and Vim installation tests use offline data and cover validation, cancellation, file safety, and rollback.
+Run workspace tests after changing cross-crate commands or shared types. Update tests use the current portable archive and transaction formats. Update and Vim installation tests run offline and cover validation, cancellation, file safety, and rollback.
 The recovery scan fixtures use the current transaction protocol and exercise equivalent install paths.

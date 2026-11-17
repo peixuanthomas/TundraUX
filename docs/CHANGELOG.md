@@ -6,7 +6,7 @@
 
 ## v1.5.1 — 2026-11-11
 
-标签：[`v1.5.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.5...v1.5.1) · [发布说明](packaging/releases/v1.5.1.md)。
+标签：[`v1.5.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.5...v1.5.1)。
 
 ### 新增与调整
 
@@ -22,7 +22,7 @@
 
 ## v1.5 — 2026-10-31
 
-标签：[`v1.5`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4.1...v1.5) · [发布说明](packaging/releases/v1.5.md)。
+标签：[`v1.5`](https://github.com/peixuanthomas/TundraUX3/tree/v1.5)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4.1...v1.5)。
 
 ### 新增
 
@@ -52,7 +52,7 @@
 
 ## v1.4.1 — 2026-10-22
 
-标签：[`v1.4.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4...v1.4.1) · [发布说明](packaging/releases/v1.4.1.md)。
+标签：[`v1.4.1`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.4...v1.4.1)。
 
 ### 新增与调整
 
@@ -70,7 +70,7 @@
 
 ## v1.4 — 2026-10-21
 
-标签：[`v1.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.4...v1.4) · [发布说明](packaging/releases/v1.4.md)。
+标签：[`v1.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.4...v1.4)。
 
 ### 新增
 
@@ -92,7 +92,7 @@
 
 ## v1.3.4 — 2026-10-11
 
-标签：[`v1.3.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.3.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.3...v1.3.4) · [发布说明](packaging/releases/v1.3.4.md)。
+标签：[`v1.3.4`](https://github.com/peixuanthomas/TundraUX3/tree/v1.3.4)。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.3...v1.3.4)。
 
 ### 新增
 
@@ -123,7 +123,7 @@
 
 ## v1.3.3 — 2026-10-04
 
-标签提交：`f2f5649`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.2...v1.3.3) · [发布说明](packaging/releases/v1.3.3.md)。
+标签提交：`f2f5649`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.2...v1.3.3)。
 
 ### 新增
 
@@ -153,7 +153,7 @@
 
 ## v1.3.2 — 2026-09-27
 
-标签提交：`581eef4`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.1...v1.3.2) · [发布说明](packaging/releases/v1.3.2.md)。
+标签提交：`581eef4`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3.1...v1.3.2)。
 
 ### 新增
 
@@ -183,7 +183,7 @@
 
 ## v1.3.1 — 2026-09-12
 
-标签提交：`8504a7a`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3...v1.3.1) · [发布说明](packaging/releases/v1.3.1.md)。
+标签提交：`8504a7a`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.3...v1.3.1)。
 
 ### 新增
 
@@ -207,7 +207,7 @@
 
 ## v1.3 — 2026-09-10
 
-标签提交：`5ffdf72`；程序版本为 `1.3.0`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.2...v1.3) · [发布说明](packaging/releases/v1.3.md)。
+标签提交：`5ffdf72`；程序版本为 `1.3.0`。[查看提交差异](https://github.com/peixuanthomas/TundraUX3/compare/v1.2...v1.3)。
 
 ### 新增
 

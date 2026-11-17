@@ -38,8 +38,8 @@
 | [terminal-runtime](../crates/terminal-runtime/README.md) | Host and child terminals |
 | [vim-runtime](../crates/vim-runtime/README.md) | Vim processes, buffer synchronization, and saving |
 | [auto-admin](../crates/auto-admin/README.md) | Authorization, password input, and administrative tasks |
-| [storage](../crates/storage/README.md) | Configuration formats, atomic saves, migration, and recovery |
-| [identity](../crates/identity/README.md) | System users and local application accounts |
+| [storage](../crates/storage/README.md) | Configuration formats, atomic saves, and recovery |
+| [identity](../crates/identity/README.md) | System users and workspace session identity |
 | [system-services](../crates/system-services/README.md) | System and weather snapshots, background services |
 | [runtime-log](../crates/runtime-log/README.md) | Logging, queries, and incident reports |
 | [watchdog](../crates/watchdog/README.md) | Process and task supervision, recovery records |
@@ -49,9 +49,6 @@ See the [complete responsibility table](README-TECHNICAL.md#crate-responsibiliti
 
 ## Historical records
 
-The following files preserve the state at the time and are not current usage guides:
-
-- [CHANGELOG](CHANGELOG.md) and [release notes](packaging/releases/v1.5.1.md)
-- [Historical Linux portable-build validation](packaging/linux/VALIDATION-2026-09-18.md)
+- [CHANGELOG](CHANGELOG.md)
 - [Linux workspace performance measurements, 2026-11-17](performance-linux-2026-11-17.md)
 - [Historical e2 candidate measurements, 2026-11-16](performance-linux-2026-11-16.md)

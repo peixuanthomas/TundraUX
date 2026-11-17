@@ -91,7 +91,7 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 
 `TextInput` provides a cursor, selection, scrolling, and password masking. Button hover, pressed, focused, current-item, and disabled styles are calculated centrally by `TundraTheme` and `RenderContext`. See [UI requirements](../../docs/UI-requirements.md) for keyboard, mouse, and touchscreen rules.
 
-The default palette restores v1.5.1 Glacier Night: canvas `#071116`, surface `#0D1B22`, raised surface `#13262F`, text `#E6F1F4`, muted text `#8EA7B0`, accent `#63D3E5`, and border `#29434E`. Ordinary buttons have a visible control surface and plain labels; primary actions use accent fill, while danger actions retain semantic color. Current-item and multi-selection backgrounds remain independent of keyboard focus. Explicit saved appearance settings remain supported.
+The default Glacier Night palette uses `#071116` for canvas, `#0D1B22` for surfaces, `#13262F` for raised surfaces, `#E6F1F4` for text, `#8EA7B0` for muted text, `#63D3E5` for accent, and `#29434E` for borders. Ordinary buttons have a visible control surface and plain labels. Primary actions use accent fill, while danger actions retain semantic color. Current-item and multi-selection backgrounds remain independent of keyboard focus. Explicit saved appearance settings remain supported.
 
 Compatibility themes retain resolved surface colors and the frame's terminal color capability, so page renderers use the same layered palette and ANSI output remains free of RGB colors. `Surface`, `Button`, and `List` accept an explicit background when embedded in a sidebar, dialog, or action band.
 

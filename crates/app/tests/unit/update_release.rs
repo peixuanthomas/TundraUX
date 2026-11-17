@@ -1,30 +1,27 @@
 use super::*;
 
 fn release() -> Release {
-    let base = format!("https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/v1.3.2/");
+    let base = format!("https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/download/v2.0.1/");
     Release {
-        tag_name: "v1.3.2".into(),
+        tag_name: "v2.0.1".into(),
         draft: false,
         prerelease: false,
         body: None,
-        assets: [
-            "TundraUX-v1.3.2-linux-x86_64.tar.gz",
-            "TundraUX-v1.3.2-linux-x86_64.sha256",
-        ]
-        .into_iter()
-        .map(|name| Asset {
-            name: name.into(),
-            browser_download_url: format!("{base}{name}"),
-            state: "uploaded".into(),
-        })
-        .collect(),
+        assets: ["tundraux-2.0.1-linux-x86_64.tar.gz", "SHA256SUMS"]
+            .into_iter()
+            .map(|name| Asset {
+                name: name.into(),
+                browser_download_url: format!("{base}{name}"),
+                state: "uploaded".into(),
+            })
+            .collect(),
     }
 }
 
 #[test]
 fn release_selects_published_linux_archive_and_checksum() {
     let mut value = release();
-    assert_eq!(select_payload(&value).unwrap().version, "1.3.2");
+    assert_eq!(select_payload(&value).unwrap().version, "2.0.1");
     value.prerelease = true;
     assert!(select_payload(&value).is_err());
     value.prerelease = false;
@@ -38,21 +35,21 @@ fn release_selects_published_linux_archive_and_checksum() {
 #[test]
 fn release_version_and_commit_both_matter() {
     let identity = BuildIdentity {
-        package_version: "1.3.2".into(),
+        package_version: "2.0.1".into(),
         commit_sha: Some("a".repeat(40)),
         dirty: false,
     };
-    let local = Version::new(1, 3, 2);
+    let local = Version::new(2, 0, 1);
     assert_eq!(
         release_relation(&identity, &local, &local, &"a".repeat(40)),
         UpdateRelation::Identical
     );
     assert_eq!(
-        release_relation(&identity, &local, &Version::new(1, 3, 3), &"b".repeat(40)),
+        release_relation(&identity, &local, &Version::new(2, 0, 2), &"b".repeat(40)),
         UpdateRelation::Behind { remote_ahead: 1 }
     );
     assert_eq!(
-        release_relation(&identity, &local, &Version::new(1, 3, 1), &"b".repeat(40)),
+        release_relation(&identity, &local, &Version::new(2, 0, 0), &"b".repeat(40)),
         UpdateRelation::Ahead { local_ahead: 1 }
     );
     assert_eq!(

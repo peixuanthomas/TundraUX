@@ -46,4 +46,4 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 cargo test --locked -p storage
 ```
 
-Tests cover schemas, atomic writes, path safety, corruption recovery, and configuration validation.
+Tests cover current document formats, invalid schemas, atomic writes, path safety, and corruption recovery.

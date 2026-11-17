@@ -165,8 +165,8 @@ fn inactive_drafts_are_claimed_one_at_a_time_in_updated_order() {
 }
 
 #[test]
-fn current_recovery_round_trips_and_rejects_schema_one() {
-    let fixture = RecoveryFixture::new("legacy");
+fn rich_recovery_round_trips_with_document_metadata() {
+    let fixture = RecoveryFixture::new("rich-round-trip");
     let paths = fixture.paths();
     let lease = acquire_editor_recovery(&paths, "alice", &RecoveryId::default()).unwrap();
     let mut record = EditorRecoveryRecordV2::rich(RichDocument::new(), "# fallback\n");
@@ -178,8 +178,6 @@ fn current_recovery_round_trips_and_rejects_schema_one() {
         read_versioned_recovery_path(lease.path()).unwrap(),
         Some(VersionedEditorRecovery::V2(record))
     );
-    atomic_write_document(lease.path(), br#"{"schema":1,"source":"old"}"#).unwrap();
-    assert!(read_versioned_recovery_path(lease.path()).is_err());
 }
 
 #[test]

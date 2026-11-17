@@ -114,7 +114,7 @@ Embedded terminals can raise their window minimum while running. The workspace u
 
 The watchdog detects missing Shell progress in five seconds and ends the run with terminal recovery. AppHost failures leave other windows usable. The watchdog can list or stop a session even when external UI control is disabled. [Watchdog commands](../cli/docs/commands.md)
 
-The compositor dims the covered interface beneath modal layers. Dialogs share the OpenCode-inspired header, body, close control, and action-band layout from `ui`; existing notification cancel actions keep their original IDs and routing. The default surfaces retain the v1.5.1 Glacier Night blue palette.
+The compositor dims the covered interface beneath modal layers. Dialogs share the OpenCode-inspired header, body, close control, and action-band layout from `ui`. Existing notification cancel actions keep their original IDs and routing. The default surfaces use the Glacier Night blue palette.
 
 Floating toasts preserve keyboard focus and block pointer input in the area they cover until they disappear. External control reports targets with covered click points as unavailable during that time.
 

@@ -42,7 +42,7 @@ cargo +1.95.0 check --workspace --all-targets --all-features --locked
 cargo +1.95.0 test --workspace --locked
 ```
 
-CI configuration is in [cross-platform.yml](../.github/workflows/cross-platform.yml), [linux.yml](../.github/workflows/linux.yml), and the corresponding release workflows. Run Linux-related checks in WSL or native Linux, and Windows and macOS checks on their respective platforms.
+CI configuration is in [cross-platform.yml](../.github/workflows/cross-platform.yml) and [linux.yml](../.github/workflows/linux.yml). The [Vim engine workflow](../.github/workflows/vim-engine-release.yml) checks bundled Vim packaging. Run Linux-related checks in WSL or native Linux, and Windows and macOS checks on their respective platforms.
 
 ## Linux PTY and system operations
 

@@ -4,7 +4,7 @@ This is the shared design and acceptance contract for the complete interface: st
 
 ## Visual language and density
 
-The default dark appearance retains the v1.5.1 Glacier Night blue surfaces and one accent. Layout and control hierarchy follow the OpenCode terminal interface; its black palette is not used. Theme overrides and explicit saved appearance choices remain supported.
+The default dark appearance uses Glacier Night blue surfaces and one accent. Layout and control hierarchy follow the OpenCode terminal interface. Theme overrides and explicit saved appearance choices remain supported.
 
 | Token | Default | Use |
 | --- | --- | --- |

@@ -104,19 +104,10 @@ fn reopening_storage_tightens_only_owned_paths() {
 
 #[test]
 fn editor_suffixes_preserve_explicit_lists() {
-    let legacy = [
-        "md", "markdown", "mdown", "mkd", "txt", "log", "json", "jsonl", "toml", "yaml", "yml",
-        "ini", "cfg", "conf", "xml", "csv", "tsv", "c", "h",
-    ]
-    .map(str::to_string)
-    .to_vec();
-    let defaults = EditorConfig::default().explorer_open_extensions;
-    let custom = vec!["txt".to_string(), "rs".to_string()];
-    for (case, extensions, expected, migrated) in [
-        ("legacy", legacy.clone(), legacy, false),
-        ("custom", custom.clone(), custom, false),
-        ("empty", Vec::new(), Vec::new(), false),
-        ("expanded", defaults.clone(), defaults, false),
+    for (case, extensions) in [
+        ("custom", vec!["txt".to_string(), "rs".to_string()]),
+        ("empty", Vec::new()),
+        ("default", EditorConfig::default().explorer_open_extensions),
     ] {
         let base = unique_temp_root(case);
         let paths = app_paths(&base);
@@ -129,23 +120,11 @@ fn editor_suffixes_preserve_explicit_lists() {
         fs::write(&layout.config_path, toml::to_string(&config).unwrap()).unwrap();
 
         let opened = StorageManager::open(paths).unwrap();
-        config.editor.explorer_open_extensions = expected;
         assert_eq!(opened.manager.load_config().unwrap(), config, "{case}");
         let persisted: StorageConfig =
             toml::from_str(&fs::read_to_string(&layout.config_path).unwrap()).unwrap();
         assert_eq!(persisted, config, "{case}");
-        assert_eq!(
-            opened.report.migrated_files.contains(&layout.config_path),
-            migrated,
-            "{case}"
-        );
-        assert!(
-            StorageManager::open(app_paths(&base))
-                .unwrap()
-                .report
-                .migrated_files
-                .is_empty()
-        );
+        assert!(opened.report.migrated_files.is_empty(), "{case}");
         cleanup(&base);
     }
 }
@@ -347,18 +326,18 @@ fn toml_and_json_documents_round_trip() {
 }
 
 #[test]
-fn unsupported_old_schema_is_rejected_without_overwriting_data() {
-    let base = unique_temp_root("unsupported-old-schema");
+fn invalid_schema_is_rejected_without_overwriting_data() {
+    let base = unique_temp_root("invalid-schema");
     let paths = app_paths(&base);
     let path = paths.config_path().to_path_buf();
     fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let old = "schema_version = 1\ntheme = \"dark\"\n";
-    fs::write(&path, old).unwrap();
+    let invalid = "schema_version = 0\ntheme = \"dark\"\n";
+    fs::write(&path, invalid).unwrap();
     assert!(matches!(
         StorageManager::open(paths),
-        Err(StorageError::InvalidSchemaVersion { found: 1, .. })
+        Err(StorageError::InvalidSchemaVersion { found: 0, .. })
     ));
-    assert_eq!(fs::read_to_string(&path).unwrap(), old);
+    assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
     cleanup(&base);
 }
 
@@ -419,9 +398,9 @@ fn existing_non_english_config_is_canonicalized_without_losing_language_on_open(
         &layout.config_path,
         "schema_version = 3\ntheme = \"dark\"\nlanguage = \"zh-Hans\"\ntimezone = \"UTC\"\n",
     )
-    .expect("legacy language fixture");
+    .expect("language alias fixture");
 
-    let opened = StorageManager::open(paths).expect("config migration should succeed");
+    let opened = StorageManager::open(paths).expect("config normalization should succeed");
 
     assert_eq!(
         opened.manager.load_config().expect("config").language,

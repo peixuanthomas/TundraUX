@@ -29,7 +29,7 @@ The update helper retains the old programs and old `vim/`, then removes the back
 
 After an interrupted update, the next startup continues recovery using the transaction record in the installation directory. The Vim directory must contain the executable, complete runtime, license, and `UPSTREAM.json`.
 
-The current protocol is v3, which requires the Vim transaction state field. v2 updaters cannot install v3 packages; upgrading from those versions requires fully extracting the new portable archive once. Existing v2 transactions can only be recovered, rolled back, or cleaned up.
+The updater uses transaction protocol 3. Each transaction record includes the Vim transaction state.
 
 Updates do not replace user data, default themes, custom themes, or local assets. Linux preserves executable permissions; the helper replaces the original process through exec and waits for the new Shell to exit. Windows uses backup copies to handle files still held by running processes and cleans up old backups on subsequent startups.
 
