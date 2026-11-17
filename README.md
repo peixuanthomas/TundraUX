@@ -15,7 +15,7 @@ TundraUX brings system tools, files, editors, and everyday utilities into one te
 - **System activity:** monitor resource usage, inspect logs and notifications, and track background tasks and their output. The top bar shows status messages and the clock.
 - **Personal workspace:** search Launcher by name or command, organize custom entries, choose themes and languages, and use the built-in clock and weather apps.
 - **Independent app windows:** use each window's frame to minimize, split, or close it; full screen is in the Split menu. Restore background apps from the bottom window bar and split the current pane incrementally into at most a 2×2 grid. Layout changes retain app content while new frames arrive, and new windows show a starting hint only after 100ms. An independent watchdog monitors the Shell and app processes and provides direct termination when an app stops responding.
-- **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, using TundraUX's Glacier Night blue palette.
+- **Terminal interface:** OpenCode-inspired navigation, selection rows, dialogs, and loading feedback, with slim scrollbars and TundraUX's Glacier Night blue palette.
 
 | Platform | Main support |
 | --- | --- |

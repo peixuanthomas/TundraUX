@@ -1,8 +1,6 @@
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{HorizontalAlignment, Margin, Rect};
-use ratatui::style::Style;
-use ratatui::widgets::{Paragraph, Widget};
+use ratatui::layout::{Margin, Rect};
 
 use crate::RenderContext;
 
@@ -82,22 +80,33 @@ impl Scrollbar {
     pub fn render(&self, area: Rect, buffer: &mut Buffer, context: &RenderContext) {
         let tokens = context.theme;
         let (start, len) = self.thumb_range(area);
-        if len == 0 {
+        if area.is_empty() || len == 0 {
             return;
         }
-        if crate::automation::enabled() {
-            let (id, track, thumb) = match self.orientation {
-                ScrollbarOrientation::VerticalRight => (
+        // Half the width and a quarter of the height look equally thick in a 1:2 cell.
+        let (id, track, thumb, track_symbol, thumb_symbol) = match self.orientation {
+            ScrollbarOrientation::VerticalRight => {
+                let x = area.right() - 1;
+                (
                     "scrollbar.vertical",
-                    Rect::new(area.right().saturating_sub(1), area.y, 1, area.height),
-                    Rect::new(area.right().saturating_sub(1), area.y + start, 1, len),
-                ),
-                ScrollbarOrientation::HorizontalBottom => (
+                    Rect::new(x, area.y, 1, area.height),
+                    Rect::new(x, area.y + start, 1, len),
+                    "▎",
+                    "▌",
+                )
+            }
+            ScrollbarOrientation::HorizontalBottom => {
+                let y = area.bottom() - 1;
+                (
                     "scrollbar.horizontal",
-                    Rect::new(area.x, area.bottom().saturating_sub(1), area.width, 1),
-                    Rect::new(area.x + start, area.bottom().saturating_sub(1), len, 1),
-                ),
-            };
+                    Rect::new(area.x, y, area.width, 1),
+                    Rect::new(area.x + start, y, len, 1),
+                    "▁",
+                    "▂",
+                )
+            }
+        };
+        if crate::automation::enabled() {
             let _scope = crate::automation::scope(id, "group", "", track);
             crate::automation::control(
                 "track",
@@ -109,43 +118,16 @@ impl Scrollbar {
             );
             crate::automation::control("thumb", "slider", "", thumb, Default::default(), &["drag"]);
         }
-        match self.orientation {
-            ScrollbarOrientation::VerticalRight => {
-                let x = area.x.saturating_add(area.width.saturating_sub(1));
-                for offset in 0..area.height {
-                    let thumb = offset >= start && offset < start.saturating_add(len);
-                    Paragraph::new(if thumb { "█" } else { "│" })
-                        .alignment(HorizontalAlignment::Left)
-                        .style(
-                            Style::default()
-                                .fg(if thumb {
-                                    tokens.accent_strong
-                                } else {
-                                    tokens.border
-                                })
-                                .bg(tokens.surface),
-                        )
-                        .render(Rect::new(x, area.y.saturating_add(offset), 1, 1), buffer);
-                }
-            }
-            ScrollbarOrientation::HorizontalBottom => {
-                let y = area.y.saturating_add(area.height.saturating_sub(1));
-                for offset in 0..area.width {
-                    let thumb = offset >= start && offset < start.saturating_add(len);
-                    Paragraph::new(if thumb { "█" } else { "─" })
-                        .alignment(HorizontalAlignment::Left)
-                        .style(
-                            Style::default()
-                                .fg(if thumb {
-                                    tokens.accent_strong
-                                } else {
-                                    tokens.border
-                                })
-                                .bg(tokens.surface),
-                        )
-                        .render(Rect::new(area.x.saturating_add(offset), y, 1, 1), buffer);
-                }
-            }
+        for point in track.intersection(buffer.area).positions() {
+            let (symbol, color) = if thumb.contains(point) {
+                (thumb_symbol, tokens.accent_strong)
+            } else {
+                (track_symbol, tokens.border)
+            };
+            buffer[point]
+                .set_symbol(symbol)
+                .set_fg(color)
+                .set_bg(tokens.surface);
         }
     }
 

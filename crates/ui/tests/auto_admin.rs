@@ -41,7 +41,7 @@ fn live_output_scrollbar_keeps_text_clear_and_tracks_history() {
             for y in layout.terminal.y..layout.terminal.bottom() {
                 assert_eq!(buffer[(layout.terminal.right() - 1, y)].symbol(), "X");
             }
-            assert_eq!(buffer[(bar.thumb.x, bar.thumb.y)].symbol(), "█");
+            assert_eq!(buffer[(bar.thumb.x, bar.thumb.y)].symbol(), "▌");
             assert_eq!(
                 buffer[(bar.thumb.x, bar.thumb.y)].fg,
                 context.theme.accent_strong

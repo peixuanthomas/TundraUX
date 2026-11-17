@@ -206,7 +206,9 @@ fn failed_terminal_keeps_the_bottom_scrollbar_thumb_visible_and_draggable() {
             })
             .unwrap();
         let point = (scrollbar.thumb.x, scrollbar.thumb.y);
-        assert_eq!(screen.backend().buffer()[point].symbol(), "█");
+        let thumb = &screen.backend().buffer()[point];
+        assert_eq!(thumb.symbol(), "▌");
+        assert_eq!(thumb.fg, context.theme.accent_strong);
         for column in [point.0 - 1, point.0, point.0 + 1] {
             host.handle_input(
                 &InputEvent::mouse_down(ui::MouseButton::Left, (column, point.1)),

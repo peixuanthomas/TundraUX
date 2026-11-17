@@ -358,18 +358,19 @@ fn settings_scrollbar_only_appears_when_content_overflows() {
         .expect("rendered settings layout")
         .scrollbar
         .expect("rendered settings scrollbar");
-    let symbols = (rendered_track.y..rendered_track.bottom())
-        .map(|y| {
-            terminal
-                .backend()
-                .buffer()
-                .cell((rendered_track.x, y))
-                .expect("scrollbar cell")
-                .symbol()
-        })
-        .collect::<Vec<_>>();
-    assert!(symbols.iter().all(|symbol| matches!(*symbol, "│" | "█")));
-    assert!(symbols.contains(&"█"));
+    let buffer = terminal.backend().buffer();
+    assert!(
+        rendered_track
+            .positions()
+            .all(|point| matches!(buffer[point].symbol(), "▎" | "▌"))
+    );
+    assert_eq!(buffer[(rendered_track.x, rendered_track.y)].symbol(), "▎");
+    let last_cell = &buffer[(rendered_track.x, rendered_track.bottom() - 1)];
+    assert_eq!(last_cell.symbol(), "▌");
+    assert_ne!(
+        buffer[(rendered_track.x, rendered_track.y)].fg,
+        last_cell.fg
+    );
 }
 
 #[test]

@@ -699,14 +699,12 @@ fn wide_source_line_exposes_and_renders_a_proportional_horizontal_scrollbar() {
         terminal.backend().buffer()[(layout.canvas.x, layout.canvas.y)].symbol(),
         "0"
     );
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.track.x, scrollbar.track.y)].symbol(),
-        "─"
-    );
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.thumb.x, scrollbar.thumb.y)].symbol(),
-        "█"
-    );
+    let buffer = terminal.backend().buffer();
+    let track = &buffer[(scrollbar.track.x, scrollbar.track.y)];
+    let thumb = &buffer[(scrollbar.thumb.x, scrollbar.thumb.y)];
+    assert_eq!(track.symbol(), "▁");
+    assert_eq!(thumb.symbol(), "▂");
+    assert_ne!(thumb.fg, track.fg);
 }
 
 #[test]
@@ -733,14 +731,12 @@ fn wide_rich_no_wrap_line_exposes_and_renders_a_horizontal_scrollbar() {
         terminal.backend().buffer()[(layout.canvas.x, layout.canvas.y)].symbol(),
         "5"
     );
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.track.x, scrollbar.track.y)].symbol(),
-        "─"
-    );
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.thumb.x, scrollbar.thumb.y)].symbol(),
-        "█"
-    );
+    let buffer = terminal.backend().buffer();
+    let track = &buffer[(scrollbar.track.x, scrollbar.track.y)];
+    let thumb = &buffer[(scrollbar.thumb.x, scrollbar.thumb.y)];
+    assert_eq!(track.symbol(), "▁");
+    assert_eq!(thumb.symbol(), "▂");
+    assert_ne!(thumb.fg, track.fg);
 }
 
 #[test]
@@ -1475,14 +1471,12 @@ fn overflowing_document_exposes_proportional_scrollbar_and_scrolled_hits() {
         Some(EditorHitTarget::VerticalScrollbar)
     );
     let terminal = render(&model, 72, 14);
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.track.x, scrollbar.track.y)].symbol(),
-        "│"
-    );
-    assert_eq!(
-        terminal.backend().buffer()[(scrollbar.thumb.x, scrollbar.thumb.y)].symbol(),
-        "█"
-    );
+    let buffer = terminal.backend().buffer();
+    let track = &buffer[(scrollbar.track.x, scrollbar.track.y)];
+    let thumb = &buffer[(scrollbar.thumb.x, scrollbar.thumb.y)];
+    assert_eq!(track.symbol(), "▎");
+    assert_eq!(thumb.symbol(), "▌");
+    assert_ne!(thumb.fg, track.fg);
 }
 
 #[test]

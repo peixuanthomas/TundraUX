@@ -71,7 +71,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
 - Home exposes an Edit icons / Done action, an edit-mode summary, and insertion indicators. Home and Launcher share grid insertion geometry, including row gaps, empty tail slots, and scrollbar exclusion.
 - `ManagementViewModel::selected_rows` represents all selected rows; `selected` represents the current position.
-- `ScrollbarOrientation::hit_test` extends pointer hit detection by one cell on either side of a vertical bar or above and below a horizontal bar, without changing the visual layout.
+- Shared scrollbars draw a thin, muted track and a brighter thumb. The vertical thumb uses half a character cell's width, and the horizontal thumb uses a quarter of its height. `ScrollbarOrientation::hit_test` extends the pointer target by one cell on either side of a vertical bar or above and below a horizontal bar.
 
 Selection dialogs keep this extended scrollbar hit area clear of option rows and the Close button, including the last row of long paths.
 

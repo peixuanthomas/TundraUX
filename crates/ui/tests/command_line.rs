@@ -288,20 +288,14 @@ fn short_history_scrollbar_layout_matches_the_painted_thumb() {
             })
             .unwrap();
         for y in layout.track.y..layout.track.bottom() {
-            let expected = if y >= layout.thumb.y && y < layout.thumb.bottom() {
-                "█"
+            let (symbol, color) = if y >= layout.thumb.y && y < layout.thumb.bottom() {
+                ("▌", context.theme.accent_strong)
             } else {
-                "│"
+                ("▎", context.theme.border)
             };
-            assert_eq!(
-                screen
-                    .backend()
-                    .buffer()
-                    .cell((layout.track.x, y))
-                    .unwrap()
-                    .symbol(),
-                expected
-            );
+            let cell = &screen.backend().buffer()[(layout.track.x, y)];
+            assert_eq!(cell.symbol(), symbol);
+            assert_eq!(cell.fg, color);
         }
     }
 }
