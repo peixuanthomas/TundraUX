@@ -460,7 +460,10 @@ impl AppHostSession {
 
     fn command_line_event(&mut self, event: CommandLineHostEvent) {
         match event {
-            CommandLineHostEvent::PanicRequested => trigger_command_line_panic(),
+            CommandLineHostEvent::PanicRequested => {
+                self.output
+                    .push_back(AppToShell::ShellAction(HostAction::DebugPanicRequested));
+            }
             CommandLineHostEvent::ExitToCaller => {
                 self.state.close_page_instance(self.state.active_page_id());
             }

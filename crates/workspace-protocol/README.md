@@ -23,6 +23,8 @@ The public watchdog request and CLI result protocol keeps its separate `WATCHDOG
 
 Private protocol version 3 adds a persisted external-control configuration receipt with its configuration revision, authorization revision, and login session. AppHost sends this reliable receipt before confirming the related input fence. Shell can close the external-control request from that receipt while its own shared configuration cache catches up; unrelated background saves do not delay ordinary input fences.
 
+Private protocol version 4 adds a reliable, explicit `DebugPanicRequested` Shell action for the embedded REPL's watchdog test. Ordinary AppHost exit or panic messages never imply this action. The public watchdog protocol remains version 1.
+
 `AppStarted` carries guardian-side spawn and readiness durations. AppHost attaches optional local startup durations to its first frame for Shell's startup log.
 
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration. The language JSON is reference-counted within each process so queueing and cloning initialization do not copy its strings; its wire representation remains a JSON object.

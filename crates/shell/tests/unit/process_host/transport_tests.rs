@@ -33,6 +33,38 @@ fn coalescing_preserves_startup_and_keeps_fence_before_the_replacing_frame() {
 }
 
 #[test]
+fn an_explicit_debug_request_survives_backpressure_and_precedes_close() {
+    let queue = Queue::new(MAX_CONTROL_BYTES);
+    for _ in 0..MAX_MESSAGES - RESERVED_MESSAGES {
+        queue.push(AppToShell::ToggleTasks).unwrap();
+    }
+    let debug = AppToShell::ShellAction(workspace_protocol::ShellAction::DebugPanicRequested);
+    let (error, retained) = queue.push(debug.clone()).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+    assert_eq!(retained, debug);
+    for message in [retained, AppToShell::CloseStarted, AppToShell::Closed] {
+        assert_eq!(
+            event_loop::runtime().block_on(queue.next()).unwrap(),
+            AppToShell::ToggleTasks
+        );
+        queue.complete();
+        queue.push(message).unwrap();
+    }
+    queue.push(AppToShell::Frame(frame(1))).unwrap();
+    queue.push(AppToShell::Frame(frame(2))).unwrap();
+    let state = queue.state.lock().unwrap();
+    let index = |target: &AppToShell| {
+        state
+            .messages
+            .iter()
+            .position(|message| message == target)
+            .unwrap()
+    };
+    assert!(index(&debug) < index(&AppToShell::CloseStarted));
+    assert!(index(&AppToShell::CloseStarted) < index(&AppToShell::Closed));
+}
+
+#[test]
 fn backpressure_and_frame_replacement_keep_persisted_control_before_its_confirmation() {
     let queue = Queue::new(MAX_CONTROL_BYTES);
     queue.push(AppToShell::Frame(frame(1))).unwrap();

@@ -11,6 +11,21 @@ use workspace_protocol::{
 };
 
 #[test]
+fn the_explicit_debug_panic_is_a_distinct_reliable_control_message() {
+    let message = AppToShell::ShellAction(workspace_protocol::ShellAction::DebugPanicRequested);
+    let bytes = serde_json::to_vec(&message).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<AppToShell>(&bytes).unwrap(),
+        message
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+        serde_json::json!({"shell_action": "debug_panic_requested"})
+    );
+    assert_eq!(workspace_protocol::WATCHDOG_PROTOCOL_VERSION, 1);
+}
+
+#[test]
 fn initialization_tracks_the_latest_viewport_before_session_construction() {
     use workspace_protocol::{ShellToApp, WindowInit};
     let mut init = WindowInit {

@@ -114,6 +114,7 @@ pub enum AppToShell {
 pub enum ShellAction {
     SettingsChanged,
     AutomationChanged(AutomationCommit),
+    DebugPanicRequested,
     LanguageReloaded { code: String },
     ClockChanged,
     Logout,

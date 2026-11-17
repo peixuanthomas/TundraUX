@@ -148,6 +148,89 @@ pub(super) fn shell_state() -> ShellSession {
     ShellSession::new_for_home_mode(ShellLaunchConfig::default(), (108, 20), ShellHomeMode::User)
 }
 
+#[test]
+fn only_the_explicit_debug_message_reaches_the_shell_panic_boundary() {
+    use watchdog::{BoundaryKind, BoundarySpec, WatchdogConfig, WatchdogRuntime};
+    let root = std::env::temp_dir().join(format!(
+        "tundra-workspace-debug-{}-{}",
+        std::process::id(),
+        PageInstanceId::new().get()
+    ));
+    let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        root.join("reports"),
+        root.join("fallback"),
+        root.join("data"),
+        "shell-debug-route",
+        "test",
+    ))
+    .unwrap();
+    let app = process
+        .register_app(watchdog::AppDescriptor::new(
+            watchdog::AppId::from_static("shell"),
+            "Shell",
+            "test",
+            watchdog::AppCriticality::ProcessCritical,
+        ))
+        .unwrap();
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let id = SessionId(1);
+    workspace.windows.insert(id, window(Size::new(106, 16)));
+    let caught = app
+        .run_boundary(
+            BoundarySpec::new("shell.fullscreen-session", BoundaryKind::UiSession),
+            || {
+                workspace
+                    .receive(
+                        id,
+                        AppToShell::ShellAction(HostAction::DebugPanicRequested),
+                        &mut state,
+                    )
+                    .unwrap()
+            },
+        )
+        .expect_err("the explicit request must unwind the Shell boundary");
+    let incident = caught.incident_id().to_string();
+    let message = super::super::runtime::finalize_session_panic(caught, "Shell UI");
+    assert!(message.contains("Intentional watchdog panic test requested from Command Line"));
+    assert!(message.contains("Full report:"));
+    let report = process
+        .list_incident_reports()
+        .reports
+        .into_iter()
+        .find(|report| report.incident_id == incident)
+        .unwrap();
+    assert_eq!(report.boundary, "shell.fullscreen-session");
+    assert_eq!(report.kind, watchdog::IncidentKind::Panic);
+    assert!(matches!(
+        report.recovery,
+        watchdog::RecoveryOutcome::Unrecoverable(_)
+    ));
+    drop(app);
+    drop(process);
+    runtime.shutdown().unwrap();
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn ordinary_app_exits_including_76_keep_other_windows_alive() {
+    for code in [Some(76), Some(101), None] {
+        let mut state = shell_state();
+        let mut workspace = Workspace::new(None, false);
+        let (failed, remaining) = (SessionId(1), SessionId(2));
+        for id in [failed, remaining] {
+            workspace.windows.insert(id, window(Size::new(106, 16)));
+            show(&mut workspace, id);
+        }
+        workspace.finish_window_exit(failed, code, false, &mut state);
+        assert!(!workspace.windows.contains_key(&failed));
+        assert!(workspace.windows.contains_key(&remaining));
+        assert_eq!(workspace.selection.focused(), Some(remaining));
+        assert!(!workspace.shutdown_requested());
+        assert!(workspace.pending_global.is_none());
+    }
+}
+
 fn pointer(
     workspace: &mut Workspace,
     state: &mut ShellSession,

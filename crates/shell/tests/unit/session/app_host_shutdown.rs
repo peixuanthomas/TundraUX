@@ -80,6 +80,55 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
 }
 
 #[test]
+fn an_explicit_debug_request_is_forwarded_before_close_without_panicking_the_host() {
+    let directory = TestDirectory(std::env::temp_dir().join(format!(
+        "tundra-app-debug-{}-{}",
+        std::process::id(),
+        PageInstanceId::new().get()
+    )));
+    std::fs::create_dir_all(&directory.0).unwrap();
+    let paths = platform::AppPaths::from_parts(
+        directory.0.join("config"),
+        directory.0.join("data"),
+        directory.0.join("cache"),
+        directory.0.join("logs"),
+        directory.0.join("temp"),
+    )
+    .unwrap();
+    let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        directory.0.join("reports"),
+        directory.0.join("fallback"),
+        directory.0.join("watchdog"),
+        "app-debug-route-test",
+        "test",
+    ))
+    .unwrap();
+    let watchdog = process
+        .register_app(AppDescriptor::new(
+            AppId::from_static("app-host"),
+            "AppHost",
+            "test",
+            AppCriticality::Optional,
+        ))
+        .unwrap();
+    let mut host = host(watchdog, &paths);
+    host.command_line_event(CommandLineHostEvent::PanicRequested);
+    assert_eq!(host.close_status, WindowClose::Idle);
+    assert_eq!(host.state.window_close, WindowClose::Idle);
+    host.receive(ShellToApp::RequestClose).unwrap();
+    assert_eq!(
+        host.output.pop_front(),
+        Some(AppToShell::ShellAction(HostAction::DebugPanicRequested))
+    );
+    assert_eq!(host.output.pop_front(), Some(AppToShell::CloseDeferred));
+    assert!(host.output.is_empty());
+    host.shutdown().unwrap();
+    drop(host);
+    drop(process);
+    runtime.shutdown().unwrap();
+}
+
+#[test]
 fn shutdown_preserves_latest_dirty_text_and_confirmed_discard_removes_it() {
     for discard in [false, true] {
         let directory = TestDirectory(std::env::temp_dir().join(format!(

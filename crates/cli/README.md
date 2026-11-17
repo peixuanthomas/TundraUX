@@ -62,3 +62,5 @@ cargo test --locked -p cli
 ```
 
 Shell's built-in Command Line uses `tundra-cli` from the same directory, so rebuild both Shell and CLI after updates. Real Linux PTY validation of UI control uses `python3 scripts/tests/shell-control.py target/debug/tundra-shell`.
+
+The embedded `/debug test-watchdog-panic` command explicitly requests Shell's real fullscreen panic boundary. An ordinary system command or external Launcher program exiting with status 76 remains a command result and does not request a Shell panic.

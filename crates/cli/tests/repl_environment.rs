@@ -65,6 +65,28 @@ fn embedded_repl_screen_keyboard_points_to_external_cli_and_keeps_reading() {
     assert!(!stdout.contains("Typed text"));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_system_command_exit_76_does_not_become_an_embedded_debug_request() {
+    run_child_if_requested();
+    for embedded in [false, true] {
+        let output = run_repl(
+            "a_system_command_exit_76_does_not_become_an_embedded_debug_request",
+            "/bin/sh -c 'exit 76'\nprintf 'AFTER_STATUS_76\\n'\nexit\n",
+            embedded,
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("[system exit code: 76]"), "{stdout}");
+        assert!(stdout.contains("AFTER_STATUS_76"), "{stdout}");
+        assert!(
+            !stdout.contains("Triggering a real Shell panic"),
+            "{stdout}"
+        );
+    }
+}
+
 #[test]
 fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
     run_child_if_requested();

@@ -705,6 +705,9 @@ impl Workspace {
                 window.close = CloseProgress::Cleaning(Instant::now());
             }
             AppToShell::ShellAction(HostAction::SettingsChanged) => {}
+            AppToShell::ShellAction(HostAction::DebugPanicRequested) => {
+                super::super::runtime::trigger_command_line_panic();
+            }
             AppToShell::ShellAction(HostAction::AutomationChanged(commit)) => {
                 state.record_automation_commit(commit);
             }
