@@ -44,6 +44,7 @@ The process host handles incident display and deduplication. Shell uses a dedica
 - `Idempotent` tasks can be recreated within the configured restart window and backoff policy.
 - `Checkpointed` tasks require a registered `RecoveryHandler` to restore a safe state first.
 - Modification operations use `begin_operation` and persistent checkpoints. After results are handled manually, the journal is retained and related writes are blocked.
+- On Windows, journal replacement retries short-lived file locks while both file paths still exist.
 - Closing a task group cancels and waits for managed work; merely dropping a handle does not stop a thread.
 - Long waits must respond to cancellation; cancellation itself is not reported as a panic.
 

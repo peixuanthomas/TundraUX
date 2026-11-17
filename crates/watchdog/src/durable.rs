@@ -103,28 +103,56 @@ fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
 
     let from = wide(from);
     let to = wide(to);
-    let replaced = if to_path_exists(to.as_ptr()) {
-        // SAFETY: `to` and `from` are live NUL-terminated UTF-16 buffers for
-        // the duration of this call. Optional pointers are null as required.
-        unsafe {
-            ReplaceFileW(
-                to.as_ptr(),
-                from.as_ptr(),
-                ptr::null(),
-                0,
-                ptr::null(),
-                ptr::null(),
-            )
+    retry_replacement(|| {
+        let replaced = if to_path_exists(to.as_ptr()) {
+            // SAFETY: both paths are live NUL-terminated UTF-16 buffers.
+            unsafe {
+                ReplaceFileW(
+                    to.as_ptr(),
+                    from.as_ptr(),
+                    ptr::null(),
+                    0,
+                    ptr::null(),
+                    ptr::null(),
+                )
+            }
+        } else {
+            // SAFETY: without REPLACE_EXISTING this cannot overwrite a raced writer.
+            unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) }
+        };
+        if replaced == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
         }
-    } else {
-        // SAFETY: both path buffers are valid and NUL-terminated. Omitting
-        // REPLACE_EXISTING ensures this branch cannot overwrite a raced writer.
-        unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) }
+    })
+}
+
+#[cfg(windows)]
+fn retry_replacement(mut replace: impl FnMut() -> io::Result<()>) -> io::Result<()> {
+    use windows_sys::Win32::Foundation::{
+        ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION, ERROR_UNABLE_TO_REMOVE_REPLACED,
     };
-    if replaced == 0 {
-        return Err(io::Error::last_os_error());
+
+    for delay in [5, 10, 20, 40] {
+        match replace() {
+            // These errors leave the original and replacement paths intact.
+            Err(error)
+                if matches!(
+                    error.raw_os_error().map(|code| code as u32),
+                    Some(
+                        ERROR_LOCK_VIOLATION
+                            | ERROR_SHARING_VIOLATION
+                            | ERROR_UNABLE_TO_REMOVE_REPLACED
+                    )
+                ) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+            }
+            result => return result,
+        }
     }
-    Ok(())
+    replace()
 }
 
 #[cfg(windows)]
@@ -155,3 +183,7 @@ fn sync_parent(_parent: &Path) -> io::Result<()> {
     // not supported on Windows.
     Ok(())
 }
+
+#[cfg(all(test, windows))]
+#[path = "../tests/unit/durable_windows.rs"]
+mod tests;
