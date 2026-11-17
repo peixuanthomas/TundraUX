@@ -21,13 +21,22 @@ impl EmbeddedDisplay {
         localize: LocalizationProvider,
         size: (u16, u16),
     ) -> Result<Self, WeathrRunError> {
+        Self::new_with_color_support(snapshots, localize, size, None)
+    }
+
+    pub fn new_with_color_support(
+        snapshots: watch::Receiver<SystemSnapshot>,
+        localize: LocalizationProvider,
+        size: (u16, u16),
+        true_color: Option<bool>,
+    ) -> Result<Self, WeathrRunError> {
         let assets = WeatherAsciiAssets::bundled()?;
         let dimensions = assets.max_dimensions();
         let minimum = (
             u16::try_from(dimensions.0).unwrap_or(u16::MAX),
             u16::try_from(dimensions.1).unwrap_or(u16::MAX),
         );
-        let renderer = TerminalRenderer::buffered(size, minimum)?;
+        let renderer = TerminalRenderer::buffered(size, minimum, true_color)?;
         let (term_width, term_height) = renderer.get_size();
         let app = App::new_with_bottom_hud_prompt_and_assets(AppInput {
             localize,

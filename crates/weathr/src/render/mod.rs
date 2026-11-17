@@ -92,12 +92,13 @@ impl TerminalRenderer {
         }
 
         let (width, height) = terminal::size().map_err(TerminalError::SizeError)?;
-        Self::buffered((width, height), (min_width, min_height))
+        Self::buffered((width, height), (min_width, min_height), None)
     }
 
     pub(crate) fn buffered(
         (width, height): (u16, u16),
         (min_width, min_height): (u16, u16),
+        true_color: Option<bool>,
     ) -> Result<Self, TerminalError> {
         let min_width = min_width.max(MIN_TERMINAL_WIDTH);
         let min_height = min_height.max(MIN_TERMINAL_HEIGHT);
@@ -108,7 +109,7 @@ impl TerminalRenderer {
 
         let stdout = BufWriter::new(io::stdout());
         let area = Rect::new(0, 0, width, height);
-        let capabilities = TerminalCapabilities::detect();
+        let capabilities = TerminalCapabilities::detect(true_color);
 
         Ok(Self {
             stdout,

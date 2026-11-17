@@ -4,7 +4,7 @@
 
 ## Embedded rendering
 
-`EmbeddedDisplay::new` accepts a weather snapshot, a translation function, and dimensions; `render` returns a Ratatui Buffer for one frame and supports resizing. It does not read terminal input, switch terminal modes, or write directly to the terminal.
+`EmbeddedDisplay::new` accepts a weather snapshot, a translation function, and dimensions. The host can pass its true-color decision through `EmbeddedDisplay::new_with_color_support`. `render` returns a Ratatui Buffer for one frame and supports resizing. It does not read terminal input, switch terminal modes, or write directly to the terminal.
 
 Weather, day/night, season, and animation together determine scenes such as houses, trees, clouds, rain and snow, and moon phases. Weather data and caching are provided by [system-services](../system-services/README.md), and Shell can prefetch them at startup.
 

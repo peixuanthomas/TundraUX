@@ -1240,7 +1240,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         if screen_saver_display.is_none() {
                             compositor.cancel_for_bounds_change();
                             let language = state.language.clone();
-                            match weathr::EmbeddedDisplay::new(
+                            match weathr::EmbeddedDisplay::new_with_color_support(
                                 system_services.subscribe(),
                                 Arc::new(move |id, args| {
                                     let mut message = i18n::LocalizedMessage::new(id);
@@ -1250,6 +1250,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                                     language.render(&message)
                                 }),
                                 (bounds.width, bounds.height),
+                                Some(platform::terminal_supports_true_color()),
                             ) {
                                 Ok(display) => screen_saver_display = Some(display),
                                 Err(error) => weather_error = Some(io::Error::other(error)),

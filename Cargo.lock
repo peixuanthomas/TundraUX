@@ -6503,7 +6503,6 @@ version = "2.0.0"
 dependencies = [
  "chrono",
  "crossterm",
- "platform",
  "rand 0.10.2",
  "ratatui-core",
  "ratatui-crossterm",

@@ -18,7 +18,7 @@ pub struct TerminalCapabilities {
 }
 
 impl TerminalCapabilities {
-    pub fn detect() -> Self {
+    pub fn detect(true_color: Option<bool>) -> Self {
         let is_tty = std::io::stdout().is_terminal();
 
         if env::var("NO_COLOR").is_ok() {
@@ -42,7 +42,9 @@ impl TerminalCapabilities {
             };
         }
 
-        let color_support = if platform::terminal_supports_true_color() {
+        let color_support = if true_color
+            .unwrap_or_else(|| crossterm::style::available_color_count() == u16::MAX)
+        {
             ColorSupport::TrueColor
         } else {
             check_term_for_256()
