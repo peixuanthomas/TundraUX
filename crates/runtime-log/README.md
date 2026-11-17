@@ -6,11 +6,12 @@
 
 | Module | Responsibility |
 | --- | --- |
-| `model` | Event, level, query, and status types |
-| `writer` | Bounded queue, deduplication, flushing, rotation, and capacity management |
-| `reader` | Queries, filtering, export, and bounded reads |
-| `privacy` | Removal of sensitive data and control sequences |
-| `clear` | Preview and cleanup of managed log files |
+| [`lib.rs`](src/lib.rs) | Exposes event recording and the process-local logger used by hosts and libraries. |
+| [`model`](src/model.rs) | Defines event context, stable levels and phases, query filters, and status types. |
+| [`writer`](src/writer.rs) | Receives events through a bounded queue, deduplicates and flushes them, and manages file rotation, retention, and capacity. |
+| [`reader`](src/reader.rs) | Reads a bounded amount of data, filters rows, and prepares output for queries, following, and export. |
+| [`privacy`](src/privacy.rs) | Applies redaction, strips control sequences, and limits persisted text. |
+| [`clear`](src/clear.rs) | Previews and clears managed log files using the supported cleanup modes. |
 
 The UX failure phase `Incident` is consistently mapped to the highest level, `Critical`, during queries. Original files remain unchanged, and recovery results continue to use their original levels.
 

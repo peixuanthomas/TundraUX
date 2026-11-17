@@ -1,31 +1,24 @@
 # platform
 
-`platform` provides operating-system query and read/write interfaces, including application paths, files, processes, terminal capabilities, system metrics, accounts, services, packages, networks, and disks. Shell and CLI perform operations through these interfaces rather than assembling privilege-elevation commands in page code.
-
-Native paths use `TundraUX` for configuration, state, cache, logs, and temporary files.
-System configuration history uses the shared transaction records.
+`platform` is the operating-system boundary. Its `Platform` trait provides the common native interface; `management` describes system administration in typed queries and commands. Shell and CLI select those operations, and platform backends own native file, process, authorization, and command handling.
 
 ## Module structure
 
 | Module | Responsibility |
 | --- | --- |
-| `paths` | Platform-specific configuration, state, cache, log, and temporary directories |
-| `Platform::current_username` | The operating-system account running the application |
-| `document` | Regular-file checks, chunked reads, document fingerprints, and atomic writes |
-| `file_operations` | File identity and atomic renames that never overwrite the destination |
-| `platform` | Directories, volumes, trash, opening files, and platform capabilities |
-| `process`, `managed_process` | Process arguments, output, cancellation, and child-process management |
-| `pty_exec` | Starts Unix PTY programs after the guardian registers the session |
-| `terminal` | Host terminal capabilities, colors, and fullscreen sequences |
-| `system_monitor` | CPU, memory, battery, network, and process metrics |
-| `management` | Typed system-management queries, actions, and fixed backends |
-| `command_session` | System command sessions and executable lookup |
-| `shell_control` | Local Shell control connections and session discovery |
-| `task_history` | History and output for pages, helpers, and scheduled tasks |
-| `task_events` | Result channels and optional host-loop wake notifications |
-| `diagnostics` | `doctor` environment and path checks |
+| [`platform`](src/platform.rs), [`mock`](src/mock.rs) | Common interface for current username, paths, files, volumes, trash, desktop integration and other capabilities. The mock supports tests without native writes. |
+| [`linux/`](src/linux/), [`macos/`](src/macos/), [`windows/`](src/windows/) | Implement the trait for each OS. Linux also provides NSS identity, AccountsService, polkit and authorization sessions, D-Bus, power, and XDG integration. |
+| [`paths`](src/paths.rs), [`installation`](src/installation.rs) | Resolve configuration, data, state, cache, logs and temporary paths; classify the installed program for diagnostics and updates. |
+| [`document`](src/document.rs), [`file_operations`](src/file_operations.rs) | Check and read regular files, fingerprint and save documents, identify objects, and rename without replacing an existing destination. |
+| [`process`](src/process.rs), [`managed_process`](src/managed_process.rs), [`command_session`](src/command_session.rs) | Describe and run programs, own cancellation/reaping, and maintain the REPL's working directory, environment and executable lookup. |
+| [`pty_exec`](src/pty_exec.rs), [`terminal`](src/terminal.rs) | Gate Unix PTY launches on guardian registration; describe terminal capabilities, colors, and fullscreen sequences. |
+| [`system_monitor`](src/system_monitor.rs), [`service`](src/service.rs) | Define and collect system metrics; share structured service errors across native adapters. |
+| [`management/`](src/management/) | Typed management queries, actions, forms and fixed backends; see the breakdown below. |
+| [`shell_control`](src/shell_control.rs) | Same-user local socket or named-pipe transport, peer checks, registrations, and session discovery. |
+| [`linux_logs`](src/linux_logs.rs), [`log_file`](src/log_file.rs), [`task_history`](src/task_history.rs) | Read native logs or selected log files; record operation summaries and captured output for pages, helpers, and scheduled tasks. |
+| [`task_events`](src/task_events.rs), [`diagnostics`](src/diagnostics.rs), [`error_details`](src/error_details.rs) | Deliver results and wake host loops; diagnose runtime capabilities and retain native error information. |
 
-Platform-specific implementations are in `src/linux/`, `src/windows/`, and `src/macos/`. Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
+Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
 
 Hosts can install one process-local `task_events` notifier. Result channels notify only after successful delivery; shared result slots and PTY readers notify after publishing and releasing their locks. Libraries retain ordinary channel behavior when no host notifier is installed.
 
@@ -36,6 +29,16 @@ Explorer moves, renames, and undo share `file_operations`: Linux uses `renameat2
 `ManagementQuery`, `ManagementSnapshot`, `ManagementAction`, and `ManagementCommand` describe queries, page data, available operations, and execution requests. Action IDs, field IDs, and target identities remain stable; display text uses the caller's language.
 
 Current management types cover services, processes, packages, networks, disks, users, system configuration, configuration backups, firewalls, SSH, scheduled tasks, task history, file permissions, and operating-system settings. User management is Linux-only.
+
+| Modules under [`src/management/`](src/management/) | Responsibility |
+| --- | --- |
+| `mod.rs`, `configuration`, `selection`, `problem` | Shared dispatch, query/action contracts, configuration drafts and validation, row identities and selection, and structured operation problems |
+| `authorization`, `capability`, `client`, `helper`, `termination` | Native backend availability, authorized connections and request execution, interaction and process control |
+| `services`, `processes`, `scheduled_tasks`, `task_history` | systemd units, process identity/metrics/actions, systemd timers and cron, and the task-history page |
+| `packages`, `homebrew`, `winget` | APT/DNF/pacman on Linux, Homebrew on macOS (exported as `packages` there), and WinGet on Windows. Linux package submodules handle queries, sources, parsing, execution and progress. |
+| `network`, `disks` | Interfaces, connections, Wi-Fi and configuration/rollback; volumes, mount persistence, health checks and directory scans |
+| `users`, `file_permissions`, `system_settings` | Account and group operations, ownership/mode/ACLs, and hostname, timezone and time synchronization |
+| `system_config`, `config_backups`, `ssh`, `firewall`, `listening_ports` | Protected configuration and history, SSH validation and recovery, native firewall rules and listening socket inventory |
 
 - Queries use the current process's permissions; operations requiring additional permissions first go through AA and system authorization.
 - Batch operations check all targets first. Services use one systemctl invocation, processes are bound to their original identity, and changes from the same cron source are saved together.
@@ -96,6 +99,4 @@ cargo test --locked -p platform --test shell_control
 Run Linux management tests on Linux or WSL. Use the corresponding isolated environment or test host for real authorization, service writes, wireless devices, mounts, and physical-disk operations; see each topic's document for specific entry points.
 The private D-Bus account test covers administrator visibility of root, service, local, and directory accounts. The watchdog connection test models the server poll between discovering the endpoint and connecting a client.
 
-Task history tests resolve the system temporary directory before opening the store. Shell control tests use short private socket paths on Unix.
-
-`workspace_watchdog_constraints` checks raw task and process spawning separately from explicit owned bootstrap adapters; its regression fixtures keep unowned spawns forbidden.
+`workspace_watchdog_constraints` checks that background work and processes have an owner and that low-level bootstrap adapters remain explicit.

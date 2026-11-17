@@ -1,49 +1,64 @@
 # shell
 
-`shell` provides `tundra-shell`, the terminal workspace, its independent application hosts, and shared session services. The initial process keeps control of terminal recovery and starts the Shell, SessionServices, and AppHost workers. The Shell worker reads and draws the interactive terminal. On Windows the watchdog launches external graphical applications through the OS.
-
-Startup displays the TundraUX banner and localized title. Linux portable packages include an installer for the `tux` command.
-
-## Main responsibilities
-
-- Attach to the current system user, initialize assets, storage and system services, and open first-time setup or Home. Users is available on Linux.
-- The Shell manages global input, window layout and focus, the terminal display, and idle weather. AppHosts leave idle weather to the Shell so waking does not consume the next dialog key.
-- Each AppHost runs an application's page controllers, navigation, task ownership, and off-screen rendering. Editors and terminals own their child processes.
-- The explicit embedded Command Line `/debug test-watchdog-panic` request is forwarded to Shell's fullscreen panic boundary. Ordinary command exit codes and AppHost failures remain isolated to their window.
-- After initialization, AppHost performs its recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded editor drafts remain discarded.
-- Session services share configuration, the active profile, system status, and file operation state across windows.
-- Shared services check the profile revision and save appearance and dashboard changes before publishing them. A draft from an older revision leaves the saved preferences intact.
-- A background connection owns shared-service I/O. AppHosts build from one authoritative session snapshot, and runtime reads share an immutable cached snapshot. Interactive saves publish successful replies to their original session, page, and draft; pending saves participate in normal close checks. A failed background save cancels an ordinary close and retains its specific error. An explicit Stop and close choice applies only to that close request.
-- Shared-service operation jobs belong to the process watchdog. Dropping their owner cancels and wakes the worker without joining on the UI thread; process shutdown waits for managed work after the event loop returns. The RPC worker retains its own task owner during initialization and client lifetime.
-- The watchdog supervises the Shell and AppHosts independently and can terminate an unresponsive window and its child processes.
-- Provide local external CLI control, converting automation requests into normal input events.
+`shell` provides `tundra-shell` and coordinates the workspace. The entry process is the guardian; it supervises Shell, SessionServices, and one AppHost per managed window. The Shell worker reads the host terminal and writes the final display. AppHosts run controllers and render their own content. See the [process diagram](../../docs/README-TECHNICAL.md#process-architecture) for the connections between them.
 
 ## Module structure
 
 | Location | Responsibility |
 | --- | --- |
-| `src/startup/` | Startup checks, first-time setup, startup screens, and command-line arguments |
-| `src/input/` | Crossterm event batching, input types, and terminal event conversion |
-| `src/session/controller/` | Page actions, application commands, task results, and input routing |
-| `src/session/presentation/` | Assemble UI ViewModels from application and session state |
-| `src/session/compositor/` | Render application content and compose the Shell's final frames |
-| `src/session/app_host.rs`, `workspace/` | AppHost event loop and Shell-side window management |
-| `src/session_services/` | Shared session configuration, profile, system status, and file operations |
-| `src/process_host/` | Watchdog process startup, IPC, and terminal recovery |
-| `src/session/navigation.rs` | Page opening paths and back navigation |
-| `src/session/page_state.rs`, `page_lifecycle.rs` | Page instances, close checks, and resource cleanup |
-| `src/session/tasks.rs`, `overlay*.rs` | Task ownership, dialog order, focus, and input interception |
-| `src/session/runtime.rs` | Event loop, refresh, and exit cleanup |
-| `src/session/automation.rs` | External control requests and snapshot publication |
-| `src/previews/` | Previews of shared controls, styles, AA, and the on-screen keyboard |
+| [`src/main.rs`](src/main.rs) | Binary entry: arguments, Linux identity checks, interrupted update recovery, worker dispatch, restart, reset, and updater handoff |
+| [`startup/`](src/startup/) | `launch_args` parses public flags; `linux_startup` checks identity and root confirmation; `terminal_size` measures the minimum. `banner`, `startup_banner`, and `first_run_banner` prepare startup visuals. |
+| [`process_host/`](src/process_host/) | `guardian` creates workers and recovers the terminal; `client` connects each worker; `transport` handles managed IPC and bounded window codecs; `event_loop` wakes hosts. `delegated` registers Linux CLI children; `desktop` delegates Windows desktop opens to the guardian. |
+| [`input/`](src/input/) | `terminal_events` maps Crossterm into UI events; `terminal_batch` drains and coalesces them. `input_events`, `shell_commands`, `shell_components`, and `shortcuts` define Shell routing vocabulary. |
+| [`session/`](src/session/) | Interactive Shell and AppHost business loops, window and page state, controllers, and frame composition; see the breakdown below. |
+| [`session_services/`](src/session_services/) | `server` and `state` own shared revisions, persist writes, and handle file-operation requests. `clock` manages shared clock state. `client`, `client_worker`, and `client_jobs` exchange requests and publish cached snapshots or completion receipts. |
+| [`notification_center`](src/notification_center.rs), [`spring_style`](src/spring_style.rs) | Shell-facing notification types and shared animation style integration |
+| [`previews/`](src/previews/) | Local debug programs for common controls, styles, rainbow text, AA, and the on-screen keyboard |
+| [`build.rs`](build.rs) | Copies canonical resource files beside the built program. |
 
-Controllers are grouped by application, including account, clock, command_line, editor, explorer, launcher, logs, management, settings, and system_status. Shared input preparation, focus, and pointer capture live in `controller/input/`; page-specific operations remain in the corresponding controllers. Explorer's asynchronous Rename and Undo completions merge refreshed listings into the live page, preserving search, sort, selection, and navigation changes made while the operation runs.
+### Session modules
+
+| Area | Modules under [`src/session/`](src/session/) | Responsibility |
+| --- | --- | --- |
+| Host loops | `runtime`, `app_host`, `construction`, `ui_state` | Drive Shell and AppHost, construct their initial state, and store host-specific UI state |
+| Window management | `workspace/`, `window_state`, `window_launch` | Track live windows, split topology, focus, Ctrl+W, taskbar and chooser state, viewport generations, and managed launches |
+| Pages | `navigation`, `page_state`, `page_lifecycle`, `tasks` | Keep the opening path and per-instance state, run close checks, and associate each job and reply with its owner |
+| Page actions | `controller/`, `queries`, `services_client`, `clock_workspace`, `localization` | Dispatch page commands, consume background work, and bridge session snapshots, clock state, and language to a window |
+| Native child hosts | `command_line_runtime`, `vim_host` (including `install`), `script_host` | Start and poll the runtime for each window; handle terminal input, editor synchronization or script results, and cleanup |
+| Frame and output | `presentation/`, `compositor/`, `automation`, `redraw` | Build view models, combine app frames and global UI, capture automation state, and choose when a new frame is needed |
+| Dialog and motion state | `overlays`, `overlay_focus`, `overlay_input`, `motion_effects`, `panel_motion`, `spring_progress` | Order dialogs, intercept input, restore focus, and track visual transitions |
+| Special surfaces | `screen_keyboard`, `screen_saver` | Own the visible keyboard target and track idle weather and wake state |
+
+### Page controllers
+
+| Modules under [`session/controller/`](src/session/controller/) | Responsibility |
+| --- | --- |
+| `input/`, `background` | Shared hit testing, focus traversal, pointer capture, Home ordering and navigation, command dispatch, and polling of accepted results |
+| `editor/`, `script` | Document and settings actions, menus, find, save and recovery tasks, Vim switching, and run/pause/breakpoint controls |
+| `explorer/`, `launcher/`, `command_line/` | Browser and save picker, file tasks, launch/edit/reorder actions, and embedded CLI navigation |
+| `management/`, `auto_admin/`, `privilege_session` | System pages, selected targets, action forms, package and scheduled-task flows, configuration editing/backups, task output, AA prompts, and authorization lifetime |
+| `account/`, `settings/`, `clock/` | First-run setup and account actions, configuration and update dialogs, and clock-item editing and synchronization |
+| `logs/`, `diagnostics/`, `system_status/`, `notifications/`, `help/` | Screen-specific selection, filtering, detail or repair actions, notifications, and contextual F1 help |
+
+Explorer's asynchronous Rename and Undo completions merge refreshed listings into the live page, preserving search, sort, selection, and navigation changes made while the operation runs.
+
+## Worker lifecycle and shared state
+
+Shell attaches to the current system user, initializes assets and storage, and opens first-time setup or Home. It owns global input, pane focus, the display, and idle weather. AppHosts own their page state and child processes. Keeping idle weather in the Shell prevents an AppHost from interpreting a wake action in its active dialog.
+
+AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
+
+SessionServices shares configuration, profile, clock, system status, and file operation state. It checks the profile revision and saves appearance and dashboard changes before publication. A background connection owns the I/O. AppHosts initialize from one coherent snapshot and reuse an immutable cached snapshot for reads.
+
+Interactive saves deliver completion to the original session, page, and draft. Pending saves participate in the close check. A failure cancels an ordinary close and keeps its error visible. An explicit **Stop and close** applies to the current request. Dropping a shared operation's task owner cancels and wakes the worker without blocking the UI thread; the process waits for managed work after its event loop ends.
+
+## Redraw and background work
 
 Background controllers report whether they consumed content, layout, notification, or task changes. The Shell and AppHost merge those results into redraw requests without cloning the whole session or comparing hit maps. Input requests an immediate frame; unchanged polls keep the existing frame and controls. Shell's header clock and visible Clock pages keep their one-second timer, while notifications, keyboard feedback, recovery, and live queries retain their own deadlines. Hidden or undersized AppHosts continue tasks and child-terminal polling but skip rendering. Active background work and native child adapters retain a 16ms fallback alongside result notifications for completion and process-state checks; idle hosts do not use that timer. System metric snapshots redraw System Status and actual alert changes; unrelated static pages retain their existing frames.
 
 Scheduled-task preview debounce deadlines run only on the time step while no preview request is active. Returning to an earlier step keeps the draft without leaving an expired timer in the event loop.
 
-Failed editor recovery writes retain the dirty draft and retry after ten seconds. Editing does not postpone that retry deadline; normal close and logout can still request an immediate recovery write and require its actual result.
+Failed editor recovery writes retain the dirty draft and retry after ten seconds. Editing does not postpone that retry deadline; normal close can still request an immediate recovery write and require its actual result.
 
 External input fences confirm Copy/Cut only after the shared clipboard service has completed the corresponding mutation and its result has reached the UI; later clipboard writes do not delay that fence. Physical input feedback and other windows continue while it waits.
 
@@ -112,7 +127,7 @@ With the default minimum, left/right needs 217×20, top/bottom 108×39, and a fu
 
 Embedded terminals can raise their window minimum while running. The workspace uses the largest reported dimensions across all live windows, including the background. A window leaves this calculation when the watchdog confirms it has exited.
 
-The watchdog detects missing Shell progress in five seconds and ends the run with terminal recovery. AppHost failures leave other windows usable. The watchdog can list or stop a session even when external UI control is disabled. [Watchdog commands](../cli/docs/commands.md)
+When Shell stops responding to progress probes, the guardian ends the run and restores the terminal. AppHost failures leave other windows usable. The guardian can list or stop a session even when external UI control is disabled. See [health checks](../watchdog/README.md#workspace-guardian) and [watchdog commands](../cli/docs/commands.md#watchdog).
 
 The compositor dims the covered interface beneath modal layers. Dialogs share the OpenCode-inspired header, body, close control, and action-band layout from `ui`. Existing notification cancel actions keep their original IDs and routing. The default surfaces use the Glacier Night blue palette.
 

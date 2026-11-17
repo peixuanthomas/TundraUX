@@ -6,15 +6,12 @@
 
 | Module | Responsibility |
 | --- | --- |
-| `artwork` | Text artwork, art sets, and Home/Launcher/file icon types |
-| `asset_manifest` | Required asset manifest, asset types, and default theme ID |
-| `asset_resolver` | Resolve asset roots from environment variables, the program directory, and installation locations |
-| `asset_store` | Asset loading and rendering-dimension statistics |
-| `asset_validation` | Required asset and default theme checks |
-| `asset_restore` | Restore asset files from embedded defaults |
-| `asset_distribution` | Copy canonical assets to the Cargo output directory |
-| `embedded_defaults` | Shared embedded default files and image bytes |
-| `clock_font` | Clock font assets |
+| [`artwork`](src/artwork.rs), [`clock_font`](src/clock_font.rs) | Decode text art, themed icon sets, and the clock bitmap font; retain the geometry used by renderers. |
+| [`asset_manifest`](src/asset_manifest.rs) | Declares the default theme, required paths, and expected formats. |
+| [`asset_resolver`](src/asset_resolver.rs), [`asset_distribution`](src/asset_distribution.rs) | Select the resource root at runtime and copy canonical assets beside binaries at build time. |
+| [`asset_store`](src/asset_store.rs) | Loads and indexes an asset set for consumers, including its maximum dimensions and optional image payloads. |
+| [`asset_validation`](src/asset_validation.rs), [`asset_error`](src/asset_error.rs) | Check required files and supported formats and describe path, read, and validation failures. |
+| [`asset_restore`](src/asset_restore.rs), [`embedded_defaults`](src/embedded_defaults.rs) | Repair default files or provide in-memory fallbacks using the same embedded bytes. |
 
 ## Asset formats
 
@@ -22,14 +19,11 @@ The default manifest contains 25 items: 20 text assets, 4 TOML art sets, and 1 c
 
 - Text assets contain only printable ASCII; TOML art sets use schema v1.
 - Images support GIF, JPEG, PNG, and WebP; paths must be relative paths within the asset root.
-- Home edit controls, drag guidance, saving errors, and F1 help ship in both English and Chinese.
-- Window input backpressure feedback ships in both English and Chinese.
 - Language resources live in `locales/<code>/`, containing `manifest.toml` and recursively read `.ftl` files.
 - Default image bytes are shared through a static asset table; validation, repair, and in-memory fallback reuse the same data.
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
 - Home resolves system-application icons from the existing built-in application artwork and images when no Home-specific icon is defined.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
-- The default banner displays TundraUX.
 
 Asset roots are resolved in this order:
 
@@ -39,7 +33,7 @@ Asset roots are resolved in this order:
 
 ## Interface language resources
 
-The English and Chinese `modules/` files include:
+The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/modules/`](assets/locales/en-US/modules/) and [`assets/locales/zh-CN/modules/`](assets/locales/zh-CN/modules/) for UI text. For example:
 
 | File | Interface text |
 | --- | --- |

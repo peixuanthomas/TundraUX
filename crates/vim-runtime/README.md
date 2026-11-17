@@ -2,6 +2,16 @@
 
 `vim-runtime` runs real Vim and synchronizes buffers, terminal frames, and save requests between Vim and the Tundra editor. Vim itself handles modes, editing keys, undo, registers, macros, windows, search, and Ex commands; this crate does not reimplement those features.
 
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`lib.rs`](src/lib.rs) | `VimHost` owns the child PTY, bridge connection, buffer commands, polling, and cleanup. |
+| [`protocol`](src/protocol.rs) | Defines cursor, buffer metadata, line changes, exported state, and save request/result records. |
+| [`bridge.vim`](src/bridge.vim) | Runs inside Vim, applies buffer commands, observes edits, exports state, and forwards writes for host approval. |
+
+Shell's editor controller manages mode switching and user decisions. The [app editor](../app/README.md#editor-and-scripts) owns document revisions and the shared save and recovery path.
+
 ## Processes and communication
 
 `VimHost` launches Vim through `terminal-runtime` using a Unix PTY or Windows ConPTY, with process cleanup supervised by watchdog. The bundled `bridge.vim` exchanges JSON lines over a local loopback connection authenticated with a random token.

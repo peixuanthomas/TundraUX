@@ -1,10 +1,17 @@
 # TundraUX technical documentation
 
-This document covers the project architecture, building, testing, and packaging. See the [Linux installation guide](packaging/linux/README-LINUX.txt) and [window controls](../crates/shell/docs/session.md#common-shortcuts) for usage, and each crate's documentation for module implementation details.
+TundraUX is a Rust terminal workspace. The Shell manages windows and owns the display; each managed application runs in its own process. Application logic, UI rendering, and operating-system access have separate crate boundaries. For installation and day-to-day use, start at the [documentation index](README.md).
+
+- [Building and running](#building-and-running)
+- [Process architecture](#process-architecture)
+- [Crate responsibilities](#crate-responsibilities)
+- [How operations flow through the workspace](#how-operations-flow-through-the-workspace)
+- [Where to make changes](#where-to-make-changes)
+- [Validation](#validation) · [Linux packaging](#linux-packaging) · [Troubleshooting](#troubleshooting)
 
 ## Building and running
 
-The project uses Rust edition 2024 and requires **Rust 1.95** or newer. From the repository root, run:
+The [workspace manifest](../Cargo.toml) uses Rust edition 2024 and requires **Rust 1.95** or newer. From the repository root:
 
 ```sh
 cargo build --locked -p shell -p cli
@@ -13,143 +20,154 @@ cargo run --locked -p shell --bin tundra-shell
 cargo run --locked -p cli --bin tundra-cli -- doctor
 ```
 
-Build both Shell and CLI after updating the source so that the built-in command line uses the matching version of `tundra-cli`. Add `--release` to the commands above for release builds.
+Build both executables together. Shell looks for its companion `tundra-cli` beside itself when it opens Command Line. For a release build, add `--release` to the Cargo commands and use `target/release/vim` for the Vim output. Windows can use `python` in place of `python3` and uses the MSVC toolchain.
 
-The Vim build script downloads the pinned upstream source and places the engine and runtime beside Shell. Ordinary Cargo builds do not download Vim. See [bundled Vim](packaging/vim.md) for build dependencies, offline sources, and release procedures for all three platforms.
+Vim is an optional runtime for editor mode. Cargo does not download or build it. The [Vim build guide](packaging/vim.md) lists Python and native build dependencies, offline inputs, and how to verify the bundle. The Linux archive's [runtime guide](packaging/linux/README-LINUX.txt) lists dependencies for desktop and account integration.
 
-Home and the built-in Command Line share a minimum of **108 × 20** terminal cells. Home uses names only when complete icons do not fit, keeping every entry on one page at this size. Mouse and touch input is forwarded by the host terminal.
+Use an interactive terminal with at least **108 × 20 cells** for the default one-window layout. The app content starts at **106 × 16 cells** after the global bars and window frame. A live child terminal or custom resources can raise the required size. Mouse and touch support depend on input forwarded by the host terminal.
 
-## Application architecture
-
-Shell manages terminal sessions, pages, and input; App stores application state; UI handles layout and rendering; Platform provides operating-system interfaces; CLI provides external commands and diagnostics.
-
-```mermaid
-flowchart TD
-    Start[Startup entry point] --> Check[Check identity, resources, storage, and the previous run]
-    Check --> Session[Establish the Shell session]
-    Session --> Input[Read terminal input and background results]
-    Input --> Command[Process commands and update app state]
-    Command --> View[Shell assembles view data]
-    View --> Render[ui lays out and renders; Shell composes the full frame]
-    Render --> Input
-    Input --> Exit[Save recovery data, clean up tasks, restore the terminal, and exit]
-```
-
-Shell opens as the system user who launches it. First-time setup saves personal preferences for that system username. Linux provides system account management. See the [session guide](../crates/shell/docs/session.md) for detailed rules.
-
-## Crate responsibilities
-
-| Crate | Responsibilities |
-| --- | --- |
-| [shell](../crates/shell/README.md) | Pages, focus, input routing, dialogs, event loop, and full-frame composition |
-| [cli](../crates/cli/README.md) | External commands, REPL, diagnostics, and internal helper entry points |
-| [app](../crates/app/README.md) | Application state, commands, file workflows, clock scheduling, and updates |
-| [ui](../crates/ui/README.md) | View data models, layouts, rendering, and shared controls |
-| [terminal-runtime](../crates/terminal-runtime/README.md) | Host terminal modes, child terminals, input encoding, and terminal snapshots |
-| [vim-runtime](../crates/vim-runtime/README.md) | Vim processes, buffer synchronization, controlled saves, and terminal snapshots |
-| [auto-admin](../crates/auto-admin/README.md) | Operation approval, password input, task finalization, and authorization connections |
-| [platform](../crates/platform/README.md) | Operating-system paths, files, processes, and system-management interfaces |
-| [storage](../crates/storage/README.md) | Application documents, format validation, atomic saves, normalization, and corruption recovery |
-| [identity](../crates/identity/README.md) | The current system user and workspace permissions |
-| [system-services](../crates/system-services/README.md) | Shared system and weather snapshots, and optional background services |
-| [time](../crates/time/README.md) | HTTP time synchronization, time advancement, and timezone conversion |
-| [weathr](../crates/weathr/README.md) | Weather scenes and lockscreen views |
-| [ascii-assets](../crates/ascii-assets/README.md) | Distribution, validation, and repair of themes, patterns, icons, and fonts |
-| [i18n](../crates/i18n/README.md) | Language catalogs, message validation, fallback, and language snapshots |
-| [runtime-log](../crates/runtime-log/README.md) | Runtime events, redaction, log queries, capacity, and cleanup |
-| [watchdog](../crates/watchdog/README.md) | Process and task supervision, incident reports, and operation recovery records |
-
-The main calling relationships are shown below. Each crate's `Cargo.toml` is authoritative for the complete dependencies:
+## Process architecture
 
 ```mermaid
 flowchart LR
-    CLI[cli] --> SHELL[shell]
-    SHELL --> UI[ui]
-    SHELL --> APP[app]
-    SHELL --> TERMINAL[terminal-runtime]
-    SHELL --> AA[auto-admin]
-    SHELL --> SERVICE[system-services runtime]
-    SHELL --> WEATHR[weathr]
-    UI --> APP
-    APP --> IDENTITY[identity]
-    APP --> STORE[storage]
-    APP --> PLATFORM[platform]
-    IDENTITY --> STORE
-    STORE --> PLATFORM
-    AA --> PLATFORM
-    SERVICE --> PLATFORM
-    SERVICE --> MODEL[system-services model]
-    SERVICE --> TIME[time]
-    WEATHR --> MODEL
-    APP --> MODEL
+    Terminal[Host terminal] <-->|Input and final frame| Shell[Shell worker]
+    Guardian[Guardian: tundra-shell entry process] -->|Starts and supervises| Shell
+    Guardian -->|Starts and supervises| AppHost[One AppHost per managed window]
+    Guardian -->|Starts and supervises| Services[SessionServices worker]
+    Shell <-->|Viewport, input, frames, close| AppHost
+    Shell <-->|Shared state and metrics| Services
+    AppHost <-->|Shared state and operation requests| Services
+    AppHost -->|PTY or ConPTY| Child[CLI, Vim, script, or external terminal program]
+    CLI[Standalone tundra-cli] -->|Opt-in UI control| Shell
+    CLI -->|Watchdog list or kill| Guardian
 ```
 
-## Module conventions
+| Process | Owns | Source entry |
+| --- | --- | --- |
+| Guardian | Worker identities, liveness checks, process-tree cleanup, and terminal recovery if Shell exits unexpectedly | [shell main](../crates/shell/src/main.rs), [process host](../crates/shell/src/process_host/) and [watchdog supervisor](../crates/watchdog/src/supervisor.rs) |
+| Shell worker | Host input and terminal modes, Home, pane layout, global overlays, output, and system snapshot collection | [Shell runtime](../crates/shell/src/session/runtime.rs) and [workspace](../crates/shell/src/session/workspace/) |
+| AppHost worker | Page instances, domain state, task ownership, child terminals, and rendering in pane-local coordinates | [AppHost](../crates/shell/src/session/app_host.rs) and [controllers](../crates/shell/src/session/controller/) |
+| SessionServices worker | Session-wide configuration, profile, clock, file-operation state, and distribution of system snapshots | [session services](../crates/shell/src/session_services/) |
+| CLI | Standalone commands, the embedded REPL, and internal helper entry points dispatched to the owning crates | [CLI main](../crates/cli/src/main.rs) and [runner](../crates/cli/src/runner.rs) |
 
-| Area | Convention |
-| --- | --- |
-| Application and interface | `app` is independent of UI, Ratatui, and crossterm; commands express application semantics without passing coordinates, component IDs, or raw keys |
-| Rendering | Shell assembles the ViewModel; pages render `ShellFrameLayout.main`, while the final compositor places global bars and dialogs |
-| Terminal | Shell manages the lifecycle; `terminal-runtime` enters and restores terminal modes; UI does not modify the host terminal directly |
-| System and storage | System interfaces go through `platform`; application documents go through `storage`; system configuration files use authorization checks and backup workflows |
-| Background work | watchdog manages tasks and declares whether they can be safely replayed; AA handles approval, while the operating system handles system permissions |
-| Text | The editor moves by complete user-visible characters, not UTF-8 byte offsets as cursor positions |
-| Resources | Images provide an ASCII fallback; languages and themes are managed independently |
+The launching OS account owns the run. Startup resolves its identity, checks for interrupted updates, starts the workers, and loads assets and saved preferences. A user without completed setup sees the appearance setup before Home. Closing an app normally runs its save and task checks; the guardian can stop an unresponsive worker independently. See [Shell session lifecycle](../crates/shell/docs/session.md) and [watchdog runtime](../crates/watchdog/docs/runtime.md).
 
-See [UI requirements](UI-requirements.md) for the shared acceptance criteria for interface development. Security, authorization, and recovery details are in the relevant crate documentation.
+`RunId` identifies the guardian run, `SessionId` identifies one window opening within it, and `PageInstanceId` identifies a screen instance within the app. `WorkerId` includes a process generation and `LayoutGeneration` identifies the viewport. These identities let the host discard stale work after a page closes, a process exits, or the pane changes size.
+
+## Crate responsibilities
+
+All 20 members below are defined in [Cargo.toml](../Cargo.toml). Each README maps its source modules, entry points, and targeted checks.
+
+| Area | Crate | Responsibility |
+| --- | --- | --- |
+| Workspace | [shell](../crates/shell/README.md) | Binary entry, guardian integration, worker event loops, pages, input routing, and final terminal composition |
+| Workspace | [app](../crates/app/README.md) | Domain commands and state for the editor, Explorer, Launcher, clock, diagnostics, and updates |
+| Workspace | [ui](../crates/ui/README.md) | View models, components, layout, hit geometry, rendering, and frame capture |
+| Workspace | [cli](../crates/cli/README.md) | `tundra-cli` commands, REPL, previews, diagnostics, and helper dispatch |
+| OS and data | [platform](../crates/platform/README.md) | Native paths, files, processes, terminals, system capabilities, and typed management backends |
+| OS and data | [storage](../crates/storage/README.md) | Versioned application documents, atomic writes, normalization, recovery, and session configuration adapter |
+| OS and data | [identity](../crates/identity/README.md) | Current OS user, session identity, and workspace permission decisions |
+| OS and data | [auto-admin](../crates/auto-admin/README.md) | Approval state, interactive task input, authorization handoff, cancellation, and results |
+| Native runtimes | [terminal-runtime](../crates/terminal-runtime/README.md) | Host terminal guards, child PTY/ConPTY, input encoding, emulation, and snapshots |
+| Native runtimes | [vim-runtime](../crates/vim-runtime/README.md) | Real Vim process, buffer bridge, and requests for application-managed saves |
+| Native runtimes | [script-runtime](../crates/script-runtime/README.md) | Linux interpreter execution and bashdb integration, with debugger events and separate terminal I/O |
+| Services and resources | [system-services](../crates/system-services/README.md) | Shared system, time, and weather models; optional collection, polling, and caching runtime |
+| Services and resources | [time](../crates/time/README.md) | System or HTTP-derived time, monotonic advancement, and timezone conversion |
+| Services and resources | [weathr](../crates/weathr/README.md) | Weather scenes, embedded idle display, and a standalone display API |
+| Services and resources | [ascii-assets](../crates/ascii-assets/README.md) | Asset discovery, distribution, validation, and repair for themes, artwork, icons, and fonts |
+| Services and resources | [i18n](../crates/i18n/README.md) | Fluent catalogs, message contracts, language snapshots, fallback, and resource repair |
+| Supervision and IPC | [watchdog](../crates/watchdog/README.md) | Worker supervision, owned tasks, panic boundaries, resource cleanup, and operation recovery |
+| Supervision and IPC | [runtime-log](../crates/runtime-log/README.md) | Shared runtime events, redaction, retention, queries, and export |
+| Supervision and IPC | [workspace-protocol](../crates/workspace-protocol/README.md) | Private worker IPC, bounded framing, and the separately versioned watchdog CLI messages |
+| Supervision and IPC | [shell-control](../crates/shell-control/README.md) | Public local UI-control request, response, and snapshot types |
+
+The process diagram shows message flow. Cargo dependencies follow a different direction: `cli` uses `shell` for shared entry points and previews; `shell` coordinates `app` and `ui`; `ui` uses app types; `app` remains independent of Ratatui, Crossterm, and `ui`. The workspace `time` crate is distinct from the external package with the same name. See each crate's manifest for the full dependency list.
+
+Shell enables the `system-services/runtime` feature to collect and distribute system and weather data. App and Weathr use the model-only interface. `workspace-protocol` and `shell-control` define wire types; `platform` owns the local transport and peer checks. `watchdog` has no dependency on `platform`.
+
+## How operations flow through the workspace
+
+### Input and rendering
+
+Shell converts host events into routed input. Global window controls and active dialogs get first refusal; page input goes to the selected AppHost. A controller turns page actions into domain commands, such as `AppCommand`, or sends native keys to the PTY. Presentation reads an `AppSnapshot` and page state to assemble view models. UI computes rectangles, draws cells, and captures controls from the same geometry. Shell composes accepted app frames with the header, window bar, and overlays. See [input routing and composition](../crates/shell/docs/session.md#input-and-event-loop).
+
+Opt-in `tundra-cli ui` uses this same input path. It reads snapshots of actual frames and does not call page operations directly. The guardian endpoint used by `tundra-cli watchdog` is separate and remains available when Shell is unresponsive. See [UI control](../crates/cli/docs/ui-control.md) and [watchdog commands](../crates/cli/docs/commands.md#watchdog).
+
+### Persistent and shared state
+
+Application documents are versioned by `storage`; `platform` provides native paths and file primitives. Managed windows obtain configuration and profile data through SessionServices, which checks revisions before committing writes and publishes the persisted result. Other processes can use local storage. Window-local state such as search text, a cursor, or an unsaved editor draft belongs to its page; the file clipboard and safe move/rename history are scoped to the run and shared by Explorer windows. See [storage](../crates/storage/README.md) and [Explorer's shared operations](../crates/app/README.md).
+
+Editor saves use a snapshot of one revision. Both the standard editor and Vim use the application save path, so a successful older save cannot clear newer edits. Recovery drafts are separate from saved files. Protected OS configuration follows its own validation, authorization, backup, and recovery path. See [editor internals](editor-scalability.md), [Vim runtime](../crates/vim-runtime/README.md), and [system configuration](../crates/platform/docs/system-config.md).
+
+### System operations and failures
+
+A management backend describes available queries, actions, and target identities. UI or CLI selects a typed operation. When needed, AutoAdmin manages approval and task interaction, while the platform backend enforces OS permissions and runs the fixed action. Long work runs under watchdog ownership. The host accepts the result only for the original request and owner, then refreshes the displayed state. See [Linux management](../crates/platform/docs/linux-management.md) and [AutoAdmin workflow](../crates/auto-admin/docs/workflow.md).
+
+Task history, runtime logs, and incidents serve different needs. Task history stores operation summaries and captured output; runtime logs record structured application events; watchdog records incidents and operation checkpoints. A process failure does not imply a write was rolled back. Inspect actual state or the operation journal before retrying a write. See [task history](../crates/platform/docs/task-history.md), [logs](../crates/runtime-log/docs/logs.md), and [recovery](../crates/watchdog/docs/runtime.md).
+
+## Where to make changes
+
+| Change | Start here | Verify |
+| --- | --- | --- |
+| New key binding, page transition, or dialog action | Shell's input/router and page controller; shared components in `ui` | Focus, modal priority, key and pointer paths, and ownership of late results |
+| Domain behavior such as an edit, alarm, or file workflow | `app` state and command; filesystem work in `platform` | Domain tests for the command and an app-host test for the user flow |
+| Layout, view model, or new visible text | `ui`, Shell presentation, and paired Fluent resources under `ascii-assets/assets/locales/` | [UI requirements](UI-requirements.md), action geometry, narrow/wide characters, and [localization checks](../crates/i18n/docs/localization.md#validation) |
+| OS query, write, or privileged command | Native `platform` backend and `management` types; use AutoAdmin for task interaction | Target platform tests and isolated acceptance checks for system writes |
+| Configuration or shared-state field | `storage` document; SessionServices and protocol when the field crosses workers | Existing and invalid documents, stale revision handling, and persistence before publication |
+| Child-terminal or worker protocol | Owning runtime, `workspace-protocol` for managed IPC, `shell-control` for public UI control | Bounds, lifecycle and cleanup, stale generations, and the relevant real-terminal tests |
+
+UI renders user-visible text through i18n; preserve literal command syntax, file paths, and protocol values across languages. Underlying text is kept as Unicode, with grapheme movement in the editor and terminal-cell widths for layout. Images need a text fallback. Background tasks should declare their replay safety and publish a result before waking the UI.
 
 ## Validation
 
-Run the full checks from the repository root:
+Use the [testing guide](testing.md) to choose checks for the affected crates or workflows. For workspace code changes, the baseline is:
 
 ```sh
 cargo fmt --check
+cargo check --workspace --locked
 cargo test --workspace --locked
 cargo build --locked -p shell -p cli
 python3 scripts/check-localization.py
 bash scripts/check-weathr-dependency-boundary.sh
 ```
 
-For targeted changes, run `cargo test --locked -p <package>`. Run Linux checks in local WSL or a Linux environment; Windows uses the MSVC toolchain, for example:
-
-```sh
-cargo +stable-x86_64-pc-windows-msvc test --workspace --locked
-```
-
-When resources are limited, set `CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0`, or use `CARGO_PROFILE_TEST_DEBUG=0` to reduce test artifact size. The regular test suite does not make HTTP requests or start HTTP test servers; add `--offline` when dependencies are cached.
-
-Real terminals, touchscreens, system authorization, and device write operations require separate acceptance checks on the corresponding platform. See the [testing guide](testing.md) for test directories, PTY, root startup, and CI details.
+Run platform-specific checks in the corresponding environment. A Linux PTY test exercises terminal I/O, not physical terminal graphics, Windows ConPTY, or authorization on a different platform. Use `--offline` for Cargo when dependencies are already cached.
 
 ## Linux packaging
+
+On Linux x86_64, build Vim and create the portable archive:
 
 ```sh
 python3 scripts/build-vim.py --output target/release/vim
 bash scripts/package-linux.sh
 ```
 
-The packaging script runs on Linux x86_64, builds release versions of Shell and CLI, and writes to `dist/` by default. The version comes from the workspace and can be overridden with `TUNDRAUX_VERSION`.
+The [packaging script](../scripts/package-linux.sh) builds locked release executables and writes the tarball and separate `SHA256SUMS` file to `dist/` by default. Set `TUNDRAUX_DIST_DIR` to override the output directory or `TUNDRAUX_VERSION` to override the workspace version in the archive name.
 
-Releases use portable archives containing both programs, `assets/`, `vim/`, `tundra-installation.json`, licenses, runtime notes, and `SHA256SUMS`. Keep these files together when running the application. See the [app update guide](../crates/app/docs/update.md) for update and recovery workflows.
+The archive contains the binaries, `assets/`, `vim/`, installation marker, `install-tux.sh`, licenses, and runtime guide. Keep that layout intact for portable updates. See [application self-updates](../crates/app/docs/update.md) for the replacement and rollback contract.
 
 ## Third-party components
 
-Dependencies are based on official releases. The repository uses locally maintained dependency versions through `[patch.crates-io]`; when changing patches, also check the relevant tests and licenses:
+| Component | Integration |
+| --- | --- |
+| [Crossterm](../third_party/crossterm/TUNDRA_PATCH.md) | Host input message boundaries, timeouts, limits, and diagnostics |
+| [interprocess](../third_party/interprocess/TUNDRA-PATCHES.md) | Local IPC dependency for platform transport and cleanup |
+| [vt100](../third_party/vt100/TUNDRA_PATCH.md) | Terminal parser with local scrollback fixes, used by AutoAdmin |
+| [WezTerm terminal core](../third_party/wezterm-term/TUNDRA_PATCH.md) | In-memory child-terminal emulation and embedded I/O changes |
+| [LSH](../third_party/lsh/TUNDRA-NOTICE.md) | Syntax highlighting for source files |
+| [bashdb](../third_party/bashdb/TUNDRA-PATCHES.md) | Bundled Linux Bash debugger and local bridge fixes |
+| [OpenCode reference](../third_party/opencode/README.md) | Loading animation curves adapted under MIT |
+| [Bundled Vim](packaging/vim.md) | Pinned upstream engine built outside Cargo and shipped with its runtime and license |
 
-- [crossterm patch](../third_party/crossterm/TUNDRA_PATCH.md): message boundaries, timeouts, input limits, and warnings.
-- [vt100 patch](../third_party/vt100/TUNDRA_PATCH.md): terminal scrollback and `CSI 3 J`.
-- [OpenCode UI reference](../third_party/opencode/README.md): loading-text sweep curves adapted under MIT; release archives include `LICENSE.opencode`.
-
-Project code uses [GPL-3.0-only](../LICENSE), and Weathr uses [GPL-3.0-or-later](../crates/weathr/LICENSE.weathr). See the respective documentation for licenses covering other resources and third-party code.
-
-Bundled Vim retains the upstream Vim License and records its source and version in `vim/UPSTREAM.json`. See [bundled Vim](packaging/vim.md).
+The workspace's `[patch.crates-io]` entries identify patched Cargo dependencies. Project code uses [GPL-3.0-only](../LICENSE); Weathr uses [GPL-3.0-or-later](../crates/weathr/LICENSE.weathr). Check the component notices and licenses when changing bundled code or assets.
 
 ## Troubleshooting
 
-| Symptom | Action |
+| Symptom | Check |
 | --- | --- |
-| Terminal too small | Enlarge the window as prompted; custom resources may change the minimum size |
-| Command Line appears to be an old version | Rebuild both Shell and CLI, and ensure both come from the same debug/release directory |
-| Paths, permissions, or system features fail | Run `tundra-cli doctor` and `tundra-cli debug paths` to check the specific dependencies and permissions |
-| Terminal display is incorrect after an abnormal exit | Reset the current terminal, then check the `crashes` reports in the log directory and the next-startup prompts |
-| Configuration or state is corrupted | Back up the reported paths first, then follow the recovery prompts; `tundra-cli new` clears the data |
-| Graphical opening or clipboard access is unavailable on Linux | Check `xdg-utils`, gio, D-Bus/portal, and the terminal session |
+| Terminal reports insufficient size | Enlarge it or minimize extra panes. Check window minimums and child applications if it already exceeds 108 × 20. |
+| Command Line uses a different build | Rebuild both binaries and check that Shell is running beside the expected CLI. |
+| Paths, permissions, or capabilities differ from expectations | Run `tundra-cli doctor` and `tundra-cli debug paths`. See [platform integration](../crates/platform/docs/integration.md). |
+| Shell or an app stops responding | Use [watchdog commands](../crates/cli/docs/commands.md#watchdog) from a second terminal under the same account. If terminal modes are left incorrect, reset the terminal and inspect the incident report. |
+| Configuration or state is damaged | Review the reported paths and backups. Use [storage recovery](../crates/storage/README.md#safe-saving-and-recovery) before considering [resetting all application data](../crates/cli/docs/commands.md#data-reset). |
+| Graphical opening or clipboard fails on Linux | Check the terminal session and desktop helpers in the [Linux runtime guide](packaging/linux/README-LINUX.txt). |

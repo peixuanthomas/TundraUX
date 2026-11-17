@@ -2,6 +2,14 @@
 
 Run all commands from the repository root. Automated tests cover core workflows, data safety, and permission boundaries; real terminals, touchscreens, system authorization, and device writes require separate acceptance checks on the corresponding platform.
 
+| Change | Checks to start with |
+| --- | --- |
+| Domain behavior or shared types | [Targeted crate tests](#targeted-tests), then workspace tests when behavior crosses crates |
+| Layout, input, or window composition | [Compact UI and motion acceptance](#compact-ui-and-motion-acceptance) and the relevant keyboard, pointer, or touch workflow |
+| Process cleanup, native management, or terminal I/O | [Linux PTY and system operations](#linux-pty-and-system-operations) or the corresponding native-platform checks |
+| Vim, embedded Command Line, or script debugging | [Real Vim regression tests](#real-vim-regression-tests) and [child-terminal checks](#child-terminals-scripts-and-launcher) |
+| Documentation only | Verify links and heading anchors, confirm command examples and paths against source, and run `git diff --check` |
+
 ## Routine checks
 
 ```sh
@@ -20,6 +28,8 @@ When resources are limited, use:
 ```sh
 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0 cargo test --workspace --locked
 ```
+
+Set `CARGO_PROFILE_TEST_DEBUG=0` if test artifacts take too much disk space.
 
 ## Targeted tests
 
@@ -100,7 +110,7 @@ python3 scripts/tests/ui-refresh-smoke.py target/debug/tundra-shell
 
 The script checks 108 × 20, 120 × 36, and 180 × 50 in English and Chinese, with truecolor and ANSI terminal capabilities, and full and reduced motion. It checks header control order, status visibility with the keyboard open, tap activation without hover, modal interception, resize during a dialog, wide and combining characters, and return navigation using current control rectangles. For a focused run, select `--language en-US --color truecolor --motion full`.
 
-Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the header and window bar leave 18 content rows. Check that text remains readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
+Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the header and window bar leave 18 rows for the window, including its frame; app content has 16 rows. Check that text remains readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
 
 For performance measurements, use a Release build at 120 × 36:
 
@@ -212,7 +222,7 @@ Implementation modules include unit tests with `#[cfg(test)]` and `#[path = "...
 
 New tests should prioritize core workflows, data safety, authorization boundaries, error recovery, and user-visible regressions. Shared controls test common states and colors; page tests check hit detection, modal interception, password masking, wide characters, and resizing. When deleting cases, also remove unused fixtures and test entry points.
 
-See [large-file editor support](editor-scalability.md) for reproduction steps and measurement definitions. Historical acceptance results remain in `docs/*validation*.md` and the corresponding specialized records.
+See [large-file editor support](editor-scalability.md) for reproduction steps and measurement definitions. The [recorded Linux validation](#recorded-linux-validation-2026-11-1617) below and its linked performance report describe past runs separately from current checks.
 
 ## Recorded Linux validation, 2026-11-16–17
 
@@ -226,4 +236,4 @@ Remaining full-suite limitations are preserved as failures, not passes:
 - Two CLI child-cleanup cases and one termination case depend on `/proc/<pid>/task/<tid>/children`, which returns `ENOENT` (2) even for an observed parent/child pair. The two CLI cases also reproduce with the original `919db6b5` binary.
 - The isolated APT/dpkg negative control fails identically on original `919db6b5`: its legacy logger succeeds where the fixture expects failure. The real removal/status-FD positive control passes, and the host package database hash is unchanged. This does not establish a cause in APT/dpkg versions.
 
-The [validation index](/workspace/tundra-perf-artifacts/validation/index.json) retains original failed logs, later focused results and direct capability/baseline evidence separately. Repository-wide formatting also reports unchanged `third_party/lsh` differences present in the baseline. Windows runtime behavior and physical terminal-emulator pixel/graphics presentation were not verified by this Linux PTY work.
+The original run's artifact bundle (`tundra-perf-artifacts/validation/index.json`, outside this repository) retained failed logs, later focused results, and baseline evidence separately. Repository-wide formatting also reported unchanged `third_party/lsh` differences in that baseline. Windows runtime behavior and physical terminal-emulator graphics presentation were outside the scope of that Linux PTY run.

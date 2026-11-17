@@ -2,7 +2,16 @@
 
 `watchdog` provides the workspace guardian and the in-process runtime for managed tasks, panic boundaries, operation journals, resource cleanup, and incident reports. Worker executables create a `WatchdogRuntime`; libraries use the existing instance through `AppWatchdog`.
 
-Fallback report directories and report titles use the TundraUX name.
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`supervisor`](src/supervisor.rs), [`supervisor/`](src/supervisor/) | Guardian-side registry, event-loop health probes, verified process ownership, native resource containment and termination, and worker launch. |
+| [`runtime`](src/runtime.rs), [`config`](src/config.rs) | Initialize each worker's watchdog, register apps, define panic boundaries, and set paths, retention and recovery policy. |
+| [`task`](src/task.rs), [`owned_task`](src/owned_task.rs), [`resource`](src/resource.rs) | Run managed work with cancellation and replay policies, own low-level asynchronous adapters, and track resources that require cleanup. |
+| [`journal`](src/journal.rs), [`durable`](src/durable.rs) | Persist operation checkpoints, recover pending work, and replace or remove journal data durably. |
+| [`model`](src/model.rs), [`error`](src/error.rs), [`log_error`](src/log_error.rs) | Define identities, runtime events, error/report data, and capture structured error details for runtime logs. |
+| [`report`](src/report.rs), [`report_catalog`](src/report_catalog.rs), [`sanitize`](src/sanitize.rs), [`writer`](src/writer.rs) | Build and redact incident data, persist reports and run markers, and list prior incidents subject to retention. |
 
 ## Workspace guardian
 
@@ -76,4 +85,5 @@ See [Runtime, recovery, and reports](docs/runtime.md) for detailed rules.
 
 ```sh
 cargo test --locked -p watchdog
+cargo test --locked -p watchdog --features tokio
 ```

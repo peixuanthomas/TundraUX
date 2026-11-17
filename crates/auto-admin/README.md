@@ -2,14 +2,23 @@
 
 AutoAdmin (AA) handles approval before built-in management operations run, passes passwords, options, and terminal input while they run, and receives the final results.
 
-Linux helper handoff uses the TundraUX operation socket path.
-
 | Component | Responsibility |
 | --- | --- |
 | `auto-admin` | Approval state, task input, stop requests, results, and Linux authorization connections |
 | Shell | Dialogs, focus, buttons, on-screen keyboard, and page navigation back |
 | watchdog | Task creation, panic recording, and thread cleanup |
 | platform | Fixed system operations and actual permission checks |
+
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`lib.rs`](src/lib.rs) | `AutoAdminJob` owns approval, phase, display snapshot, questions, input handling, and the worker's result. It exposes prompt state to Shell without owning the dialog or focus. |
+| [`tasks`](src/tasks.rs) | Starts a supervised job, waits for approval when required, hands off operation events, and finalizes the task and history. |
+| [`stop`](src/stop.rs) | Tracks stop and force-stop requests and the state presented while the worker or helper exits. |
+| [`linux`](src/linux.rs) | Bridges the job to Linux authorization and helper terminal I/O, including managed cleanup of the authorization process. |
+
+## Operation lifecycle
 
 ```mermaid
 flowchart LR
@@ -42,4 +51,3 @@ cargo test --locked -p auto-admin
 ```
 
 Shell's AA tests cover dialogs, focus, password masking, and external control snapshots. Linux authorization interactions are validated in the corresponding test environment.
-The task history test resolves its temporary directory before opening the history store.

@@ -2,6 +2,15 @@
 
 `script-runtime` provides the backend for running Linux scripts and debugging with bashdb. Normal execution uses the interpreter, arguments, and directory specified by the caller; breakpoint debugging requires Bash 5.2 or newer.
 
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`lib.rs`](src/lib.rs) | Defines commands and events shared with Shell, exports the Linux session, and reports unsupported execution on other platforms. |
+| [`linux`](src/linux.rs) | Owns the child PTY and debugger connection; starts processes, sends debugger commands, parses pause and exit events, and cleans up temporary files. |
+| [`bridge.sh`](src/bridge.sh) | Embedded Bash bootstrap that connects bashdb to the runtime while leaving program stdin/stdout/stderr on the terminal. |
+| [`variables`](src/variables.rs) | Parses debugger declarations for scalars and arrays into variable views without evaluating their values. |
+
 ## Session interface
 
 `ScriptSession::spawn` creates a run, `command` receives a `RuntimeCommand`, and `poll` returns a `RuntimeEvent`:

@@ -1,24 +1,38 @@
 # ui
 
-Shell chrome uses the localized TundraUX title and sizes its header from the translated text.
-
-System Status offers its current metrics and Diagnostics; log and incident browsing is handled by Logs.
-
-`ui` converts interface data into Ratatui layouts and frames, providing shared controls, themes, focus, hit testing, animations, and automation snapshots. It does not manage the host terminal, perform system operations, or modify application state while rendering.
+`ui` converts view models into Ratatui layouts, frames, and control geometry. Shell owns routing, persistence, and the host terminal. Components may hold local interaction state and return actions; renderers read state without executing file or system operations.
 
 ## Module structure
 
 | Location | Contents |
 | --- | --- |
-| `src/foundation/` | Input events, focus, hit testing, and shared basic types |
-| `src/components/` | Buttons, lists, tables, forms, dialogs, and scrollbars |
-| `src/screens/` | Page data models, layouts, and rendering |
-| `src/theme/` | Themes, colors, control states, and animation scheduling |
-| `src/motion.rs`, `surface_motion.rs` | Transition calculations for pages, dialogs, details, and the keyboard |
-| `src/automation.rs` | Capture control trees and text from actual rendered frames |
-| `src/terminal_images.rs` | Child-terminal image clipping, caching, and fallbacks |
-| `src/workspace/` | Split geometry, window controls, and composition of app-host frames |
-| `assets/` | Icons and timezone maps; see [Asset notes](assets/README.md) for sources |
+| [`foundation/`](src/foundation/) | `input` represents normalized events; `command` defines shortcut scopes and conflicts; `focus` handles traversal and modal traps; `hit_test` orders pointer targets; `intent` describes the resulting UI action. |
+| [`components/`](src/components/) | Reusable controls; see the component groups below. |
+| [`screens/`](src/screens/) | Page-specific view models, layouts, hit targets, and rendering; see the screen groups below. |
+| [`theme/`](src/theme/) | Palette tokens, terminal color capabilities, component states, syntax colors, render context, and motion frame/schedule types |
+| [`motion`](src/motion.rs), [`surface_motion`](src/surface_motion.rs), [`spring`](src/spring.rs) | Timing and interpolation, surface and panel geometry during transitions, and shared spring helpers |
+| [`table_sort`](src/table_sort.rs) | Shared sort state, header geometry and drawing, and cell comparison |
+| [`automation`](src/automation.rs) | Captures control trees, bounds, sensitive masks, and visible text from actual rendered frames. |
+| [`workspace/`](src/workspace/) | `tree` stores splits; `layout` calculates pane geometry; `chrome`, `panel`, `split_menu`, and `taskbar` draw global window controls. `frame` translates and clips AppHost frame data. |
+| [`editor_media`](src/editor_media.rs), [`terminal_images`](src/terminal_images.rs) | Detect and prepare graphics and fallbacks; crop, cache, and place images from the child terminal. |
+| [`assets/`](src/assets/) | Resolves Home icons and setup preview assets. See [asset sources](assets/README.md) for the included icons and timezone map. |
+| [`ui_test`](src/ui_test.rs), [`style_preview`](src/style_preview.rs), [`rainbow_text_preview`](src/rainbow_text_preview.rs) | Provide demo data and renderers for interactive previews owned by Shell. |
+| [`build.rs`](build.rs) | Copies canonical resources to the build output for renderers and previews. |
+
+### Screen modules
+
+| Modules under [`src/screens/`](src/screens/) | UI responsibility |
+| --- | --- |
+| `shell/`, `context`, `home/`, `auth/` | Shared frame and header, render context, Home catalog, and first-run setup |
+| `explorer/`, `launcher`, `launcher/edit` | Browser, save picker, grids and lists, entry editor, and run-settings dialogs |
+| `editor/`, `script/`, `command_line` | Document canvas and controls, Vim viewport or installation progress, debugger panes, and terminal area |
+| `management`, `management_workspace`, `management_touch`, `auto_admin`, `auto_admin_preview` | Management lists, details, form/actions layouts and touch affordances, plus approval and interactive task surfaces |
+| `settings`, `timezone_map`, `clock/`, `system_status/` | Configuration controls, update and timezone screens, clock forms, and dashboard widgets |
+| `logs/`, `diagnostics/`, `notifications/`, `help`, `panic`, `screen_keyboard` | Log browsing, check and repair results, notifications, localized F1 shortcuts, fatal-error display, and virtual keyboard geometry |
+
+Screens with separate `model.rs`, `layout.rs`, and `render.rs` keep the data, rectangles, and drawing code together. Reuse the layout result wherever pointer targets, focus, or an embedded viewport need to match the display.
+
+## Workspace frames
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
@@ -39,6 +53,14 @@ AppHosts without terminal image support load complete ASCII catalogs and fonts w
 Shell can compose a retained app frame at a new pane size, clipping from the top left and filling newly exposed space with the canvas color. Images keep the same clipping. Retained controls are non-actionable and the old cursor is hidden. Initial window startup uses a blank canvas for 100ms before showing the localized busy indicator; reduced motion keeps that indicator static.
 
 ## Shared controls
+
+| Modules under [`src/components/`](src/components/) | Responsibility |
+| --- | --- |
+| `foundation`, `surface`, `button`, `tabs`, `nav_rail`, `page_action_bar` | Common geometry and visual state, background surfaces, buttons, navigation, and adaptive action rows |
+| `dialog`, `form_dialog`, `context_menu`, `picker`, `text_input` | Shared modal layout, form events, menus, value selection, and text editing or masking |
+| `data_table`, `list`, `selection_list`, `command_palette`, `sidebar_workspace`, `scrollbar`, `grid_reorder` | Table/list layout and selection, searchable options, sidebar composition, scrolling, and grid insertion |
+| `metric_card`, `progress_gauge`, `update_activity`, `command_status`, `toast` | Present metrics, execution or download progress, command results, and transient feedback |
+| `empty_state`, `skeleton`, `busy_indicator`, `rainbow_text`, `big_text` | Empty/loading states, motion and color affordances, and larger text for supported terminals |
 
 ### Forms
 

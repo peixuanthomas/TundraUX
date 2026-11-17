@@ -2,8 +2,6 @@
 
 `cli` provides `tundra-cli`: configuration, diagnostics, logs, Linux operations commands, Shell interface control, managed-process recovery, and an interactive command line. It also hosts update and authorization helper entry points; these internal entry points are not part of the public scripting interface.
 
-CLI output and diagnostics use the TundraUX name and the renamed application paths.
-
 ## Common entry points
 
 | Usage | Example |
@@ -23,11 +21,23 @@ Tab accepts the gray inline completion on Windows and Unix. Right cycles through
 
 ## Modules and responsibilities
 
-- `src/arguments.rs` parses public arguments and configuration fields.
-- `src/commands/` groups commands such as asset, config, debug, doctor, launcher, logs, management, ui, and watchdog.
-- `src/management_client.rs` reuses platform's management connection.
-- `src/repl/` provides the interactive command line, completion, and embedded-host protocol.
-- `src/runner.rs` coordinates configuration, storage, watchdog, and command execution.
+| Location | Responsibility |
+| --- | --- |
+| [`main`](src/main.rs), [`embedded_children_linux`](src/embedded_children_linux.rs) | Dispatch queries and internal helper entry points, start standalone supervision, and register managed children from the embedded Linux CLI. |
+| [`arguments`](src/arguments.rs), [`help_text`](src/help_text.rs) | Parse user arguments into `CliCommand` and configuration fields; render topic help and syntax errors. |
+| [`runner`](src/runner.rs) | Loads the appropriate environment and dispatches parsed commands; applies the output and exit-code contract. |
+| [`repl`](src/repl.rs), [`repl/completion`](src/repl/completion.rs) | Read interactive lines, distinguish leading-slash commands from native commands, manage history/completion, and notify the embedded host of command completion or special exit actions. Native session state lives in `platform`. |
+| [`management_client`](src/management_client.rs) | Reuses platform's typed management connection for native operations. |
+| [`commands/`](src/commands/) | Implement the command families below. |
+| [`build.rs`](build.rs) | Copies the canonical asset tree to the build output for CLI diagnostics and previews. |
+
+| Modules under `src/commands/` | Responsibility |
+| --- | --- |
+| `config`, `storage_reset`, `launcher` | Read and update settings, reset application data, and manage pinned entries. |
+| `doctor`, `debug`, `path_report`, `asset` | Report runtime capabilities and resolved paths, drive previews and explicit failure exercises, and inspect or render assets. |
+| `logs`, `clear_logs` | Query and follow logs, export structured output, and preview or confirm log cleanup. |
+| `management` | Parse native operation arguments, run typed queries or commands through the client, and render task IDs and outcomes. |
+| `ui`, `watchdog` | Connect to the live Shell for opt-in input, or to the independent guardian for process listing and recovery. |
 
 Help and version queries print built-in text directly without starting watchdog or reading configuration. `doctor` is a top-level command; the former top-level debug entry points are grouped under `debug`.
 
@@ -65,7 +75,5 @@ cargo test --locked -p cli
 ```
 
 Shell's built-in Command Line uses `tundra-cli` from the same directory, so rebuild both Shell and CLI after updates. Real Linux PTY validation of UI control uses `python3 scripts/tests/shell-control.py target/debug/tundra-shell`.
-
-The log-follow test keeps the CLI process's application state in its own temporary directory. Local control tests use short Unix socket paths.
 
 The embedded `/debug test-watchdog-panic` command explicitly requests Shell's real fullscreen panic boundary. An ordinary system command or external Launcher program exiting with status 76 remains a command result and does not request a Shell panic.

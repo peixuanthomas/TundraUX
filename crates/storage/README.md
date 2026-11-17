@@ -2,6 +2,19 @@
 
 `storage` reads and saves application documents, validates format versions, and provides atomic writes, corruption recovery, and data reset. `platform` provides platform paths and low-level file operations.
 
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`layout`](src/layout.rs), [`manager`](src/manager.rs) | Map native app directories to document paths and give callers a single load, update, and reporting API. |
+| [`descriptors`](src/descriptors.rs), [`schema`](src/schema.rs) | Define filenames, formats, and schema versions and check that documents use a supported schema. |
+| [`document_io`](src/document_io.rs), [`atomic_write`](src/atomic_write.rs) | Parse and validate JSON/TOML; create private directories and save through the platform's atomic writing path. |
+| [`config_document`](src/config_document.rs), [`animation`](src/animation.rs) | Define settings, defaults, validation and normalization, including appearance and transition timings. |
+| [`profile_document`](src/profile_document.rs), [`system_status_dashboard`](src/system_status_dashboard.rs), [`clock_document`](src/clock_document.rs) | Store per-user appearance, dashboard widgets and placements, and alarms/timers. |
+| [`state_documents`](src/state_documents.rs), [`trash_document`](src/trash_document.rs) | Represent general state, recent files, recoverable sessions, and trash metadata. |
+| [`initialization`](src/initialization.rs), [`document_health`](src/document_health.rs), [`recovery`](src/recovery.rs), [`reset`](src/reset.rs), [`error`](src/error.rs) | Initialize storage and check document health; repair or reset saved files and report structured errors. |
+| [`session_store`](src/session_store.rs) | Allows a managed host to substitute the SessionServices configuration adapter for local configuration I/O. |
+
 ## Main documents
 
 | File | Format | Content |

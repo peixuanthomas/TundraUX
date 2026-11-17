@@ -2,6 +2,17 @@
 
 `i18n` handles Fluent language-pack loading, validation, default-resource repair, and immutable language snapshots. It shares a resource root with `ascii-assets`; language packs reside in `root/locales/<code>/`.
 
+## Modules
+
+| Location | Responsibility |
+| --- | --- |
+| [`catalog`](src/catalog.rs) | Discovers packs, parses manifests, and normalizes language codes. |
+| [`resource`](src/resource.rs), [`contract`](src/contract.rs) | Load and validate Fluent sources, then check message identifiers, variables, and fallback against the generated English contract. |
+| [`snapshot`](src/snapshot.rs) | Builds immutable bundles, repairs default resources during startup, resolves fallbacks, and serializes language data for workers. |
+| [`scope`](src/scope.rs) | Applies the active snapshot to the current thread and exposes the fixed-language diagnostic renderer. |
+| [`message`](src/message.rs), [`error`](src/error.rs) | Define retained messages, raw text, typed arguments, localized errors, and loading/repair diagnostics. |
+| [`build.rs`](build.rs), [`build_support.rs`](build_support.rs) | Embed the built-in catalogs and generate message IDs and contracts from the source resources. |
+
 ## Language packs
 
 Each language pack contains a `manifest.toml`:
@@ -14,9 +25,7 @@ native_name = "简体中文"
 
 `.ftl` files in `common`, `modules`, and `recovery` are loaded recursively. `zh-Hans` is an input alias for `zh-CN`; directories and manifests use the canonical code. `LanguageCatalog::built_in()` provides English and Chinese language choices without accessing the filesystem.
 
-The bundled Chinese and English packs include the TundraUX title and startup messages, compact-interface preview descriptions, primary and danger action labels, and terminal-size messages with interpolated minimum dimensions. Keep both languages and their argument contracts in sync when changing these shared UI resources.
-
-The bundled `modules/workspace.ftl` covers the Windows panel, window states and size requirements, close and cleanup prompts, and watchdog CLI help and errors. CLI flags and JSON status values are shared across languages.
+Keep message IDs and argument names in sync between the bundled Chinese and English packs. Translate labels and diagnostics through Fluent; keep CLI flags and JSON status values stable across languages.
 
 ## Snapshots and messages
 

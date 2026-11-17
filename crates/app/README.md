@@ -1,20 +1,22 @@
 # app
 
-`app` stores application state and handles domain commands without depending on UI, Ratatui, or crossterm. Shell/UI handles window dimensions, keys, focus, and click positions; platform reads and writes go through `platform` and `storage`.
+`app` owns application state and domain commands. Shell turns keys, clicks, and focus changes into domain actions, then reads an application snapshot to prepare the UI. This crate has no dependency on UI, Ratatui, or Crossterm. Native I/O uses `platform`; structured application documents use `storage`.
 
 ## Modules
 
 | Module | Responsibilities |
 | --- | --- |
-| `application/` | Global state, application catalog, notifications, commands, and read-only snapshots |
-| `editor/` | Text buffers, multiple documents, undo, saving, recovery, and Vim mirrors |
-| `script/` | Script interpreters, arguments, breakpoints, and per-document execution state |
-| `explorer/` | File lists, selection, operation tasks, and recovery |
-| `launcher/` | Built-in entries, custom commands, external programs, and launch workflows |
-| `diagnostics/`, `runtime_logs/` | Diagnostics, log queries, and merging failure reports |
-| `system_settings` | System settings backend interfaces and availability state |
-| `clock.rs` | Alarm and timer scheduling, including updates shared across Clock windows |
-| `update/` | Update checks, downloads, builds, Vim installation, replacement, and rollback |
+| [`application/`](src/application/) | `state` defines `AppState`, commands, actions, and snapshots. `catalog` lists platform-specific built-ins and setup choices. `notification` manages alerts, modals, and toasts. `pages` defines page kinds and instance IDs. |
+| [`editor/`](src/editor/) | Owns documents, revision-specific saves, text editing, recovery, and the mirror used by Vim. See the editor breakdown below. |
+| [`script/`](src/script/) | Stores run settings and breakpoints per document, resolves interpreter and arguments, and keeps track of the current run and pause. Actual execution is in [script-runtime](../script-runtime/README.md). |
+| [`explorer/`](src/explorer/) | `state` models directories, filtering and selection; `controller` dispatches effects; `files` handles file types and path operations. `tasks`, `operations`, and `shared_operations` handle long writes, undo, and the shared clipboard interface. |
+| [`launcher/`](src/launcher/) | Merges the built-in catalog with saved entries, checks executable targets, and plans the launch, including terminal settings and custom commands. |
+| [`diagnostics/`](src/diagnostics/) | Builds system and storage health reports, runs supervised scans and repair tasks, and checks language resources through `localization`. |
+| [`runtime_logs`](src/runtime_logs.rs) | Coordinates log queries and source visibility; `documents` prepares log content for display and `incidents` merges accessible watchdog reports. |
+| [`system_settings`](src/system_settings.rs) | Defines the OS-settings backend, availability, snapshots and requests so hosts can schedule work without leaking UI state into the backend. |
+| [`clock`](src/clock.rs) | Advances scheduled alarms and countdowns from clock snapshots and returns due events. Profile persistence is in storage; Shell presents the reminders. |
+| [`update/`](src/update/) | Orchestrates update checks, preparation, replacement, and rollback. `git` reads remote history; `http` fetches update data; `release` handles Linux artifacts; `toolchain` checks source-build prerequisites; `vim` validates or installs the engine; `cancellation` cleans up or preserves transactions safely. |
+| [`build.rs`](build.rs), [`build_support`](build_support.rs) | Compile the LSH language definitions and supply version, commit, and dirty-state metadata for update checks. |
 
 Callers modify state through `AppCommand` and read a consistent view through `AppSnapshot`. `clock_snapshot()` samples only time when no page snapshot is needed; `storage_config_revision()` lets hosts observe effective configuration changes without copying the configuration. `AppAction` only expresses requests to redraw, exit, reboot, or power off; Shell performs terminal restoration and process operations.
 
@@ -32,9 +34,15 @@ The shared application catalog supplies Home and Launcher. System applications s
 
 ### Editor and scripts
 
-The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
+| Modules under [`src/editor/`](src/editor/) | Responsibility |
+| --- | --- |
+| `document`, `state`, `controller` | Own the document and its metadata, open-document state, and editor commands and effects |
+| `source_buffer`, `source_changes`, `line_changes` | Store source text and history; represent changed line ranges for incremental work and compare against saved text for line markers |
+| `syntax`, `c_syntax`, `search`, `soft_wrap`, `json_format` | Compute highlighting, C lexical tokens, matches, visual row mapping, and JSON formatting |
+| `background`, `recovery` | Run revision-tagged computations and I/O away from the UI loop; persist and claim recoverable drafts separately |
+| `rich_document`, `rich_edit`, `markdown_codec` | Represent, edit, and serialize structured Markdown for rich-document support. Files normally opened in the standard editor use source text. |
 
-Editor recovery uses the current per-document draft format.
+The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 
 Editor calculations, Explorer tasks, and diagnostic results notify an optional host event loop after publishing their results. Domain code uses the platform notifier and does not depend on Shell.
 
@@ -43,8 +51,6 @@ Script state stores the interpreter, arguments, breakpoints, run ID, and pause I
 ### Updates and logs
 
 Updates prepare Shell, CLI, and the complete `vim/` together, validate assets, licenses, and upstream metadata, and roll them all back on failure or startup timeout. Vim installation packages are checked for SHA-256, directory contents, and the pinned version; Windows also checks the iconv DLL, license, and source code.
-
-Update checks use the TundraUX repository and its release and Vim archive names.
 
 Source updates can build a commit from any branch in the public remote history. Git reads the history and draws its branches and merges without checking out files. After confirmation, the updater downloads and builds the selected commit. It reuses a complete installed Vim when its upstream metadata matches the selected source's pin. Cargo and Vim output goes to an `update-*.log` file that remains after build failure or cancellation.
 
@@ -57,6 +63,7 @@ Runtime logs merge failure reports that the user is authorized to access at the 
 - [Update tests](docs/update-tests.md)
 - [Editor and script workspace](../../docs/source-editor.md)
 - [Saving system configuration](../platform/docs/system-config.md)
+- [Workspace architecture and crate boundaries](../../docs/README-TECHNICAL.md)
 
 ## Validation
 
@@ -64,6 +71,4 @@ Runtime logs merge failure reports that the user is authorized to access at the 
 cargo test --locked -p app
 ```
 
-Run workspace tests after changing cross-crate commands or shared types. Update tests use the current portable archive and transaction formats. Update and Vim installation tests run offline and cover validation, cancellation, file safety, and rollback.
-The recovery scan fixtures use the current transaction protocol and exercise equivalent install paths.
-Explorer file-operation fixtures resolve the temporary directory before testing file identity and undo.
+Use the named integration tests `editor`, `explorer`, `launcher`, and `script` for those workflows. Update and Vim installation tests run offline and cover validation, cancellation, file safety, and rollback. Run workspace tests when changing cross-crate commands or shared types.

@@ -2,19 +2,16 @@
 
 `terminal-runtime` manages host-terminal modes and isolated child terminals. Command Line, external programs, Vim, and scripts share this implementation of PTY/ConPTY, input encoding, terminal parsing, and process cleanup.
 
-Child terminals identify their host program as TundraUX.
-
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `session` | `TerminalGuard`, host-terminal modes, and color and graphics capability detection |
-| `pty` | Child-process startup, resizing, output reading, and process-tree cleanup |
-| `emulator` | WezTerm in-memory terminal, protocol replies, synchronized updates, and image state |
-| `input` | Encode keys, paste, and mouse input according to child-terminal modes |
-| `input_queue` | Bounded input queue and a watchdog-supervised writer thread |
-| `snapshot` | Convert parsed results into renderable cells and shared snapshots |
-| `ansi` | ANSI encoding of foreground colors |
+| [`session`](src/session.rs) | `TerminalGuard`, host modes and restoration, color and graphics capability detection |
+| [`pty`](src/pty.rs), [`process_tree_linux`](src/process_tree_linux.rs) | Start the child, resize, read output, and clean up the process tree, including Linux-specific ownership and termination logic. |
+| [`emulator`](src/emulator.rs), [`emulator/images`](src/emulator/images.rs) | In-memory WezTerm state, protocol replies and synchronized updates; decode and track child image placements within limits. |
+| [`input`](src/input.rs), [`input_queue`](src/input_queue.rs) | Encode input for the child's current mode and serialize input and replies through a bounded supervised writer. |
+| [`snapshot`](src/snapshot.rs) | Convert parsed cells, cursor, scrollback, and image state into shared renderable snapshots. |
+| [`ansi`](src/ansi.rs) | Encode ANSI foreground colors used by terminal hosts. |
 
 Shell decides when to take over or hand back the terminal; this crate applies and restores settings, while UI only renders snapshots.
 
