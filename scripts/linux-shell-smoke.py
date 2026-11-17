@@ -1582,15 +1582,17 @@ def main() -> int:
         os.write(master, f"\x1b[<0;{back_x};{back_y}M".encode())
         read_available(master, output, 0.2)
         back_replay_bytes = len(output)
+        back_held_seconds = time.monotonic() - back_pressed_at
+        os.write(master, f"\x1b[<0;{back_x};{back_y}m".encode())
+        # Replay only the pre-release output after Up so observation cannot
+        # extend the physical press beyond the button's 500ms timeout.
         back_replay_started = time.monotonic()
         activated_before_release = not wait_for_painted_text(
-            master, output, "Exit TundraUX", child, present=False, timeout=0
+            master, output[:back_replay_bytes], "Exit TundraUX", child, present=False, timeout=0
         )
         back_replay_seconds = time.monotonic() - back_replay_started
         if activated_before_release:
             raise SystemExit("second press activated Back before release")
-        back_held_seconds = time.monotonic() - back_pressed_at
-        os.write(master, f"\x1b[<0;{back_x};{back_y}m".encode())
         print(f"Back click held {back_held_seconds:.3f}s; "
               f"replayed {back_replay_bytes} bytes in {back_replay_seconds:.3f}s")
         if not wait_for_painted_text(master, output, "Exit TundraUX", child):
