@@ -6,8 +6,7 @@ English | [简体中文](docs/README.zh-CN.md)
 
 TundraUX brings system tools, files, and everyday apps together in one terminal workspace. It is designed primarily for Linux devices, including those without a graphical desktop, and also runs on macOS and Windows. Some system management features are available only on Linux.
 
-Use it with a keyboard, mouse, or touchscreen.
-
+You can use it with a keyboard, mouse or both.
 ## Home
 
 Find apps and settings, and manage software, services, networks, and more.
