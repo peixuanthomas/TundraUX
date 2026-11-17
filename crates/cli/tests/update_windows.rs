@@ -6,6 +6,9 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "support/update_vim.rs"]
+mod vim;
+
 const MANIFEST_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_MANIFEST";
 const FAIL_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_FAIL";
 const RECOVERY_ENV: &str = "TUNDRAUX_TEST_WINDOWS_UPDATE_RECOVERY";
@@ -56,6 +59,8 @@ fn windows_update_keeps_original_process_alive_through_replacement_and_rollback(
             .unwrap();
             fs::copy(env!("CARGO_BIN_EXE_tundra-cli"), dir.join("tundra-cli.exe")).unwrap();
         }
+        vim::write_bundle(&install.join("vim"), b"old Vim");
+        vim::write_bundle(&prepared.join("vim"), b"new Vim");
         let staged = app::update::stage_update_for_apply(
             &app::update::PreparedUpdate {
                 work_dir: prepared.clone(),
@@ -125,6 +130,7 @@ fn windows_update_keeps_original_process_alive_through_replacement_and_rollback(
         let status = original.wait().unwrap();
         let journal = fs::read_to_string(&staged.manifest_path).unwrap();
         let restored_bytes = fs::read(install.join("tundra-shell.exe")).unwrap();
+        let vim_bytes = fs::read(install.join("vim/runtime/syntax/test.vim")).unwrap();
         fs::remove_dir_all(&root).unwrap();
         assert!(ready.unwrap().contains(if fail_start {
             "RESTORED_SHELL_READY"
@@ -137,6 +143,7 @@ fn windows_update_keeps_original_process_alive_through_replacement_and_rollback(
         );
         assert!(status.success());
         assert!(journal.contains(expected_state));
+        assert_eq!(vim_bytes, if fail_start { b"old Vim" } else { b"new Vim" });
         assert_eq!(
             restored_bytes,
             fs::read(std::env::current_exe().unwrap()).unwrap()

@@ -665,14 +665,17 @@ fn recovery_scan_fixture(name: &str, state: TransactionState) -> (PathBuf, PathB
     mark_portable_fixture(&canonical_install);
     let manifest_path = transaction_dir.join("transaction.json");
     let manifest = TransactionManifest {
-        protocol: 2,
+        protocol: UPDATE_PROTOCOL_VERSION,
         target_sha: "abc".to_owned(),
         install_dir: canonical_install,
         transaction_dir,
         state,
         cli_replaced: false,
         shell_replaced: false,
-        vim: None,
+        vim: Some(VimTransaction {
+            had_previous: false,
+            replaced: false,
+        }),
     };
     write_manifest(&manifest_path, &manifest).unwrap();
     (root, install, manifest_path)

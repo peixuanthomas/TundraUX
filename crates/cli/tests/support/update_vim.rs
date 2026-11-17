@@ -20,4 +20,15 @@ pub fn write_bundle(directory: &Path, program: &[u8]) {
         include_str!("../../../../packaging/vim.json"),
     )
     .unwrap();
+    #[cfg(windows)]
+    for name in [
+        "libiconv-2.dll",
+        "licenses/libiconv/COPYING.LIB",
+        "licenses/libiconv/BUILD-LICENSE.txt",
+        "sources/libiconv.tar.gz",
+    ] {
+        let path = directory.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"iconv fixture").unwrap();
+    }
 }

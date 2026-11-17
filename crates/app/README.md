@@ -65,3 +65,4 @@ cargo test --locked -p app
 ```
 
 Run workspace tests after changing cross-crate commands or shared types. Update and Vim installation tests use offline data and cover validation, cancellation, file safety, and rollback.
+The recovery scan fixtures use the current transaction protocol and exercise equivalent install paths.
