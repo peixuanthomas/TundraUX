@@ -526,14 +526,17 @@ fn package_details_without_overflow_keep_scroll_and_selection_unchanged() {
 #[test]
 fn package_tab_moves_focus_without_switching_main_pages() {
     use ui::components::WorkspaceFocus;
-    for focus in [
+    let mut order = vec![
         WorkspaceFocus::Navigation,
         WorkspaceFocus::Search,
         WorkspaceFocus::List,
         WorkspaceFocus::Details,
         WorkspaceFocus::Actions,
-        WorkspaceFocus::Advanced,
-    ] {
+    ];
+    if !cfg!(windows) {
+        order.push(WorkspaceFocus::Advanced);
+    }
+    for (index, &focus) in order.iter().enumerate() {
         for key in [
             KeyInput::new(InputKey::Tab),
             KeyInput::new(InputKey::BackTab),
@@ -542,11 +545,11 @@ fn package_tab_moves_focus_without_switching_main_pages() {
             let mut session = package_list_state();
             session.focus_management_workspace(focus);
             let backwards = key.key == InputKey::BackTab || key.modifiers.shift;
-            let before = session.pages.management.management_state.workspace_focus;
+            let offset = if backwards { order.len() - 1 } else { 1 };
             session.handle_management_key(&key);
             let state = &session.pages.management.management_state;
             assert_eq!(state.query.as_ref().unwrap().scope, "");
-            assert_eq!(state.workspace_focus, before.step(backwards));
+            assert_eq!(state.workspace_focus, order[(index + offset) % order.len()]);
             assert_eq!(
                 state.filtering,
                 state.workspace_focus == WorkspaceFocus::Search

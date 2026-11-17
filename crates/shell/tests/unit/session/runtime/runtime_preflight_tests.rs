@@ -749,6 +749,7 @@ fn theme_reloader_applies_active_user_changes_and_recovers_from_invalid_profiles
         ShellHomeMode::User,
     );
     state.storage_manager = Some(storage.clone());
+    state.set_terminal_image_support(true);
     state.attach_system_session(session);
 
     reloader.last_observed = None;

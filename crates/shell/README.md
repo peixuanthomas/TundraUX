@@ -183,6 +183,8 @@ Set `TUNDRA_PERF_TRACE=/absolute/path/trace.jsonl` for optional per-frame and pe
 
 ## Build and validation
 
+The theme reload test supplies terminal image support explicitly. Package keyboard tests check the focus order for the available actions on each platform.
+
 ```sh
 cargo build --locked -p shell -p cli
 cargo test --locked -p shell
