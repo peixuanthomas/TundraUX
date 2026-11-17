@@ -2072,8 +2072,7 @@ fn failed_recovery_cleanup_keeps_the_editor_open_until_retry_succeeds() {
     let user_key = state.auth_session().unwrap().user_id.clone();
     type_text(&mut state, &platform, "keep until cleanup succeeds");
     state.apply_input_at(InputEvent::Tick, Instant::now() + Duration::from_secs(3));
-    let recovery_directory =
-        app::editor_recovery::editor_recovery_path(&paths, &user_key).with_extension("");
+    let recovery_directory = app::editor_recovery::editor_recovery_directory(&paths, &user_key);
     let recovery_path = fs::read_dir(recovery_directory)
         .unwrap()
         .map(|entry| entry.unwrap().path())

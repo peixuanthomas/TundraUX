@@ -858,7 +858,7 @@ fn config_accent_color_accepts_hex_and_default_then_reports_canonical_values() {
     assert!(stderr.is_empty());
     assert_eq!(
         String::from_utf8(stdout).expect("config output should be utf8"),
-        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated accent color: cyan\n"
+        "Saved. Restart TundraUX3 to apply settings to an already running UI.\nUpdated accent color: #63D3E5\n"
     );
     assert_eq!(
         opened
@@ -867,7 +867,7 @@ fn config_accent_color_accepts_hex_and_default_then_reports_canonical_values() {
             .expect("config")
             .appearance
             .accent_color,
-        BorderColor::Cyan
+        BorderColor::Rgb(0x63, 0xD3, 0xE5)
     );
 
     let mut stdout = Vec::new();

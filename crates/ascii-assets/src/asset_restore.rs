@@ -110,49 +110,7 @@ pub fn restore_default_theme_file(
         .join("themes")
         .join(DEFAULT_THEME_ID)
         .join(file.relative_path);
-    // A valid older catalog needs only its missing entries. Preserve user labels,
-    // artwork, comments and extra items rather than resetting the entire catalog.
-    let upgraded = match file_key {
-        "home_icons" => upgraded_icon_catalog(
-            &path,
-            file_key,
-            file.contents,
-            &["logs"],
-            &[
-                "explorer",
-                "launcher",
-                "settings",
-                "system_status",
-                "user_management",
-                "default",
-            ],
-        ),
-        "launcher_icons" => upgraded_icon_catalog(
-            &path,
-            file_key,
-            file.contents,
-            &[
-                "builtin.users",
-                "builtin.logs",
-                "builtin.services",
-                "builtin.processes",
-                "builtin.packages",
-                "builtin.network",
-                "builtin.disks",
-                "builtin.firewall",
-                "builtin.ssh",
-                "builtin.backups",
-                "builtin.scheduled-tasks",
-                "builtin.tasks",
-            ],
-            &["builtin.command-line", "builtin.editor"],
-        ),
-        _ => None,
-    };
-    let contents = upgraded
-        .as_deref()
-        .map(str::as_bytes)
-        .unwrap_or(file.contents);
+    let contents = file.contents;
     let changed = fs::read(&path)
         .map(|existing| existing != contents)
         .unwrap_or(true);
@@ -220,42 +178,6 @@ impl Drop for StagedAsset {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
     }
-}
-
-fn upgraded_icon_catalog(
-    path: &Path,
-    key: &str,
-    embedded: &[u8],
-    added: &[&str],
-    required: &[&str],
-) -> Option<String> {
-    let existing = fs::read_to_string(path).ok()?;
-    let parsed: toml::Value = toml::from_str(&existing).ok()?;
-    let items = parsed.get("items")?.as_table()?;
-    if added.iter().all(|key| items.contains_key(*key))
-        || required.iter().any(|key| !items.contains_key(*key))
-    {
-        return None;
-    }
-    // Only upgrade catalogs whose existing artwork parses correctly.
-    let root = path.parent()?.parent()?.parent()?;
-    let resolver = crate::AssetResolver::from_unchecked_root(root.to_path_buf());
-    crate::artwork::load_art_set(&resolver, DEFAULT_THEME_ID, key, &format!("{key}.toml")).ok()?;
-    let defaults = std::str::from_utf8(embedded).ok()?;
-    let defaults: toml::Value = toml::from_str(defaults).ok()?;
-    let mut updated = existing;
-    for key in added
-        .iter()
-        .copied()
-        .filter(|key| !items.contains_key(*key))
-    {
-        let entry = defaults.get("items")?.get(key)?;
-        updated.push_str(&format!(
-            "\n[items.\"{key}\"]\n{}",
-            toml::to_string(entry).ok()?
-        ));
-    }
-    Some(updated)
 }
 
 /// Restores every missing, unreadable, or invalid file in the default theme,

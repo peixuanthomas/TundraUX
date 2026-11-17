@@ -47,8 +47,7 @@ fn recovery_failures_back_off_without_marking_the_draft_saved() {
         let failed_at =
             state.pages.editor.editor_recovery_dirty_since.unwrap() + EDITOR_RECOVERY_IDLE;
         let blocked = if acquire_fails {
-            let directory =
-                app::editor_recovery::editor_recovery_path(&paths, "alice").with_extension("");
+            let directory = app::editor_recovery::editor_recovery_directory(&paths, "alice");
             std::fs::create_dir_all(directory.parent().unwrap()).unwrap();
             std::fs::write(&directory, "blocks recovery directory creation").unwrap();
             directory

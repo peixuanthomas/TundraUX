@@ -160,7 +160,7 @@ impl ShellSession {
                     record
                         .terminal
                         .as_ref()
-                        .map(|settings| settings.wait_for_enter.unwrap_or(false))
+                        .map(|settings| settings.wait_for_enter)
                 })
         });
         let command_enabled = self.can_execute_command_line();

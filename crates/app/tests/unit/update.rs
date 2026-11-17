@@ -99,6 +99,7 @@ fn update_zip_rejects_parent_traversal() {
 fn update_product_validation_requires_both_programs_without_assets() {
     let root = std::env::temp_dir().join(format!("tundra-update-products-{}", std::process::id()));
     fs::create_dir_all(root.join("target/release")).unwrap();
+    let root = fs::canonicalize(root).unwrap();
     fs::write(root.join("target/release").join(SHELL_FILE), b"shell").unwrap();
     assert!(validate_product_paths(&root, &root.join("target"), "abc").is_err());
     fs::write(root.join("target/release").join(CLI_FILE), b"cli").unwrap();

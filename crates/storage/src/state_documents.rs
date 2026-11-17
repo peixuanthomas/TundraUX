@@ -24,10 +24,6 @@ impl VersionedDocument for StateDocument {
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
-
-    fn upgrade_schema(&mut self) {
-        self.schema_version = SCHEMA_VERSION;
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -50,10 +46,6 @@ impl VersionedDocument for RecentFilesDocument {
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
-
-    fn upgrade_schema(&mut self) {
-        self.schema_version = SCHEMA_VERSION;
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,9 +67,5 @@ impl Default for SessionsDocument {
 impl VersionedDocument for SessionsDocument {
     fn schema_version(&self) -> u32 {
         self.schema_version
-    }
-
-    fn upgrade_schema(&mut self) {
-        self.schema_version = SCHEMA_VERSION;
     }
 }

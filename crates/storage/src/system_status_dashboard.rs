@@ -15,9 +15,6 @@ pub enum SystemStatusWidgetKind {
     UptimeLoad,
     TopProcesses,
     Diagnostics,
-    #[serde(alias = "activity")]
-    Logs,
-    Incidents,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -165,13 +162,7 @@ impl SystemStatusDashboardConfig {
 
     pub fn normalize(&mut self) {
         let mut seen = HashSet::new();
-        // Keep legacy variants deserializable while migrating only their placements.
-        self.widgets.retain(|kind| {
-            !matches!(
-                kind,
-                SystemStatusWidgetKind::Logs | SystemStatusWidgetKind::Incidents
-            ) && seen.insert(*kind)
-        });
+        self.widgets.retain(|kind| seen.insert(*kind));
         normalize_layout(
             &mut self.wide,
             &self.widgets,
@@ -345,7 +336,7 @@ fn first_fit(
             0
         };
         for column in first_column..=max_column {
-            let candidate = placement(SystemStatusWidgetKind::Logs, column, row, size);
+            let candidate = placement(SystemStatusWidgetKind::SystemOverview, column, row, size);
             if !overlaps_any(&candidate, placed) {
                 return (column, row);
             }
@@ -355,7 +346,7 @@ fn first_fit(
     // Wrap once so malformed persisted input still normalizes deterministically.
     for row in 0..start_row {
         for column in 0..=max_column {
-            let candidate = placement(SystemStatusWidgetKind::Logs, column, row, size);
+            let candidate = placement(SystemStatusWidgetKind::SystemOverview, column, row, size);
             if !overlaps_any(&candidate, placed) {
                 return (column, row);
             }
@@ -393,7 +384,3 @@ fn placement(
 #[cfg(test)]
 #[path = "../tests/unit/system_status_dashboard/tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../tests/unit/system_status_dashboard/logs_migration_tests.rs"]
-mod logs_migration_tests;

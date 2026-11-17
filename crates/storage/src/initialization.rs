@@ -8,8 +8,8 @@ use crate::clock_document::ClockDocument;
 use crate::config_document::StorageConfig;
 use crate::descriptors::{CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, PROFILES_DESCRIPTOR};
 use crate::document_io::{
-    load_json_document, load_toml_document, save_json_document, save_toml_document,
-    validate_existing_schema, validate_json_document, validate_toml_document,
+    load_toml_document, save_json_document, save_toml_document, validate_existing_schema,
+    validate_json_document, validate_toml_document,
 };
 use crate::error::StorageError;
 use crate::manager::{StorageLoadReport, StorageManager};
@@ -134,8 +134,10 @@ impl StorageManager {
                 continue;
             }
 
-            if let Err(error @ StorageError::UnsupportedSchema { .. }) =
-                validate_existing_schema(path, document, format)
+            if let Err(
+                error @ (StorageError::UnsupportedSchema { .. }
+                | StorageError::InvalidSchemaVersion { .. }),
+            ) = validate_existing_schema(path, document, format)
             {
                 return Err(error);
             }
@@ -199,15 +201,7 @@ impl StorageManager {
         }
 
         match validate_toml_document::<T>(path, document) {
-            Ok(schema_version) => {
-                if schema_version < crate::schema::SCHEMA_VERSION {
-                    let mut document_value = load_toml_document::<T>(path, document)?;
-                    document_value.upgrade_schema();
-                    save_toml_document(path, document, &document_value)?;
-                    report.migrated_files.push(path.to_path_buf());
-                }
-                Ok(())
-            }
+            Ok(_) => Ok(()),
             Err(error @ StorageError::UnsupportedSchema { .. }) => Err(error),
             Err(error) => {
                 recover_document(report, path, document, error)?;
@@ -235,15 +229,7 @@ impl StorageManager {
         }
 
         match validate_json_document::<T>(path, document) {
-            Ok(schema_version) => {
-                if schema_version < crate::schema::SCHEMA_VERSION {
-                    let mut document_value = load_json_document::<T>(path, document)?;
-                    document_value.upgrade_schema();
-                    save_json_document(path, document, &document_value)?;
-                    report.migrated_files.push(path.to_path_buf());
-                }
-                Ok(())
-            }
+            Ok(_) => Ok(()),
             Err(error @ StorageError::UnsupportedSchema { .. }) => Err(error),
             Err(error) => {
                 recover_document(report, path, document, error)?;

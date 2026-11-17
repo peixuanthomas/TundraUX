@@ -37,13 +37,6 @@ impl ShellSession {
         self.pages.editor.editor_recovery_lease = Some(lease);
 
         let (mut state, fingerprint, unbound, warning) = match recovery {
-            app::editor_recovery::VersionedEditorRecovery::V1(record) => {
-                let kind = app::editor::DocumentKind::PlainText;
-                let (mut state, fingerprint, unbound) =
-                    editor_recovery_base(record.path.as_ref(), record.saved_content_hash, kind);
-                state.install_source_draft(record.source, record.cursor, None);
-                (state, fingerprint, unbound, None)
-            }
             app::editor_recovery::VersionedEditorRecovery::V2(record) => {
                 restore_editor_recovery_v2(record, None)
             }

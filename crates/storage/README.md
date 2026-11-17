@@ -1,20 +1,20 @@
 # storage
 
-`storage` reads and saves application documents, validates format versions, and provides atomic writes, migration, corruption recovery, and data reset. `platform` provides platform paths and low-level file operations.
+`storage` reads and saves application documents, validates format versions, and provides atomic writes, corruption recovery, and data reset. `platform` provides platform paths and low-level file operations.
 
 ## Main documents
 
 | File | Format | Content |
 | --- | --- | --- |
-| `config.toml` | TOML, schema 1 | Language, timezone, weather, appearance, AA, automation, and application settings |
+| `config.toml` | TOML, schema 3 | Language, timezone, weather, appearance, AA, automation, and application settings |
 | `profiles.v1.json` | JSON, schema 3 | Appearance and dashboard preferences keyed by system username |
-| `state.v1.json` | JSON, schema 1 | General application state |
-| `recent-files.v1.json` | JSON, schema 1 | Recent files |
-| `sessions.v1.json` | JSON, schema 1 | Recoverable session data |
+| `state.v1.json` | JSON, schema 3 | General application state |
+| `recent-files.v1.json` | JSON, schema 3 | Recent files |
+| `sessions.v1.json` | JSON, schema 3 | Recoverable session data |
 | `clock.v2.json` | JSON, schema 3 | Alarms and timer items keyed by system username |
-| `trash/trash.v1.json` | JSON, schema 1 | Application trash manifest |
+| `trash/trash.v1.json` | JSON, schema 3 | Application trash manifest |
 
-`StorageManager` and `StorageLayout` manage document locations and loading, `StorageDescriptor` describes formats, and `StorageLoadReport` returns migration and recovery results. Shell and app workers install a `SessionConfigStore` for their run's configuration path; its shared services process serializes configuration writes and rejects stale revisions. Other paths and standalone tools retain ordinary local storage.
+`StorageManager` and `StorageLayout` manage document locations and loading, `StorageDescriptor` describes formats, and `StorageLoadReport` returns normalization and recovery results. Shell and app workers install a `SessionConfigStore` for their run's configuration path; its shared services process serializes configuration writes and rejects stale revisions. Other paths and standalone tools retain ordinary local storage.
 
 Session configuration reads reuse the worker's latest successful shared snapshot. Its configuration and authorization revisions are in-memory metadata and are never persisted. Interactive callers submit writes in the background and apply their results after persistence; the synchronous storage adapter remains available to background operations.
 
@@ -24,7 +24,7 @@ Documents are read up to a default limit of 1 GiB. Length, modification time, an
 
 Writing proceeds through a temporary file in the same directory, file synchronization, atomic replacement, and parent-directory synchronization. Linux uses `openat` and `O_NOFOLLOW` to prevent ancestor-directory redirection. Application directories use `0700`, and private documents use `0600`.
 
-Future schemas are rejected outright. If a current or older format cannot be parsed, the original is renamed to `<filename>.corrupt.<timestamp>`, then a default document is created and Shell shows a notice. Version 2.0 starts personal preferences fresh. Older account and clock files stay on disk.
+Unsupported schemas are rejected without rewriting their contents. If a current document cannot be parsed, the original is renamed to `<filename>.corrupt.<timestamp>`, then a default document is created and Shell shows a notice.
 
 ## Configuration notes
 
@@ -35,7 +35,7 @@ Future schemas are rejected outright. If a current or older format cannot be par
 - `[editor].explorer_open_extensions` controls the suffixes handed to the built-in editor; custom lists and empty lists take precedence.
 - `animation_timings` stores separate acceleration, constant-speed, and deceleration durations for page/dialog/menu animations, each from 1 to 2000ms.
 - Default page/dialog/menu phases are `[40, 80, 40]`, `[45, 90, 45]`, and `[30, 60, 30]` milliseconds. Existing explicit values and animation speed remain effective; reduced motion bypasses transitions.
-- The default border is the v1.5.1 Glacier Night `#29434E`, and the accent is `#63D3E5`. Missing preferences use current defaults; explicit colors and the existing legacy-color migration remain supported.
+- The default border is Glacier Night `#29434E`, and the accent is `#63D3E5`. Missing preferences use current defaults and explicit colors remain supported.
 - Launcher's `order` stores a unified ID order, `custom` stores names, icons, commands, and exit options, and `terminal` stores argument arrays and working directories.
 
 `reset_saved_content` clears saved data. The caller is responsible for backup, confirmation, and restart workflows.
@@ -46,4 +46,4 @@ Future schemas are rejected outright. If a current or older format cannot be par
 cargo test --locked -p storage
 ```
 
-Tests cover schemas, migration, atomic writes, path safety, corruption recovery, and configuration compatibility.
+Tests cover schemas, atomic writes, path safety, corruption recovery, and configuration validation.

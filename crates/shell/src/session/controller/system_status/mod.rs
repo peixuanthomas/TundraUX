@@ -304,14 +304,6 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn set_system_status_tab(&mut self, tab: ui::SystemStatusTab) {
-        if matches!(
-            tab,
-            ui::SystemStatusTab::Logs | ui::SystemStatusTab::Incidents
-        ) {
-            self.open_logs();
-            self.logs_select_legacy_section(tab == ui::SystemStatusTab::Incidents);
-            return;
-        }
         self.pages.system_status.system_status_tab = tab;
         self.pages.system_status.system_status_route = match tab {
             ui::SystemStatusTab::Overview => ui::SystemStatusRoute::Dashboard,
@@ -323,12 +315,6 @@ impl ShellSession {
             }
             ui::SystemStatusTab::Health => {
                 ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Diagnostics)
-            }
-            ui::SystemStatusTab::Logs => {
-                ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Logs)
-            }
-            ui::SystemStatusTab::Incidents => {
-                ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Incidents)
             }
         };
         self.pages.system_status.system_status_selected_row = 0;
@@ -347,14 +333,6 @@ impl ShellSession {
         &mut self,
         kind: storage::SystemStatusWidgetKind,
     ) {
-        if matches!(
-            kind,
-            storage::SystemStatusWidgetKind::Logs | storage::SystemStatusWidgetKind::Incidents
-        ) {
-            self.open_logs();
-            self.logs_select_legacy_section(kind == storage::SystemStatusWidgetKind::Incidents);
-            return;
-        }
         if !self.system_status_widget_detail_allowed(kind) {
             self.pages.system_status.system_status_dashboard_feedback = Some(
                 if matches!(
@@ -382,14 +360,6 @@ impl ShellSession {
             storage::SystemStatusWidgetKind::Diagnostics => {
                 self.pages.system_status.system_status_tab = ui::SystemStatusTab::Health;
                 self.pages.diagnostics.diagnostics_tab = ui::DiagnosticsTab::Health;
-            }
-            storage::SystemStatusWidgetKind::Logs => {
-                self.pages.system_status.system_status_tab = ui::SystemStatusTab::Logs;
-                self.pages.diagnostics.diagnostics_tab = ui::DiagnosticsTab::Logs;
-            }
-            storage::SystemStatusWidgetKind::Incidents => {
-                self.pages.system_status.system_status_tab = ui::SystemStatusTab::Incidents;
-                self.pages.diagnostics.diagnostics_tab = ui::DiagnosticsTab::Incidents;
             }
             storage::SystemStatusWidgetKind::Storage => {
                 self.pages.system_status.system_status_tab = ui::SystemStatusTab::Storage;
@@ -1812,8 +1782,6 @@ pub(in crate::session) const fn ui_widget_kind(
         storage::SystemStatusWidgetKind::UptimeLoad => ui::SystemStatusWidgetKind::UptimeLoad,
         storage::SystemStatusWidgetKind::TopProcesses => ui::SystemStatusWidgetKind::TopProcesses,
         storage::SystemStatusWidgetKind::Diagnostics => ui::SystemStatusWidgetKind::Diagnostics,
-        storage::SystemStatusWidgetKind::Logs => ui::SystemStatusWidgetKind::Logs,
-        storage::SystemStatusWidgetKind::Incidents => ui::SystemStatusWidgetKind::Incidents,
     }
 }
 
@@ -1833,8 +1801,6 @@ pub(in crate::session) const fn storage_widget_kind(
         ui::SystemStatusWidgetKind::UptimeLoad => storage::SystemStatusWidgetKind::UptimeLoad,
         ui::SystemStatusWidgetKind::TopProcesses => storage::SystemStatusWidgetKind::TopProcesses,
         ui::SystemStatusWidgetKind::Diagnostics => storage::SystemStatusWidgetKind::Diagnostics,
-        ui::SystemStatusWidgetKind::Logs => storage::SystemStatusWidgetKind::Logs,
-        ui::SystemStatusWidgetKind::Incidents => storage::SystemStatusWidgetKind::Incidents,
     }
 }
 
@@ -1886,7 +1852,5 @@ fn system_status_widget_message(kind: storage::SystemStatusWidgetKind) -> i18n::
         storage::SystemStatusWidgetKind::UptimeLoad => i18n::msg!("shell-widget-uptimeload"),
         storage::SystemStatusWidgetKind::TopProcesses => i18n::msg!("shell-widget-topprocesses"),
         storage::SystemStatusWidgetKind::Diagnostics => i18n::msg!("shell-widget-diagnostics"),
-        storage::SystemStatusWidgetKind::Logs => i18n::msg!("shell-widget-logs"),
-        storage::SystemStatusWidgetKind::Incidents => i18n::msg!("shell-widget-incidents"),
     }
 }

@@ -315,7 +315,7 @@ impl ShellSession {
                             .find(|item| item.record.id == state.id)
                     })
                     .and_then(|item| item.record.terminal.as_ref())
-                    .and_then(|settings| settings.wait_for_enter),
+                    .is_some_and(|settings| settings.wait_for_enter),
             })
         } else {
             None

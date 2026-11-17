@@ -71,17 +71,6 @@ impl PartialEq for EditorRecoveryLease {
 
 impl Eq for EditorRecoveryLease {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EditorRecoveryRecord {
-    pub source: String,
-    pub path: Option<PathBuf>,
-    pub markdown: bool,
-    pub source_mode: bool,
-    pub cursor: usize,
-    pub saved_content_hash: Option<u64>,
-    pub updated_at_epoch_ms: u64,
-}
-
 /// Versioned recovery data written by the Markdown-independent editor.
 ///
 /// This is deliberately an application-private format. It is never written
@@ -193,7 +182,6 @@ pub struct RecoverySourceSelection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VersionedEditorRecovery {
-    V1(EditorRecoveryRecord),
     V2(EditorRecoveryRecordV2),
     /// The schema/header survived but the structured Rich payload did not.
     /// The private Markdown fallback is returned as a Source draft.
@@ -201,20 +189,6 @@ pub enum VersionedEditorRecovery {
         record: EditorRecoveryRecordV2,
         warning: String,
     },
-}
-
-impl EditorRecoveryRecord {
-    pub fn new(source: impl Into<String>) -> Self {
-        Self {
-            source: source.into(),
-            path: None,
-            markdown: true,
-            source_mode: false,
-            cursor: 0,
-            saved_content_hash: None,
-            updated_at_epoch_ms: unix_millis(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -240,19 +214,12 @@ impl From<PlatformError> for EditorRecoveryError {
     }
 }
 
-pub fn editor_recovery_path(app_paths: &AppPaths, user_key: &str) -> PathBuf {
+pub fn editor_recovery_directory(app_paths: &AppPaths, user_key: &str) -> PathBuf {
     app_paths
         .data_path()
         .join("editor")
         .join("recovery")
-        .join(format!(
-            "{:016x}.json",
-            stable_key_hash(user_key.as_bytes())
-        ))
-}
-
-fn recovery_directory(app_paths: &AppPaths, user_key: &str) -> PathBuf {
-    editor_recovery_path(app_paths, user_key).with_extension("")
+        .join(format!("{:016x}", stable_key_hash(user_key.as_bytes())))
 }
 
 fn recovery_io_error(
@@ -313,12 +280,7 @@ pub fn acquire_editor_recovery(
     user_key: &str,
     id: &RecoveryId,
 ) -> Result<EditorRecoveryLease, EditorRecoveryError> {
-    if id.0 == "legacy" {
-        return Err(EditorRecoveryError::Invalid(
-            "legacy editor recovery must be claimed before writing".into(),
-        ));
-    }
-    let path = recovery_directory(app_paths, user_key).join(format!("{}.json", id.0));
+    let path = editor_recovery_directory(app_paths, user_key).join(format!("{}.json", id.0));
     let lease = try_lease(id.clone(), path.clone())?.ok_or_else(|| {
         EditorRecoveryError::Invalid("editor recovery is already owned by an active editor".into())
     })?;
@@ -336,13 +298,7 @@ fn recovery_paths(
     user_key: &str,
 ) -> Result<Vec<(RecoveryId, PathBuf)>, EditorRecoveryError> {
     let mut paths = Vec::new();
-    let legacy = editor_recovery_path(app_paths, user_key);
-    match fs::symlink_metadata(&legacy) {
-        Ok(_) => paths.push((RecoveryId("legacy".into()), legacy)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(recovery_io_error("inspect editor recovery", &legacy, error)),
-    }
-    let directory = recovery_directory(app_paths, user_key);
+    let directory = editor_recovery_directory(app_paths, user_key);
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(paths),
@@ -373,7 +329,6 @@ fn recovery_paths(
 
 fn recovery_updated_at(record: &VersionedEditorRecovery) -> u64 {
     match record {
-        VersionedEditorRecovery::V1(record) => record.updated_at_epoch_ms,
         VersionedEditorRecovery::V2(record)
         | VersionedEditorRecovery::V2Fallback { record, .. } => record.updated_at_epoch_ms,
     }
@@ -451,36 +406,6 @@ pub fn write_editor_recovery_v2(
     Ok(())
 }
 
-pub fn read_editor_recovery(
-    app_paths: &AppPaths,
-    user_key: &str,
-) -> Result<Option<EditorRecoveryRecord>, EditorRecoveryError> {
-    let path = editor_recovery_path(app_paths, user_key);
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(EditorRecoveryError::Platform(PlatformError::Io {
-                operation: "inspect editor recovery",
-                path: Some(path),
-                message: error.to_string(),
-            }));
-        }
-    }
-    let document = read_document_bytes(&path)?;
-    let value: Value = serde_json::from_slice(&document.bytes)
-        .map_err(|error| EditorRecoveryError::Invalid(error.to_string()))?;
-    legacy_record_from_value(&value).map(Some)
-}
-
-pub fn read_versioned_editor_recovery(
-    app_paths: &AppPaths,
-    user_key: &str,
-) -> Result<Option<VersionedEditorRecovery>, EditorRecoveryError> {
-    let path = editor_recovery_path(app_paths, user_key);
-    read_versioned_recovery_path(&path)
-}
-
 fn read_versioned_recovery_path(
     path: &Path,
 ) -> Result<Option<VersionedEditorRecovery>, EditorRecoveryError> {
@@ -499,9 +424,6 @@ fn read_versioned_recovery_path(
     let value: Value = serde_json::from_slice(&document.bytes)
         .map_err(|error| EditorRecoveryError::Invalid(error.to_string()))?;
     match value.get("schema").and_then(Value::as_u64) {
-        Some(1) => legacy_record_from_value(&value)
-            .map(VersionedEditorRecovery::V1)
-            .map(Some),
         Some(2) => match serde_json::from_value::<EditorRecoveryRecordV2>(value.clone()) {
             Ok(mut record) => {
                 record.saved_content_hash = recovery_content_hash(&value);
@@ -583,42 +505,6 @@ fn recovery_content_hash(value: &Value) -> Option<u64> {
         == Some(platform::DOCUMENT_CONTENT_HASH_ALGORITHM))
     .then(|| value.get("saved_content_hash").and_then(Value::as_u64))
     .flatten()
-}
-
-fn legacy_record_from_value(value: &Value) -> Result<EditorRecoveryRecord, EditorRecoveryError> {
-    if value.get("schema").and_then(Value::as_u64) != Some(1) {
-        return Err(EditorRecoveryError::Invalid(
-            "unsupported editor recovery schema".to_string(),
-        ));
-    }
-    let source = value
-        .get("source")
-        .and_then(Value::as_str)
-        .ok_or_else(|| EditorRecoveryError::Invalid("recovery source is missing".to_string()))?
-        .to_string();
-    let path = value.get("path").and_then(Value::as_str).map(PathBuf::from);
-    Ok(EditorRecoveryRecord {
-        source,
-        path,
-        markdown: value
-            .get("markdown")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        source_mode: value
-            .get("source_mode")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        cursor: value
-            .get("cursor")
-            .and_then(Value::as_u64)
-            .and_then(|value| usize::try_from(value).ok())
-            .unwrap_or(0),
-        saved_content_hash: recovery_content_hash(value),
-        updated_at_epoch_ms: value
-            .get("updated_at_epoch_ms")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
-    })
 }
 
 pub fn clear_editor_recovery(lease: &EditorRecoveryLease) -> Result<(), EditorRecoveryError> {

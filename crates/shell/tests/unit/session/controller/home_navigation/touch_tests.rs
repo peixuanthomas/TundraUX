@@ -341,7 +341,6 @@ fn launcher_scrollbars_reach_tail_in_both_views_without_launch_or_reorder() {
                                 executable_kind: Some(
                                     storage::LauncherExecutableKind::NativeBinary,
                                 ),
-                                fingerprint: None,
                                 added_by_user_id: "admin".into(),
                                 added_at_epoch_ms: 0,
                                 terminal: None,

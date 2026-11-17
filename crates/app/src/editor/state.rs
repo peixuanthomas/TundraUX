@@ -462,14 +462,13 @@ impl EditorState {
     pub fn install_rich_draft(
         &mut self,
         mut document: RichDocument,
-        mut cursor: Option<RichPosition>,
-        mut selection: Option<RichSelection>,
+        cursor: Option<RichPosition>,
+        selection: Option<RichSelection>,
     ) {
         if self.is_read_only() {
             return;
         }
         document.repair_node_id_allocator();
-        normalize_legacy_recovered_heading_breaks(&mut document, &mut cursor, &mut selection);
         let mut editor = RichEditor::new(document);
         if let Some(cursor) = cursor.filter(|position| editor.contains_position(*position)) {
             editor.cursor = Some(cursor);

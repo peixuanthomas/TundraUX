@@ -122,7 +122,6 @@ fn managed_refresh_publishes_presence_results() {
         id: "program".to_string(),
         path: executable.to_string_lossy().into_owned(),
         executable_kind: Some(storage::LauncherExecutableKind::NativeBinary),
-        fingerprint: None,
         added_by_user_id: "admin".to_string(),
         added_at_epoch_ms: 0,
         terminal: None,

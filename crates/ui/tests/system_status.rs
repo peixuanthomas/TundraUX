@@ -130,7 +130,7 @@ fn three_sizes_have_expected_geometry_and_no_overlap() {
 fn logical_scroll_scrollbar_and_widget_hits() {
     let mut m = model();
     m.dashboard.wide_widgets.push(widget(
-        SystemStatusWidgetKind::Logs,
+        SystemStatusWidgetKind::Temperature,
         SystemStatusWidgetSize::Wide,
         0,
         9,

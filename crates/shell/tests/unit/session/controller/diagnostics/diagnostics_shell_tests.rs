@@ -138,7 +138,7 @@ fn diagnostics_toolbar_shortcuts_match_in_both_hosts_and_keep_disabled_actions_i
         let mut state = state(UserRole::Admin);
         state.pages.diagnostics.diagnostics_tab = ui::DiagnosticsTab::Logs;
         state.pages.system_status.system_status_route =
-            ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Logs);
+            ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Diagnostics);
         if standalone {
             let snapshot = state.app.diagnostics_snapshot().cloned();
             state.enter_screen(ShellScreen::Diagnostics);

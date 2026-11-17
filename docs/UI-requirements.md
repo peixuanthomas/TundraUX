@@ -24,7 +24,7 @@ The default dark appearance retains the v1.5.1 Glacier Night blue surfaces and o
 - The header and bottom window bar each occupy one row. The title sits at the far left. The status message starts next to the title and uses the available space up to the right-aligned controls. Show the controls in order from left to right as screen keyboard, Tasks, Help, clock, and Back. Click the status area to read the full message. At 108 × 20, the application window occupies 108 × 18 cells and its outer frame leaves 106 × 16 content cells.
 - Use the same spacing, typography, and control states across pages. Text must remain readable with truecolor or ANSI color, and with Chinese, English, combining marks, and wide characters.
 
-New defaults apply when a preference is absent. Preserve existing legacy-color migration and explicit saved border, color, theme, animation speed, and timing preferences; do not overwrite them merely because defaults changed.
+New defaults apply when a preference is absent. Preserve explicit saved border, color, theme, animation speed, and timing preferences; do not overwrite them merely because defaults changed.
 
 ### OpenCode source reference
 

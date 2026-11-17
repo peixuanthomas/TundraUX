@@ -269,8 +269,6 @@ pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> System
             SystemStatusDetail::Storage
                 | SystemStatusDetail::Network
                 | SystemStatusDetail::Diagnostics
-                | SystemStatusDetail::Logs
-                | SystemStatusDetail::Incidents
         )
     });
     let detail_summary_height = if detail == Some(SystemStatusDetail::Processes) {
@@ -330,11 +328,7 @@ pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> System
     let detail_has_scroll = item_count > visible_capacity
         && !matches!(
             model.route,
-            SystemStatusRoute::Detail(
-                SystemStatusDetail::Diagnostics
-                    | SystemStatusDetail::Logs
-                    | SystemStatusDetail::Incidents
-            )
+            SystemStatusRoute::Detail(SystemStatusDetail::Diagnostics)
         );
     let rows_area = Rect::new(
         table_inner.x,
@@ -491,11 +485,7 @@ pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> System
         });
     let scrollbar = match model.route {
         SystemStatusRoute::Dashboard => dashboard_scrollbar,
-        SystemStatusRoute::Detail(
-            SystemStatusDetail::Diagnostics
-            | SystemStatusDetail::Logs
-            | SystemStatusDetail::Incidents,
-        ) => None,
+        SystemStatusRoute::Detail(SystemStatusDetail::Diagnostics) => None,
         SystemStatusRoute::Detail(_) => detail_has_scroll.then(|| {
             Rect::new(
                 table_inner.right().saturating_sub(1),

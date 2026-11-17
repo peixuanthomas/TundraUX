@@ -1,5 +1,4 @@
 use super::*;
-use serde_json::json;
 
 struct RecoveryFixture(PathBuf);
 
@@ -45,20 +44,6 @@ fn new_draft(paths: &AppPaths, text: &str, updated: u64) -> EditorRecoveryLease 
     let lease = acquire_editor_recovery(paths, "alice", &RecoveryId::default()).unwrap();
     write_editor_recovery_v2(&lease, &draft(text, updated)).unwrap();
     lease
-}
-
-fn write_legacy(paths: &AppPaths, record: &EditorRecoveryRecord) {
-    let value = json!({
-        "schema": 1, "source": record.source, "path": record.path,
-        "markdown": record.markdown, "source_mode": record.source_mode,
-        "cursor": record.cursor, "saved_content_hash": record.saved_content_hash,
-        "updated_at_epoch_ms": record.updated_at_epoch_ms,
-    });
-    atomic_write_document(
-        &editor_recovery_path(paths, "alice"),
-        &serde_json::to_vec(&value).unwrap(),
-    )
-    .unwrap();
 }
 
 #[test]
@@ -180,7 +165,7 @@ fn inactive_drafts_are_claimed_one_at_a_time_in_updated_order() {
 }
 
 #[test]
-fn schema_two_round_trips_a_rich_document_and_keeps_schema_one_readable() {
+fn current_recovery_round_trips_and_rejects_schema_one() {
     let fixture = RecoveryFixture::new("legacy");
     let paths = fixture.paths();
     let lease = acquire_editor_recovery(&paths, "alice", &RecoveryId::default()).unwrap();
@@ -193,57 +178,12 @@ fn schema_two_round_trips_a_rich_document_and_keeps_schema_one_readable() {
         read_versioned_recovery_path(lease.path()).unwrap(),
         Some(VersionedEditorRecovery::V2(record))
     );
-    let mut legacy = EditorRecoveryRecord::new("legacy source");
-    legacy.cursor = 4;
-    legacy.path = Some(PathBuf::from("C:/notes/example.md"));
-    write_legacy(&paths, &legacy);
-    assert_eq!(
-        read_editor_recovery(&paths, "alice").unwrap(),
-        Some(legacy.clone())
-    );
-    assert_eq!(read_editor_recovery(&paths, "bob").unwrap(), None);
-    let (claimed, restored) = claim_next_editor_recovery(&paths, "alice")
-        .unwrap()
-        .unwrap();
-    assert_eq!(restored, VersionedEditorRecovery::V1(legacy));
-    assert!(acquire_editor_recovery(&paths, "alice", claimed.id()).is_err());
-    assert!(
-        claim_next_editor_recovery(&paths, "alice")
-            .unwrap()
-            .is_none()
-    );
-    write_editor_recovery_v2(&claimed, &draft("legacy edited", 50)).unwrap();
-    clear_editor_recovery(&claimed).unwrap();
-    assert!(
-        lease.path().is_file(),
-        "clearing the legacy draft must retain other drafts"
-    );
-    assert!(read_editor_recovery(&paths, "alice").unwrap().is_none());
+    atomic_write_document(lease.path(), br#"{"schema":1,"source":"old"}"#).unwrap();
+    assert!(read_versioned_recovery_path(lease.path()).is_err());
 }
 
 #[test]
-fn old_schema_two_file_can_be_claimed_and_cleared_separately() {
-    let fixture = RecoveryFixture::new("legacy-v2");
-    let paths = fixture.paths();
-    let record = draft("old v2", 10);
-    let mut value = serde_json::to_value(&record).unwrap();
-    value["schema"] = Value::from(2);
-    atomic_write_document(
-        &editor_recovery_path(&paths, "alice"),
-        &serde_json::to_vec(&value).unwrap(),
-    )
-    .unwrap();
-    let other = new_draft(&paths, "new v2", 20);
-    let (claimed, restored) = claim_next_editor_recovery(&paths, "alice")
-        .unwrap()
-        .unwrap();
-    assert_eq!(restored, VersionedEditorRecovery::V2(record));
-    clear_editor_recovery(&claimed).unwrap();
-    assert!(other.path().exists());
-}
-
-#[test]
-fn unknown_or_legacy_fingerprint_keeps_the_draft_without_binding_to_disk() {
+fn unknown_fingerprint_keeps_the_draft_without_binding_to_disk() {
     let fixture = RecoveryFixture::new("hash-version");
     let paths = fixture.paths();
     let mut record = draft("unsaved text must survive", 10);
@@ -253,7 +193,8 @@ fn unknown_or_legacy_fingerprint_keeps_the_draft_without_binding_to_disk() {
         let mut value = serde_json::to_value(&record).unwrap();
         value["schema"] = Value::from(2);
         value["saved_content_hash_algorithm"] = algorithm;
-        let path = editor_recovery_path(&paths, "alice");
+        let lease = acquire_editor_recovery(&paths, "alice", &RecoveryId::default()).unwrap();
+        let path = lease.path().to_owned();
         atomic_write_document(&path, &serde_json::to_vec(&value).unwrap()).unwrap();
         let Some(VersionedEditorRecovery::V2(restored)) =
             read_versioned_recovery_path(&path).unwrap()
@@ -268,11 +209,6 @@ fn unknown_or_legacy_fingerprint_keeps_the_draft_without_binding_to_disk() {
             serde_json::to_vec(&value).unwrap()
         );
     }
-    let mut legacy = EditorRecoveryRecord::new("legacy unsaved text");
-    legacy.saved_content_hash = Some(42);
-    write_legacy(&paths, &legacy);
-    legacy.saved_content_hash = None;
-    assert_eq!(read_editor_recovery(&paths, "alice").unwrap(), Some(legacy));
 }
 
 #[test]
@@ -283,11 +219,9 @@ fn damaged_rich_payload_recovers_the_private_markdown_fallback_as_source() {
     let mut value = serde_json::to_value(record).unwrap();
     value["schema"] = Value::from(2);
     value["payload"]["document"]["blocks"] = Value::String("corrupt".to_string());
-    atomic_write_document(
-        &editor_recovery_path(&paths, "alice"),
-        &serde_json::to_vec_pretty(&value).unwrap(),
-    )
-    .unwrap();
+    let draft = acquire_editor_recovery(&paths, "alice", &RecoveryId::default()).unwrap();
+    atomic_write_document(draft.path(), &serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+    drop(draft);
     let (lease, VersionedEditorRecovery::V2Fallback { record, warning }) =
         claim_next_editor_recovery(&paths, "alice")
             .unwrap()

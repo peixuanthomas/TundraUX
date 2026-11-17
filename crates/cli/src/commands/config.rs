@@ -2,7 +2,7 @@ use std::io::Write;
 
 use platform::Platform;
 use storage::{
-    AccentColor, BorderColor, BorderShape, DEFAULT_ACCENT_COLOR, StorageConfig, StorageLayout,
+    AccentColor, AppearanceConfig, BorderColor, BorderShape, StorageConfig, StorageLayout,
     StorageManager,
 };
 
@@ -311,7 +311,7 @@ fn write_theme_summary(output: &mut impl Write, config: &StorageConfig) {
 
 fn parse_accent_color(value: &str) -> Result<AccentColor, String> {
     if value.eq_ignore_ascii_case("default") {
-        Ok(DEFAULT_ACCENT_COLOR)
+        Ok(AppearanceConfig::default().accent_color)
     } else {
         value
             .parse::<AccentColor>()

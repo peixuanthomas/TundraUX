@@ -7,8 +7,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::schema::{SCHEMA_VERSION, VersionedDocument};
 
 pub const DEFAULT_LANGUAGE: &str = "en-US";
-/// Legacy name; this is the default, not a language whitelist.
-pub const SUPPORTED_LANGUAGE: &str = DEFAULT_LANGUAGE;
 pub const DEFAULT_ANIMATION_SPEED_PERCENT: u16 = 100;
 pub const MIN_ANIMATION_SPEED_PERCENT: u16 = 50;
 pub const MAX_ANIMATION_SPEED_PERCENT: u16 = 200;
@@ -75,8 +73,6 @@ pub struct StorageConfig {
     #[serde(default)]
     pub launcher: LauncherConfig,
     #[serde(default)]
-    pub security: SecurityConfig,
-    #[serde(default)]
     pub system_status: SystemStatusConfig,
     #[serde(default)]
     pub runtime_logs: RuntimeLogsConfig,
@@ -84,13 +80,7 @@ pub struct StorageConfig {
 
 impl StorageConfig {
     pub fn normalize(&mut self) -> bool {
-        let legacy_schema = self.schema_version < 2;
-        let mut changed = self.schema_version != SCHEMA_VERSION;
-        if legacy_schema {
-            self.appearance.migrate_legacy_colors();
-        }
-        self.schema_version = SCHEMA_VERSION;
-        changed |= self.launcher.migrate_legacy_pinned_apps();
+        let mut changed = false;
         changed |= self.editor.normalize();
         changed |= self.time_sync.normalize();
         changed |= self.system_status.normalize();
@@ -127,7 +117,6 @@ impl Default for StorageConfig {
             explorer: ExplorerConfig::default(),
             editor: EditorConfig::default(),
             launcher: LauncherConfig::default(),
-            security: SecurityConfig::default(),
             system_status: SystemStatusConfig::default(),
             runtime_logs: RuntimeLogsConfig::default(),
         }
@@ -214,10 +203,6 @@ impl VersionedDocument for StorageConfig {
     fn schema_version(&self) -> u32 {
         self.schema_version
     }
-
-    fn upgrade_schema(&mut self) {
-        self.normalize();
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -267,7 +252,6 @@ pub enum TimeSyncSource {
 pub struct AppearanceConfig {
     pub border_shape: BorderShape,
     pub border_color: BorderColor,
-    #[serde(deserialize_with = "deserialize_accent_color")]
     pub accent_color: AccentColor,
     pub icon_display_mode: IconDisplayMode,
     /// Controls terminal UI transitions.  It is deliberately per-user so an
@@ -301,29 +285,9 @@ impl Default for AppearanceConfig {
 }
 
 impl AppearanceConfig {
-    pub(crate) fn migrate_legacy_colors(&mut self) {
-        if *self == legacy_appearance_default() {
-            let defaults = Self::default();
-            self.border_color = defaults.border_color;
-            self.accent_color = defaults.accent_color;
-        }
-    }
-
     pub fn normalized_animation_speed_percent(&self) -> u16 {
         self.animation_speed_percent
             .clamp(MIN_ANIMATION_SPEED_PERCENT, MAX_ANIMATION_SPEED_PERCENT)
-    }
-}
-
-const fn legacy_appearance_default() -> AppearanceConfig {
-    AppearanceConfig {
-        border_shape: BorderShape::Rounded,
-        border_color: BorderColor::White,
-        accent_color: BorderColor::Cyan,
-        icon_display_mode: IconDisplayMode::Image,
-        motion_preference: MotionPreference::Full,
-        animation_speed_percent: DEFAULT_ANIMATION_SPEED_PERCENT,
-        animation_timings: crate::AnimationTimingsConfig::DEFAULT,
     }
 }
 
@@ -422,10 +386,6 @@ impl Default for ExplorerConfig {
     }
 }
 
-const LEGACY_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
-    "md", "markdown", "mdown", "mkd", "txt", "log", "json", "jsonl", "toml", "yaml", "yml", "ini",
-    "cfg", "conf", "xml", "csv", "tsv", "c", "h",
-];
 pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
     "md",
     "markdown",
@@ -572,7 +532,7 @@ impl Default for EditorConfig {
 
 impl EditorConfig {
     fn normalize(&mut self) -> bool {
-        let mut normalized = self
+        let normalized = self
             .explorer_open_extensions
             .iter()
             .filter_map(|extension| normalize_editor_explorer_open_extension(extension))
@@ -584,17 +544,6 @@ impl EditorConfig {
                 }
                 extensions
             });
-        // Only the unchanged old default can be upgraded without replacing a custom list.
-        if normalized
-            .iter()
-            .map(String::as_str)
-            .eq(LEGACY_EDITOR_EXPLORER_OPEN_EXTENSIONS.iter().copied())
-        {
-            normalized = DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS
-                .iter()
-                .map(|extension| (*extension).to_string())
-                .collect();
-        }
         if normalized == self.explorer_open_extensions {
             false
         } else {
@@ -661,13 +610,6 @@ pub enum ExplorerSortDirection {
 pub struct LauncherConfig {
     pub order: Vec<String>,
     pub entries: Vec<LauncherEntryRecord>,
-    /// Legacy input retained only so schema-1 configurations can be read. Values are moved into
-    /// `entries` during normalization and are never emitted again.
-    #[serde(skip_serializing)]
-    pub pinned_apps: Vec<String>,
-    /// Legacy directory pins remain readable for backwards compatibility, but Launcher does not
-    /// treat directories as executable entries.
-    pub pinned_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -696,25 +638,6 @@ pub enum BorderColor {
 ///
 /// Accent and border colors intentionally share the same serialized color vocabulary.
 pub type AccentColor = BorderColor;
-
-/// The legacy UI visual accent: cyan.
-/// Legacy serialized `"default"` accent sentinel. New defaults are explicit
-/// Glacier RGB values; old files keep parsing this token as cyan.
-pub const DEFAULT_ACCENT_COLOR: AccentColor = AccentColor::Cyan;
-
-fn deserialize_accent_color<'de, DeserializerType>(
-    deserializer: DeserializerType,
-) -> Result<AccentColor, DeserializerType::Error>
-where
-    DeserializerType: Deserializer<'de>,
-{
-    let value = String::deserialize(deserializer)?;
-    if value.trim().eq_ignore_ascii_case("default") {
-        Ok(DEFAULT_ACCENT_COLOR)
-    } else {
-        value.parse().map_err(serde::de::Error::custom)
-    }
-}
 
 impl BorderColor {
     pub const NAMED_VALUES: &'static [&'static str] = &[
@@ -856,34 +779,6 @@ fn parse_rgb(value: &str) -> Result<BorderColor, BorderColorParseError> {
     Ok(BorderColor::Rgb(red, green, blue))
 }
 
-impl LauncherConfig {
-    fn migrate_legacy_pinned_apps(&mut self) -> bool {
-        if self.pinned_apps.is_empty() {
-            return false;
-        }
-
-        for path in &self.pinned_apps {
-            if self.entries.iter().any(|entry| entry.path == *path) {
-                continue;
-            }
-            self.entries.push(LauncherEntryRecord {
-                id: legacy_launcher_entry_id(path),
-                path: path.clone(),
-                executable_kind: None,
-                fingerprint: None,
-                added_by_user_id: "legacy".to_string(),
-                added_at_epoch_ms: 0,
-                terminal: None,
-                custom: None,
-                name: None,
-                icon: None,
-            });
-        }
-        self.pinned_apps.clear();
-        true
-    }
-}
-
 /// A globally-managed application approved for Launcher execution.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -894,11 +789,7 @@ pub struct LauncherEntryRecord {
     pub id: String,
     /// A canonical, absolute path recorded by the admin approval workflow.
     pub path: String,
-    /// Missing only for entries migrated from the obsolete `pinned_apps` setting; such entries
-    /// require fresh admin approval before they can be launched.
     pub executable_kind: Option<LauncherExecutableKind>,
-    /// Legacy content identity, retained for config compatibility but ignored by Launcher.
-    pub fingerprint: Option<LauncherFingerprint>,
     pub added_by_user_id: String,
     pub added_at_epoch_ms: i64,
     /// Present when this entry runs in an embedded terminal instead of the system launcher.
@@ -910,8 +801,7 @@ pub struct LauncherEntryRecord {
 pub struct LauncherTerminalSettings {
     pub arguments: Vec<String>,
     pub working_directory: Option<String>,
-    /// None keeps the previous success/failure exit handling for older entries.
-    pub wait_for_enter: Option<bool>,
+    pub wait_for_enter: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -937,35 +827,9 @@ pub enum LauncherExecutableKind {
     ApplicationBundle,
 }
 
-/// Content identity captured when an administrator approves a Launcher entry.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct LauncherFingerprint {
-    pub sha256: String,
-    pub byte_len: u64,
-    pub modified_at_epoch_ms: Option<i64>,
-}
-
-fn legacy_launcher_entry_id(path: &str) -> String {
-    // FNV-1a makes the migration deterministic without introducing a hashing dependency. This
-    // ID identifies a record only; it is never used as an integrity check.
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    for byte in path.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("legacy-{hash:016x}")
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AutomationConfig {
     pub enabled: bool,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SecurityConfig {
-    /// Retained for backward-compatible config parsing. Release builds never enable debug mode.
-    pub allow_release_debug: bool,
 }
 
 fn default_theme() -> String {
@@ -973,7 +837,7 @@ fn default_theme() -> String {
 }
 
 fn default_language() -> String {
-    SUPPORTED_LANGUAGE.to_string()
+    DEFAULT_LANGUAGE.to_string()
 }
 
 fn default_timezone() -> String {
@@ -981,8 +845,8 @@ fn default_timezone() -> String {
 }
 
 #[cfg(test)]
-#[path = "../tests/unit/config_document/glacier_migration_tests.rs"]
-mod glacier_migration_tests;
+#[path = "../tests/unit/config_document/appearance_tests.rs"]
+mod appearance_tests;
 
 #[cfg(test)]
 #[path = "../tests/unit/config_document/runtime_log_config_tests.rs"]

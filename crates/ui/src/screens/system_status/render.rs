@@ -295,9 +295,7 @@ fn render_detail(
         SystemStatusDetail::Overview => super::overview::render_overview(frame, l, model, context),
         SystemStatusDetail::Storage => render_storage(frame, l, model, context),
         SystemStatusDetail::Network => render_network(frame, l, model, context),
-        SystemStatusDetail::Diagnostics
-        | SystemStatusDetail::Logs
-        | SystemStatusDetail::Incidents => {
+        SystemStatusDetail::Diagnostics => {
             let mut diagnostics = model.diagnostics.clone();
             diagnostics.tab = d.diagnostics_tab().expect("diagnostics module route");
             if let Some(dl) = &l.diagnostics_content {
@@ -315,10 +313,7 @@ fn render_detail(
             }
         }
     }
-    if !matches!(
-        d,
-        SystemStatusDetail::Diagnostics | SystemStatusDetail::Logs | SystemStatusDetail::Incidents
-    ) {
+    if !matches!(d, SystemStatusDetail::Diagnostics) {
         system_status_action_bar(model).render(frame, l.action_bar.area, context);
     }
 }
@@ -444,16 +439,6 @@ pub(super) fn detail_headers(kind: SystemStatusWidgetKind) -> Vec<String> {
         SystemStatusWidgetKind::Diagnostics => vec![
             i18n::tr!("ui-system-status-check"),
             i18n::tr!("ui-system-status-status"),
-        ],
-        SystemStatusWidgetKind::Logs => vec![
-            i18n::tr!("ui-system-status-log"),
-            i18n::tr!("ui-system-status-size"),
-            i18n::tr!("ui-system-status-modified"),
-        ],
-        SystemStatusWidgetKind::Incidents => vec![
-            i18n::tr!("ui-system-status-when"),
-            i18n::tr!("ui-system-status-app"),
-            i18n::tr!("ui-system-status-summary"),
         ],
     }
 }

@@ -89,7 +89,7 @@ fn launcher_exit_switch_is_saved_and_applied_only_to_embedded_launches() {
                     record
                         .terminal
                         .as_ref()
-                        .and_then(|settings| settings.wait_for_enter)
+                        .map(|settings| settings.wait_for_enter)
                 });
             assert_eq!(actual, Some(wait));
             assert!(matches!(
@@ -391,15 +391,6 @@ fn content_changes_allow_launch_and_scripts_require_fresh_confirmation() {
         .id
         .clone();
 
-    // Existing configs may still contain the old content digest. It must not
-    // affect either the refreshed status or launch after the target changes.
-    let mut config = storage.load_config().expect("config");
-    config.launcher.entries[0].fingerprint = Some(storage::LauncherFingerprint {
-        sha256: "obsolete digest".into(),
-        byte_len: 8,
-        modified_at_epoch_ms: Some(0),
-    });
-    storage.save_config(&config).expect("legacy fingerprint");
     state = controller.load(&storage).expect("reload");
     assert!(
         state
@@ -558,7 +549,6 @@ fn application_bundles_need_only_the_target_directory_without_content_fingerprin
     );
     assert_eq!(state.items.len(), 1, "{:?}", state.error);
     let entry = state.items[0].record.clone();
-    assert_eq!(entry.fingerprint, None);
     assert_eq!(state.items[0].status, LauncherItemStatus::Ready);
     assert_eq!(
         controller.apply(
@@ -789,7 +779,7 @@ fn terminal_launch_preserves_argument_boundaries_and_working_directory() {
             path: executable.clone(),
             args: settings.arguments,
             directory: Some(fixture.documents.clone()),
-            wait_for_enter: None,
+            wait_for_enter: Some(false),
         }
     );
     controller.apply(
@@ -994,7 +984,7 @@ fn embedded_scripts_still_require_confirmation_and_recheck_directory_at_launch()
             path: script,
             args: Vec::new(),
             directory: Some(directory.clone()),
-            wait_for_enter: None,
+            wait_for_enter: Some(false),
         }
     );
     fs::remove_dir(directory).unwrap();

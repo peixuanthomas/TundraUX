@@ -57,7 +57,7 @@ The English and Chinese `modules/` files include:
 
 ## Default asset repair
 
-Startup checks default graphics and the Chinese and English language resources. Missing or corrupt default files are restored from embedded content, while healthy custom content remains unchanged. Older default-theme configurations can gain new entries without removing the user's existing artwork.
+Startup checks default graphics and the Chinese and English language resources. Missing or corrupt default files are restored from embedded content, while healthy custom content remains unchanged.
 
 If the asset directory cannot be written, the program uses in-memory copies and reports the repair result. See [Language resources and recovery](../i18n/docs/localization.md) for language message IDs, argument contracts, and fallback rules.
 

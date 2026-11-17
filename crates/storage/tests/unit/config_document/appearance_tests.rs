@@ -1,9 +1,5 @@
 use super::*;
 
-fn legacy() -> AppearanceConfig {
-    legacy_appearance_default()
-}
-
 #[test]
 fn missing_icon_mode_uses_the_platform_default_and_saved_modes_are_preserved() {
     let expected = if cfg!(target_os = "linux") {
@@ -41,62 +37,6 @@ fn animation_speed_defaults_and_clamps_when_loaded() {
     );
     assert_eq!(below.animation_speed_percent, MIN_ANIMATION_SPEED_PERCENT);
     assert_eq!(above.animation_speed_percent, MAX_ANIMATION_SPEED_PERCENT);
-}
-
-#[test]
-fn exact_legacy_config_default_migrates_to_glacier() {
-    let mut config = StorageConfig {
-        schema_version: 1,
-        appearance: legacy(),
-        ..StorageConfig::default()
-    };
-    assert!(config.normalize());
-    assert_eq!(
-        config.appearance,
-        AppearanceConfig {
-            icon_display_mode: IconDisplayMode::Image,
-            ..AppearanceConfig::default()
-        }
-    );
-}
-
-#[test]
-fn every_single_legacy_appearance_override_is_preserved() {
-    let variants = [
-        AppearanceConfig {
-            border_shape: BorderShape::Square,
-            ..legacy()
-        },
-        AppearanceConfig {
-            border_color: BorderColor::LightBlue,
-            ..legacy()
-        },
-        AppearanceConfig {
-            accent_color: BorderColor::LightMagenta,
-            ..legacy()
-        },
-        AppearanceConfig {
-            icon_display_mode: IconDisplayMode::Ascii,
-            ..legacy()
-        },
-        AppearanceConfig {
-            motion_preference: MotionPreference::Reduced,
-            ..legacy()
-        },
-        AppearanceConfig {
-            animation_speed_percent: 125,
-            ..legacy()
-        },
-    ];
-    for expected in variants {
-        let mut config = StorageConfig {
-            schema_version: 1,
-            appearance: expected.clone(),
-            ..StorageConfig::default()
-        };
-        config.normalize();
-        assert_eq!(config.appearance, expected);
-    }
 }
 
 #[test]

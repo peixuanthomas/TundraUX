@@ -317,7 +317,7 @@ fn context_exit_switch_persists_for_custom_and_embedded_programs_and_is_hidden_f
                     record
                         .terminal
                         .as_ref()
-                        .and_then(|settings| settings.wait_for_enter)
+                        .map(|settings| settings.wait_for_enter)
                 });
             assert_eq!(wait, Some(true));
             if !custom {

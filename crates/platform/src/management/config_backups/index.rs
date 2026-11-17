@@ -49,6 +49,7 @@ impl Summary {
 
 #[derive(Serialize, Deserialize)]
 struct Checkpoint {
+    format_version: u8,
     directory: Option<Stamp>,
     journal_bytes: u64,
 }
@@ -249,7 +250,8 @@ fn current(root: &Path) -> bool {
     let Ok(checkpoint) = serde_json::from_reader::<_, Checkpoint>(checkpoint.take(8192)) else {
         return false;
     };
-    directory_stamp(root).is_ok_and(|actual| actual == checkpoint.directory)
+    checkpoint.format_version == 1
+        && directory_stamp(root).is_ok_and(|actual| actual == checkpoint.directory)
         && fs::symlink_metadata(root.join("index/entries.jsonl"))
             .is_ok_and(|metadata| metadata.len() == checkpoint.journal_bytes)
 }
@@ -270,6 +272,7 @@ fn checkpoint(root: &Path) -> Result<(), ManagementError> {
     atomic_json(
         &root.join("index/checkpoint.json"),
         &Checkpoint {
+            format_version: 1,
             directory: directory_stamp(root)?,
             journal_bytes: journal.metadata().map_err(io_error)?.len(),
         },

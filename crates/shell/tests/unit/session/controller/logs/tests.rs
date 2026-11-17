@@ -876,10 +876,10 @@ fn log_levels_sort_by_severity_and_keep_the_selected_record() {
     assert_eq!(model.events[2].status, ui::DiagnosticsStatus::Warning);
 }
 #[test]
-fn legacy_status_navigation_redirects_to_logs_app() {
+fn diagnostics_incidents_tab_opens_logs_with_critical_filter() {
     let mut state = state(UserRole::Admin);
     state.enter_screen(ShellScreen::SystemStatus);
-    state.set_system_status_tab(ui::SystemStatusTab::Incidents);
+    state.set_diagnostics_tab(ui::DiagnosticsTab::Incidents);
     assert_eq!(state.active_screen(), ShellScreen::Logs);
     assert_eq!(
         state.pages.logs.logs_state.query.min_level,
@@ -887,8 +887,6 @@ fn legacy_status_navigation_redirects_to_logs_app() {
     );
     key(&mut state, "Esc");
     assert_eq!(state.active_screen(), ShellScreen::SystemStatus);
-    assert!(!ui::SystemStatusWidgetKind::ALL.contains(&ui::SystemStatusWidgetKind::Logs));
-    assert!(!ui::SystemStatusWidgetKind::ALL.contains(&ui::SystemStatusWidgetKind::Incidents));
 }
 #[test]
 fn refresh_preserves_selected_event_and_scroll() {

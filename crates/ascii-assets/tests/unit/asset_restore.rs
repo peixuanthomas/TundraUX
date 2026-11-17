@@ -1,45 +1,6 @@
 use super::*;
 
 #[test]
-fn management_icons_upgrade_preserves_existing_custom_artwork() {
-    let root = TempDir::new("management-icon-upgrade");
-    restore_default_theme(root.path()).unwrap();
-    let path = root.path().join("themes/default/launcher_icons.toml");
-    let original = fs::read_to_string(&path).unwrap();
-    let old = original
-        .split("[items.\"builtin.logs\"]")
-        .next()
-        .unwrap()
-        .replace("label = \"Editor\"", "label = \"My Editor\"");
-    fs::write(&path, &old).unwrap();
-    let (store, report) =
-        AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
-    assert!(
-        report
-            .repaired
-            .iter()
-            .any(|file| file.key == "launcher_icons")
-    );
-    let updated = fs::read_to_string(path).unwrap();
-    assert!(updated.starts_with(&old));
-    for key in [
-        "builtin.services",
-        "builtin.processes",
-        "builtin.packages",
-        "builtin.network",
-        "builtin.disks",
-        "builtin.firewall",
-        "builtin.ssh",
-        "builtin.backups",
-        "builtin.scheduled-tasks",
-        "builtin.logs",
-        "builtin.tasks",
-    ] {
-        assert!(store.launcher_icon(key).is_some());
-    }
-}
-
-#[test]
 fn management_and_task_images_are_distinct_embedded_and_recoverable() {
     let root = TempDir::new("management-png-recovery");
     restore_default_theme(root.path()).unwrap();
@@ -169,36 +130,6 @@ impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
-}
-
-#[test]
-fn upgrades_old_home_catalog_without_replacing_customized_items() {
-    let root = TempDir::new("logs-upgrade");
-    restore_default_theme(root.path()).unwrap();
-    let catalog = root.path().join("themes/default/home_icons.toml");
-    let original = fs::read_to_string(&catalog).unwrap();
-    let old = original
-        .split("[items.logs]")
-        .next()
-        .unwrap()
-        .replace("label = \"Explorer\"", "label = \"My Explorer\"");
-    fs::write(&catalog, &old).unwrap();
-    assert!(
-        check_default_theme(root.path())
-            .warning_checks()
-            .iter()
-            .any(|check| check.key == "home_icons")
-    );
-    let restored = restore_default_theme(root.path()).unwrap();
-    assert_eq!(restored.len(), 1);
-    let updated = fs::read_to_string(&catalog).unwrap();
-    assert!(updated.starts_with(&old));
-    let parsed: toml::Value = toml::from_str(&updated).unwrap();
-    let items = parsed.get("items").and_then(toml::Value::as_table).unwrap();
-    assert_eq!(items["logs"]["image"].as_str(), Some("home_icons/logs.png"));
-    assert_eq!(items["explorer"]["label"].as_str(), Some("My Explorer"));
-    assert!(check_default_theme(root.path()).is_ok());
-    assert!(restore_default_theme(root.path()).unwrap().is_empty());
 }
 
 #[test]

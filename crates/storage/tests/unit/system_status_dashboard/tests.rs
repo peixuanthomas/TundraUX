@@ -168,23 +168,27 @@ fn profile_edits_are_separate_while_catalog_add_remove_is_shared() {
     let narrow_before = config.narrow.clone();
     config.move_widget(DashboardProfile::Wide, SystemStatusWidgetKind::Cpu, 0, 20);
     assert_eq!(config.narrow, narrow_before);
-    assert!(config.add_widget(SystemStatusWidgetKind::Logs));
+    assert!(config.add_widget(SystemStatusWidgetKind::Temperature));
     assert!(
         config
             .wide
             .placements
             .iter()
-            .any(|p| p.kind == SystemStatusWidgetKind::Logs)
+            .any(|p| p.kind == SystemStatusWidgetKind::Temperature)
     );
     assert!(
         config
             .narrow
             .placements
             .iter()
-            .any(|p| p.kind == SystemStatusWidgetKind::Logs)
+            .any(|p| p.kind == SystemStatusWidgetKind::Temperature)
     );
-    assert!(config.remove_widget(SystemStatusWidgetKind::Logs));
-    assert!(!config.widgets.contains(&SystemStatusWidgetKind::Logs));
+    assert!(config.remove_widget(SystemStatusWidgetKind::Temperature));
+    assert!(
+        !config
+            .widgets
+            .contains(&SystemStatusWidgetKind::Temperature)
+    );
 }
 
 #[test]

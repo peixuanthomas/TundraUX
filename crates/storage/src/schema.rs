@@ -4,8 +4,6 @@ use crate::error::StorageError;
 
 /// Version of the global TOML configuration document.
 ///
-/// Version 3 adds System Status storage-pressure thresholds. Documents from
-/// versions 1 and 2 remain readable and are rewritten during initialization.
 pub const SCHEMA_VERSION: u32 = 3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageFormat {
@@ -15,11 +13,6 @@ pub enum StorageFormat {
 
 pub trait VersionedDocument {
     fn schema_version(&self) -> u32;
-
-    /// Updates an already-deserialized compatible document to the currently
-    /// supported schema.  The default keeps third-party document types source
-    /// compatible; storage-owned documents override it to update their header.
-    fn upgrade_schema(&mut self) {}
 }
 
 pub(crate) fn ensure_document_schema(
@@ -54,26 +47,7 @@ pub(crate) fn ensure_supported_schema(
     path: &Path,
     schema_version: u32,
 ) -> Result<(), StorageError> {
-    let supported = SCHEMA_VERSION;
-    if schema_version > supported {
-        return Err(StorageError::UnsupportedSchema {
-            document,
-            path: path.to_path_buf(),
-            found: schema_version,
-            supported,
-        });
-    }
-
-    if schema_version == 0 {
-        return Err(StorageError::InvalidSchemaVersion {
-            document,
-            path: path.to_path_buf(),
-            found: schema_version,
-            supported,
-        });
-    }
-
-    Ok(())
+    ensure_document_schema(document, path, schema_version)
 }
 
 pub(crate) fn toml_schema_version(

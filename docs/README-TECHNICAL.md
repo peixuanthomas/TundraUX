@@ -49,7 +49,7 @@ Shell opens as the system user who launches it. First-time setup saves personal 
 | [vim-runtime](../crates/vim-runtime/README.md) | Vim processes, buffer synchronization, controlled saves, and terminal snapshots |
 | [auto-admin](../crates/auto-admin/README.md) | Operation approval, password input, task finalization, and authorization connections |
 | [platform](../crates/platform/README.md) | Operating-system paths, files, processes, and system-management interfaces |
-| [storage](../crates/storage/README.md) | Application documents, format validation, atomic saves, migration, and corruption recovery |
+| [storage](../crates/storage/README.md) | Application documents, format validation, atomic saves, normalization, and corruption recovery |
 | [identity](../crates/identity/README.md) | The current system user and workspace permissions |
 | [system-services](../crates/system-services/README.md) | Shared system and weather snapshots, and optional background services |
 | [time](../crates/time/README.md) | HTTP time synchronization, time advancement, and timezone conversion |

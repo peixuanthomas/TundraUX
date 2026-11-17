@@ -7280,7 +7280,6 @@ fn launcher_arrow_keys_follow_grid_rows_and_columns() {
                                     name: None,
                                     icon: None,
                                     executable_kind: None,
-                                    fingerprint: None,
                                     added_by_user_id: "admin".into(),
                                     added_at_epoch_ms: 0,
                                 },

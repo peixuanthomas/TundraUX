@@ -8,9 +8,9 @@ use storage::{
     AppearanceConfig, BorderColor, BorderShape, ClockDocument, ClockEntryRecord, ClockProfile,
     EditorConfig, ExplorerConfig, ExplorerDateZone, ExplorerSizeFormat, ExplorerSortDirection,
     ExplorerSortField, IconDisplayMode, LauncherConfig, LauncherEntryRecord,
-    LauncherExecutableKind, LauncherFingerprint, MotionPreference, RecentFilesDocument,
-    SCHEMA_VERSION, SecurityConfig, SessionsDocument, StateDocument, StorageConfig, StorageError,
-    StorageLayout, StorageManager, TimeSyncConfig, TimeSyncSource, TrashDocument, TrashRecord,
+    LauncherExecutableKind, MotionPreference, RecentFilesDocument, SCHEMA_VERSION,
+    SessionsDocument, StateDocument, StorageConfig, StorageError, StorageLayout, StorageManager,
+    TimeSyncConfig, TimeSyncSource, TrashDocument, TrashRecord,
 };
 
 #[test]
@@ -103,7 +103,7 @@ fn reopening_storage_tightens_only_owned_paths() {
 }
 
 #[test]
-fn editor_suffixes_upgrade_old_defaults_and_preserve_custom_lists() {
+fn editor_suffixes_preserve_explicit_lists() {
     let legacy = [
         "md", "markdown", "mdown", "mkd", "txt", "log", "json", "jsonl", "toml", "yaml", "yml",
         "ini", "cfg", "conf", "xml", "csv", "tsv", "c", "h",
@@ -113,7 +113,7 @@ fn editor_suffixes_upgrade_old_defaults_and_preserve_custom_lists() {
     let defaults = EditorConfig::default().explorer_open_extensions;
     let custom = vec!["txt".to_string(), "rs".to_string()];
     for (case, extensions, expected, migrated) in [
-        ("legacy", legacy, defaults.clone(), true),
+        ("legacy", legacy.clone(), legacy, false),
         ("custom", custom.clone(), custom, false),
         ("empty", Vec::new(), Vec::new(), false),
         ("expanded", defaults.clone(), defaults, false),
@@ -208,16 +208,10 @@ fn toml_and_json_documents_round_trip() {
             cursor_vertical_max_step: 4,
         },
         launcher: LauncherConfig {
-            pinned_dirs: vec!["C:/Projects".to_string()],
             entries: vec![LauncherEntryRecord {
                 id: "notepad".to_string(),
                 path: "C:/Windows/notepad.exe".to_string(),
                 executable_kind: Some(LauncherExecutableKind::NativeBinary),
-                fingerprint: Some(LauncherFingerprint {
-                    sha256: "abc123".to_string(),
-                    byte_len: 42,
-                    modified_at_epoch_ms: Some(100),
-                }),
                 added_by_user_id: "admin".to_string(),
                 added_at_epoch_ms: 99,
                 terminal: None,
@@ -226,9 +220,6 @@ fn toml_and_json_documents_round_trip() {
                 icon: None,
             }],
             ..LauncherConfig::default()
-        },
-        security: SecurityConfig {
-            allow_release_debug: true,
         },
         system_status: storage::SystemStatusConfig::default(),
         runtime_logs: storage::RuntimeLogsConfig::default(),
@@ -356,19 +347,35 @@ fn toml_and_json_documents_round_trip() {
 }
 
 #[test]
-fn old_config_without_language_or_timezone_loads_with_defaults() {
-    let base = unique_temp_root("old-config-defaults");
+fn unsupported_old_schema_is_rejected_without_overwriting_data() {
+    let base = unique_temp_root("unsupported-old-schema");
+    let paths = app_paths(&base);
+    let path = paths.config_path().to_path_buf();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let old = "schema_version = 1\ntheme = \"dark\"\n";
+    fs::write(&path, old).unwrap();
+    assert!(matches!(
+        StorageManager::open(paths),
+        Err(StorageError::InvalidSchemaVersion { found: 1, .. })
+    ));
+    assert_eq!(fs::read_to_string(&path).unwrap(), old);
+    cleanup(&base);
+}
+
+#[test]
+fn missing_language_or_timezone_uses_defaults() {
+    let base = unique_temp_root("missing-config-defaults");
     let paths = app_paths(&base);
     let layout = StorageLayout::from_app_paths(&paths);
     fs::create_dir_all(layout.config_path.parent().expect("config parent"))
         .expect("config parent should be writable");
     fs::write(
         &layout.config_path,
-        "schema_version = 1\ntheme = \"light\"\n\n[shortcuts]\n\n[explorer]\nshow_hidden = true\n\n[launcher]\npinned_apps = []\npinned_dirs = []\n\n[security]\nallow_release_debug = false\n",
+        "schema_version = 3\ntheme = \"light\"\n\n[shortcuts]\n\n[explorer]\nshow_hidden = true\n\n[launcher]\n\n",
     )
-    .expect("old config fixture");
+    .expect("config fixture");
 
-    let opened = StorageManager::open(paths).expect("old config should load");
+    let opened = StorageManager::open(paths).expect("config should load");
     let config = opened.manager.load_config().expect("config should load");
 
     assert_eq!(config.theme, "light");
@@ -402,130 +409,6 @@ fn old_config_without_language_or_timezone_loads_with_defaults() {
 }
 
 #[test]
-fn v1_appearance_migration_keeps_every_custom_visual_choice() {
-    let base = unique_temp_root("appearance-custom-migration");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(layout.config_path.parent().expect("config parent"))
-        .expect("config parent should be writable");
-    fs::write(
-        &layout.config_path,
-        "schema_version = 1\ntheme = \"dark\"\n\n[appearance]\nborder_shape = \"square\"\nborder_color = \"#38BDF8\"\naccent_color = \"light-magenta\"\nicon_display_mode = \"ascii\"\n",
-    )
-    .expect("legacy appearance fixture");
-
-    let opened = StorageManager::open(paths).expect("appearance migration should succeed");
-    let appearance = opened
-        .manager
-        .load_config()
-        .expect("migrated config")
-        .appearance;
-
-    assert_eq!(appearance.border_shape, BorderShape::Square);
-    assert_eq!(appearance.border_color, BorderColor::Rgb(0x38, 0xBD, 0xF8));
-    assert_eq!(appearance.accent_color, BorderColor::LightMagenta);
-    assert_eq!(appearance.icon_display_mode, IconDisplayMode::Ascii);
-    assert_eq!(appearance.motion_preference, MotionPreference::Full);
-    let contents = fs::read_to_string(&layout.config_path).expect("migrated config contents");
-    assert!(contents.contains(&format!("schema_version = {SCHEMA_VERSION}")));
-    assert!(contents.contains("border_color = \"#38BDF8\""));
-    assert!(contents.contains("accent_color = \"light-magenta\""));
-    assert!(contents.contains("icon_display_mode = \"ascii\""));
-    assert!(opened.report.migrated_files.contains(&layout.config_path));
-
-    cleanup(&base);
-}
-
-#[test]
-fn v2_config_migrates_system_status_defaults_and_round_trips() {
-    let base = unique_temp_root("system-status-v2-migration");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(layout.config_path.parent().expect("config parent"))
-        .expect("config parent should be writable");
-    fs::write(
-        &layout.config_path,
-        "schema_version = 2\ntheme = \"dark\"\n",
-    )
-    .expect("v2 config fixture");
-
-    let opened = StorageManager::open(paths).expect("v2 config should migrate");
-    let config = opened.manager.load_config().expect("migrated config");
-    assert_eq!(config.schema_version, SCHEMA_VERSION);
-    assert_eq!(config.system_status, storage::SystemStatusConfig::default());
-    assert!(opened.report.migrated_files.contains(&layout.config_path));
-
-    let contents = fs::read_to_string(&layout.config_path).expect("migrated contents");
-    assert!(contents.contains(&format!("schema_version = {SCHEMA_VERSION}")));
-    assert!(contents.contains("[system_status]"));
-    assert!(contents.contains("low_available_gib = 5"));
-
-    opened
-        .manager
-        .save_config(&config)
-        .expect("save migrated config");
-    assert_eq!(
-        opened
-            .manager
-            .load_config()
-            .expect("reload migrated config"),
-        config
-    );
-    cleanup(&base);
-}
-
-#[test]
-fn new_accent_default_is_glacier_and_legacy_default_value_is_cyan() {
-    let config: StorageConfig =
-        toml::from_str("schema_version = 1\n\n[appearance]\naccent_color = \"default\"\n")
-            .expect("accent default should parse");
-
-    assert_eq!(
-        StorageConfig::default().appearance.accent_color,
-        BorderColor::Rgb(0x63, 0xD3, 0xE5)
-    );
-    assert_eq!(config.appearance.accent_color, BorderColor::Cyan);
-}
-
-#[test]
-fn legacy_pinned_apps_migrate_to_unapproved_launcher_entries() {
-    let base = unique_temp_root("legacy-launcher-pins");
-    let paths = app_paths(&base);
-    let layout = StorageLayout::from_app_paths(&paths);
-    fs::create_dir_all(layout.config_path.parent().expect("config parent"))
-        .expect("config parent should be writable");
-    fs::write(
-        &layout.config_path,
-        "schema_version = 1\ntheme = \"dark\"\n\n[launcher]\npinned_apps = [\"C:/Apps/Legacy.exe\", \"C:/Apps/Legacy.exe\"]\npinned_dirs = [\"C:/Projects\"]\n",
-    )
-    .expect("legacy config fixture");
-
-    let opened = StorageManager::open(paths).expect("legacy config should migrate");
-    let config = opened
-        .manager
-        .load_config()
-        .expect("migrated config should load");
-
-    assert_eq!(config.launcher.entries.len(), 1);
-    let entry = &config.launcher.entries[0];
-    assert_eq!(entry.path, "C:/Apps/Legacy.exe");
-    assert_eq!(entry.executable_kind, None);
-    assert_eq!(entry.fingerprint, None);
-    assert_eq!(entry.added_by_user_id, "legacy");
-    assert!(entry.id.starts_with("legacy-"));
-    assert!(config.launcher.pinned_apps.is_empty());
-    assert_eq!(config.launcher.pinned_dirs, vec!["C:/Projects"]);
-    assert!(opened.report.migrated_files.contains(&layout.config_path));
-
-    let contents = fs::read_to_string(&layout.config_path).expect("migrated config is readable");
-    assert!(contents.contains("[[launcher.entries]]"));
-    assert!(!contents.contains("pinned_apps"));
-    assert!(contents.contains("pinned_dirs = [\"C:/Projects\"]"));
-
-    cleanup(&base);
-}
-
-#[test]
 fn existing_non_english_config_is_canonicalized_without_losing_language_on_open() {
     let base = unique_temp_root("non-english-config");
     let paths = app_paths(&base);
@@ -534,7 +417,7 @@ fn existing_non_english_config_is_canonicalized_without_losing_language_on_open(
         .expect("config parent should be writable");
     fs::write(
         &layout.config_path,
-        "schema_version = 1\ntheme = \"dark\"\nlanguage = \"zh-Hans\"\ntimezone = \"UTC\"\n",
+        "schema_version = 3\ntheme = \"dark\"\nlanguage = \"zh-Hans\"\ntimezone = \"UTC\"\n",
     )
     .expect("legacy language fixture");
 
@@ -560,7 +443,7 @@ fn clock_fields_missing_from_hand_written_files_use_defaults() {
     fs::create_dir_all(&layout.data_path).expect("data path should be writable");
     fs::write(
         &layout.clock_path,
-        "{\n  \"schema_version\": 1,\n  \"profiles\": {\n    \"user-1\": {\n      \"entries\": [\n        { \"kind\": \"daily_alarm\" },\n        { \"kind\": \"countdown\" }\n      ]\n    }\n  }\n}\n",
+        "{\n  \"schema_version\": 3,\n  \"profiles\": {\n    \"user-1\": {\n      \"entries\": [\n        { \"kind\": \"daily_alarm\" },\n        { \"kind\": \"countdown\" }\n      ]\n    }\n  }\n}\n",
     )
     .expect("hand-written clock fixture");
 
@@ -760,7 +643,7 @@ fn future_json_schema_errors_without_modifying_file() {
     fs::create_dir_all(&layout.data_path).expect("data path should be writable");
     fs::write(
         &layout.config_path,
-        "schema_version = 1\ntheme = \"dark\"\n\n[shortcuts]\n\n[explorer]\nshow_hidden = false\n\n[launcher]\npinned_apps = []\npinned_dirs = []\n",
+        "schema_version = 3\ntheme = \"dark\"\n\n[shortcuts]\n\n[explorer]\nshow_hidden = false\n\n[launcher]\n",
     )
     .expect("current TOML fixture");
     let original = "{\n  \"schema_version\": 5,\n  \"profiles\": {}\n}\n";

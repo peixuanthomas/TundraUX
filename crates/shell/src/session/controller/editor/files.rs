@@ -63,11 +63,7 @@ impl ShellSession {
             ShellScreen::SystemStatus
                 if matches!(
                     self.pages.system_status.system_status_route,
-                    ui::SystemStatusRoute::Detail(
-                        ui::SystemStatusDetail::Diagnostics
-                            | ui::SystemStatusDetail::Logs
-                            | ui::SystemStatusDetail::Incidents
-                    )
+                    ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Diagnostics)
                 ) =>
             {
                 EditorLoadNavigation::Diagnostics

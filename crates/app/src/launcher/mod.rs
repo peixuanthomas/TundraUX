@@ -404,7 +404,7 @@ impl LauncherController {
                         wait_for_enter: entry
                             .terminal
                             .as_ref()
-                            .and_then(|settings| settings.wait_for_enter)
+                            .map(|settings| settings.wait_for_enter)
                             .unwrap_or(false),
                         ..Default::default()
                     });
@@ -431,7 +431,7 @@ impl LauncherController {
                 if let Some(custom) = &mut entry.custom {
                     custom.wait_for_enter = wait;
                 } else if let Some(settings) = &mut entry.terminal {
-                    settings.wait_for_enter = Some(wait);
+                    settings.wait_for_enter = wait;
                 } else {
                     return Err(LauncherError::Localized(LocalizedError::new(
                         "LAUNCHER_TERMINAL_UNSUPPORTED",
@@ -696,7 +696,7 @@ impl LauncherController {
                     .as_deref()
                     .filter(|directory| !directory.is_empty())
                     .map(PathBuf::from),
-                wait_for_enter: settings.wait_for_enter,
+                wait_for_enter: Some(settings.wait_for_enter),
             });
         }
         Ok(LauncherEffect::OpenRequested {
@@ -754,7 +754,6 @@ pub fn prepare_launcher_entry(
         id: new_id(&target.path, config),
         path: target.path.to_string_lossy().into_owned(),
         executable_kind: Some(target.kind),
-        fingerprint: None,
         added_by_user_id: added_by_user_id.to_string(),
         added_at_epoch_ms: epoch_millis(),
         terminal: None,

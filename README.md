@@ -29,6 +29,8 @@ Use an interactive terminal of at least **108 columns × 20 rows**. Mouse and to
 
 The workspace opens as the current system user. Home shows that username. The first run sets up personal preferences. Linux provides system user management.
 
+Version 2 uses the TundraUX3 data directories and does not migrate v1 data.
+
 Each window has **Minimize, Split, and Close** buttons. Split left/right or top/bottom, then search the new pane's selector to restore a minimized app or start a new session. Cancel restores the previous layout. Full screen in that menu minimizes the other panes. Use **Ctrl+W, then v/s** to split and **h/j/k/l** after the prefix to focus neighbors; editors, Vim, and embedded terminals retain their native Ctrl+W and use the window buttons. The limit is a 2×2 grid, with unavailable directions shown disabled. Selection dialogs across the app have a top search field. Restore running apps from the bottom bar; its separate minus button closes a window normally. All living apps still contribute to the minimum dimensions, and background apps are cleaned up on exit.
 
 ### Run a Linux portable build

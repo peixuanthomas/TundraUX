@@ -949,11 +949,15 @@ impl ShellSession {
         self.pages.diagnostics.diagnostics_detail_drag = None;
         self.pages.diagnostics.diagnostics_tab = tab;
         if self.active_screen() == ShellScreen::SystemStatus {
-            self.set_system_status_tab(match tab {
-                ui::DiagnosticsTab::Health => ui::SystemStatusTab::Health,
-                ui::DiagnosticsTab::Logs => ui::SystemStatusTab::Logs,
-                ui::DiagnosticsTab::Incidents => ui::SystemStatusTab::Incidents,
-            });
+            match tab {
+                ui::DiagnosticsTab::Health => {
+                    self.set_system_status_tab(ui::SystemStatusTab::Health)
+                }
+                ui::DiagnosticsTab::Logs | ui::DiagnosticsTab::Incidents => {
+                    self.open_logs();
+                    self.logs_filter_incidents(tab == ui::DiagnosticsTab::Incidents);
+                }
+            }
             return;
         }
         self.pages.diagnostics.diagnostics_list_window_start = 0;

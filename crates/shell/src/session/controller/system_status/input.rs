@@ -145,11 +145,7 @@ impl ShellSession {
 
         let diagnostics_active = matches!(
             self.pages.system_status.system_status_route,
-            ui::SystemStatusRoute::Detail(
-                ui::SystemStatusDetail::Diagnostics
-                    | ui::SystemStatusDetail::Logs
-                    | ui::SystemStatusDetail::Incidents
-            )
+            ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Diagnostics)
         );
         let diagnostics_tab = diagnostics_active.then_some(self.pages.diagnostics.diagnostics_tab);
         if diagnostics_active
@@ -401,11 +397,7 @@ impl ShellSession {
         let hit = ui::system_status_hit_test(&layout, coordinates);
         let diagnostics_active = matches!(
             self.pages.system_status.system_status_route,
-            ui::SystemStatusRoute::Detail(
-                ui::SystemStatusDetail::Diagnostics
-                    | ui::SystemStatusDetail::Logs
-                    | ui::SystemStatusDetail::Incidents
-            )
+            ui::SystemStatusRoute::Detail(ui::SystemStatusDetail::Diagnostics)
         );
         let editing = self
             .pages
@@ -562,10 +554,10 @@ impl ShellSession {
                 ))) => ShellCommand::SystemStatusTab(ui::SystemStatusTab::Health),
                 Some(ui::SystemStatusHitTarget::Diagnostics(ui::DiagnosticsHitTarget::Tab(
                     ui::DiagnosticsTab::Logs,
-                ))) => ShellCommand::SystemStatusTab(ui::SystemStatusTab::Logs),
+                ))) => ShellCommand::DiagnosticsLogsTab,
                 Some(ui::SystemStatusHitTarget::Diagnostics(ui::DiagnosticsHitTarget::Tab(
                     ui::DiagnosticsTab::Incidents,
-                ))) => ShellCommand::SystemStatusTab(ui::SystemStatusTab::Incidents),
+                ))) => ShellCommand::DiagnosticsIncidentsTab,
                 Some(ui::SystemStatusHitTarget::Diagnostics(
                     ui::DiagnosticsHitTarget::Check(index)
                     | ui::DiagnosticsHitTarget::Log(index)

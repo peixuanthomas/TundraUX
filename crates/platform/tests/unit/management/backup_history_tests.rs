@@ -149,6 +149,22 @@ fn retained_flags_survive_writer_updates_and_rebuilding_the_index() {
 }
 
 #[test]
+fn outdated_index_is_rebuilt_from_transaction_records() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let session = record(root, "test");
+    let checkpoint = root.join("index/checkpoint.json");
+    let mut value: Value = serde_json::from_slice(&fs::read(&checkpoint).unwrap()).unwrap();
+    value.as_object_mut().unwrap().remove("format_version");
+    fs::write(&checkpoint, serde_json::to_vec(&value).unwrap()).unwrap();
+
+    let snapshot = query_at(root, &query(), &AtomicBool::new(false)).unwrap();
+    assert_eq!(snapshot.rows[0].id, session.id());
+    let rebuilt: Value = serde_json::from_slice(&fs::read(checkpoint).unwrap()).unwrap();
+    assert_eq!(rebuilt["format_version"], 1);
+}
+
+#[test]
 fn cleanup_excludes_kept_unfinished_active_and_referenced_records() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();

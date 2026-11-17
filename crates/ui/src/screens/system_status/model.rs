@@ -14,8 +14,6 @@ pub enum SystemStatusWidgetKind {
     UptimeLoad,
     TopProcesses,
     Diagnostics,
-    Logs,
-    Incidents,
 }
 impl SystemStatusWidgetKind {
     pub const ALL: [Self; 10] = [
@@ -42,8 +40,6 @@ impl SystemStatusWidgetKind {
             Self::UptimeLoad => i18n::tr!("ui-system-status-uptime-load"),
             Self::TopProcesses => i18n::tr!("ui-system-status-top-processes"),
             Self::Diagnostics => i18n::tr!("ui-system-status-diagnostics"),
-            Self::Logs => i18n::tr!("ui-system-status-logs"),
-            Self::Incidents => i18n::tr!("ui-system-status-incidents"),
         }
     }
     pub const fn detail(self) -> SystemStatusDetail {
@@ -58,8 +54,6 @@ impl SystemStatusWidgetKind {
             Self::UptimeLoad => SystemStatusDetail::UptimeLoad,
             Self::TopProcesses => SystemStatusDetail::Processes,
             Self::Diagnostics => SystemStatusDetail::Diagnostics,
-            Self::Logs => SystemStatusDetail::Logs,
-            Self::Incidents => SystemStatusDetail::Incidents,
         }
     }
 }
@@ -287,15 +281,11 @@ pub enum SystemStatusDetail {
     UptimeLoad,
     Processes,
     Diagnostics,
-    Logs,
-    Incidents,
 }
 impl SystemStatusDetail {
     pub const fn diagnostics_tab(self) -> Option<DiagnosticsTab> {
         match self {
             Self::Diagnostics => Some(DiagnosticsTab::Health),
-            Self::Logs => Some(DiagnosticsTab::Logs),
-            Self::Incidents => Some(DiagnosticsTab::Incidents),
             _ => None,
         }
     }
@@ -311,8 +301,6 @@ impl SystemStatusDetail {
             Self::UptimeLoad => i18n::tr!("ui-system-status-uptime-load"),
             Self::Processes => i18n::tr!("ui-system-status-processes"),
             Self::Diagnostics => i18n::tr!("ui-system-status-diagnostics"),
-            Self::Logs => i18n::tr!("ui-system-status-logs"),
-            Self::Incidents => i18n::tr!("ui-system-status-incidents"),
         }
     }
 }
@@ -330,8 +318,6 @@ pub enum SystemStatusTab {
     Storage,
     Network,
     Health,
-    Logs,
-    Incidents,
 }
 impl SystemStatusTab {
     pub const ALL: [Self; 4] = [Self::Overview, Self::Storage, Self::Network, Self::Health];
@@ -342,15 +328,11 @@ impl SystemStatusTab {
             Self::Storage => i18n::tr!("ui-system-status-storage"),
             Self::Network => i18n::tr!("ui-system-status-network"),
             Self::Health => i18n::tr!("ui-system-status-health"),
-            Self::Logs => i18n::tr!("ui-system-status-logs"),
-            Self::Incidents => i18n::tr!("ui-system-status-incidents"),
         }
     }
     pub const fn diagnostics_tab(self) -> Option<DiagnosticsTab> {
         match self {
             Self::Health => Some(DiagnosticsTab::Health),
-            Self::Logs => Some(DiagnosticsTab::Logs),
-            Self::Incidents => Some(DiagnosticsTab::Incidents),
             _ => None,
         }
     }
@@ -563,16 +545,6 @@ impl SystemStatusViewModel {
             ) => a.network_rows.len(),
             (_, SystemStatusRoute::Detail(SystemStatusDetail::Diagnostics)) => {
                 self.diagnostics.checks.len()
-            }
-            (_, SystemStatusRoute::Detail(SystemStatusDetail::Logs)) => {
-                if self.diagnostics.can_view_details {
-                    self.diagnostics.logs.len()
-                } else {
-                    0
-                }
-            }
-            (_, SystemStatusRoute::Detail(SystemStatusDetail::Incidents)) => {
-                self.diagnostics.incidents.len()
             }
             (_, SystemStatusRoute::Detail(detail)) => self
                 .detail_widget(detail)

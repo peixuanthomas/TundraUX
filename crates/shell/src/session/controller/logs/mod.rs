@@ -147,7 +147,7 @@ impl ShellSession {
         self.refresh_hit_map();
     }
 
-    pub(in crate::session) fn logs_select_legacy_section(&mut self, incidents: bool) {
+    pub(in crate::session) fn logs_filter_incidents(&mut self, incidents: bool) {
         self.pages.logs.logs_state.query.min_level = incidents.then_some(LogLevel::Critical);
         self.request_logs_job(None);
     }

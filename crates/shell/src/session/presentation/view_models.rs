@@ -1122,61 +1122,6 @@ impl ShellSession {
                     ComponentTone::Success
                 };
             }
-            storage::SystemStatusWidgetKind::Logs => {
-                model.state = if diagnostics.scanning {
-                    ui::SystemStatusWidgetState::Loading
-                } else {
-                    ui::SystemStatusWidgetState::Ready
-                };
-                model.primary = if diagnostics.can_view_details {
-                    i18n::tr!("shell-arg1-logs", arg1 = diagnostics.logs.len())
-                } else {
-                    i18n::tr!("shell-administrator-access-required")
-                };
-                model.secondary = diagnostics
-                    .logs
-                    .iter()
-                    .take(3)
-                    .map(|log| log.relative_path.clone())
-                    .collect();
-                model.compact_rows = diagnostics
-                    .logs
-                    .iter()
-                    .map(|log| {
-                        vec![
-                            log.relative_path.clone(),
-                            format_bytes(log.size_bytes),
-                            log.modified_at.clone(),
-                        ]
-                    })
-                    .collect();
-            }
-            storage::SystemStatusWidgetKind::Incidents => {
-                model.state = if diagnostics.scanning {
-                    ui::SystemStatusWidgetState::Loading
-                } else {
-                    ui::SystemStatusWidgetState::Ready
-                };
-                model.primary =
-                    i18n::tr!("shell-arg1-incidents", arg1 = diagnostics.incidents.len());
-                model.secondary = diagnostics
-                    .incidents
-                    .iter()
-                    .take(3)
-                    .map(|incident| incident.summary.clone())
-                    .collect();
-                model.compact_rows = diagnostics
-                    .incidents
-                    .iter()
-                    .map(|incident| {
-                        vec![
-                            incident.occurred_at.clone(),
-                            incident.app.clone(),
-                            incident.summary.clone(),
-                        ]
-                    })
-                    .collect();
-            }
         }
         model
     }

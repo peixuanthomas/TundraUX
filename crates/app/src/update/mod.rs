@@ -1491,14 +1491,6 @@ fn run_update_transaction(
             operations,
         );
     }
-    if manifest.protocol != UPDATE_PROTOCOL_VERSION {
-        return rollback_and_restart_with_operations(
-            manifest_path,
-            manifest,
-            "legacy update requires a complete portable installation with bundled Vim",
-            operations,
-        );
-    }
     if manifest.state != TransactionState::Prepared {
         return rollback_and_restart_with_operations(
             manifest_path,
@@ -1874,13 +1866,13 @@ fn validate_manifest_location(
     path: &Path,
     manifest: &TransactionManifest,
 ) -> Result<(), UpdateError> {
-    if manifest.protocol != UPDATE_PROTOCOL_VERSION && manifest.protocol != 2 {
+    if manifest.protocol != UPDATE_PROTOCOL_VERSION {
         return Err(UpdateError::new(format!(
             "unsupported update protocol {}",
             manifest.protocol
         )));
     }
-    if manifest.protocol == UPDATE_PROTOCOL_VERSION && manifest.vim.is_none() {
+    if manifest.vim.is_none() {
         return Err(UpdateError::new(
             "update transaction is missing bundled Vim state",
         ));

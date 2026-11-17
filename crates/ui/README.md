@@ -1,5 +1,7 @@
 # ui
 
+System Status offers its current metrics and Diagnostics; log and incident browsing is handled by Logs.
+
 `ui` converts interface data into Ratatui layouts and frames, providing shared controls, themes, focus, hit testing, animations, and automation snapshots. It does not manage the host terminal, perform system operations, or modify application state while rendering.
 
 ## Module structure

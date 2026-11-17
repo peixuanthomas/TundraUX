@@ -423,45 +423,20 @@ fn vim_recovery_handles_a_publish_before_its_journal_write() {
 
 #[cfg(any(windows, target_os = "linux"))]
 #[test]
-fn legacy_update_journals_leave_an_existing_vim_runtime_untouched() {
-    for applying in [false, true] {
-        let (root, path, mut manifest) = transaction_fixture("vim-legacy-journal");
-        write_bundle(&manifest.install_dir.join("vim"), b"existing Vim");
-        if applying {
-            let paths = transaction_paths(&manifest);
-            fs::rename(&paths.installed_cli, &paths.backup_cli).unwrap();
-            fs::rename(&paths.new_cli, &paths.installed_cli).unwrap();
-            manifest.cli_replaced = true;
-            manifest.state = TransactionState::Applying;
-        }
-        let mut legacy = serde_json::to_value(&manifest).unwrap();
-        legacy["protocol"] = 2.into();
-        legacy.as_object_mut().unwrap().remove("vim");
-        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-        let mut manifest = load_manifest(&path).unwrap();
-        assert!(manifest.vim.is_none());
-        let operations = FakeTransactionOperations {
-            failure: TransactionFailure::Cli,
-            injected: Cell::new(false),
-        };
-        run_update_transaction(&path, &mut manifest, applying, &operations).unwrap();
-        assert!(
-            !operations.injected.get(),
-            "legacy updates must not apply new files"
-        );
-        assert_eq!(manifest.state, TransactionState::RolledBack);
-        assert_old_install_preserved(&manifest);
-        assert_eq!(
-            fs::read(manifest.install_dir.join("vim").join(if cfg!(windows) {
-                "vim.exe"
-            } else {
-                "vim"
-            }))
-            .unwrap(),
-            b"existing Vim"
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
+fn old_update_protocol_is_rejected_without_changing_the_installation() {
+    let (root, path, manifest) = transaction_fixture("old-update-protocol");
+    let mut old = serde_json::to_value(&manifest).unwrap();
+    old["protocol"] = 2.into();
+    old.as_object_mut().unwrap().remove("vim");
+    fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+    assert!(
+        load_manifest(&path)
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported update protocol")
+    );
+    assert_old_install_preserved(&manifest);
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
