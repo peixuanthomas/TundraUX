@@ -34,36 +34,23 @@ pub(super) struct Summary {
     pub completed: bool,
     pub restorable: bool,
     pub disabled_reason: Option<String>,
-    pub legacy: bool,
     pub references: BTreeSet<String>,
-    pub files: Vec<(bool, Stamp)>,
+    pub file: Option<Stamp>,
 }
 
 impl Summary {
     pub fn bytes(&self) -> u64 {
-        self.files.iter().map(|(_, stamp)| stamp.bytes).sum()
+        self.file.as_ref().map_or(0, |stamp| stamp.bytes)
     }
-    pub fn paths(&self, root: &Path) -> Vec<PathBuf> {
-        self.files
-            .iter()
-            .map(|(operation, _)| {
-                if *operation {
-                    root.join("operations")
-                } else {
-                    root.to_owned()
-                }
-                .join(format!("{}.json", self.id))
-            })
-            .collect()
+    pub fn path(&self, root: &Path) -> PathBuf {
+        root.join("operations").join(format!("{}.json", self.id))
     }
 }
 
 #[derive(Serialize, Deserialize)]
 struct Checkpoint {
-    directories: [Option<Stamp>; 2],
+    directory: Option<Stamp>,
     journal_bytes: u64,
-    #[serde(default)]
-    retentions: Option<Stamp>,
 }
 
 pub(crate) struct HistoryLock {
@@ -137,12 +124,12 @@ pub(crate) fn lock(root: &Path) -> Result<HistoryLock, ManagementError> {
     };
     if !lock.current {
         let mut has_records = false;
-        for directory in [root.to_owned(), root.join("operations")] {
-            let directory = match fs::read_dir(directory) {
-                Ok(directory) => directory,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(io_error(error)),
-            };
+        let directory = match fs::read_dir(root.join("operations")) {
+            Ok(directory) => Some(directory),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(io_error(error)),
+        };
+        if let Some(directory) = directory {
             for entry in directory {
                 let path = entry.map_err(io_error)?.path();
                 if path
@@ -156,9 +143,6 @@ pub(crate) fn lock(root: &Path) -> Result<HistoryLock, ManagementError> {
                     has_records = true;
                     break;
                 }
-            }
-            if has_records {
-                break;
             }
         }
         if !has_records {
@@ -247,16 +231,15 @@ pub(super) fn cleanup_lease(root: &Path) -> Result<Option<HistoryLock>, Manageme
     }))
 }
 
-fn directories(root: &Path) -> Result<[Option<Stamp>; 2], ManagementError> {
-    let stamp = |path: &Path| match fs::symlink_metadata(path) {
+fn directory_stamp(root: &Path) -> Result<Option<Stamp>, ManagementError> {
+    match fs::symlink_metadata(root.join("operations")) {
         Ok(metadata) if metadata.is_dir() => Ok(Some(Stamp::of(&metadata))),
         Ok(_) => Err(ManagementError::PermissionDenied(i18n::tr!(
             "platform-backups-unsafe-directory"
         ))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(io_error(error)),
-    };
-    Ok([stamp(root)?, stamp(&root.join("operations"))?])
+    }
 }
 
 fn current(root: &Path) -> bool {
@@ -266,18 +249,9 @@ fn current(root: &Path) -> bool {
     let Ok(checkpoint) = serde_json::from_reader::<_, Checkpoint>(checkpoint.take(8192)) else {
         return false;
     };
-    directories(root).is_ok_and(|actual| actual == checkpoint.directories)
-        && retention_stamp(root).is_ok_and(|actual| actual == checkpoint.retentions)
+    directory_stamp(root).is_ok_and(|actual| actual == checkpoint.directory)
         && fs::symlink_metadata(root.join("index/entries.jsonl"))
             .is_ok_and(|metadata| metadata.len() == checkpoint.journal_bytes)
-}
-
-fn retention_stamp(root: &Path) -> Result<Option<Stamp>, ManagementError> {
-    match fs::symlink_metadata(root.join("index/retained-legacy.json")) {
-        Ok(metadata) => Ok(Some(Stamp::of(&metadata))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(io_error(error)),
-    }
 }
 
 fn atomic_json(path: &Path, value: &impl Serialize) -> Result<(), ManagementError> {
@@ -296,38 +270,28 @@ fn checkpoint(root: &Path) -> Result<(), ManagementError> {
     atomic_json(
         &root.join("index/checkpoint.json"),
         &Checkpoint {
-            directories: directories(root)?,
+            directory: directory_stamp(root)?,
             journal_bytes: journal.metadata().map_err(io_error)?.len(),
-            retentions: retention_stamp(root)?,
         },
     )
 }
 
-fn artifacts(root: &Path, id: &str) -> Result<Vec<(bool, Stamp)>, ManagementError> {
-    let mut files = Vec::new();
-    for operation in [true, false] {
-        let path = if operation {
-            record_path(root, id)?
-        } else {
-            root.join(format!("{id}.json"))
-        };
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) => {
-                if !metadata.is_file()
-                    || metadata.uid() != unsafe { libc::geteuid() }
-                    || metadata.mode() & 0o077 != 0
-                {
-                    return Err(ManagementError::PermissionDenied(i18n::tr!(
-                        "platform-backups-unsafe-record"
-                    )));
-                }
-                files.push((operation, Stamp::of(&metadata)));
+fn artifact(root: &Path, id: &str) -> Result<Option<Stamp>, ManagementError> {
+    match fs::symlink_metadata(record_path(root, id)?) {
+        Ok(metadata) => {
+            if !metadata.is_file()
+                || metadata.uid() != unsafe { libc::geteuid() }
+                || metadata.mode() & 0o077 != 0
+            {
+                return Err(ManagementError::PermissionDenied(i18n::tr!(
+                    "platform-backups-unsafe-record"
+                )));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(io_error(error)),
+            Ok(Some(Stamp::of(&metadata)))
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(io_error(error)),
     }
-    Ok(files)
 }
 
 fn references(value: &Value, result: &mut BTreeSet<String>) {
@@ -375,55 +339,8 @@ pub(super) fn summary(root: &Path, record: &Record) -> Result<Summary, Managemen
             .get("restore_disabled_reason")
             .and_then(Value::as_str)
             .map(String::from),
-        legacy: false,
         references: linked,
-        files: artifacts(root, &record.id)?,
-    })
-}
-
-pub(super) fn legacy_retained(root: &Path) -> Result<BTreeSet<String>, ManagementError> {
-    let path = root.join("index/retained-legacy.json");
-    if !path.exists() {
-        return Ok(BTreeSet::new());
-    }
-    serde_json::from_reader(private_file(&path, libc::O_RDONLY)?.take(MAX_RECORD))
-        .map_err(super::error)
-}
-
-pub(super) fn set_legacy_retained(
-    root: &Path,
-    id: &str,
-    retain: bool,
-) -> Result<(), ManagementError> {
-    let mut retained = legacy_retained(root)?;
-    if retain {
-        retained.insert(id.into());
-    } else {
-        retained.remove(id);
-    }
-    atomic_json(&root.join("index/retained-legacy.json"), &retained)
-}
-
-fn legacy_summary(root: &Path, id: &str, retained: bool) -> Result<Summary, ManagementError> {
-    let stored = system_config::read_backup(&root.join(format!("{id}.json")))?;
-    Ok(Summary {
-        id: id.into(),
-        source: "legacy".into(),
-        timestamp: id
-            .split('-')
-            .next()
-            .and_then(|time| time.parse::<u128>().ok())
-            .map(|nanos| (nanos / 1_000_000_000) as u64)
-            .unwrap_or(0),
-        subject: stored.document.path.display().to_string(),
-        result: String::new(),
-        retained,
-        completed: true,
-        restorable: true,
-        disabled_reason: None,
-        legacy: true,
-        references: BTreeSet::new(),
-        files: artifacts(root, id)?,
+        file: artifact(root, &record.id)?,
     })
 }
 
@@ -491,12 +408,12 @@ pub(super) fn load(
         }
     }
     let mut ids = BTreeSet::new();
-    for directory in [root.to_owned(), root.join("operations")] {
-        let directory = match fs::read_dir(directory) {
-            Ok(directory) => directory,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(io_error(error)),
-        };
+    let directory = match fs::read_dir(root.join("operations")) {
+        Ok(directory) => Some(directory),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(io_error(error)),
+    };
+    if let Some(directory) = directory {
         for entry in directory {
             check_cancelled(flag)?;
             let path = entry.map_err(io_error)?.path();
@@ -510,15 +427,10 @@ pub(super) fn load(
             }
         }
     }
-    let retained = legacy_retained(root)?;
     let mut entries = BTreeMap::new();
     for id in ids {
         check_cancelled(flag)?;
-        let entry = if record_path(root, &id)?.exists() {
-            summary(root, &read_record(root, &id)?)?
-        } else {
-            legacy_summary(root, &id, retained.contains(&id))?
-        };
+        let entry = summary(root, &read_record(root, &id)?)?;
         entries.insert(id, entry);
     }
     rewrite(root, &entries)?;
@@ -526,5 +438,5 @@ pub(super) fn load(
 }
 
 pub(super) fn unchanged(root: &Path, summary: &Summary) -> Result<bool, ManagementError> {
-    Ok(artifacts(root, &summary.id)? == summary.files)
+    Ok(artifact(root, &summary.id)? == summary.file)
 }

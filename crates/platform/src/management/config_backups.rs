@@ -15,7 +15,7 @@ const MAX_RECORD: u64 = 16 * 1024 * 1024;
 
 mod history;
 mod index;
-pub(super) use index::lock as lock_history;
+use index::lock as lock_history;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Record {
@@ -206,6 +206,13 @@ pub(super) fn begin_at(
     source: &str,
     paths: &[PathBuf],
 ) -> Result<BackupSession, ManagementError> {
+    begin_stored(root, source, capture(paths)?)
+}
+pub(super) fn begin_stored(
+    root: &Path,
+    source: &str,
+    before: Vec<StoredFile>,
+) -> Result<BackupSession, ManagementError> {
     let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(error)?;
@@ -215,7 +222,7 @@ pub(super) fn begin_at(
         id: id.clone(),
         source: source.into(),
         timestamp: time.as_secs(),
-        before: capture(paths)?,
+        before,
         after: None,
         result: "pending".into(),
         payload: Value::Null,
@@ -315,30 +322,56 @@ pub(super) fn finish_at(root: &Path, id: &str, result: &str) -> Result<(), Manag
     record.result = result.into();
     write_record(root, &record)
 }
-pub(super) fn start_legacy(
+pub(super) fn system_config_before(
     root: &Path,
     id: &str,
-    before: &StoredFile,
-    index_current: bool,
-) -> Result<(), ManagementError> {
-    write_record_locked(
-        root,
-        &Record {
-            format_version: 1,
-            id: id.into(),
-            source: "system-config".into(),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(error)?
-                .as_secs(),
-            before: vec![before.clone()],
-            after: None,
-            result: "pending".into(),
-            payload: Value::Null,
-            retained: false,
-        },
-        index_current,
-    )
+    path: &Path,
+) -> Result<StoredFile, ManagementError> {
+    let mut record = read_record(root, id)?;
+    if record.source != "system-config"
+        || record.before.len() != 1
+        || record.before[0].document.path != path
+    {
+        return Err(ManagementError::InvalidInput(
+            i18n::tr!("platform-backups-wrong-file").into(),
+        ));
+    }
+    Ok(record.before.remove(0))
+}
+
+pub(super) fn system_config_history(
+    root: &Path,
+    target: Option<&Path>,
+    flag: &AtomicBool,
+) -> Result<Vec<(String, StoredFile)>, ManagementError> {
+    let entries = match fs::read_dir(root.join("operations")) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(self::error(error)),
+    };
+    let mut history = Vec::new();
+    for entry in entries.take(1000) {
+        check_cancelled(flag)?;
+        let path = entry.map_err(error)?.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(id) = path.file_stem().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if record_path(root, id).is_err() {
+            continue;
+        }
+        let mut record = read_record(root, id)?;
+        if record.source != "system-config" || record.before.len() != 1 {
+            continue;
+        }
+        let before = record.before.remove(0);
+        if target.is_none_or(|target| target == before.document.path.as_path()) {
+            history.push((id.to_owned(), before));
+        }
+    }
+    Ok(history)
 }
 
 fn verify_current(
@@ -723,7 +756,8 @@ fn query_at(
     let entries = match fs::read_dir(&directory) {
         Ok(v) => v,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return legacy_rows(root, query, snapshot, flag);
+            snapshot.notices.push(i18n::tr!("management-backups-empty"));
+            return Ok(snapshot);
         }
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             snapshot.needs_authorization = true;
@@ -743,7 +777,6 @@ fn query_at(
         }
         Err(e) => return Err(error(e)),
     };
-    let mut ids = Vec::new();
     for entry in entries {
         check_cancelled(flag)?;
         let entry = entry.map_err(error)?;
@@ -757,7 +790,6 @@ fn query_at(
             .to_string_lossy()
             .into_owned();
         let record = read_record(root, &id)?;
-        ids.push(id.clone());
         let source = match record.source.as_str() {
             "system-config" => i18n::tr!("platform-backups-source-config"),
             "system-settings" => i18n::tr!("system-settings-title"),
@@ -840,102 +872,12 @@ fn query_at(
         });
     }
     snapshot.rows.sort_by(|a, b| b.id.cmp(&a.id));
-    legacy_rows_excluding(root, query, snapshot, flag, &ids)
-}
-fn legacy_rows(
-    root: &Path,
-    query: &ManagementQuery,
-    snapshot: ManagementSnapshot,
-    flag: &AtomicBool,
-) -> Result<ManagementSnapshot, ManagementError> {
-    legacy_rows_excluding(root, query, snapshot, flag, &[])
-}
-fn legacy_rows_excluding(
-    root: &Path,
-    query: &ManagementQuery,
-    mut snapshot: ManagementSnapshot,
-    flag: &AtomicBool,
-    ids: &[String],
-) -> Result<ManagementSnapshot, ManagementError> {
-    let entries = match fs::read_dir(root) {
-        Ok(v) => v,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            snapshot.notices.push(i18n::tr!("management-backups-empty"));
-            return Ok(snapshot);
-        }
-        Err(e) => return Err(error(e)),
-    };
-    for entry in entries {
-        check_cancelled(flag)?;
-        let path = entry.map_err(error)?.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("json") {
-            continue;
-        }
-        let id = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
-        if ids.contains(&id) || query.target.as_ref().is_some_and(|t| t != &id) {
-            continue;
-        }
-        let stored = system_config::read_backup(&path)?;
-        let file = stored.document.path.display().to_string();
-        if !file.to_lowercase().contains(&query.filter.to_lowercase()) {
-            continue;
-        }
-        let current = system_config::read(&stored.document.path)?;
-        snapshot.rows.push(ManagementRow {
-            id: id.clone(),
-            cells: vec![
-                id.clone(),
-                i18n::tr!("platform-backups-unknown").into(),
-                i18n::tr!("platform-backups-source-legacy"),
-                file.clone(),
-                i18n::tr!("platform-backups-unknown").into(),
-            ],
-            detail: vec![
-                (i18n::tr!("platform-backups-file").into(), file.clone()),
-                (
-                    i18n::tr!("platform-backups-original").into(),
-                    safe_text(&stored.document.path, &stored.document.content),
-                ),
-                (
-                    i18n::tr!("platform-backups-current").into(),
-                    safe_text(&current.path, &current.content),
-                ),
-            ],
-            identity: BTreeMap::from([
-                ("path".into(), file.clone()),
-                ("legacy".into(), "true".into()),
-            ]),
-            actions: vec![ManagementAction {
-                id: "restore_legacy".into(),
-                dangerous: true,
-                label: i18n::tr!("platform-backups-restore-legacy").into(),
-                privileged: true,
-                confirm: true,
-                values: BTreeMap::from([
-                    ("path".into(), file),
-                    ("backup_id".into(), id),
-                    ("expected_version".into(), current.version),
-                ]),
-                fields: vec![ManagementField {
-                    id: "allow_unvalidated".into(),
-                    label: i18n::tr!("platform-backups-unvalidated").into(),
-                    value: "false".into(),
-                    choices: vec!["false".into(), "true".into()],
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-        });
-    }
     if snapshot.rows.is_empty() && query.filter.is_empty() && query.target.is_none() {
         snapshot.notices.push(i18n::tr!("management-backups-empty"));
     }
     Ok(snapshot)
 }
+
 pub fn execute(
     command: &ManagementCommand,
     context: &ExecutionContext,
@@ -952,24 +894,6 @@ pub fn execute(
                 .with_authorized_refresh(command),
         });
         return Ok(i18n::tr!("platform-backups-loaded").into());
-    }
-    if command.action == "restore_legacy" {
-        let _lease = command
-            .values
-            .get("backup_id")
-            .map(|id| index::restore_lease(Path::new(ROOT), id))
-            .transpose()?;
-        let path = command.values.get("path").ok_or_else(|| {
-            ManagementError::InvalidInput(i18n::tr!("platform-backups-select-configuration").into())
-        })?;
-        let restore = ManagementCommand {
-            kind: ManagementKind::SystemConfig,
-            action: "restore".into(),
-            target: Some(path.clone()),
-            values: command.values.clone(),
-            identity: command.identity.clone(),
-        };
-        return system_config::execute(&restore, context, io, flag);
     }
     let id = command.target.as_deref().ok_or_else(|| {
         ManagementError::InvalidInput(i18n::tr!("platform-backups-select").into())

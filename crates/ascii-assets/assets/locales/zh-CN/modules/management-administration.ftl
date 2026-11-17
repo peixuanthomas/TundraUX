@@ -22,7 +22,6 @@ management-action-ssh-cancel = 恢复 SSH 设置
 management-action-ssh-status = 查看 SSH 修改状态
 management-action-inspect-backups = 授权查看备份
 management-action-preview-restore = 查看差异
-management-action-restore-legacy = 恢复旧版本
 management-action-create-task = 创建任务
 management-action-preview-task = 预览任务
 management-action-pause = 暂停

@@ -691,15 +691,6 @@ mod linux {
                 }
                 return Ok((action.clone(), Some((*row).clone())));
             }
-            if request.group == "backups" && id == "restore" {
-                if let Some(action) = row
-                    .actions
-                    .iter()
-                    .find(|action| action.id == "restore_legacy")
-                {
-                    return Ok((action.clone(), Some((*row).clone())));
-                }
-            }
             // Explicit SSID on an interface also supports a hidden personal network.
             if request.group == "network"
                 && request.verb == "wifi-connect"
@@ -1764,7 +1755,7 @@ mod linux {
             request
         }
         #[test]
-        fn new_actions_keep_backend_ids_default_account_and_legacy_restore() {
+        fn new_actions_keep_backend_ids_and_default_account() {
             for (kind, verb, expected) in [
                 (ManagementKind::Firewall, "allow", "add_rule"),
                 (ManagementKind::Firewall, "remove", "remove_rule"),
@@ -1798,26 +1789,6 @@ mod linux {
             )
             .unwrap();
             assert_eq!(selected.unwrap().id, "alice");
-            let backups = ManagementSnapshot {
-                rows: vec![ManagementRow {
-                    id: "1-2".into(),
-                    actions: vec![ManagementAction {
-                        id: "restore_legacy".into(),
-                        values: BTreeMap::from([("expected_version".into(), "version".into())]),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                }],
-                ..Default::default()
-            };
-            let (action, _) = select_action(
-                &backups,
-                &request("backups", &["restore", "1-2"]),
-                "restore",
-            )
-            .unwrap();
-            assert_eq!(action.id, "restore_legacy");
-            assert_eq!(action.values["expected_version"], "version");
         }
         #[test]
         fn previews_keep_generated_text_in_json_and_text_results() {

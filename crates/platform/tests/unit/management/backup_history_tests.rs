@@ -149,52 +149,7 @@ fn retained_flags_survive_writer_updates_and_rebuilding_the_index() {
 }
 
 #[test]
-fn legacy_rows_filter_and_keep_flags_survive_index_rebuild() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("history");
-    fs::create_dir(&root).unwrap();
-    let source = directory.path().join("example.conf");
-    fs::write(&source, "before").unwrap();
-    let stored = system_config::read_stored(&source).unwrap();
-    let id = "1700000000000000000-1";
-    let path = root.join(format!("{id}.json"));
-    fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    let mut query = query();
-    query.options.insert("source".into(), "legacy".into());
-    let snapshot = query_at(&root, &query, &AtomicBool::new(false)).unwrap();
-    assert_eq!(snapshot.rows.len(), 1);
-    assert_eq!(snapshot.rows[0].identity["source"], "legacy");
-    assert!(snapshot.rows[0].detail.is_empty());
-    index::set_legacy_retained(&root, id, true).unwrap();
-    assert_eq!(
-        query_at(&root, &query, &AtomicBool::new(false))
-            .unwrap()
-            .rows[0]
-            .identity["retained"],
-        "true"
-    );
-    execute_at(
-        &root,
-        &command("retain_backup", Some(id), BTreeMap::new()),
-        &mut NoInput,
-        &AtomicBool::new(false),
-    )
-    .unwrap();
-    fs::remove_file(root.join("index/entries.jsonl")).unwrap();
-    query.target = Some(id.into());
-    let snapshot = query_at(&root, &query, &AtomicBool::new(false)).unwrap();
-    assert_eq!(snapshot.rows[0].identity["retained"], "true");
-    assert!(
-        snapshot.rows[0]
-            .actions
-            .iter()
-            .any(|action| action.id == "restore_legacy")
-    );
-}
-
-#[test]
-fn cleanup_excludes_kept_unfinished_active_and_referenced_records_and_removes_duplicates() {
+fn cleanup_excludes_kept_unfinished_active_and_referenced_records() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
     let referenced = record(root, "test");
@@ -216,9 +171,6 @@ fn cleanup_excludes_kept_unfinished_active_and_referenced_records_and_removes_du
         .finish("awaiting SSH connection confirmation")
         .unwrap();
     let remove = record(root, "test");
-    let legacy = root.join(format!("{}.json", remove.id()));
-    fs::write(&legacy, "redundant old copy").unwrap();
-    fs::set_permissions(&legacy, fs::Permissions::from_mode(0o600)).unwrap();
     let cleanup = preview(root, query());
     assert!(matches!(
         execute_at(root, &cleanup, &mut NoInput, &AtomicBool::new(false)),
@@ -230,7 +182,6 @@ fn cleanup_excludes_kept_unfinished_active_and_referenced_records_and_removes_du
     let cleanup = preview(root, query);
     execute_at(root, &cleanup, &mut NoInput, &AtomicBool::new(false)).unwrap();
     assert!(!record_path(root, remove.id()).unwrap().exists());
-    assert!(!legacy.exists());
     for session in [&referenced, &kept, &active, &pending, &awaiting] {
         assert!(record_path(root, session.id()).unwrap().exists());
     }

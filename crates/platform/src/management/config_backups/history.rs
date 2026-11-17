@@ -69,7 +69,6 @@ fn source_name(source: &str) -> String {
         "ssh" => i18n::tr!("platform-backups-source-ssh"),
         "scheduled-tasks" => i18n::tr!("platform-backups-source-scheduled"),
         "restore" => i18n::tr!("platform-backups-source-restore"),
-        "legacy" => i18n::tr!("platform-backups-source-legacy"),
         _ => source.into(),
     }
 }
@@ -234,65 +233,31 @@ fn row(
         choices: vec!["false".into(), "true".into()],
         ..Default::default()
     }];
-    if summary.legacy {
-        row.identity.insert("legacy".into(), "true".into());
-        row.identity.insert("path".into(), summary.subject.clone());
-        if details {
-            let stored = system_config::read_backup(&root.join(format!("{}.json", summary.id)))?;
-            let current = system_config::read(&stored.document.path)?;
-            row.detail = vec![
-                (i18n::tr!("platform-backups-file"), summary.subject.clone()),
-                (
-                    i18n::tr!("platform-backups-original"),
-                    safe_text(&stored.document.path, &stored.document.content),
-                ),
-                (
-                    i18n::tr!("platform-backups-current"),
-                    safe_text(&current.path, &current.content),
-                ),
-            ];
-            row.actions.push(ManagementAction {
-                id: "restore_legacy".into(),
-                dangerous: true,
-                label: i18n::tr!("platform-backups-restore-legacy"),
-                privileged: true,
-                confirm: true,
-                values: BTreeMap::from([
-                    ("path".into(), summary.subject.clone()),
-                    ("backup_id".into(), summary.id.clone()),
-                    ("expected_version".into(), current.version),
-                ]),
-                fields,
-                primary: true,
-                ..Default::default()
-            });
-        }
-    } else {
-        row.actions.push(ManagementAction {
-            id: "preview_restore".into(),
-            label: i18n::tr!("platform-backups-view-diff"),
-            privileged: true,
-            ..Default::default()
-        });
-        row.actions.push(ManagementAction {
-            id: "restore".into(),
-            dangerous: true,
-            label: i18n::tr!("platform-backups-restore"),
-            privileged: true,
-            confirm: true,
-            primary: true,
-            fields,
-            disabled_reason: summary.disabled_reason.clone().or_else(|| {
-                (!summary.restorable).then(|| i18n::tr!("platform-backups-unfinished"))
-            }),
-            ..Default::default()
-        });
-        if details {
-            row.detail.push((
-                i18n::tr!("platform-backups-difference"),
-                differences(&read_record(root, &summary.id)?),
-            ));
-        }
+    row.actions.push(ManagementAction {
+        id: "preview_restore".into(),
+        label: i18n::tr!("platform-backups-view-diff"),
+        privileged: true,
+        ..Default::default()
+    });
+    row.actions.push(ManagementAction {
+        id: "restore".into(),
+        dangerous: true,
+        label: i18n::tr!("platform-backups-restore"),
+        privileged: true,
+        confirm: true,
+        primary: true,
+        fields,
+        disabled_reason: summary
+            .disabled_reason
+            .clone()
+            .or_else(|| (!summary.restorable).then(|| i18n::tr!("platform-backups-unfinished"))),
+        ..Default::default()
+    });
+    if details {
+        row.detail.push((
+            i18n::tr!("platform-backups-difference"),
+            differences(&read_record(root, &summary.id)?),
+        ));
     }
     Ok(row)
 }
@@ -350,7 +315,7 @@ fn token(query: &ManagementQuery, candidates: &[Summary]) -> Result<String, Mana
         query.options.get("to_timestamp"),
         candidates
             .iter()
-            .map(|entry| (&entry.id, &entry.files))
+            .map(|entry| (&entry.id, &entry.file))
             .collect::<Vec<_>>(),
     ))
     .map_err(error)?;
@@ -626,19 +591,9 @@ pub(super) fn execute_at(
             .ok_or_else(|| ManagementError::InvalidInput(i18n::tr!("platform-backups-select")))?;
         record_path(root, id)?;
         let retained = command.action == "retain_backup";
-        if record_path(root, id)?.exists() {
-            let mut record = read_record(root, id)?;
-            record.retained = retained;
-            write_record_locked(root, &record, history.current)?;
-        } else {
-            system_config::read_backup(&root.join(format!("{id}.json")))?;
-            index::set_legacy_retained(root, id, retained)?;
-            let mut entries = index::load(root, flag)?;
-            if let Some(entry) = entries.get_mut(id) {
-                entry.retained = retained;
-            }
-            index::rewrite(root, &entries)?;
-        }
+        let mut record = read_record(root, id)?;
+        record.retained = retained;
+        write_record_locked(root, &record, history.current)?;
         return Ok(Some(i18n::tr!(if retained {
             "backup-history-retained"
         } else {
@@ -669,9 +624,7 @@ pub(super) fn execute_at(
     }
     for candidate in &candidates {
         check_cancelled(flag)?;
-        for path in candidate.paths(root).into_iter().rev() {
-            fs::remove_file(path).map_err(error)?;
-        }
+        fs::remove_file(candidate.path(root)).map_err(error)?;
         entries.remove(&candidate.id);
         match fs::remove_file(root.join("index/leases").join(&candidate.id)) {
             Ok(()) => {}

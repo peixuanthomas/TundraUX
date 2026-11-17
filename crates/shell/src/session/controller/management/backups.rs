@@ -11,7 +11,6 @@ const SOURCES: &[&str] = &[
     "ssh",
     "scheduled-tasks",
     "restore",
-    "legacy",
 ];
 
 fn source_label(source: &str) -> String {
@@ -25,7 +24,7 @@ fn source_label(source: &str) -> String {
         "ssh" => i18n::tr!("platform-backups-source-ssh"),
         "scheduled-tasks" => i18n::tr!("platform-backups-source-scheduled"),
         "restore" => i18n::tr!("platform-backups-source-restore"),
-        _ => i18n::tr!("platform-backups-source-legacy"),
+        _ => source.into(),
     }
 }
 

@@ -12,10 +12,9 @@ use std::os::unix::{ffi::OsStrExt, fs::MetadataExt, process::CommandExt};
 use std::path::{Component, Path};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const MAX_TEXT: usize = 256 * 1024;
-const MAX_BACKUP: u64 = 8 * 1024 * 1024;
 const BACKUPS: &str = "/var/lib/tundraux3/config-backups";
 
 fn failure(error: std::io::Error) -> ManagementError {
@@ -803,45 +802,11 @@ pub fn check(
 }
 
 fn backup(previous: &StoredFile, root: &Path) -> Result<String, ManagementError> {
-    let history = super::config_backups::lock_history(root)?;
-    let dummy = root.join("record");
-    let (directory, _) = parent(&dummy, true)?;
-    let metadata = directory.metadata().map_err(failure)?;
-    if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o022 != 0 {
-        return Err(ManagementError::PermissionDenied(
-            "Recovery directory has unsafe ownership or permissions".into(),
-        ));
-    }
-    if unsafe { libc::fchmod(directory.as_raw_fd(), 0o700) } != 0 {
-        return Err(failure(std::io::Error::last_os_error()));
-    }
-    let id = format!(
-        "{}-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| ManagementError::Failed(e.to_string()))?
-            .as_nanos(),
-        std::process::id()
-    );
-    let name = CString::new(format!("{id}.json")).unwrap();
-    let fd = unsafe {
-        libc::openat(
-            directory.as_raw_fd(),
-            name.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-            0o600,
-        )
-    };
-    if fd < 0 {
-        return Err(failure(std::io::Error::last_os_error()));
-    }
-    let mut file = unsafe { File::from_raw_fd(fd) };
-    serde_json::to_writer(&mut file, previous)
-        .map_err(|e| ManagementError::Failed(e.to_string()))?;
-    file.sync_all().map_err(failure)?;
-    directory.sync_all().map_err(failure)?;
-    super::config_backups::start_legacy(root, &id, previous, history.current)?;
-    Ok(id)
+    Ok(
+        super::config_backups::begin_stored(root, "system-config", vec![previous.clone()])?
+            .id()
+            .to_owned(),
+    )
 }
 
 fn install(
@@ -1212,33 +1177,10 @@ pub fn query(
         ..Default::default()
     };
     if query.scope == "history" {
-        let entries = match fs::read_dir(BACKUPS) {
-            Ok(e) => e,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(snapshot),
-            Err(e) => return Err(failure(e)),
-        };
-        for entry in entries.take(1000) {
-            cancelled(flag)?;
-            let entry = entry.map_err(failure)?;
-            if !entry.file_type().map_err(failure)?.is_file()
-                || entry.path().extension() != Some(OsStr::new("json"))
-            {
-                continue;
-            }
-            let stored = read_backup(&entry.path())?;
-            if query
-                .target
-                .as_ref()
-                .is_some_and(|p| Path::new(p) != stored.document.path)
-            {
-                continue;
-            }
-            let id = entry
-                .path()
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
+        let target = query.target.as_deref().map(Path::new);
+        for (id, stored) in
+            super::config_backups::system_config_history(Path::new(BACKUPS), target, flag)?
+        {
             snapshot.rows.push(ManagementRow {
                 id: id.clone(),
                 cells: vec![id.clone(), stored.document.path.display().to_string()],
@@ -1264,35 +1206,6 @@ pub fn query(
         snapshot.rows.sort_by(|a, b| b.id.cmp(&a.id));
     }
     Ok(snapshot)
-}
-
-pub(super) fn read_backup(path: &Path) -> Result<StoredFile, ManagementError> {
-    let (directory, name) = parent(path, false)?;
-    let fd = unsafe {
-        libc::openat(
-            directory.as_raw_fd(),
-            name.as_ptr(),
-            libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-        )
-    };
-    if fd < 0 {
-        return Err(failure(std::io::Error::last_os_error()));
-    }
-    let file = unsafe { File::from_raw_fd(fd) };
-    let metadata = file.metadata().map_err(failure)?;
-    if !metadata.is_file()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.mode() & 0o077 != 0
-    {
-        return Err(ManagementError::PermissionDenied(
-            "Recovery file has unsafe permissions".into(),
-        ));
-    }
-    if metadata.len() > MAX_BACKUP {
-        return Err(invalid("Recovery file is too large"));
-    }
-    serde_json::from_reader(std::io::BufReader::new(file.take(MAX_BACKUP)))
-        .map_err(|_| invalid("Recovery file is damaged"))
 }
 
 pub fn execute(
@@ -1473,14 +1386,11 @@ pub fn execute(
             .values
             .get("backup_id")
             .ok_or_else(|| invalid("Select a recovery record"))?;
-        if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-            return Err(invalid("Invalid recovery record"));
-        }
-        let stored = read_backup(&Path::new(BACKUPS).join(format!("{id}.json")))?;
-        if stored.document.path != path {
-            return Err(invalid("Recovery record belongs to another file"));
-        }
-        Some(stored)
+        Some(super::config_backups::system_config_before(
+            Path::new(BACKUPS),
+            id,
+            path,
+        )?)
     } else {
         None
     };
@@ -1670,9 +1580,33 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "new\n");
         assert_eq!(saved.mode, 0o640);
         assert_ne!(saved.version, old.document.version);
+        let id = saved.backup_id.unwrap();
         let recovery =
-            read_backup(&backup_root.join(format!("{}.json", saved.backup_id.unwrap()))).unwrap();
+            super::super::config_backups::system_config_before(&backup_root, &id, &path).unwrap();
         assert_eq!(recovery.document.content, "old\n");
+        assert!(
+            backup_root
+                .join("operations")
+                .join(format!("{id}.json"))
+                .exists()
+        );
+        assert!(!backup_root.join(format!("{id}.json")).exists());
+        let history = super::super::config_backups::system_config_history(
+            &backup_root,
+            Some(&path),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].0, id);
+        assert!(
+            super::super::config_backups::system_config_before(
+                &backup_root,
+                &id,
+                &temp.path().join("other"),
+            )
+            .is_err()
+        );
         assert!(matches!(
             install(
                 &old,
@@ -1721,13 +1655,13 @@ mod tests {
                 || Err(error.clone()),
             );
             assert_eq!(result.unwrap_err(), error);
-            assert_eq!(fs::read_to_string(path).unwrap(), "original\n");
+            assert_eq!(fs::read_to_string(&path).unwrap(), "original\n");
             assert_eq!(fs::metadata(&root).unwrap().mode() & 0o777, 0o700);
             assert_eq!(
                 fs::metadata(root.join("operations")).unwrap().mode() & 0o777,
                 0o700
             );
-            let file = fs::read_dir(&root)
+            let file = fs::read_dir(root.join("operations"))
                 .unwrap()
                 .map(Result::unwrap)
                 .find(|entry| {
@@ -1737,7 +1671,10 @@ mod tests {
                 .unwrap()
                 .path();
             assert_eq!(fs::metadata(&file).unwrap().mode() & 0o777, 0o600);
-            assert_eq!(read_backup(&file).unwrap().document.content, "original\n");
+            let id = file.file_stem().unwrap().to_str().unwrap();
+            let stored =
+                super::super::config_backups::system_config_before(&root, id, &path).unwrap();
+            assert_eq!(stored.document.content, "original\n");
         }
     }
 
@@ -1804,14 +1741,22 @@ mod tests {
             || Ok(()),
         )
         .unwrap();
-        let backup_missing =
-            read_backup(&root.join(format!("{}.json", created.backup_id.unwrap()))).unwrap();
+        let backup_missing = super::super::config_backups::system_config_before(
+            &root,
+            &created.backup_id.unwrap(),
+            &path,
+        )
+        .unwrap();
         assert!(!backup_missing.document.existed);
         let current = read_stored(&path).unwrap();
         let restored = restore_absence(&current, &root, || Ok(())).unwrap();
         assert!(!restored.existed && !path.exists());
-        let undo =
-            read_backup(&root.join(format!("{}.json", restored.backup_id.unwrap()))).unwrap();
+        let undo = super::super::config_backups::system_config_before(
+            &root,
+            &restored.backup_id.unwrap(),
+            &path,
+        )
+        .unwrap();
         install(
             &read_stored(&path).unwrap(),
             &undo.document.content,

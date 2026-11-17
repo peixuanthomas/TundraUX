@@ -22,7 +22,6 @@ management-action-ssh-cancel = Restore SSH settings
 management-action-ssh-status = Check SSH change
 management-action-inspect-backups = Authorize backup inspection
 management-action-preview-restore = View differences
-management-action-restore-legacy = Restore old version
 management-action-create-task = Create task
 management-action-preview-task = Preview task
 management-action-pause = Pause

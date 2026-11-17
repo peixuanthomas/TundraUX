@@ -193,7 +193,6 @@ impl ShellSession {
             Some(ManagementKind::Backups) => &[
                 "preview_restore",
                 "restore",
-                "restore_legacy",
                 "inspect_backups",
                 "filter_backups",
                 "backups_next_page",
