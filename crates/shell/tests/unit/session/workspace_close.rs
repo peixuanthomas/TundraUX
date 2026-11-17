@@ -179,7 +179,7 @@ fn only_the_explicit_debug_message_reaches_the_shell_panic_boundary() {
     let caught = app
         .run_boundary(
             BoundarySpec::new("shell.fullscreen-session", BoundaryKind::UiSession),
-            || {
+            std::panic::AssertUnwindSafe(|| {
                 workspace
                     .receive(
                         id,
@@ -187,7 +187,7 @@ fn only_the_explicit_debug_message_reaches_the_shell_panic_boundary() {
                         &mut state,
                     )
                     .unwrap()
-            },
+            }),
         )
         .expect_err("the explicit request must unwind the Shell boundary");
     let incident = caught.incident_id().to_string();
