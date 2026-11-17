@@ -319,6 +319,8 @@ fn copy_keep_both_is_staged_and_reports_monotonic_progress() {
         .expect("submit copy");
     let (events, summary) = finished(&engine);
 
+    assert_eq!(summary.failed_items, 0, "{summary:#?}");
+    assert!(summary.fatal_error.is_none(), "{summary:#?}");
     assert_eq!(
         fs::read(destination.join("notes.txt")).unwrap(),
         b"old contents"
@@ -332,7 +334,6 @@ fn copy_keep_both_is_staged_and_reports_monotonic_progress() {
         summary.succeeded_sources,
         vec![fs::canonicalize(&source).unwrap()]
     );
-    assert_eq!(summary.failed_items, 0);
     assert_eq!(summary.processed_bytes, summary.total_bytes);
 
     let progress: Vec<_> = events
