@@ -1,6 +1,6 @@
 # Testing guide
 
-Run all commands from the repository root. Automated tests cover core workflows, data safety, and permission boundaries; real terminals, touchscreens, system authorization, and device writes require separate acceptance checks on the corresponding platform.
+Run all commands from the repository root. Automated tests cover core workflows, data safety, and permission boundaries. Real terminals, touchscreens, system authorization, and device writes need separate acceptance checks on the target platform.
 
 | Change | Checks to start with |
 | --- | --- |
@@ -52,7 +52,7 @@ cargo +1.95.0 check --workspace --all-targets --all-features --locked
 cargo +1.95.0 test --workspace --locked
 ```
 
-CI configuration is in [cross-platform.yml](../.github/workflows/cross-platform.yml) and [linux.yml](../.github/workflows/linux.yml). The [Vim engine workflow](../.github/workflows/vim-engine-release.yml) checks bundled Vim packaging. Run Linux-related checks in WSL or native Linux, and Windows and macOS checks on their respective platforms.
+CI configuration is in [cross-platform.yml](../.github/workflows/cross-platform.yml) and [linux.yml](../.github/workflows/linux.yml). The [Vim engine workflow](../.github/workflows/vim-engine-release.yml) checks bundled Vim packaging. Run Linux-related checks in WSL or native Linux, and Windows and macOS checks on their own platforms.
 
 ## Linux PTY and system operations
 
@@ -71,7 +71,7 @@ The workspace split script checks two-stage Ctrl+W input, cancellation, T layout
 
 These scripts use isolated XDG directories and real PTYs to check initial setup, file workflows, mouse and keyboard input, Command Line, external UI control, crash reports, and terminal restoration. `TUNDRA_PTY_MOUSE_EVENT_COUNT` adjusts the number of events in the mouse-event flood test.
 
-Readiness and global-button targeting use automation snapshots and control IDs. Page assertions use business content and painted screens, so changes to decorative frames or bar coordinates do not change the workflow contract. Shell and its companion CLI must come from the same build.
+Readiness and global-button targeting use automation snapshots and control IDs. Page assertions use business content and painted screens, so decorative frames or bar coordinates can change without altering the workflow contract. Shell and its companion CLI must come from the same build.
 
 Home application entries and the OS settings entry use current controls and page identity. The unsupported-systemd check verifies the actual PID 1 process and D-Bus requirement through F4, rejects authorization as a remedy, and returns through Settings to Home. Status details must open on release and close back onto the same page.
 
@@ -108,9 +108,9 @@ Run the semantic matrix after building Shell and CLI:
 python3 scripts/tests/ui-refresh-smoke.py target/debug/tundra-shell
 ```
 
-The script checks 108 × 20, 120 × 36, and 180 × 50 in English and Chinese, with truecolor and ANSI terminal capabilities, and full and reduced motion. It checks header control order, status visibility with the keyboard open, tap activation without hover, modal interception, resize during a dialog, wide and combining characters, and return navigation using current control rectangles. For a focused run, select `--language en-US --color truecolor --motion full`.
+The script checks 108 × 20, 120 × 36, and 180 × 50 in English and Chinese, with truecolor and ANSI terminal capabilities, and with full and reduced motion. It checks header control order, status visibility with the keyboard open, tap activation without hover, modal interception, resize during a dialog, wide and combining characters, and return navigation using current control rectangles. For a focused run, select `--language en-US --color truecolor --motion full`.
 
-Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the header and window bar leave 18 rows for the window, including its frame; app content has 16 rows. Check that text remains readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
+Also complete the keyboard-only, mouse-only, and touchscreen workflows in [UI requirements](UI-requirements.md), including rapid page changes, reversal, continuous resize, details and keyboard expansion, sorting, multi-selection, and expert areas. Ordinary pages and groups use whitespace instead of full frames. At 108 × 20, the header and window bar leave 18 rows for the window, including its frame; app content has 16 rows. Check that text stays readable on the first transition frame and that Vim/child-terminal sizing and pointer targets follow the same geometry.
 
 For performance measurements, use a Release build at 120 × 36:
 
@@ -139,7 +139,7 @@ Both endpoints use Python's monotonic clock. The end is the first matching compl
 
 Before each measured new window, the previous measured window IDs must be absent from the taskbar, the active page must be the different Home/picker page, and a known target business signature must no longer be visible in the PTY. Each sample records that activation context and checks a newly observed process. This prevents a retained or buffered picture from an earlier instance from standing in for the new process's first frame.
 
-An unknown application's first measured process is observed for 20 seconds without RPCs. This is the real first sample, not a separate prewarming process; its latency is backdated to the earliest matching business frame within that capture. The verified signature is then reused within that isolated Shell. Subsequent captures finish at the first matching frame, with a 20-second hard timeout. They never wait for terminal silence: changing clocks and nonessential status/footer values remain outside the original business-control regions. A missing target or failed verification is retained in `failed-attempts.jsonl`, leaves the run incomplete, and stops sampling without replacing the slow attempt. Discovery adds at most 160 seconds per complete run, not 20 seconds per sample.
+An unknown application's first measured process is observed for 20 seconds without RPCs. This is the real first sample, not a separate prewarming process; its latency is backdated to the earliest matching business frame within that capture. The verified signature is then reused within that isolated Shell. Subsequent captures finish at the first matching frame, with a 20-second hard timeout. They never wait for terminal silence: changing clocks and nonessential status/footer values stay outside the original business-control regions. A missing target or failed verification is retained in `failed-attempts.jsonl`, leaves the run incomplete, and stops sampling without replacing the slow attempt. Discovery adds at most 160 seconds per complete run, not 20 seconds per sample.
 
 A new-window signature jointly contains the nonempty interactive application controls. Blank regions and unchanged feedback fail validation. Input uses a unique marker in the prepared search field; click and keyboard focus use that field's verified focused/unfocused style, with the final logical focus checked afterward. The mouse-focused template is prepared only after an observed unfocus and real mouse refocus, with snapshot and PTY text aligned; clearing keys cannot substitute a keyboard-modality padding style. Footer changes cannot complete focus capture. Pane focus uses the prepared title's selected style. The measurement covers terminal output completion, not terminal-emulator pixel presentation. It includes PTY and host scheduling, and may include more time than the Shell's internal input-to-output interval.
 
@@ -147,7 +147,7 @@ Restore measures complete business content becoming visible again. A retained fr
 
 Vim readiness is the first changed complete empty terminal buffer with all expected left-column EOB `~` rows and the stable `[Scratch]` / `0,0-1` / `All` status line. Donation/sponsor intro text may be present or absent; its later disappearance cannot delay the endpoint. A partial EOB display or a blocking command prompt fails the cue. The target terminal area is prepared from the Editor page geometry, and one post-capture snapshot verifies native terminal mode.
 
-Each output directory preserves the pre-run process/cgroup environment snapshot, `samples.jsonl`, raw `*.pty` streams and their monotonic `*.frames.jsonl` boundary indexes, per-session observation audits, failed attempts, application startup logs, optional Shell timing traces, build identity, P50/P95/P99 summaries, process-tree CPU/RSS point samples, and a readable `report.md`. Observation audits record zero capture RPCs and total verification/preparation response bytes. Metric-card titles prove dashboard readiness while their changing CPU/memory/network values remain outside the startup matcher. Existing `app-startup.total_us` ends at frame acceptance; `app-startup-presented` ends after output. The benchmark clears `TUNDRA_PERF_TRACE` by default, including inherited values, while retaining normal product logs. Use `--detailed-trace` only in a separate diagnostic run to enable per-frame/input timing logs; their serialization and writes add observation overhead. JSON and Markdown reports record `trace_enabled`, observation and native/focus endpoint versions, and build/trace acceptance eligibility. Comparisons reject incompatible observation, trace, endpoint, or diagnostic-build conditions. CPU/RSS points are collected outside capture after validation; CPU excludes exited workers, summed RSS includes shared mappings per process, and neither field is an endpoint or whole-run peak measurement.
+Each output directory preserves the pre-run process/cgroup environment snapshot, `samples.jsonl`, raw `*.pty` streams and their monotonic `*.frames.jsonl` boundary indexes, per-session observation audits, failed attempts, application startup logs, optional Shell timing traces, build identity, P50/P95/P99 summaries, process-tree CPU/RSS point samples, and a readable `report.md`. Observation audits record zero capture RPCs and total verification/preparation response bytes. Metric-card titles prove dashboard readiness while their changing CPU/memory/network values stay outside the startup matcher. Existing `app-startup.total_us` ends at frame acceptance; `app-startup-presented` ends after output. The benchmark clears `TUNDRA_PERF_TRACE` by default, including inherited values, while keeping normal product logs. Use `--detailed-trace` only in a separate diagnostic run to enable per-frame/input timing logs; their serialization and writes add observation overhead. JSON and Markdown reports record `trace_enabled`, observation and native/focus endpoint versions, and build/trace acceptance eligibility. Comparisons reject incompatible observation, trace, endpoint, or diagnostic-build conditions. CPU/RSS points are collected outside capture after validation; CPU excludes exited workers, summed RSS includes shared mappings per process, and neither field is an endpoint or whole-run peak measurement.
 
 Acceptance targets are new built-in application action-to-first-business-frame P95 ≤100ms and ordinary interaction feedback P95 ≤50ms. Report each measured series and any failing scene rather than treating a hidden Starting label as readiness. The first-open series has one sample per isolated Shell in this run and must be reported separately from the larger repeated-new-process series.
 
@@ -155,7 +155,7 @@ The [2026-11-17 Linux acceptance report](performance-linux-2026-11-17.md) record
 
 ## Real Vim regression tests
 
-Ordinary workspace tests skip ignored cases that require a complete Vim. After building the engine, run them explicitly:
+Ordinary workspace tests skip ignored cases that need a complete Vim. After building the engine, run them explicitly:
 
 ```sh
 cargo build --locked -p shell -p cli
@@ -182,7 +182,7 @@ Real PTY checks for external TUIs:
 python3 scripts/tests/embedded-tui-smoke.py target/debug/tundra-shell --nvim /absolute/path/to/nvim --yazi /absolute/path/to/yazi
 ```
 
-This script covers startup through Command Line and Launcher, input, paste, mouse, resizing, exit, and terminal restoration. Image protocols use protocol fixtures; native images and physical touchscreens require acceptance checks on the corresponding devices.
+This script covers startup through Command Line and Launcher, input, paste, mouse, resizing, exit, and terminal restoration. Image protocols use protocol fixtures; native images and physical touchscreens need acceptance checks on the matching devices.
 
 Linux script workspace:
 
@@ -226,7 +226,7 @@ See [large-file editor support](editor-scalability.md) for reproduction steps an
 
 ## Recorded Linux validation, 2026-11-16–17
 
-The full workspace run at `eda29044` completed 150 targets in 1,479 seconds: **2,888 passed, 11 failed, 34 ignored**. This historical run was not all green. Later checks covered affected code separately: the final persisted-control/authentication, shutdown recovery, input-fence and wire batch passed **66/66** at `6456fe44`, whose complete `crates/` tree matches measured package `cd59be5d`. The benchmark harness passed 25 lightweight tests; affected-crate formatting and localization checks passed (4,077 literal call sites and 4,278 paired en-US/zh-CN messages).
+The full workspace run at `eda29044` completed 150 targets in 1,479 seconds: **2,888 passed, 11 failed, 34 ignored**. This historical run was not all green. Later checks covered the affected code separately: the final persisted-control/authentication, shutdown recovery, input-fence and wire batch passed **66/66** at `6456fe44`, whose complete `crates/` tree matches measured package `cd59be5d`. The benchmark harness passed 25 lightweight tests; affected-crate formatting and localization checks passed (4,077 literal call sites and 4,278 paired en-US/zh-CN messages).
 
 The measured cd59 package passed eight critical terminal groups, including real cross-process clipboard, exact Vim recovery bytes and the full 24-case/720-input UI matrix. Final source `4a8c77a6` subsequently added explicit debug-panic routing, with seven focused checks and a real PANIC/report/Q/terminal-restoration probe passing. The [performance report](performance-linux-2026-11-17.md) records both binary identities and their separate validation scope; the full workspace and performance matrix were not repeated after that isolated follow-up.
 

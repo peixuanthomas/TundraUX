@@ -1,21 +1,21 @@
 # List multi-selection
 
-Multi-selection is for lists where the same operation can be applied to multiple objects. Lists used only to view details, enter individual parameters, or configure items one at a time remain single-selection.
+Multi-selection applies where one operation can act on several objects at once. Lists used only to view details, enter parameters one at a time, or configure individual items stay single-selection.
 
 ## Common operations
 
 Packages, services, processes, scheduled tasks, and file management provide Select Multiple / Finish Selection controls, checkboxes, and a selection count.
 
 - Tapping a row toggles its checkbox; arrow keys move the current position; Enter or Space toggles the current row.
-- Exiting selection mode clears the batch selection and restores single selection of the current row. Batch operations cannot run with an empty selection.
-- Sorting and refreshing retain targets that still exist; changing filters or query criteria clears the selection.
-- Confirmation and authorization dialogs list every target, and background processing checks the objects again before execution.
-- File management and management lists share Ctrl/Cmd+click for individual selection, Shift+click for a continuous range from a stable anchor, and Shift+Enter to toggle the current row. Arrow navigation preserves the selection; an ordinary click restores single selection.
-- Mouse and touchscreen gestures are canceled after dragging out, scrolling, focus loss, or resizing, so releasing cannot act on a new target.
+- Leaving selection mode clears the batch and restores single selection of the current row. Batch operations refuse an empty selection.
+- Sorting and refreshing keep targets that still exist; changing filters or query criteria clears the selection.
+- Confirmation and authorization dialogs list every target, and background processing checks the objects again before running.
+- File management and management lists share the same gestures: Ctrl/Cmd+click toggles one record, Shift+click selects a range from a stable anchor, and Shift+Enter toggles the current row. Arrow navigation preserves the selection; an ordinary click restores single selection.
+- Mouse and touch gestures are canceled after a drag-out, scroll, focus loss, or resize, so releasing cannot act on a different target.
 
-Package selections are stored by package ID. Installation, removal, or upgrade is allowed only when all selected packages support the same operation. APT, DNF, and pacman use batch commands; pacman installation and upgrade also perform a full system upgrade. Homebrew groups by Formula/Cask, while WinGet processes packages individually using exact IDs and versions.
+Package selections are keyed by package ID. Install, remove, and upgrade are allowed only when every selected package supports that operation. APT, DNF, and pacman use batch commands; pacman install and upgrade also perform a full system upgrade. Homebrew groups by Formula/Cask; WinGet processes packages one at a time using exact IDs and versions.
 
-Services support batch start, stop, restart, reload, enable, and disable. Processes support batch suspend, resume, termination, and assignment of the same priority, with process identity checked before execution. Scheduled tasks support batch pause, resume, and run-now; changes from the same cron source are saved together.
+Services support batch start, stop, restart, reload, enable, and disable. Processes support batch suspend, resume, terminate, and set-priority, with process identity checked before execution. Scheduled tasks support batch pause, resume, and run-now; changes from the same cron source are saved together.
 
 ## Selection behavior by page
 
@@ -42,4 +42,4 @@ Services support batch start, stop, restart, reload, enable, and disable. Proces
 | Initial setup and timezone map | Single | Select one option or input field at a time |
 | Home, Help, notifications, Command Line, AA, weather | Single | Primarily entry points, instructions, messages, or the current task |
 
-When adding a batch operation, first make the backend accept and validate multiple targets, then connect page selection, confirmation, and authorization. See F1 help for each page's complete shortcuts.
+When adding a batch operation, make the backend accept and validate multiple targets first, then wire up page selection, confirmation, and authorization. Each page's F1 help lists its shortcuts.
