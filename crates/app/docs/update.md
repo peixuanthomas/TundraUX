@@ -1,6 +1,8 @@
 # Application self-updates
 
-The update workflow is in `app::update`. CLI runs the update helper, while Shell saves settings and schedules exit and restart. Linux updates treat the portable directory as the installation unit, separately from system package management.
+Open **Settings → Update** to check the current build and available updates. On Linux, in-app updates require a writable portable directory with both executables and `tundra-installation.json`. System package installations use their own update mechanism.
+
+The workflow is implemented in [`app::update`](../src/update/). Shell saves settings and exits for replacement; the companion CLI runs the update helper.
 
 ## Update modes
 

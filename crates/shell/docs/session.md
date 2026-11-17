@@ -1,6 +1,6 @@
 # Shell sessions, navigation, and rendering
 
-This document describes startup, input, page lifecycles, and full-frame compositing in `tundra-shell`. See [UI requirements](../../../docs/UI-requirements.md) for shared visual and interaction rules.
+This document describes startup, input, page lifecycles, and full-frame compositing in `tundra-shell`. See the [user guide](../../../docs/user-guide.md#navigate-and-arrange-windows) for window operations and [UI requirements](../../../docs/UI-requirements.md) for shared interaction rules.
 
 ## Startup sequence
 
@@ -71,7 +71,7 @@ Unix input messages are assembled by the local Crossterm patch. A standalone Esc
 
 `tasks.rs` registers the page or session a task belongs to, its request ID, generation, and cancellation action. Results from old Shell sessions, closed pages, and superseded requests do not update new pages. watchdog handles execution and failure isolation; Shell handles ownership and presentation.
 
-The title-bar Tasks button is available to logged-in non-guest users and shows running operations or pending approval; background queries are excluded. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
+The title-bar Tasks button is available in the active workspace session. It shows running operations or pending approval; background queries are excluded. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
 
 Before exit, save editor recovery records, stop tasks for the current session, and revoke authorization. Task summaries and output persist across program restarts; scheduled tasks run independently through system services.
 
@@ -117,15 +117,15 @@ Clicking the status area in the header opens the full text. The dialog retains t
 
 Before suspend, save editor recovery data and leave full-screen mode. On resume, reestablish the terminal, platform session, and size.
 
-If the Shell stops reporting progress for five seconds, the watchdog terminates the run and restores the terminal. Use Ctrl+W, Shift+X, the advanced window list, or the watchdog CLI to force kill an unresponsive AppHost. An AppHost remains registered until the watchdog reaps its process and cleans up its resources. If the Shell catches a panic and reaches the standalone panic page, R restarts and Q, Esc or Ctrl+C exits.
+If the Shell fails its [progress probe](../../watchdog/README.md#workspace-guardian), the guardian terminates the run and restores the terminal. Use Ctrl+W, Shift+X, the advanced window list, or the watchdog CLI to force kill an unresponsive AppHost. An AppHost remains registered until the watchdog reaps its process and cleans up its resources. If the Shell catches a panic and reaches the standalone panic page, R restarts and Q, Esc or Ctrl+C exits.
 
 ## Common shortcuts
 
-Page buttons show their shortcuts, and F1 opens complete help for the current page.
+Page buttons show their shortcuts, and F1 opens help on pages that provide it. For the window shortcut prefix and mouse controls, see [arranging windows](../../../docs/user-guide.md#navigate-and-arrange-windows).
 
 | Page | Common input |
 | --- | --- |
-| General | Tab/Shift+Tab moves focus, Enter/Space executes, Esc returns |
+| General | Tab/Shift+Tab moves focus, Enter/Space activates, Esc dismisses the active overlay or minimizes an ordinary app |
 | Home | Arrows select entries; Enter/Space opens the selection; Q/Esc opens exit confirmation |
 | Launcher | Enter opens, V switches views, R/F5 refreshes, F2 organizes |
 | File management | S, Ctrl+F, or `/` searches; F5 refreshes; F6 sorts; Ctrl/Cmd+Z undoes a move or rename |

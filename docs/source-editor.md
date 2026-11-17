@@ -2,6 +2,8 @@
 
 The built-in editor provides multiple documents, syntax highlighting, search and replace, soft wrapping, JSON formatting, and a real Vim mode. The Linux script workspace reuses the same editor and provides Bash execution and debugging.
 
+To open your first file, use Editor from Launcher and choose **File → Open**, or open a supported file from Explorer. **File → Save** writes the current document. If it has no path, the save picker asks for a directory and filename. See [File Explorer and saving](user-guide.md#browse-and-edit-files) for browsing and picker controls.
+
 ## Standard editor
 
 The interface is modeled on [Microsoft Edit](https://github.com/microsoft/edit/tree/cb6de0a8966aecd01d19a3541dab1829d0e679ca/crates/edit/src/bin/edit), with File, Edit, View, and Help menus. Find and Replace bars appear above the document; controls for language, line endings, encoding, indentation, line/column position, and document switching appear at the bottom.
@@ -41,7 +43,7 @@ F8 or the Vim button switches to the bundled real Vim. The editing area directly
 
 | Operation | Behavior |
 | --- | --- |
-| F8 / VIM mode enabled | Synchronizes unsaved content and returns to the standard editor without automatically writing the file |
+| F8 while Vim is active | Synchronizes unsaved content and returns to the standard editor without automatically writing the file |
 | Press F8 again | Synchronizes changes from the standard editor and resumes the same Vim process |
 | `:w`, `:write filename` | Writes through the host save task and confirms after success |
 | `:wq` | Exits after a successful save; retains changes on failure |
@@ -82,6 +84,8 @@ Run settings can specify the interpreter, arguments, and working directory. When
 - Breakpoints and expression history belong to the current document page. Invalid breakpoints appear as Not active; validity is confirmed when they are actually hit.
 
 ## Implementation structure
+
+See the [app editor module map](../crates/app/README.md#editor-and-scripts), [Vim runtime](../crates/vim-runtime/README.md), and [script runtime](../crates/script-runtime/README.md) for code ownership and targeted tests.
 
 - `crates/app/src/editor/syntax.rs` feeds line-by-line text to LSH, maintains state across lines, and caches token types and byte ranges.
 - `TundraTheme::syntax_style` in `crates/ui/src/theme/mod.rs` maps tokens to theme colors.

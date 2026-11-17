@@ -60,7 +60,7 @@ Normal removal uses `pacman -R -- PACKAGE_NAME`, preserving `.pacsave` behavior.
 
 When closing a page with an active operation, you can keep it running in the background, cancel and close, or stay on the page. AA reappears when input is needed. Exiting Shell requests that current-session tasks stop and waits for cleanup.
 
-The first built-in elevation establishes a private authorization connection for the current Shell through sudo; the password is cleared after verification. Exit, logout, or connection failure revokes authorization; restarting Shell requires authorization again.
+The first built-in elevation establishes a private authorization connection for the current Shell through sudo; the password is cleared after verification. Workspace exit or connection failure revokes authorization; restarting Shell requires authorization again. Account and power actions can also use their native system authorization flows. See [authorization details](authorization.md).
 
 Tasks still running in a helper can restore output and interaction through Reconnect System Task. When the result is unknown, query the actual state first instead of resubmitting the same write operation.
 

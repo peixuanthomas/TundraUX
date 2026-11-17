@@ -6,13 +6,16 @@ Running the portable build
 Extract the archive and keep both binaries, assets/, vim/, and
 tundra-installation.json together. Open a terminal in that directory and run:
 
-  ./install-tux.sh
-  tux
+  ./tundra-shell
   ./tundra-cli doctor
 
-The installer links ~/.local/bin/tux to this directory without replacing an
-existing command. Keep the directory in place and add ~/.local/bin to PATH if
-the installer reports it is missing.
+The optional ./install-tux.sh links ~/.local/bin/tux to the extracted Shell
+executable without replacing an existing command. Keep the directory in place
+and add ~/.local/bin to PATH if the installer reports it is missing. You can
+then run tux from any directory.
+
+Use a terminal of at least 108 columns by 20 rows. At first launch, choose your
+preferences or press F9 to start with the default appearance.
 
 The archive includes the full Vim engine and runtime, the GNU GPL v3 license,
 and the Weathr component license. Vim's upstream license and source details are
@@ -59,15 +62,15 @@ create, edit, lock, unlock, and delete other local login accounts. Deleting an
 account keeps its home directory; the account running Tundra cannot delete,
 lock, or demote itself.
 
-Privileged writes use the system polkit agent, with pkttyagent as a foreground
-terminal fallback when available. Password prompts are handled by the system
-agent. Changing your own password runs /usr/bin/passwd with the Tundra interface
-suspended.
+Account authorization can use the system polkit agent, with pkttyagent as a
+terminal fallback when available. Built-in management operations that need
+elevation can request a separate authorization through AutoAdmin. Changing your
+own password runs /usr/bin/passwd with the Tundra interface suspended.
 
-Package management
-------------------
-Launcher supports APT/dpkg, DNF, and pacman through AutoAdmin. System package
-management and Tundra self-update are separate features.
+Package management from Home
+----------------------------
+The Packages page supports APT/dpkg, DNF, and pacman through AutoAdmin. This
+feature does not update TundraUX itself.
 
 On Arch, installed-package queries read existing pacman metadata. Repository
 queries also require /usr/bin/pacman-conf and readable sync databases with
@@ -88,9 +91,10 @@ Settings -> Update provides two modes:
 
   - Release downloads the latest stable Linux x86_64 archive and verifies its
     SHA-256 checksum. A Rust toolchain is not needed.
-  - Beta downloads a specific master commit and builds it with the local Rust
-    toolchain. It also needs Python 3.12+, a C compiler, make, and ncurses
-    development headers.
+  - Beta lets you pick a commit from the Git tree of published branches and
+    builds that commit with the local Rust toolchain. If the installed Vim
+    cannot be reused, building Vim also needs Python 3.12+, a C compiler,
+    make, and ncurses development headers.
 
 Both modes stage Shell, CLI, and the complete Vim directory together. Personal
 data and themes are preserved. The previous executables and engine remain

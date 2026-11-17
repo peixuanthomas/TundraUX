@@ -15,7 +15,7 @@ Settings → System → AutoAdmin saves `auto_admin` in `config.toml`:
 
 Built-in management operations, account writes, and power operations go through AA; ordinary queries do not require approval. AA does not intercept commands entered by users themselves or system dialogs from external programs.
 
-Manual confirmation initially focuses Approve. Tab/Shift+Tab/Left/Right switch focus, Enter/Space approves, and Reject or Esc closes the dialog. Repeats of the key that opened the dialog cannot approve subsequent prompts in succession; terminals without key-release reports use a 750ms interval to block repeated presses of the same key.
+Manual confirmation initially selects Deny. Tab/Shift+Tab/Left/Right switch focus, Enter/Space activates the selected action, and Esc closes the dialog without approving. Repeats of the key that opened the dialog cannot approve subsequent prompts in succession; terminals without key-release reports use a 750ms interval to block repeated presses of the same key.
 
 Tasks start only once, and write operations are not replayed automatically. Startup failures or panics clear pending prompts and save a report; an indeterminate outcome is shown as "Outcome unknown".
 

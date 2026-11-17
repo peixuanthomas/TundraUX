@@ -10,7 +10,7 @@ Logs is a standalone application that brings together UX runtime events, inciden
 | Linux log | Read the journal on demand, falling back to dmesg when unavailable. The TUI requires an administrator, and operating-system permissions still apply |
 | Selected file | Read the absolute path chosen by the user, using current operating-system permissions and bounded tail reads |
 
-UX supports Linux, Windows, and macOS. Guest has no Logs entry. The Linux source displays Unsupported on Windows/macOS.
+UX supports Linux, Windows, and macOS. The Linux source displays Unsupported on Windows and macOS.
 
 Sources and levels are separate: Explorer errors belong to `ux.explorer`, kernel messages to `linux.kernel`, and service messages to `linux.service`. Journal priorities map to log levels; original source and timestamp notes are retained.
 

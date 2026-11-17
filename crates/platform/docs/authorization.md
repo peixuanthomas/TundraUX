@@ -19,7 +19,7 @@ This connection accepts only fixed requests. Normal users' own profile and passw
 | Authorized program | Holds only the connection inherited at startup; does not expose a session socket that other processes can connect to |
 | Shell | Prevents processes owned by the same user from copying authorization through ptrace or `/proc` |
 | Connection descriptors | Set close-on-exec; do not pass them to external commands |
-| Exit, logout, or communication failure | Revoke the connection and terminate the authorized program |
+| Workspace exit or communication failure | Revoke the connection and terminate the authorized program |
 | Normal service errors or expired tasks | Return an error and retain an authorization session that is still valid |
 
 A task's `control.sock` is owned by root and accepts only root. The authorized program checks the ownership, permissions, and task identity of `/run/tundraux-management/<actor>/<operation>/control.sock`, then passes the connected descriptor to Shell. A new Shell must authorize again before reconnecting.

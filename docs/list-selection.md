@@ -29,7 +29,7 @@ Services support batch start, stop, restart, reload, enable, and disable. Proces
 | Process management | Multiple | Send signals or set priorities in batches |
 | Scheduled tasks | Multiple | Creation, editing, and time previews remain individual |
 | Firewall rules and listening ports | Single | Review rules individually; ports are primarily for inspection |
-| Users, groups, and in-app accounts | Single | Passwords, membership, ownership, and deletion concern one account |
+| Linux users and groups | Single | Passwords, membership, ownership, and deletion concern one account |
 | Networks, disks, SSH, system settings | Single | Each configuration uses separate parameters and checks |
 | Configuration files and configuration backups | Single | Edit or restore one configuration at a time |
 | Launcher applications and shortcuts | Single | Opening, ordering, and editing concern one item |
@@ -39,7 +39,7 @@ Services support batch start, stop, restart, reload, enable, and disable. Proces
 | System status cards and selection dialogs | Single | Inspect data and edit cards individually |
 | Clock alarms and timers | Single | Management dialogs handle one item at a time |
 | Editor documents and menus | Single | Text selections and Vim Visual mode follow their own rules |
-| Login, initial setup, and timezone map | Single | Select one account, option, or input field at a time |
+| Initial setup and timezone map | Single | Select one option or input field at a time |
 | Home, Help, notifications, Command Line, AA, weather | Single | Primarily entry points, instructions, messages, or the current task |
 
 When adding a batch operation, first make the backend accept and validate multiple targets, then connect page selection, confirmation, and authorization. See F1 help for each page's complete shortcuts.

@@ -1,5 +1,7 @@
 # CLI commands and interaction
 
+The [user guide](../../../docs/user-guide.md#launch-programs-and-run-commands) shows how to start the built-in Command Line. The commands on this page also work through the standalone executable where supported.
+
 ## Program entry points
 
 ```sh
@@ -42,7 +44,7 @@ Shell/CLI help and version queries do not start watchdog, read configuration, or
 | `help [command …]` | View command help |
 | `new` | Reset Tundra user configuration and state |
 
-Use `tundra-cli <command> --help` or `tundra-cli help <command>` for the exact arguments. For debug previews, see [Shell debug previews](../../shell/docs/previews.md).
+Use `tundra-cli <command> --help` or `tundra-cli help <command>` for the arguments accepted by command groups with topic help. For debug previews, see [Shell debug previews](../../shell/docs/previews.md).
 
 ## Configuration
 
@@ -127,6 +129,6 @@ Standard output contains one JSON result. `list` returns `runs`, which is empty 
 
 ## Data reset
 
-`new` deletes user configuration and state. Before running it, use `debug paths` to identify and back up the directories, then enter exactly `RESET` at confirmation.
+`tundra-cli new` deletes saved configuration and state immediately. Close the running workspace and use `tundra-cli debug paths` to identify and back up the directories before running it.
 
-`repl --embedded` is an entry point specifically for Command Line. Embedded CLI uses exit code 75 to ask Shell to restore the terminal, finish tasks, reset storage, and restart.
+In a REPL or the built-in Command Line, `/new` asks you to enter exactly `RESET` before proceeding. In Command Line, the CLI uses exit code 75 to ask Shell to finish tasks, restore the terminal, reset storage, and restart. The `repl --embedded` entry point is intended for Shell.

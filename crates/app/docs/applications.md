@@ -1,5 +1,7 @@
 # Application state and built-in applications
 
+This page describes the state behind the main applications. For installation, shortcuts, and day-to-day tasks, see the [user guide](../../../docs/user-guide.md).
+
 ## AppState
 
 `app::AppState` stores the clock, exit state, notifications, authentication session, user, configuration, appearance, and optional Explorer, Launcher, Diagnostics, and Editor state.
@@ -9,7 +11,7 @@ AppState::dispatch_at(AppCommand, Instant) -> AppAction
 AppState::snapshot() -> AppSnapshot<'_>
 ```
 
-Passing the monotonic clock `Instant` explicitly makes notification timeouts and login lockouts deterministic to test. `AppSnapshot` provides a borrowed read-only view; state changes go through new `AppCommand` values. `AppAction` only describes `Redraw`, `Exit`, `Reboot`, or `PowerOff`; Shell performs the actual terminal and system operations.
+Passing the monotonic clock `Instant` explicitly makes notification timeouts deterministic to test. `AppSnapshot` provides a borrowed read-only view; state changes go through `AppCommand`. `AppAction` describes `Redraw`, `Exit`, `Reboot`, or `PowerOff`; Shell performs the terminal and system operations.
 
 Notifications include 4-second toasts, keyed alerts, FIFO modals, and critical modals that can preempt others. The response queue has bounded capacity.
 
@@ -19,17 +21,7 @@ Explorer maintains filtering, sorting, multiple selection, history, the clipboar
 
 `ExplorerTaskEngine` provides a single worker, cancellation, staging, journals/checkpoints, and crash recovery for copy, move, and trash operations. Some lightweight file and storage operations still run in the command apply path.
 
-Common selection controls:
-
-- Ctrl/Cmd+click or Space selects individual items; Shift+click or arrow keys selects a contiguous range.
-- Ctrl/Cmd+A selects all, Ctrl/Cmd+I inverts the selection, and Ctrl/Cmd+Shift+A clears it.
-- C/X/V copies, cuts, and pastes; D or Delete moves items to the trash.
-- N/T creates a folder or text file, F2 renames, and Alt+Up goes to the parent directory.
-- Right-click or Shift+F10 opens the menu; clicking outside it or pressing Esc closes it.
-
-Letter shortcuts only apply while browsing the list. Path, search, and file-name fields accept normal text input. Batch operations only affect selected items in the currently visible list.
-
-Ctrl/Cmd+L edits the path bar, which supports selection, pasting, and automatic path-separator conversion. Right-clicking empty space in a regular directory can open Command Line in that directory; the working directory is passed directly to the child process.
+The shared clipboard and move/rename undo state belong to the current workspace run; list filters, selection, and navigation belong to a page. Batch commands act on selected entries in the visible list. Right-clicking empty space in a regular directory can open Command Line there by passing the working directory to the child process. See [Explorer use](../../../docs/user-guide.md#browse-and-edit-files) and the [selection rules](../../../docs/list-selection.md).
 
 ## Launcher
 
@@ -39,7 +31,7 @@ Built-in applications are declared per platform in `BUILT_IN_APPLICATIONS` and a
 
 For external programs, **Run settings (F4)** saves the choice of system launch or an embedded terminal, arguments, and working directory. Arguments are parsed into an array without variable expansion. Custom commands can return immediately after exit or retain output until Enter is pressed.
 
-For page shortcuts, see [Shell sessions](../../shell/docs/session.md#common-shortcuts). For Command Line state, see [CLI commands](../../cli/docs/commands.md) and [terminal-runtime](../../terminal-runtime/README.md).
+For the user flow, see [Launcher and Command Line](../../../docs/user-guide.md#launch-programs-and-run-commands). For native command session state, see [CLI commands](../../cli/docs/commands.md#session-directory-and-environment) and [terminal-runtime](../../terminal-runtime/README.md).
 
 ## Plain-text editor
 
@@ -55,7 +47,7 @@ For complete controls, see [Editor and script workspace](../../../docs/source-ed
 
 ## Clock, system status, and diagnostics
 
-Clock scheduling is in `app::clock` and is saved in `clock.v1.json`. Linux follows system time and timezone; demonstration time settings on Windows/macOS continue to use their respective configurations. See [time](../../time/README.md) for synchronization details.
+Clock scheduling is in `app::clock`. User alarms and countdowns are saved in `clock.v2.json` (schema 3); SessionServices checks each update against the shared clock revision. Linux follows system time and timezone. Windows and macOS use the application time configuration. See [storage documents](../../storage/README.md#main-documents) and [time synchronization](../../time/README.md).
 
 System Status displays system metrics, processes, network, and storage. The dashboard supports adding, editing, and arranging widgets; the system overview shows detailed metrics separately.
 
