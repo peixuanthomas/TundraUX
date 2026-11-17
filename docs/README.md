@@ -49,6 +49,7 @@ See the [complete responsibility table](README-TECHNICAL.md#crate-responsibiliti
 
 ## Historical records
 
+- [V2.0.0 release notes](packaging/releases/v2.0.0.md)
 - [CHANGELOG](CHANGELOG.md)
 - [Linux workspace performance measurements, 2026-11-17](performance-linux-2026-11-17.md)
 - [Historical e2 candidate measurements, 2026-11-16](performance-linux-2026-11-16.md)
