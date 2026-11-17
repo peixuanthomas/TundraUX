@@ -368,6 +368,7 @@ endfunction
 function! s:Leaving() abort
   let s:exiting = v:true
   call s:Snapshot(1)
+  call ch_close(s:channel)
 endfunction
 
 function! s:Tick(timer) abort

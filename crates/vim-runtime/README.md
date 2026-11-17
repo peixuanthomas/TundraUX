@@ -28,6 +28,7 @@ The host sends a liveness probe with `request_ping`. Vim's channel callback echo
 After completing permission, external-change, configuration-diff, and asynchronous-save checks, the host replies with the result through `respond_save`. Only a successful response clears the modified flag; on failure, `:wq` stays in Vim. Read-only buffers reject editing and saving, and protected configuration does not enter ordinary swap, backup, or persistent undo files.
 
 `request_close(false)` lets Vim check for unsaved changes; `:q!` and `:qa!` discard content according to Vim's rules. Before closing the host, export and handle saving or discarding first, then clean up the process.
+Vim sends its final buffer state and closes the bridge before exiting.
 
 ## Validation
 
