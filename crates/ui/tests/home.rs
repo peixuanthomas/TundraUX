@@ -17,38 +17,44 @@ use ui::{
 };
 
 #[test]
-fn home_system_entries_use_their_application_artwork_and_images() {
+fn home_and_launcher_share_built_in_application_artwork_and_images() {
     let assets = ui::RuntimeAsciiAssets::load_default().unwrap();
     let home = HomeViewModel::user_with_icon_assets("User", "Now", Vec::new(), assets.clone());
-    for key in [
-        "packages",
-        "services",
-        "processes",
-        "network",
-        "disks",
-        "firewall",
-        "ssh",
-        "users",
-        "scheduled-tasks",
-        "tasks",
-        "logs",
-        "backups",
-    ] {
-        let application_key = format!("builtin.{key}");
-        let expected = assets.launcher_icon(&application_key).unwrap();
+    let items = app::BUILT_IN_APPLICATIONS
+        .iter()
+        .copied()
+        .map(ui::LauncherItemViewModel::built_in)
+        .collect();
+    let launcher = ui::LauncherViewModel::with_ascii_assets(
+        items,
+        None,
+        ui::LauncherViewMode::LargeIcons,
+        false,
+        assets,
+    );
+    for item in &launcher.items {
+        let key = match item.id.as_str() {
+            "builtin.system-status" => "system_status",
+            id => id.strip_prefix("builtin.").unwrap(),
+        };
+        let application_key = match item.id.as_str() {
+            "builtin.script-editor" => "builtin.editor",
+            id => id,
+        };
         let icon = home.home_icon_for_label(key).unwrap();
-        assert_eq!(icon.lines(), expected.lines(), "Home icon {key}");
+        assert_eq!(icon.key(), application_key);
+        assert!(
+            std::ptr::eq(icon, launcher.item_icon(item).unwrap()),
+            "{key}"
+        );
         assert_eq!(
             home.home_icon_image_path_for_label(key),
-            assets.launcher_icon_image_path(&application_key),
+            launcher.item_graphic_path(item),
             "Home image path {key}"
         );
-        let image = home
-            .home_icon_image_bytes_for_label(key)
-            .expect("Home image");
         assert_eq!(
-            Some(image),
-            assets.launcher_icon_image_bytes(&application_key),
+            Some(home.home_icon_image_bytes_for_label(key).unwrap()),
+            launcher.item_graphic_bytes(item),
             "Home image bytes {key}"
         );
     }

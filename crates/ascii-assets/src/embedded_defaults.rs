@@ -26,36 +26,23 @@ macro_rules! embedded_default_theme_file {
 pub(crate) static EMBEDDED_DEFAULT_THEME_FILES: &[EmbeddedDefaultThemeFile] = &[
     embedded_default_theme_file!("banner", "banner.toml"),
     embedded_default_theme_file!("explorer_icons", "explorer_icons.toml"),
-    embedded_default_theme_file!("home_icons", "home_icons.toml"),
-    embedded_default_theme_file!("launcher_icons", "launcher_icons.toml"),
-    embedded_default_theme_file!("home_icons/default.png", "home_icons/default.png"),
-    embedded_default_theme_file!("home_icons/explorer.png", "home_icons/explorer.png"),
-    embedded_default_theme_file!("home_icons/launcher.png", "home_icons/launcher.png"),
-    embedded_default_theme_file!("home_icons/logs.png", "home_icons/logs.png"),
-    embedded_default_theme_file!("home_icons/settings.png", "home_icons/settings.png"),
-    embedded_default_theme_file!(
-        "home_icons/system_status.png",
-        "home_icons/system_status.png"
-    ),
-    embedded_default_theme_file!(
-        "home_icons/user_management.png",
-        "home_icons/user_management.png"
-    ),
-    embedded_default_theme_file!(
-        "launcher_icons/command_line.png",
-        "launcher_icons/command_line.png"
-    ),
-    embedded_default_theme_file!("launcher_icons/editor.png", "launcher_icons/editor.png"),
-    embedded_default_theme_file!("launcher_icons/services.png", "launcher_icons/services.png"),
-    embedded_default_theme_file!("launcher_icons/tasks.png", "launcher_icons/tasks.png"),
-    embedded_default_theme_file!(
-        "launcher_icons/processes.png",
-        "launcher_icons/processes.png"
-    ),
-    embedded_default_theme_file!("launcher_icons/packages.png", "launcher_icons/packages.png"),
-    embedded_default_theme_file!("launcher_icons/network.png", "launcher_icons/network.png"),
-    embedded_default_theme_file!("launcher_icons/disks.png", "launcher_icons/disks.png"),
-    embedded_default_theme_file!("launcher_icons/clock.png", "launcher_icons/clock.png"),
+    embedded_default_theme_file!("app_icons", "app_icons.toml"),
+    embedded_default_theme_file!("app_icons/clock.png", "app_icons/clock.png"),
+    embedded_default_theme_file!("app_icons/command_line.png", "app_icons/command_line.png"),
+    embedded_default_theme_file!("app_icons/default.png", "app_icons/default.png"),
+    embedded_default_theme_file!("app_icons/disks.png", "app_icons/disks.png"),
+    embedded_default_theme_file!("app_icons/editor.png", "app_icons/editor.png"),
+    embedded_default_theme_file!("app_icons/explorer.png", "app_icons/explorer.png"),
+    embedded_default_theme_file!("app_icons/launcher.png", "app_icons/launcher.png"),
+    embedded_default_theme_file!("app_icons/logs.png", "app_icons/logs.png"),
+    embedded_default_theme_file!("app_icons/network.png", "app_icons/network.png"),
+    embedded_default_theme_file!("app_icons/packages.png", "app_icons/packages.png"),
+    embedded_default_theme_file!("app_icons/processes.png", "app_icons/processes.png"),
+    embedded_default_theme_file!("app_icons/services.png", "app_icons/services.png"),
+    embedded_default_theme_file!("app_icons/settings.png", "app_icons/settings.png"),
+    embedded_default_theme_file!("app_icons/system_status.png", "app_icons/system_status.png"),
+    embedded_default_theme_file!("app_icons/tasks.png", "app_icons/tasks.png"),
+    embedded_default_theme_file!("app_icons/users.png", "app_icons/users.png"),
     embedded_default_theme_file!("weathr/render/clock_font", "weathr/render/clock_font.toml"),
     embedded_default_theme_file!("weathr/animation/airplane", "weathr/animation/airplane.txt"),
     embedded_default_theme_file!("weathr/animation/cloud_0", "weathr/animation/cloud_0.txt"),

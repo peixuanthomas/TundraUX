@@ -4792,11 +4792,11 @@ fn launcher_uses_cached_ascii_assets_after_the_runtime_directory_is_deleted() {
     ));
     let canonical = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
     copy_directory(&canonical, &root);
-    let launcher_icons = root.join("themes/default/launcher_icons.toml");
-    let source = std::fs::read_to_string(&launcher_icons).expect("read Launcher icons");
+    let app_icons = root.join("themes/default/app_icons.toml");
+    let source = std::fs::read_to_string(&app_icons).expect("read Launcher icons");
     let customized = source.replacen("' ______ '", "'CACHE!!!'", 1);
     assert_ne!(customized, source, "Launcher icon fixture should change");
-    std::fs::write(&launcher_icons, customized).expect("write cached Launcher icon fixture");
+    std::fs::write(&app_icons, customized).expect("write cached Launcher icon fixture");
     let assets = ui::RuntimeAsciiAssets::from_store(
         ui::AsciiAssetStore::load_with_root(&root, ui::DEFAULT_THEME_ID)
             .expect("temporary ASCII assets should load"),
@@ -4841,11 +4841,11 @@ fn explicit_theme_refresh_reloads_assets_from_disk() {
     ));
     let _ = std::fs::remove_dir_all(&root);
     ui::restore_default_theme(&root).expect("create complete default theme fixture");
-    let launcher_icons = root.join("themes/default/launcher_icons.toml");
-    let source = std::fs::read_to_string(&launcher_icons).expect("read Launcher icons");
+    let app_icons = root.join("themes/default/app_icons.toml");
+    let source = std::fs::read_to_string(&app_icons).expect("read Launcher icons");
     let first = source.replacen("' ______ '", "'CACHE001'", 1);
     assert_ne!(first, source);
-    std::fs::write(&launcher_icons, &first).expect("write initial cached Launcher icon");
+    std::fs::write(&app_icons, &first).expect("write initial cached Launcher icon");
 
     let assets = ui::RuntimeAsciiAssets::load_with_root(&root, ui::DEFAULT_THEME_ID)
         .expect("load initial asset cache");
@@ -4862,7 +4862,7 @@ fn explicit_theme_refresh_reloads_assets_from_disk() {
     set_test_auth_role(&mut state, UserRole::Admin);
 
     let second = first.replacen("CACHE001", "CACHE002", 1);
-    std::fs::write(&launcher_icons, second).expect("change Launcher icon after startup");
+    std::fs::write(&app_icons, second).expect("change Launcher icon after startup");
 
     let cached = state.to_launcher_view_model();
     assert!(

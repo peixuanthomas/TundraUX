@@ -138,7 +138,7 @@ fn asset_diagnostics_offer_embedded_repairs_when_the_asset_root_is_missing() {
         .expect("missing banner should be repairable");
     let image_action = checks
         .iter()
-        .find(|check| check.label == "home_icons/explorer.png")
+        .find(|check| check.label == "app_icons/explorer.png")
         .and_then(|check| check.repair.clone())
         .expect("missing default theme image should be repairable");
     let app_paths = AppPaths::from_parts(
@@ -186,12 +186,12 @@ fn asset_diagnostics_offer_embedded_repairs_when_the_asset_root_is_missing() {
     assert!(matches!(
         image_result.action,
         DiagnosticsRepairAction::RestoreDefaultThemeFile { ref file_key, .. }
-            if file_key == "home_icons/explorer.png"
+            if file_key == "app_icons/explorer.png"
     ));
     assert!(
         diagnostic_asset_checks(&root)
             .iter()
-            .find(|check| check.label == "home_icons/explorer.png")
+            .find(|check| check.label == "app_icons/explorer.png")
             .is_some_and(|check| check.status == DiagnosticStatus::Pass)
     );
 

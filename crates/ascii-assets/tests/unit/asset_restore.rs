@@ -13,7 +13,7 @@ fn management_and_task_images_are_distinct_embedded_and_recoverable() {
         "disks",
         "tasks",
     ] {
-        let relative = format!("launcher_icons/{key}.png");
+        let relative = format!("app_icons/{key}.png");
         let file = embedded_default_theme_file(&relative).expect("embedded management PNG");
         assert!(
             seen.insert(file.contents.to_vec()),
@@ -36,10 +36,10 @@ fn management_and_task_images_are_distinct_embedded_and_recoverable() {
     ] {
         let id = format!("builtin.{key}");
         assert_eq!(
-            store.launcher_icon(&id).unwrap().image_path(),
-            Some(format!("launcher_icons/{key}.png").as_str())
+            store.app_icon(&id).unwrap().image_path(),
+            Some(format!("app_icons/{key}.png").as_str())
         );
-        assert!(store.launcher_icon_image_bytes(&id).is_some());
+        assert!(store.app_icon_image_bytes(&id).is_some());
     }
 }
 use crate::{AssetCheckStatus, check_default_theme, check_required_assets};
@@ -82,22 +82,22 @@ fn restores_the_complete_default_theme_including_images() {
     assert!(check_default_theme(root.path()).is_ok());
     assert!(
         root.path()
-            .join("themes/default/home_icons/explorer.png")
+            .join("themes/default/app_icons/explorer.png")
             .is_file()
     );
     assert!(
         root.path()
-            .join("themes/default/home_icons/system_status.png")
+            .join("themes/default/app_icons/system_status.png")
             .is_file()
     );
     assert!(
         root.path()
-            .join("themes/default/launcher_icons/command_line.png")
+            .join("themes/default/app_icons/command_line.png")
             .is_file()
     );
     assert!(
         root.path()
-            .join("themes/default/launcher_icons/editor.png")
+            .join("themes/default/app_icons/editor.png")
             .is_file()
     );
 }
@@ -158,24 +158,23 @@ fn automatic_recovery_repairs_corrupt_defaults_and_preserves_custom_content() {
     let root = TempDir::new("automatic-custom-content");
     restore_default_theme(root.path()).unwrap();
     let theme = root.path().join("themes/default");
-    let home_path = theme.join("home_icons.toml");
-    let custom_home = fs::read_to_string(&home_path)
+    let catalog = theme.join("app_icons.toml");
+    let custom_catalog = fs::read_to_string(&catalog)
         .unwrap()
         .replace("label = \"Explorer\"", "label = \"My Explorer\"")
-        .replace("home_icons/explorer.png", "home_icons/custom.png");
-    fs::write(&home_path, &custom_home).unwrap();
-    let custom_image = fs::read(theme.join("home_icons/settings.png")).unwrap();
-    fs::write(theme.join("home_icons/custom.png"), &custom_image).unwrap();
+        .replace("app_icons/explorer.png", "app_icons/custom.png");
+    fs::write(&catalog, &custom_catalog).unwrap();
+    let custom_image = fs::read(theme.join("app_icons/settings.png")).unwrap();
+    fs::write(theme.join("app_icons/custom.png"), &custom_image).unwrap();
     let custom_banner = "schema_version = 1\n[items.tundraux]\nlines = [\"CUSTOM\"]\n";
     fs::write(theme.join("banner.toml"), custom_banner).unwrap();
     fs::write(theme.join("weathr/world/house.txt"), "CUSTOM HOUSE\n").unwrap();
 
     let corrupt = [
         ("explorer_icons", "explorer_icons.toml"),
-        ("launcher_icons", "launcher_icons.toml"),
         ("weathr/render/clock_font", "weathr/render/clock_font.toml"),
         ("weathr/animation/cloud_0", "weathr/animation/cloud_0.txt"),
-        ("home_icons/logs.png", "home_icons/logs.png"),
+        ("app_icons/logs.png", "app_icons/logs.png"),
     ];
     for (_, relative_path) in corrupt {
         fs::write(theme.join(relative_path), b"\xff\x00broken").unwrap();
@@ -187,7 +186,7 @@ fn automatic_recovery_repairs_corrupt_defaults_and_preserves_custom_content() {
     for (key, _) in corrupt {
         assert!(report.repaired.iter().any(|file| file.key == key));
     }
-    assert_eq!(fs::read_to_string(home_path).unwrap(), custom_home);
+    assert_eq!(fs::read_to_string(catalog).unwrap(), custom_catalog);
     assert_eq!(
         fs::read_to_string(theme.join("banner.toml")).unwrap(),
         custom_banner
@@ -198,11 +197,11 @@ fn automatic_recovery_repairs_corrupt_defaults_and_preserves_custom_content() {
         &["CUSTOM HOUSE"]
     );
     assert_eq!(
-        store.home_icon_image_bytes("explorer"),
+        store.app_icon_image_bytes("explorer"),
         Some(custom_image.as_slice())
     );
     assert_eq!(
-        store.home_icon_catalog().icon("explorer").unwrap().label(),
+        store.app_icon_catalog().icon("explorer").unwrap().label(),
         Some("My Explorer")
     );
 }
@@ -232,7 +231,7 @@ fn automatic_recovery_uses_memory_when_root_is_a_file_without_creating_asset_dir
         store.banner_lines("tundraux").unwrap(),
         expected.banner_lines("tundraux").unwrap()
     );
-    assert_eq!(store.home_icon_catalog(), expected.home_icon_catalog());
+    assert_eq!(store.app_icon_catalog(), expected.app_icon_catalog());
     assert_eq!(store.clock_font(), expected.clock_font());
     assert_eq!(
         store.max_asset_dimensions(),
@@ -247,29 +246,14 @@ fn automatic_recovery_uses_memory_when_root_is_a_file_without_creating_asset_dir
     for icon in expected.explorer_icons() {
         assert_eq!(store.explorer_icon(icon.key()).unwrap(), icon);
     }
-    for icon in expected.home_icon_catalog().icons() {
+    for icon in expected.app_icon_catalog().icons() {
         assert_eq!(
-            store.home_icon_image_bytes(icon.key()),
-            expected.home_icon_image_bytes(icon.key())
+            store.app_icon_image_bytes(icon.key()),
+            expected.app_icon_image_bytes(icon.key())
         );
         assert_eq!(
-            store.home_icon_image_path(icon.key()),
+            store.app_icon_image_path(icon.key()),
             icon.image_path()
-                .map(|path| root.join("themes/default").join(path))
-        );
-    }
-    for key in ["builtin.command-line", "builtin.editor"] {
-        assert_eq!(store.launcher_icon(key), expected.launcher_icon(key));
-        assert_eq!(
-            store.launcher_icon_image_bytes(key),
-            expected.launcher_icon_image_bytes(key)
-        );
-        assert_eq!(
-            store.launcher_icon_image_path(key),
-            expected
-                .launcher_icon(key)
-                .unwrap()
-                .image_path()
                 .map(|path| root.join("themes/default").join(path))
         );
     }
@@ -284,7 +268,7 @@ fn automatic_recovery_continues_after_individual_failures_and_cleans_staging_fil
     let root = TempDir::new("automatic-mixed-recovery");
     restore_default_theme(root.path()).unwrap();
     let theme = root.path().join("themes/default");
-    for relative in ["banner.toml", "home_icons/explorer.png"] {
+    for relative in ["banner.toml", "app_icons/explorer.png"] {
         let path = theme.join(relative);
         fs::remove_file(&path).unwrap();
         fs::create_dir(&path).unwrap();
@@ -297,15 +281,15 @@ fn automatic_recovery_continues_after_individual_failures_and_cleans_staging_fil
     assert_eq!(report.repaired.len(), 1);
     assert_eq!(report.repaired[0].key, "weathr/world/tree");
     assert_eq!(
-        store.home_icon_image_bytes("explorer"),
+        store.app_icon_image_bytes("explorer"),
         Some(
-            embedded_default_theme_file("home_icons/explorer.png")
+            embedded_default_theme_file("app_icons/explorer.png")
                 .unwrap()
                 .contents
         )
     );
     assert!(store.banner_lines("tundraux").is_ok());
-    for directory in [&theme, &theme.join("home_icons")] {
+    for directory in [&theme, &theme.join("app_icons")] {
         for entry in fs::read_dir(directory).unwrap() {
             assert!(
                 !entry
@@ -316,7 +300,7 @@ fn automatic_recovery_continues_after_individual_failures_and_cleans_staging_fil
             );
         }
     }
-    for relative in ["banner.toml", "home_icons/explorer.png"] {
+    for relative in ["banner.toml", "app_icons/explorer.png"] {
         assert_eq!(
             fs::read(theme.join(relative).join("keep")).unwrap(),
             b"leave obstruction intact"
@@ -325,57 +309,64 @@ fn automatic_recovery_continues_after_individual_failures_and_cleans_staging_fil
 }
 
 #[test]
-fn automatic_recovery_validates_required_launcher_entries() {
-    let root = TempDir::new("automatic-invalid-launcher");
+fn automatic_recovery_validates_required_application_icons() {
+    let root = TempDir::new("automatic-invalid-app-icons");
     restore_default_theme(root.path()).unwrap();
     fs::write(
-        root.path().join("themes/default/launcher_icons.toml"),
+        root.path().join("themes/default/app_icons.toml"),
         "schema_version = 1\n[items]\n",
     )
     .unwrap();
     let (store, report) =
         AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
     assert_eq!(report.repaired.len(), 1);
-    assert_eq!(report.repaired[0].key, "launcher_icons");
+    assert_eq!(report.repaired[0].key, "app_icons");
     assert!(
         report.repaired[0]
             .issue
             .contains("missing required built-in application icon")
     );
-    assert!(store.launcher_icon("builtin.editor").is_some());
+    assert!(store.app_icon("builtin.editor").is_some());
 }
 
 #[test]
-fn older_default_launcher_catalog_keeps_its_overrides_and_gains_the_clock_icon() {
-    let root = TempDir::new("older-launcher-catalog");
+fn legacy_icon_catalogs_share_application_ids_and_keep_overrides() {
+    let root = TempDir::new("legacy-app-icons");
     restore_default_theme(root.path()).unwrap();
     let theme = root.path().join("themes/default");
-    let catalog = theme.join("launcher_icons.toml");
-    let mut contents: toml::Table = fs::read_to_string(&catalog).unwrap().parse().unwrap();
-    let items = contents.get_mut("items").unwrap().as_table_mut().unwrap();
-    items.remove("builtin.clock").unwrap();
-    items.get_mut("builtin.command-line").unwrap()["label"] = "Custom Command Line".into();
-    let custom_catalog = toml::to_string(&contents).unwrap();
-    fs::write(&catalog, &custom_catalog).unwrap();
-    let clock_path = "launcher_icons/clock.png";
+    fs::remove_file(theme.join("app_icons.toml")).unwrap();
+    let home = "schema_version = 1\n[items.explorer]\nlines = ['FILES']\n\
+        [items.settings]\nlines = ['HOME']\n";
+    let launcher = "schema_version = 1\n[items.'builtin.settings']\nlines = ['APP']\n";
+    fs::write(theme.join("home_icons.toml"), home).unwrap();
+    fs::write(theme.join("launcher_icons.toml"), launcher).unwrap();
+    let clock_path = "app_icons/clock.png";
     fs::remove_file(theme.join(clock_path)).unwrap();
 
     let store = AsciiAssetStore::load_with_root(root.path(), DEFAULT_THEME_ID).unwrap();
-    let clock = store.launcher_icon("builtin.clock").unwrap();
-    assert_eq!(clock.image_path(), Some(clock_path));
     assert_eq!(
-        store.launcher_icon_image_bytes("builtin.clock"),
+        store.app_icon("builtin.explorer").unwrap().lines(),
+        ["FILES"]
+    );
+    assert_eq!(store.app_icon("settings").unwrap().lines(), ["APP"]);
+    assert_eq!(
+        store.app_icon_image_bytes("builtin.clock"),
         Some(embedded_default_theme_file(clock_path).unwrap().contents)
     );
-    assert_eq!(
-        store.launcher_icon("builtin.command-line").unwrap().label(),
-        Some("Custom Command Line")
-    );
 
-    let (_, report) = AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
+    let (recovered, report) =
+        AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
     assert_eq!(report.repaired.len(), 1);
     assert_eq!(report.repaired[0].key, clock_path);
-    assert_eq!(fs::read_to_string(catalog).unwrap(), custom_catalog);
+    assert_eq!(recovered.app_icon_catalog(), store.app_icon_catalog());
+    assert_eq!(
+        fs::read_to_string(theme.join("home_icons.toml")).unwrap(),
+        home
+    );
+    assert_eq!(
+        fs::read_to_string(theme.join("launcher_icons.toml")).unwrap(),
+        launcher
+    );
 }
 
 #[test]
@@ -399,28 +390,16 @@ fn restore_atomically_replaces_the_destination_instead_of_truncating_it() {
 }
 
 #[test]
-fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_catalogs() {
+fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_the_catalog() {
     let root = TempDir::new("custom-image-dependencies");
     restore_default_theme(root.path()).unwrap();
     let theme = root.path().join("themes/default");
-    let mut custom_catalogs = Vec::new();
-    for (catalog, original, custom) in [
-        (
-            "home_icons.toml",
-            "home_icons/explorer.png",
-            "custom/missing.png",
-        ),
-        (
-            "launcher_icons.toml",
-            "launcher_icons/editor.png",
-            "custom/unreadable.png",
-        ),
-    ] {
-        let path = theme.join(catalog);
-        let contents = fs::read_to_string(&path).unwrap().replace(original, custom);
-        fs::write(&path, &contents).unwrap();
-        custom_catalogs.push((path, contents));
-    }
+    let catalog = theme.join("app_icons.toml");
+    let custom_catalog = fs::read_to_string(&catalog)
+        .unwrap()
+        .replace("app_icons/explorer.png", "custom/missing.png")
+        .replace("app_icons/editor.png", "custom/unreadable.png");
+    fs::write(&catalog, &custom_catalog).unwrap();
     // A directory is a deterministic unreadable image on every supported platform.
     let unreadable = theme.join("custom/unreadable.png");
     fs::create_dir_all(&unreadable).unwrap();
@@ -428,15 +407,15 @@ fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_ca
     let custom_banner = "schema_version = 1\n[items.tundraux]\nlines = [\"MY BANNER\"]\n";
     fs::write(theme.join("banner.toml"), custom_banner).unwrap();
     // Combine a missing custom image dependency with an unwritable default image.
-    let blocked_default = theme.join("home_icons/explorer.png");
+    let blocked_default = theme.join("app_icons/explorer.png");
     fs::remove_file(&blocked_default).unwrap();
     fs::create_dir(&blocked_default).unwrap();
 
     let (mut store, report) =
         AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
     assert!(report.repaired.is_empty());
-    assert_eq!(report.fallback.len(), 3);
-    for key in ["home_icons", "launcher_icons", "home_icons/explorer.png"] {
+    assert_eq!(report.fallback.len(), 2);
+    for key in ["app_icons", "app_icons/explorer.png"] {
         assert!(
             report
                 .fallback
@@ -444,29 +423,24 @@ fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_ca
                 .any(|file| file.key == key && file.repair_error.is_some())
         );
     }
-    for (path, contents) in custom_catalogs {
-        assert_eq!(fs::read_to_string(path).unwrap(), contents);
-    }
+    assert_eq!(fs::read_to_string(catalog).unwrap(), custom_catalog);
     assert!(!theme.join("custom/missing.png").exists());
     assert_eq!(fs::read(unreadable.join("keep")).unwrap(), b"custom data");
     assert_eq!(store.root(), root.path());
     assert_eq!(store.banner_lines("tundraux").unwrap(), &["MY BANNER"]);
+    assert_eq!(store.app_icon_image_path("explorer"), Some(blocked_default));
     assert_eq!(
-        store.home_icon_image_path("explorer"),
-        Some(blocked_default)
-    );
-    assert_eq!(
-        store.home_icon_image_bytes("explorer"),
+        store.app_icon_image_bytes("explorer"),
         Some(
-            embedded_default_theme_file("home_icons/explorer.png")
+            embedded_default_theme_file("app_icons/explorer.png")
                 .unwrap()
                 .contents
         )
     );
     assert_eq!(
-        store.launcher_icon_image_bytes("builtin.editor"),
+        store.app_icon_image_bytes("builtin.editor"),
         Some(
-            embedded_default_theme_file("launcher_icons/editor.png")
+            embedded_default_theme_file("app_icons/editor.png")
                 .unwrap()
                 .contents
         )
@@ -474,5 +448,5 @@ fn automatic_recovery_completes_custom_image_dependencies_without_overwriting_ca
     store
         .reload()
         .expect("reloading retains the complete fallback dependency graph");
-    assert!(store.home_icon_image_bytes("explorer").is_some());
+    assert!(store.app_icon_image_bytes("explorer").is_some());
 }

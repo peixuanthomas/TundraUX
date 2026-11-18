@@ -50,12 +50,12 @@ fn detail_motion_keeps_source_and_visible_details_readable() {
 fn script_launcher_reuses_editor_art_in_existing_themes() {
     let assets = ui::RuntimeAsciiAssets::load_default().unwrap();
     assert!(std::ptr::eq(
-        assets.launcher_icon("builtin.editor").unwrap(),
-        assets.launcher_icon("builtin.script-editor").unwrap()
+        assets.app_icon("builtin.editor").unwrap(),
+        assets.app_icon("builtin.script-editor").unwrap()
     ));
     assert_eq!(
-        assets.launcher_icon_image_bytes("builtin.editor"),
-        assets.launcher_icon_image_bytes("builtin.script-editor")
+        assets.app_icon_image_bytes("builtin.editor"),
+        assets.app_icon_image_bytes("builtin.script-editor")
     );
 }
 

@@ -9,9 +9,7 @@ mod asset_validation;
 mod clock_font;
 mod embedded_defaults;
 
-pub use artwork::{
-    ArtItem, ArtSet, ExplorerIcon, HomeIcon, HomeIconCatalog, LauncherIcon, TextArt,
-};
+pub use artwork::{AppIcon, AppIconCatalog, ArtItem, ArtSet, ExplorerIcon, TextArt};
 pub use asset_distribution::{
     cargo_profile_dir_from_out_dir, copy_canonical_assets_to_profile_dir,
 };

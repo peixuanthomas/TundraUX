@@ -90,17 +90,16 @@ pub(crate) fn write_asset_help(output: &mut impl Write) -> std::io::Result<()> {
     )?;
     writeln!(
         output,
-        "  --<item>    Print one item from a TOML art set, such as --launcher"
+        "  --<item>    Print one item from a TOML art set, such as --builtin.launcher"
     )?;
     writeln!(output)?;
     writeln!(output, "Examples:")?;
     writeln!(output, "  tundra-cli debug asset banner")?;
     writeln!(output, "  tundra-cli debug asset explorer_icons -a")?;
     writeln!(output, "  tundra-cli debug asset explorer_icons --folder")?;
-    writeln!(output, "  tundra-cli debug asset home_icons --launcher")?;
     writeln!(
         output,
-        "  tundra-cli debug asset launcher_icons --builtin.command-line"
+        "  tundra-cli debug asset app_icons --builtin.command-line"
     )?;
     writeln!(output)?;
     writeln!(output, "Available assets:")?;

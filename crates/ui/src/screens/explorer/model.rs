@@ -1,4 +1,4 @@
-use crate::home_icons::{AssetError, RuntimeAsciiAssets};
+use crate::{AssetError, RuntimeAsciiAssets};
 
 pub use app::explorer::{ExplorerQuickLocationKind, ExplorerSortDirection};
 

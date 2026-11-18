@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, btree_map::Entry};
 use std::path::{Component, Path};
 
 use serde::Deserialize;
@@ -73,9 +74,8 @@ impl ArtItem {
     }
 }
 
-pub type HomeIcon = ArtItem;
+pub type AppIcon = ArtItem;
 pub type ExplorerIcon = ArtItem;
-pub type LauncherIcon = ArtItem;
 
 pub(crate) const EXPLORER_ENTRY_AND_LOCATION_ICON_KEYS: &[&str] = &[
     "folder",
@@ -134,32 +134,40 @@ impl ArtSet {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HomeIconCatalog {
-    icons: BTreeMap<String, ArtItem>,
-    labels: BTreeMap<String, String>,
+pub struct AppIconCatalog {
+    icons: BTreeMap<String, AppIcon>,
 }
 
-impl HomeIconCatalog {
-    pub fn icon_for_label(&self, label: &str) -> Option<&ArtItem> {
-        let key = self
-            .labels
-            .get(label)
-            .map(String::as_str)
-            .unwrap_or("default");
-
-        self.icons.get(key).or_else(|| self.icons.get("default"))
+impl AppIconCatalog {
+    pub fn icon(&self, key: &str) -> Option<&AppIcon> {
+        let id = app_icon_id(key);
+        self.icons.get(id.as_ref()).or_else(|| {
+            if id == "builtin.script-editor" {
+                self.icons.get("builtin.editor")
+            } else {
+                None
+            }
+        })
     }
 
-    pub fn icon(&self, key: &str) -> Option<&ArtItem> {
-        self.icons.get(key)
+    pub fn icon_for_label(&self, label: &str) -> Option<&AppIcon> {
+        self.icon(label)
+            .or_else(|| self.icons().find(|icon| icon.label() == Some(label)))
+            .or_else(|| self.icon("default"))
     }
 
-    pub fn icon_for_key(&self, key: &str) -> Option<&ArtItem> {
-        self.icon(key)
-    }
-
-    pub fn icons(&self) -> impl Iterator<Item = &ArtItem> {
+    pub fn icons(&self) -> impl Iterator<Item = &AppIcon> {
         self.icons.values()
+    }
+}
+
+fn app_icon_id(key: &str) -> Cow<'_, str> {
+    match key {
+        "system_status" => Cow::Borrowed("builtin.system-status"),
+        "user_management" => Cow::Borrowed("builtin.users"),
+        "default" => Cow::Borrowed(key),
+        key if key.starts_with("builtin.") => Cow::Borrowed(key),
+        key => Cow::Owned(format!("builtin.{key}")),
     }
 }
 
@@ -188,76 +196,64 @@ pub(crate) fn load_text_art(
     })
 }
 
-pub(crate) fn load_home_icon_catalog(
-    resolver: &AssetResolver,
-    theme_id: &str,
-) -> Result<HomeIconCatalog, AssetError> {
-    let art_set = load_art_set(resolver, theme_id, "home_icons", "home_icons.toml")?;
-    let mut icons = BTreeMap::new();
-    let mut labels = BTreeMap::new();
-    for item in art_set.items.into_values() {
-        if let Some(label) = &item.label {
-            labels.insert(label.clone(), item.key.clone());
-        }
-        icons.insert(item.key.clone(), item);
-    }
-
-    for required in [
-        "explorer",
-        "launcher",
-        "settings",
-        "system_status",
-        "user_management",
-        "default",
-    ] {
-        if !icons.contains_key(required) {
-            return Err(AssetError::InvalidAsset {
-                asset: "home_icons".to_string(),
-                message: format!("missing required home icon {required}"),
-            });
-        }
-    }
-
-    // Older custom themes remain usable without modifying their files. The default
-    // theme is upgraded by the asset repair path before it is loaded.
-    if theme_id == crate::DEFAULT_THEME_ID {
-        for required in ["logs"] {
-            if !icons.contains_key(required) {
-                return Err(AssetError::InvalidAsset {
-                    asset: "home_icons".to_string(),
-                    message: format!("missing required home icon {required}"),
-                });
-            }
-        }
-    }
-    if let Some(logs) = icons.get("logs") {
-        if logs.width != 7 || logs.height != 4 {
-            return Err(AssetError::InvalidAsset {
-                asset: "home_icons".to_string(),
-                message: "home icon logs must be exactly 7x4".to_string(),
-            });
-        }
-    }
-
-    Ok(HomeIconCatalog { icons, labels })
-}
-
-pub(crate) fn load_launcher_icons(
+pub(crate) fn load_app_icons(
     resolver: &mut AssetResolver,
     theme_id: &str,
-) -> Result<ArtSet, AssetError> {
-    let mut icons = load_art_set(resolver, theme_id, "launcher_icons", "launcher_icons.toml")?;
-    for required in ["builtin.command-line", "builtin.editor"] {
-        if icons.get(required).is_none() {
-            return Err(AssetError::InvalidAsset {
-                asset: "launcher_icons".to_string(),
-                message: format!("missing required built-in application icon {required}"),
-            });
+) -> Result<AppIconCatalog, AssetError> {
+    let icons = match load_art_set(resolver, theme_id, "app_icons", "app_icons.toml") {
+        Ok(current) => current.items,
+        Err(missing @ AssetError::MissingAsset { .. }) => {
+            let home = match load_art_set(resolver, theme_id, "home_icons", "home_icons.toml") {
+                Err(AssetError::MissingAsset { .. }) => return Err(missing),
+                result => result?,
+            };
+            let launcher =
+                load_art_set(resolver, theme_id, "launcher_icons", "launcher_icons.toml")?;
+            let mut icons: BTreeMap<_, _> = home
+                .items
+                .into_values()
+                .map(|mut icon| {
+                    icon.key = app_icon_id(&icon.key).into_owned();
+                    (icon.key.clone(), icon)
+                })
+                .collect();
+            // Older themes can define an explicit application ID in the Launcher catalog.
+            icons.extend(launcher.items);
+            if theme_id == crate::DEFAULT_THEME_ID {
+                let catalog = embedded_default_theme_file("app_icons").expect("embedded app icons");
+                let mut embedded = resolver.clone();
+                embedded.use_embedded_default(catalog.relative_path, catalog.contents);
+                let defaults =
+                    load_art_set(&embedded, theme_id, catalog.key, catalog.relative_path)?;
+                for (key, icon) in defaults.items {
+                    if let Entry::Vacant(entry) = icons.entry(key) {
+                        if let Some(path) = icon.image_path() {
+                            let file =
+                                embedded_default_theme_file(path).expect("embedded app icon");
+                            resolver.use_embedded_default(file.relative_path, file.contents);
+                        }
+                        entry.insert(icon);
+                    }
+                }
+            }
+            icons
         }
-    }
-    if theme_id == crate::DEFAULT_THEME_ID {
-        for required in [
-            "builtin.users",
+        Err(error) => return Err(error),
+    };
+
+    let core = [
+        "default",
+        "builtin.explorer",
+        "builtin.launcher",
+        "builtin.settings",
+        "builtin.system-status",
+        "builtin.users",
+        "builtin.command-line",
+        "builtin.editor",
+    ];
+    let default_apps: &[&str] = if theme_id == crate::DEFAULT_THEME_ID {
+        &[
+            "builtin.clock",
             "builtin.logs",
             "builtin.services",
             "builtin.processes",
@@ -269,38 +265,27 @@ pub(crate) fn load_launcher_icons(
             "builtin.backups",
             "builtin.scheduled-tasks",
             "builtin.tasks",
-        ] {
-            if icons.get(required).is_none() {
-                return Err(AssetError::InvalidAsset {
-                    asset: "launcher_icons".into(),
-                    message: format!("missing required built-in application icon {required}"),
-                });
-            }
-        }
-
-        // Keep older default catalogs and their overrides usable after upgrading.
-        let clock_key = "builtin.clock";
-        if icons.get(clock_key).is_none() {
-            let catalog = embedded_default_theme_file("launcher_icons").expect("embedded catalog");
-            let mut defaults_resolver = resolver.clone();
-            defaults_resolver.use_embedded_default(catalog.relative_path, catalog.contents);
-            let mut defaults = load_art_set(
-                &defaults_resolver,
-                theme_id,
-                catalog.key,
-                catalog.relative_path,
-            )?;
-            let clock = defaults
-                .items
-                .remove(clock_key)
-                .expect("embedded Clock icon");
-            let png = embedded_default_theme_file("launcher_icons/clock.png")
-                .expect("embedded Clock image");
-            resolver.use_embedded_default(png.relative_path, png.contents);
-            icons.items.insert(clock_key.to_string(), clock);
+        ]
+    } else {
+        &[]
+    };
+    for required in core.into_iter().chain(default_apps.iter().copied()) {
+        if !icons.contains_key(required) {
+            return Err(AssetError::InvalidAsset {
+                asset: "app_icons".to_string(),
+                message: format!("missing required built-in application icon {required}"),
+            });
         }
     }
-    Ok(icons)
+    if let Some(logs) = icons.get("builtin.logs")
+        && (logs.width() != 7 || logs.height() != 4)
+    {
+        return Err(AssetError::InvalidAsset {
+            asset: "app_icons".to_string(),
+            message: "application icon builtin.logs must be exactly 7x4".to_string(),
+        });
+    }
+    Ok(AppIconCatalog { icons })
 }
 
 pub(crate) fn load_explorer_icons(

@@ -359,10 +359,10 @@ fn asset_args_select_help_rendered_source_and_named_item_output() {
         }))
     );
     assert_eq!(
-        parse_args(["debug", "asset", "home_icons", "--launcher"]),
+        parse_args(["debug", "asset", "app_icons", "--builtin.launcher"]),
         Ok(CliCommand::Asset(AssetAction::Show {
-            name: "home_icons".to_string(),
-            output: AssetOutput::Item("launcher".to_string()),
+            name: "app_icons".to_string(),
+            output: AssetOutput::Item("builtin.launcher".to_string()),
         }))
     );
     assert_eq!(
@@ -542,7 +542,7 @@ fn asset_command_renders_art_sets_and_individual_items() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let exit_code = run_with_platform_and_asset_root(
-        ["debug", "asset", "launcher_icons", "--builtin.command-line"],
+        ["debug", "asset", "app_icons", "--builtin.command-line"],
         &platform,
         &mut stdout,
         &mut stderr,
@@ -609,7 +609,7 @@ fn asset_command_supports_unique_file_names_and_reports_missing_values() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let exit_code = run_with_platform_and_asset_root(
-        ["debug", "asset", "home_icons", "--not_present"],
+        ["debug", "asset", "app_icons", "--not_present"],
         &UnsupportedPlatform,
         &mut stdout,
         &mut stderr,
@@ -619,7 +619,7 @@ fn asset_command_supports_unique_file_names_and_reports_missing_values() {
     assert!(stdout.is_empty());
     let error = String::from_utf8(stderr).expect("unknown item error should be utf8");
     assert!(
-        error.contains("asset \"home_icons\" has no item \"not_present\""),
+        error.contains("asset \"app_icons\" has no item \"not_present\""),
         "unexpected error: {error}"
     );
 

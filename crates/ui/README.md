@@ -15,7 +15,7 @@
 | [`automation`](src/automation.rs) | Captures control trees, bounds, sensitive masks, and visible text from actual rendered frames. |
 | [`workspace/`](src/workspace/) | `tree` stores splits; `layout` calculates pane geometry; `chrome`, `panel`, `split_menu`, and `taskbar` draw global window controls. `frame` translates and clips AppHost frame data. |
 | [`editor_media`](src/editor_media.rs), [`terminal_images`](src/terminal_images.rs) | Detect and prepare graphics and fallbacks; crop, cache, and place images from the child terminal. |
-| [`assets/`](src/assets/) | Resolves Home icons and setup preview assets. See [asset sources](assets/README.md) for the included icons and timezone map. |
+| [`assets/`](src/assets/) | Accesses the shared application icon catalog and setup preview assets. See [asset sources](assets/README.md) for the included icons and timezone map. |
 | [`ui_test`](src/ui_test.rs), [`style_preview`](src/style_preview.rs), [`rainbow_text_preview`](src/rainbow_text_preview.rs) | Provide demo data and renderers for interactive previews owned by Shell. |
 | [`build.rs`](build.rs) | Copies canonical resources to the build output for renderers and previews. |
 
@@ -150,7 +150,7 @@ Default acceleration/constant-speed/deceleration phases are page `[40, 80, 40]`,
 
 `TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. `TerminalImageCache` clips and caches Kitty, Sixel, and iTerm2 images by viewport. An app host captures the visible image placements alongside its rasterized cells. Shell rebuilds native graphics in the pane and retires native resources when the pane moves, closes, or becomes obscured.
 
-Launcher tiles use themed ASCII artwork or images for built-in apps. Image layout uses the terminal's measured cell size. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
+Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
 
 Text terminals, dialog occlusion, layout transitions, and transparent or overlapping images use character-block compositing. Snapshots preserve wide characters, italics, and native cursor shapes; the editor's Vim region shares rendering, PTY sizing, and mouse coordinates through `editor_vim_terminal_area`.
 

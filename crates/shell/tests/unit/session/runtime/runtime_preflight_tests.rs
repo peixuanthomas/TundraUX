@@ -485,7 +485,7 @@ fn startup_automatically_repairs_without_interactive_input() {
     assert!(!report.repaired.is_empty());
     assert!(report.fallback.is_empty());
     assert!(ui::check_default_theme(&root).is_ok());
-    assert!(store.home_icon_image_bytes("explorer").is_some());
+    assert!(store.app_icon_image_bytes("explorer").is_some());
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -496,7 +496,7 @@ fn startup_uses_memory_when_asset_root_is_not_writable() {
     let (store, report) =
         ui::AsciiAssetStore::load_default_with_root_and_recovery(&root).expect("embedded recovery");
     assert!(!report.fallback.is_empty());
-    assert!(store.home_icon_image_bytes("explorer").is_some());
+    assert!(store.app_icon_image_bytes("explorer").is_some());
     assert_eq!(std::fs::read(&root).unwrap(), b"not a directory");
     std::fs::remove_file(root).unwrap();
 }

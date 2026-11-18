@@ -16,15 +16,15 @@ fn embedded_default_theme_covers_required_ascii_assets_and_images() {
 
     assert_eq!(embedded.len(), EMBEDDED_DEFAULT_THEME_FILES.len());
     assert!(required.is_subset(&embedded));
-    assert!(embedded.contains(&("launcher_icons/editor.png", "launcher_icons/editor.png")));
+    assert!(embedded.contains(&("app_icons/editor.png", "app_icons/editor.png")));
     for path in [
-        "launcher_icons/services.png",
-        "launcher_icons/processes.png",
-        "launcher_icons/packages.png",
-        "launcher_icons/network.png",
-        "launcher_icons/disks.png",
-        "launcher_icons/tasks.png",
-        "launcher_icons/clock.png",
+        "app_icons/services.png",
+        "app_icons/processes.png",
+        "app_icons/packages.png",
+        "app_icons/network.png",
+        "app_icons/disks.png",
+        "app_icons/tasks.png",
+        "app_icons/clock.png",
     ] {
         assert!(
             embedded.contains(&(path, path)),

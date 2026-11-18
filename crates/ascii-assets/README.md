@@ -15,15 +15,15 @@
 
 ## Asset formats
 
-The default manifest contains 25 items: 20 text assets, 4 TOML art sets, and 1 clock font.
+The default manifest contains 24 items: 20 text assets, 3 TOML art sets, and 1 clock font.
 
 - Text assets contain only printable ASCII; TOML art sets use schema v1.
 - Images support GIF, JPEG, PNG, and WebP; paths must be relative paths within the asset root.
 - Language resources live in `locales/<code>/`, containing `manifest.toml` and recursively read `.ftl` files.
 - Default image bytes are shared through a static asset table; validation, repair, and in-memory fallback reuse the same data.
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
-- Home resolves system-application icons from the existing built-in application artwork and images when no Home-specific icon is defined.
-- Launcher uses the themed Home icons for Explorer, Settings, and System Status when there is no Launcher-specific entry. Older default Launcher catalogs inherit the embedded Clock artwork and image.
+- `app_icons.toml` defines ASCII artwork and optional images by built-in application ID. Home and Launcher use the same application catalog.
+- Older themes can still supply their former icon files. The loader combines them in memory by app ID, using explicit Launcher entries when both files define the same app. Older default themes receive missing icons from the bundled theme.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
 
 Asset roots are resolved in this order:

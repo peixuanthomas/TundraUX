@@ -288,7 +288,7 @@ fn resource_repair_action_restores_chinese_and_graphics_then_requests_restart() 
     let chinese = f.root.join("assets/locales/zh-CN/recovery/startup.ftl");
     let image = f
         .root
-        .join("assets/themes/default/home_icons/system_status.png");
+        .join("assets/themes/default/app_icons/system_status.png");
     std::fs::write(&chinese, "broken = {\n").unwrap();
     std::fs::remove_file(&image).unwrap();
     f.state
@@ -334,7 +334,7 @@ fn failed_resource_repair_keeps_two_actions_and_exit_does_not_restart() {
     let mut f = fixture();
     let image = f
         .root
-        .join("assets/themes/default/home_icons/system_status.png");
+        .join("assets/themes/default/app_icons/system_status.png");
     std::fs::remove_file(&image).unwrap();
     std::fs::create_dir(&image).unwrap();
     f.state

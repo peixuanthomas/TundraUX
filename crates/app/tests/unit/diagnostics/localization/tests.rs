@@ -78,7 +78,7 @@ fn project_summaries_use_ids_and_typed_outcomes_without_changing_raw_diagnostics
             DiagnosticStatus::Fail,
         ),
         check(
-            "asset.home_icons/explorer.png",
+            "asset.app_icons/explorer.png",
             DiagnosticCategory::Assets,
             DiagnosticStatus::Warning,
         ),

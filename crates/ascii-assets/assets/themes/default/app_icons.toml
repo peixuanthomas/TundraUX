@@ -1,34 +1,84 @@
 schema_version = 1
-name = "default-launcher-icons"
+name = "default-app-icons"
+
+[items."builtin.explorer"]
+label = "Explorer"
+image = "app_icons/explorer.png"
+lines = [
+  ' _____ ',
+  '/ ___ \',
+  '| | | |',
+  '|_____|',
+]
+
+[items."builtin.launcher"]
+label = "Launcher"
+image = "app_icons/launcher.png"
+lines = [
+  '  / \  ',
+  ' /===\ ',
+  ' | o | ',
+  ' /___\ ',
+]
+
+[items."builtin.settings"]
+label = "Settings"
+image = "app_icons/settings.png"
+lines = [
+  '-o-----',
+  '---o---',
+  '--o----',
+  '-----o-',
+]
+
+[items."builtin.system-status"]
+label = "System Status"
+image = "app_icons/system_status.png"
+lines = [
+  ' _____ ',
+  '| /\  |',
+  '|/  \_|',
+  '|_____|',
+]
+
+[items.default]
+label = "Application"
+image = "app_icons/default.png"
+lines = [
+  ' _____ ',
+  '| ? ? |',
+  '|  ?  |',
+  '|_____|',
+]
 
 [items."builtin.firewall"]
 label = "Firewall and ports"
-image = "launcher_icons/network.png"
+image = "app_icons/network.png"
 lines = [' [###] ', ' [# #] ', ' [###] ', '  ---  ']
 
 [items."builtin.ssh"]
 label = "SSH service"
-image = "launcher_icons/command_line.png"
+image = "app_icons/command_line.png"
 lines = [' _____ ', '|ssh> |', '|  <> |', '|_____|']
 
 [items."builtin.backups"]
 label = "Configuration backups"
-image = "launcher_icons/disks.png"
+image = "app_icons/disks.png"
 lines = [' _____ ', '| <== |', '| --- |', '|_____|']
 
 [items."builtin.scheduled-tasks"]
 label = "Scheduled tasks"
-image = "launcher_icons/services.png"
+image = "app_icons/services.png"
 lines = ['  ___  ', ' / | \ ', '|  L  |', ' \___/ ']
 
 [items."builtin.users"]
 label = "Users"
-image = "home_icons/user_management.png"
+image = "app_icons/users.png"
 lines = ['  o o  ', ' /| |\ ', ' / \ \ ', ' users ']
 
 [items."builtin.command-line"]
 label = "Command Line"
-image = "launcher_icons/command_line.png"
+image = "app_icons/command_line.png"
 lines = [
   ' ______ ',
   '|cmd>  |',
@@ -38,7 +88,7 @@ lines = [
 
 [items."builtin.editor"]
 label = "Editor"
-image = "launcher_icons/editor.png"
+image = "app_icons/editor.png"
 lines = [
   ' _____ ',
   '|==  |',
@@ -48,40 +98,40 @@ lines = [
 
 [items."builtin.logs"]
 label = "Logs"
-image = "home_icons/logs.png"
+image = "app_icons/logs.png"
 lines = [' ____  ', '| =  | ', '| == | ', '|____| ']
 
 [items."builtin.services"]
 label = "Services"
-image = "launcher_icons/services.png"
+image = "app_icons/services.png"
 lines = [' [===] ', ' o---o ', ' [===] ', ' o---o ']
 
 [items."builtin.processes"]
 label = "Processes"
-image = "launcher_icons/processes.png"
+image = "app_icons/processes.png"
 lines = [' | | | ', ' | | | ', ' | |_| ', ' |_|   ']
 
 [items."builtin.packages"]
 label = "Packages"
-image = "launcher_icons/packages.png"
+image = "app_icons/packages.png"
 lines = ['  ___  ', ' /___\ ', ' | + | ', ' |___| ']
 
 [items."builtin.network"]
 label = "Network"
-image = "launcher_icons/network.png"
+image = "app_icons/network.png"
 lines = ['  [o]  ', '   |   ', ' --+-- ', ' o   o ']
 
 [items."builtin.disks"]
 label = "Disks"
-image = "launcher_icons/disks.png"
+image = "app_icons/disks.png"
 lines = [' _____ ', '| (o) |', '|     |', '|___o_|']
 
 [items."builtin.tasks"]
 label = "Tasks"
-image = "launcher_icons/tasks.png"
+image = "app_icons/tasks.png"
 lines = [' _____ ', '|v == |', '|v == |', '|o____|']
 
 [items."builtin.clock"]
 label = "Clock"
-image = "launcher_icons/clock.png"
+image = "app_icons/clock.png"
 lines = ['  ___  ', ' / | \ ', '|  +--|', ' \___/ ']

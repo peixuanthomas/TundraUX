@@ -2,7 +2,6 @@ mod assets;
 pub mod automation;
 mod foundation;
 mod screens;
-pub(crate) use assets::home_icons;
 pub(crate) use foundation::input;
 pub use screens::timezone_map;
 mod editor_media;

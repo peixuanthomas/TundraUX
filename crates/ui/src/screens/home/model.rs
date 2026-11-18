@@ -1,5 +1,5 @@
-use crate::home_icons::{AssetError, HomeIcon, HomeIconCatalog, RuntimeAsciiAssets};
 use crate::screens::diagnostics::DebugDiagnosticsViewModel;
+use crate::{AppIcon, AssetError, RuntimeAsciiAssets};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,28 +188,22 @@ impl HomeViewModel {
         &self.entries
     }
 
-    pub fn home_icon_catalog(&self) -> Option<&HomeIconCatalog> {
+    pub fn home_icon_for_label(&self, label: &str) -> Option<&AppIcon> {
         self.home_icon_assets
             .as_ref()
-            .map(RuntimeAsciiAssets::home_icon_catalog)
-    }
-
-    pub fn home_icon_for_label(&self, label: &str) -> Option<&HomeIcon> {
-        self.home_icon_assets
-            .as_ref()
-            .and_then(|assets| assets.home_icon_for_label(label))
+            .and_then(|assets| assets.app_icon_for_label(label))
     }
 
     pub fn home_icon_image_path_for_label(&self, label: &str) -> Option<PathBuf> {
         let assets = self.home_icon_assets.as_ref()?;
-        let icon = assets.home_icon_for_label(label)?;
-        assets.home_icon_image_path(icon.key())
+        let icon = assets.app_icon_for_label(label)?;
+        assets.app_icon_image_path(icon.key())
     }
 
     pub fn home_icon_image_bytes_for_label(&self, label: &str) -> Option<&[u8]> {
         let assets = self.home_icon_assets.as_ref()?;
-        let icon = assets.home_icon_for_label(label)?;
-        assets.home_icon_image_bytes(icon.key())
+        let icon = assets.app_icon_for_label(label)?;
+        assets.app_icon_image_bytes(icon.key())
     }
 
     pub fn selected_entry_index(&self) -> usize {

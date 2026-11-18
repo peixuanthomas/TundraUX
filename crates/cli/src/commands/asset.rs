@@ -51,9 +51,13 @@ fn show_asset(
 
 fn find_asset(name: &str) -> Result<RequiredAsset, AssetCommandError> {
     let requested = normalize_name(name);
+    let requested = match requested.as_str() {
+        "home_icons" | "home_icons.toml" | "launcher_icons" | "launcher_icons.toml" => "app_icons",
+        name => name,
+    };
     let matches = required_assets()
         .into_iter()
-        .filter(|asset| asset_aliases(asset).iter().any(|alias| alias == &requested))
+        .filter(|asset| asset_aliases(asset).iter().any(|alias| alias == requested))
         .collect::<Vec<_>>();
 
     match matches.as_slice() {
@@ -153,8 +157,8 @@ fn render_asset(
 
     match item {
         Some(item) => {
-            let (key, value) = find_item(entries, item, asset.kind).ok_or_else(|| {
-                AssetCommandError::UnknownItem {
+            let (key, value) =
+                find_item(entries, item, asset).ok_or_else(|| AssetCommandError::UnknownItem {
                     asset: asset.key.to_string(),
                     item: item.to_string(),
                     available: entries
@@ -162,8 +166,7 @@ fn render_asset(
                         .map(|key| selector_name(key))
                         .collect::<Vec<_>>()
                         .join(", "),
-                }
-            })?;
+                })?;
             let lines = item_lines(asset.key, key, value, asset.kind)?;
             write_lines(output, &lines)
         }
@@ -193,12 +196,18 @@ fn render_asset(
 fn find_item<'a>(
     entries: &'a toml::Table,
     requested: &str,
-    kind: AssetKind,
+    asset: &RequiredAsset,
 ) -> Option<(&'a str, &'a toml::Value)> {
-    let requested = normalized_item_name(requested, kind);
+    let requested = normalized_item_name(requested, asset.kind);
     entries
         .iter()
-        .find(|(key, _)| normalized_item_name(key, kind) == requested)
+        .find(|(key, _)| {
+            let key = normalized_item_name(key, asset.kind);
+            key == requested
+                || (asset.key == "app_icons"
+                    && (key.strip_prefix("builtin.") == Some(requested.as_str())
+                        || (requested == "user_management" && key == "builtin.users")))
+        })
         .map(|(key, value)| (key.as_str(), value))
 }
 

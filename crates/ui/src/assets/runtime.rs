@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use ascii_assets::{
-    AsciiAssetStore, AssetDimensions, AssetError, ClockFontAsset, DEFAULT_THEME_ID,
-    DefaultThemeCheckReport, DefaultThemeFile, ExplorerIcon, HomeIcon, HomeIconCatalog,
-    LauncherIcon, asset_root_for_recovery_from_env_or_current_exe, check_default_theme,
-    default_theme_files, restore_default_theme,
+    AppIcon, AppIconCatalog, AsciiAssetStore, AssetDimensions, AssetError, ClockFontAsset,
+    DEFAULT_THEME_ID, DefaultThemeCheckReport, DefaultThemeFile, ExplorerIcon,
+    asset_root_for_recovery_from_env_or_current_exe, check_default_theme, default_theme_files,
+    restore_default_theme,
 };
 
 #[derive(Clone)]
@@ -61,32 +61,24 @@ impl RuntimeAsciiAssets {
         self.store.banner_lines(key)
     }
 
-    pub fn home_icon_catalog(&self) -> &HomeIconCatalog {
-        self.store.home_icon_catalog()
+    pub fn app_icon_catalog(&self) -> &AppIconCatalog {
+        self.store.app_icon_catalog()
     }
 
-    pub fn home_icon_image_path(&self, key: &str) -> Option<PathBuf> {
-        self.store.home_icon_image_path(key)
+    pub fn app_icon_image_path(&self, key: &str) -> Option<PathBuf> {
+        self.store.app_icon_image_path(key)
     }
 
-    pub fn home_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
-        self.store.home_icon_image_bytes(key)
+    pub fn app_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
+        self.store.app_icon_image_bytes(key)
     }
 
     pub fn explorer_icon(&self, key: &str) -> Result<&ExplorerIcon, AssetError> {
         self.store.explorer_icon(key)
     }
 
-    pub fn launcher_icon(&self, key: &str) -> Option<&LauncherIcon> {
-        self.store.launcher_icon(key)
-    }
-
-    pub fn launcher_icon_image_path(&self, key: &str) -> Option<PathBuf> {
-        self.store.launcher_icon_image_path(key)
-    }
-
-    pub fn launcher_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
-        self.store.launcher_icon_image_bytes(key)
+    pub fn app_icon(&self, key: &str) -> Option<&AppIcon> {
+        self.store.app_icon(key)
     }
 
     pub fn clock_font(&self) -> &ClockFontAsset {
@@ -97,12 +89,8 @@ impl RuntimeAsciiAssets {
         self.store.max_asset_dimensions()
     }
 
-    pub fn home_icon_for_label(&self, label: &str) -> Option<&HomeIcon> {
-        let catalog = self.home_icon_catalog();
-        self.store
-            .home_icon(label)
-            .or_else(|| catalog.icon_for_label(label))
-            .or_else(|| catalog.icon_for_key("default"))
+    pub fn app_icon_for_label(&self, label: &str) -> Option<&AppIcon> {
+        self.app_icon_catalog().icon_for_label(label)
     }
 }
 
@@ -122,14 +110,14 @@ impl PartialEq for RuntimeAsciiAssets {
 
 impl Eq for RuntimeAsciiAssets {}
 
-pub fn try_home_icon_for_label(label: &str) -> Result<HomeIcon, AssetError> {
+pub fn try_app_icon_for_label(label: &str) -> Result<AppIcon, AssetError> {
     let assets = RuntimeAsciiAssets::load_default()?;
     Ok(assets
-        .home_icon_for_label(label)
+        .app_icon_for_label(label)
         .cloned()
-        .expect("home icon assets must define a default icon"))
+        .expect("app icon assets must define a default icon"))
 }
 
-pub fn home_icon_for_label(label: &str) -> HomeIcon {
-    try_home_icon_for_label(label).expect("default ASCII home icon assets must load")
+pub fn app_icon_for_label(label: &str) -> AppIcon {
+    try_app_icon_for_label(label).expect("default ASCII app icon assets must load")
 }

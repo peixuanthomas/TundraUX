@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::artwork::{
-    ArtItem, ArtSet, ExplorerIcon, HomeIcon, HomeIconCatalog, LauncherIcon, TextArt, load_art_set,
-    load_explorer_icons, load_home_icon_catalog, load_launcher_icons, load_text_art,
+    AppIcon, AppIconCatalog, ArtItem, ArtSet, ExplorerIcon, TextArt, load_app_icons, load_art_set,
+    load_explorer_icons, load_text_art,
 };
 use crate::asset_error::AssetError;
 use crate::asset_manifest::{DEFAULT_THEME_ID, REQUIRED_TEXT_ARTS};
@@ -29,8 +29,7 @@ pub struct AsciiAssetStore {
     theme_id: String,
     banners: ArtSet,
     explorer_icons: ArtSet,
-    home_icons: HomeIconCatalog,
-    launcher_icons: ArtSet,
+    app_icons: AppIconCatalog,
     image_assets: BTreeMap<String, Vec<u8>>,
     load_images: bool,
     clock_font: ClockFontAsset,
@@ -94,11 +93,10 @@ impl AsciiAssetStore {
     ) -> Result<Self, AssetError> {
         let banners = load_art_set(&resolver, theme_id, "banner", "banner.toml")?;
         let explorer_icons = load_explorer_icons(&resolver, theme_id)?;
-        let home_icons = load_home_icon_catalog(&resolver, theme_id)?;
         let mut icon_resolver = resolver.clone();
-        let launcher_icons = load_launcher_icons(&mut icon_resolver, theme_id)?;
+        let app_icons = load_app_icons(&mut icon_resolver, theme_id)?;
         let image_assets = if load_images {
-            load_image_assets(&icon_resolver, theme_id, &home_icons, &launcher_icons)?
+            load_image_assets(&icon_resolver, theme_id, &app_icons)?
         } else {
             BTreeMap::new()
         };
@@ -114,8 +112,7 @@ impl AsciiAssetStore {
             theme_id: theme_id.to_string(),
             banners,
             explorer_icons,
-            home_icons,
-            launcher_icons,
+            app_icons,
             image_assets,
             load_images,
             clock_font,
@@ -149,26 +146,23 @@ impl AsciiAssetStore {
             })
     }
 
-    pub fn home_icon_catalog(&self) -> &HomeIconCatalog {
-        &self.home_icons
+    pub fn app_icon_catalog(&self) -> &AppIconCatalog {
+        &self.app_icons
     }
 
-    pub fn home_icon(&self, key: &str) -> Option<&HomeIcon> {
-        self.home_icons
-            .icon_for_key(key)
-            .or_else(|| self.launcher_icon(key))
-            .or_else(|| self.launcher_icon(&format!("builtin.{key}")))
+    pub fn app_icon(&self, key: &str) -> Option<&AppIcon> {
+        self.app_icons.icon(key)
     }
 
-    pub fn home_icon_image_path(&self, key: &str) -> Option<PathBuf> {
-        let relative_path = self.home_icon(key)?.image_path()?;
+    pub fn app_icon_image_path(&self, key: &str) -> Option<PathBuf> {
+        let relative_path = self.app_icon(key)?.image_path()?;
         self.image_assets
             .contains_key(relative_path)
             .then(|| self.resolver.asset_path(&self.theme_id, relative_path))
     }
 
-    pub fn home_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
-        let relative_path = self.home_icon(key)?.image_path()?;
+    pub fn app_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
+        let relative_path = self.app_icon(key)?.image_path()?;
         self.image_assets.get(relative_path).map(Vec::as_slice)
     }
 
@@ -182,35 +176,6 @@ impl AsciiAssetStore {
 
     pub fn explorer_icons(&self) -> impl Iterator<Item = &ExplorerIcon> {
         self.explorer_icons.items()
-    }
-
-    pub fn launcher_icon(&self, key: &str) -> Option<&LauncherIcon> {
-        let key = if key == "builtin.script-editor" {
-            "builtin.editor"
-        } else {
-            key
-        };
-        self.launcher_icons.get(key).or_else(|| {
-            let home_key = match key {
-                "builtin.explorer" => "explorer",
-                "builtin.settings" => "settings",
-                "builtin.system-status" => "system_status",
-                _ => return None,
-            };
-            self.home_icons.icon_for_key(home_key)
-        })
-    }
-
-    pub fn launcher_icon_image_path(&self, key: &str) -> Option<PathBuf> {
-        let relative_path = self.launcher_icon(key)?.image_path()?;
-        self.image_assets
-            .contains_key(relative_path)
-            .then(|| self.resolver.asset_path(&self.theme_id, relative_path))
-    }
-
-    pub fn launcher_icon_image_bytes(&self, key: &str) -> Option<&[u8]> {
-        let relative_path = self.launcher_icon(key)?.image_path()?;
-        self.image_assets.get(relative_path).map(Vec::as_slice)
     }
 
     pub fn clock_font(&self) -> &ClockFontAsset {
@@ -231,8 +196,7 @@ impl AsciiAssetStore {
         for item in self
             .banners
             .items()
-            .chain(self.home_icons.icons())
-            .chain(self.launcher_icons.items())
+            .chain(self.app_icons.icons())
             .chain(self.explorer_icons.items())
         {
             dimensions.include(item.width(), item.height());
@@ -252,12 +216,10 @@ impl AsciiAssetStore {
 fn load_image_assets(
     resolver: &AssetResolver,
     theme_id: &str,
-    home_icons: &HomeIconCatalog,
-    launcher_icons: &ArtSet,
+    app_icons: &AppIconCatalog,
 ) -> Result<BTreeMap<String, Vec<u8>>, AssetError> {
-    let relative_paths = home_icons
+    let relative_paths = app_icons
         .icons()
-        .chain(launcher_icons.items())
         .filter_map(ArtItem::image_path)
         .map(str::to_string)
         .collect::<BTreeSet<_>>();

@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::artwork::load_art_set;
+use crate::artwork::load_app_icons;
 use crate::asset_error::AssetError;
 use crate::asset_manifest::DEFAULT_THEME_ID;
 use crate::asset_validation::{AssetCheckStatus, check_default_theme, validate_default_theme_file};
@@ -66,21 +66,18 @@ pub(crate) fn recover_default_theme(
             }
         }
     }
-    // A syntactically valid custom catalog can still refer to an unavailable image.
-    // Use its complete embedded catalog in memory so every image dependency resolves
-    // to a default file already repaired above. Never rewrite healthy custom data.
-    for key in ["home_icons", "launcher_icons"] {
-        let file = embedded_default_theme_file(key).expect("embedded icon catalog");
-        let catalog = load_art_set(&resolver, DEFAULT_THEME_ID, key, file.relative_path)?;
-        let failures = catalog
-            .items()
-            .filter_map(|item| item.image_path())
-            .filter_map(|path| resolver.read_asset(DEFAULT_THEME_ID, path, path).err())
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>();
-        if failures.is_empty() {
-            continue;
-        }
+    // Keep a catalog with missing custom images on disk so it can work again when they return.
+    let key = "app_icons";
+    let file = embedded_default_theme_file(key).expect("embedded icon catalog");
+    let mut icon_resolver = resolver.clone();
+    let catalog = load_app_icons(&mut icon_resolver, DEFAULT_THEME_ID)?;
+    let failures = catalog
+        .icons()
+        .filter_map(|item| item.image_path())
+        .filter_map(|path| icon_resolver.read_asset(DEFAULT_THEME_ID, path, path).err())
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    if !failures.is_empty() {
         resolver.use_embedded_default(file.relative_path, file.contents);
         validate_default_theme_file(&resolver, file)?;
         report.repaired.retain(|recovery| recovery.key != key);

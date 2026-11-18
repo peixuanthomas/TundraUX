@@ -26,35 +26,24 @@ fn runtime_asset_copy_includes_valid_icon_assets() {
             .join("themes/default/explorer_icons.toml")
             .is_file()
     );
-    assert!(
-        copied_root
-            .join("themes/default/launcher_icons.toml")
-            .is_file()
-    );
-    assert!(
-        copied_root
-            .join("themes/default/launcher_icons/command_line.png")
-            .is_file()
-    );
-    assert!(
-        copied_root
-            .join("themes/default/launcher_icons/editor.png")
-            .is_file()
-    );
+    assert!(copied_root.join("themes/default/app_icons.toml").is_file());
     for icon in [
+        "clock",
+        "command_line",
+        "editor",
         "explorer",
         "launcher",
         "settings",
         "system_status",
         "logs",
-        "user_management",
+        "users",
         "default",
     ] {
         assert!(
             copied_root
-                .join(format!("themes/default/home_icons/{icon}.png"))
+                .join(format!("themes/default/app_icons/{icon}.png"))
                 .is_file(),
-            "copied runtime assets should include Home icon {icon}"
+            "copied runtime assets should include application icon {icon}"
         );
     }
     for locale in ["en-US", "zh-CN"] {

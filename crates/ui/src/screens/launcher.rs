@@ -350,16 +350,14 @@ impl LauncherViewModel {
         self.selected_index.and_then(|index| self.items.get(index))
     }
 
-    pub fn default_app_icon(&self) -> Option<&crate::HomeIcon> {
-        self.ascii_assets
-            .home_icon_catalog()
-            .icon_for_key("default")
+    pub fn default_app_icon(&self) -> Option<&crate::AppIcon> {
+        self.ascii_assets.app_icon("default")
     }
 
-    pub fn item_icon(&self, item: &LauncherItemViewModel) -> Option<&crate::HomeIcon> {
+    pub fn item_icon(&self, item: &LauncherItemViewModel) -> Option<&crate::AppIcon> {
         if item.is_builtin() {
             self.ascii_assets
-                .launcher_icon(&item.id)
+                .app_icon(&item.id)
                 .or_else(|| self.default_app_icon())
         } else {
             self.default_app_icon()
@@ -368,7 +366,7 @@ impl LauncherViewModel {
 
     pub fn item_graphic_path(&self, item: &LauncherItemViewModel) -> Option<std::path::PathBuf> {
         if item.is_builtin() {
-            self.ascii_assets.launcher_icon_image_path(&item.id)
+            self.ascii_assets.app_icon_image_path(&item.id)
         } else {
             None
         }
@@ -376,7 +374,7 @@ impl LauncherViewModel {
 
     pub fn item_graphic_bytes(&self, item: &LauncherItemViewModel) -> Option<&[u8]> {
         if item.is_builtin() {
-            self.ascii_assets.launcher_icon_image_bytes(&item.id)
+            self.ascii_assets.app_icon_image_bytes(&item.id)
         } else {
             None
         }
