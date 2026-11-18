@@ -1,6 +1,39 @@
 use super::*;
 
 #[test]
+fn opening_a_managed_log_document_keeps_the_logs_page_and_its_filters() {
+    let mut state = state(UserRole::User);
+    state.open_logs();
+    state.window_owner = WindowOwner::App(WindowApplication::Logs);
+    let owner = state.active_page_id();
+    state.pages.logs.logs_state.selected = 2;
+    state.pages.logs.logs_state.query.module = Some("testing".into());
+    state.pages.logs.logs_state.time_filter = 1;
+    state.pages.logs.logs_state.last_document = Some(LogDocumentSelection::Events);
+
+    state.show_logs_document(PathBuf::from("filtered.jsonl"));
+
+    assert_eq!(state.active_page_id(), owner);
+    assert_eq!(state.active_screen(), ShellScreen::Logs);
+    assert_eq!(state.pages.logs.logs_state.selected, 2);
+    let Some(WindowRequest::Open {
+        launch:
+            WindowLaunch::EditorReport {
+                log: true,
+                source: Some(source),
+                ..
+            },
+        ..
+    }) = state.window_launches.pop_front()
+    else {
+        panic!("the Logs page should request an Editor window");
+    };
+    assert_eq!(source.query.module.as_deref(), Some("testing"));
+    assert_eq!(source.time_filter, 1);
+    assert_eq!(source.selection, Some(LogDocumentSelection::Events));
+}
+
+#[test]
 fn compact_log_times_use_the_configured_timezone_and_keep_full_source_timestamps() {
     let mut state = state(UserRole::User);
     state.open_logs();

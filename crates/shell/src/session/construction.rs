@@ -154,6 +154,8 @@ impl ShellSession {
             pages: ShellPages::default(),
             window_owner: runtime_services.window_owner,
             window_launches: VecDeque::new(),
+            editor_file_picker: None,
+            window_picked_file: None,
             window_delete_launcher: None,
             window_close: Default::default(),
             window_close_explicit: false,

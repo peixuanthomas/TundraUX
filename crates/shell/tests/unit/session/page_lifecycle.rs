@@ -19,7 +19,7 @@ fn staying_in_explorer_preserves_its_input_purpose_model_and_alert() {
         ExplorerPurpose::DiagnosticsLogs,
         ExplorerPurpose::EditorOpen,
         ExplorerPurpose::EditorSaveAs {
-            snapshot,
+            snapshot: Some(snapshot),
             input: ui::components::TextInput::new("save.filename"),
             focus: ui::ExplorerSaveFocus::Filename,
         },

@@ -18,6 +18,7 @@ pub(super) fn window(minimum: Size) -> Window {
         queued: VecDeque::new(),
         viewport: None,
         close: CloseProgress::Idle,
+        picked_file: None,
         force_when_started: false,
         view_requested: None,
         launch_error: false,
@@ -142,6 +143,50 @@ fn show(workspace: &mut Workspace, id: SessionId) {
             .split(source, WorkspaceSplitMode::LeftRight);
     }
     workspace.selection.open(id);
+}
+
+#[test]
+fn only_a_completed_picker_returns_a_selected_path_to_its_opener() {
+    for (forced, cancelled) in [(false, false), (true, false), (false, true)] {
+        let mut state = shell_state();
+        let mut workspace = Workspace::new(None, false);
+        let (opener, picker) = (SessionId(1), SessionId(2));
+        let path = NativePath(PathBuf::from("日志.txt"));
+        workspace.windows.insert(opener, window(Size::new(106, 16)));
+        let mut picker_window = window(Size::new(106, 16));
+        picker_window.launch = WindowLaunch::ExplorerPicker {
+            request: 7,
+            suggested_name: None,
+        };
+        workspace.windows.insert(picker, picker_window);
+        workspace.selection.open(opener);
+        workspace
+            .selection
+            .open_from(opener, picker, &workspace.layout);
+
+        workspace
+            .receive(picker, AppToShell::FilePicked(path.clone()), &mut state)
+            .unwrap();
+        assert_eq!(
+            workspace.windows[&picker].queued.back(),
+            Some(&ShellToApp::RequestClose)
+        );
+        assert!(workspace.windows[&opener].queued.is_empty());
+        if cancelled {
+            workspace
+                .receive(picker, AppToShell::CloseCancelled, &mut state)
+                .unwrap();
+        }
+        workspace.finish_window_exit(picker, Some(0), forced, &mut state);
+        assert_eq!(
+            workspace.windows[&opener].queued.back(),
+            Some(&ShellToApp::FilePickerResult {
+                request: 7,
+                path: (!forced && !cancelled).then_some(path)
+            })
+        );
+        assert_eq!(workspace.selection.focused(), Some(opener));
+    }
 }
 
 pub(super) fn shell_state() -> ShellSession {
@@ -468,7 +513,7 @@ fn ordinary_open_reuses_the_exact_application_and_preserves_split_add() {
         .selection
         .split(script, WorkspaceSplitMode::LeftRight);
     workspace
-        .open_requested(WindowLaunch::Editor, false, None)
+        .open_requested(WindowLaunch::Editor, false, None, None)
         .unwrap();
     assert_eq!(workspace.selection.visible(), vec![script, editor]);
     assert_eq!(workspace.selection.focused(), Some(editor));

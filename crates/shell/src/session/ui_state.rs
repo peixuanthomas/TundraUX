@@ -481,10 +481,18 @@ pub(super) enum ExplorerPurpose {
     DiagnosticsLogs,
     EditorOpen,
     EditorSaveAs {
-        snapshot: app::editor::SaveSnapshot,
+        snapshot: Option<app::editor::SaveSnapshot>,
         input: ui::components::TextInput,
         focus: ui::ExplorerSaveFocus,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct EditorFilePicker {
+    pub(super) request: u64,
+    pub(super) owner: PageInstanceId,
+    pub(super) document_generation: u64,
+    pub(super) snapshot: Option<app::editor::SaveSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -551,6 +559,8 @@ pub struct UiSessionState {
     pub(super) pages: ShellPages,
     pub(super) window_owner: super::window_launch::WindowOwner,
     pub(super) window_launches: VecDeque<WindowRequest>,
+    pub(super) editor_file_picker: Option<EditorFilePicker>,
+    pub(super) window_picked_file: Option<PathBuf>,
     pub(super) window_delete_launcher: Option<workspace_protocol::SessionId>,
     pub(super) window_close: super::app_host::WindowClose,
     pub(super) window_close_explicit: bool,

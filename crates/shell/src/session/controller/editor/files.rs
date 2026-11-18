@@ -17,6 +17,7 @@ impl ShellSession {
         if self.route_window_launch(WindowLaunch::EditorReport {
             path: reload.path().as_os_str().to_owned(),
             log: matches!(reload, EditorReloadPolicy::Log { .. }),
+            source: None,
         }) {
             return Ok(());
         }
@@ -70,8 +71,10 @@ impl ShellSession {
             }
             _ => EditorLoadNavigation::Editor,
         };
-        let script_workspace =
-            navigation == EditorLoadNavigation::EditorPicker && self.pages.editor.script.enabled;
+        let script_workspace = matches!(
+            navigation,
+            EditorLoadNavigation::Editor | EditorLoadNavigation::EditorPicker
+        ) && self.pages.editor.script.enabled;
         let rollback =
             self.begin_editor_navigation(navigation == EditorLoadNavigation::EditorPicker);
         self.pages.editor.script.enabled = script_workspace;
@@ -788,15 +791,13 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn open_editor_picker(&mut self, platform: &dyn Platform) {
-        let owner = self.pages.editor.selected_id();
+        if self.window_owner.is_app() {
+            self.request_editor_file_picker(None, None);
+            return;
+        }
         self.open_explorer(platform);
         if self.active_screen() == ShellScreen::Explorer {
-            self.pages.explorer.explorer_purpose = ExplorerPurpose::EditorOpen;
-            self.pages.explorer.editor_picker_owner = owner;
-            self.pages.explorer.editor_picker_save_submitted = false;
-            self.notify_status(i18n::LocalizedText::from(i18n::msg!(
-                "shell-choose-a-markdown-or-text-document"
-            )));
+            self.configure_editor_picker(None, None);
         } else {
             self.pages.editor.editor_open_after_save = false;
             self.pages.editor.editor_discard_for_open = false;
@@ -812,7 +813,10 @@ impl ShellSession {
         suggested_name: String,
         snapshot: app::editor::SaveSnapshot,
     ) {
-        let owner = self.pages.editor.selected_id();
+        if self.window_owner.is_app() {
+            self.request_editor_file_picker(Some(suggested_name), Some(snapshot));
+            return;
+        }
         self.open_explorer(platform);
         if self.active_screen() != ShellScreen::Explorer {
             self.pages.editor.editor_close_after_save = false;
@@ -822,6 +826,21 @@ impl ShellSession {
             )));
             return;
         }
+        self.configure_editor_picker(Some(suggested_name), Some(snapshot));
+    }
+
+    pub(in crate::session) fn configure_editor_picker(
+        &mut self,
+        suggested_name: Option<String>,
+        snapshot: Option<app::editor::SaveSnapshot>,
+    ) {
+        self.pages.explorer.editor_picker_owner = self.pages.editor.selected_id();
+        self.pages.explorer.editor_picker_save_submitted = false;
+        let Some(suggested_name) = suggested_name else {
+            self.pages.explorer.explorer_purpose = ExplorerPurpose::EditorOpen;
+            self.notify_status(i18n::msg!("shell-choose-a-markdown-or-text-document"));
+            return;
+        };
         let mut input = ui::components::TextInput::new("explorer.save.filename")
             .with_horizontal_scroll(true)
             .with_capture_name(i18n::tr!("ui-explorer-save-filename"));
@@ -834,11 +853,77 @@ impl ShellSession {
             input,
             focus: ui::ExplorerSaveFocus::Filename,
         };
-        self.pages.explorer.editor_picker_owner = owner;
-        self.pages.explorer.editor_picker_save_submitted = false;
         self.notify_status(i18n::LocalizedText::from(i18n::msg!(
             "shell-save-as-enter-a-file-name-in-the-current-directory"
         )));
+    }
+
+    fn request_editor_file_picker(
+        &mut self,
+        suggested_name: Option<String>,
+        snapshot: Option<app::editor::SaveSnapshot>,
+    ) {
+        let Some(owner) = self.pages.editor.selected_id() else {
+            return;
+        };
+        if self.editor_file_picker.is_some() {
+            return;
+        }
+        let request = PageInstanceId::new().get();
+        if self.route_window_launch(WindowLaunch::ExplorerPicker {
+            request,
+            suggested_name,
+        }) {
+            self.editor_file_picker = Some(EditorFilePicker {
+                request,
+                owner,
+                document_generation: self.pages.editor.editor_document_generation,
+                snapshot,
+            });
+        }
+    }
+
+    pub(in crate::session) fn finish_editor_file_picker(
+        &mut self,
+        request: u64,
+        path: Option<PathBuf>,
+        platform: &dyn Platform,
+    ) {
+        let Some(picker) = self
+            .editor_file_picker
+            .take_if(|picker| picker.request == request)
+        else {
+            return;
+        };
+        self.with_page_context(picker.owner, |state| {
+            state.pages.editor.editor_discard_for_open = false;
+            if let Some(path) = path
+                && state.pages.editor.editor_document_generation == picker.document_generation
+            {
+                if let Some(snapshot) = picker.snapshot {
+                    if state.save_editor_document_for_owner(path, snapshot, platform, None) {
+                        return;
+                    }
+                } else if state.active_page_id() == picker.owner
+                    && state.window_close == app_host::WindowClose::Idle
+                {
+                    state.open_editor_path(path);
+                    return;
+                }
+            }
+            state.cancel_editor_file_picker();
+        });
+    }
+
+    fn cancel_editor_file_picker(&mut self) {
+        self.pages.editor.editor_discard_for_open = false;
+        self.pages.editor.editor_open_after_save = false;
+        if std::mem::take(&mut self.pages.editor.editor_close_after_save)
+            && self.window_close == app_host::WindowClose::Checking
+        {
+            self.window_close = app_host::WindowClose::Cancelled;
+            self.approved_editor_closes.clear();
+        }
     }
 
     pub(in crate::session) fn submit_editor_save_as_from_explorer(
@@ -880,7 +965,11 @@ impl ShellSession {
             return true;
         };
         let path = directory.join(name);
-        self.save_editor_document(path, snapshot, platform);
+        if let Some(snapshot) = snapshot {
+            self.save_editor_document(path, snapshot, platform);
+        } else {
+            self.window_picked_file = Some(path);
+        }
         true
     }
 

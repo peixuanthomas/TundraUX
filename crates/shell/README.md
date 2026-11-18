@@ -97,6 +97,10 @@ Every app has **Minimize**, **Split**, and **Close** controls. Split offers **Le
 
 Split the focused pane incrementally: three-window T layouts are supported, with a maximum of four panes in a 2×2 grid. Each path can split once in each direction. Full screen keeps only the chosen window, minimizes the other panes, and clears the previous split. Closing or minimizing merges the empty region; restoring a window uses its previous place when possible, otherwise it replaces the focused pane.
 
+A new window opened from another app uses the first unfocused pane in layout order when the workspace is split. In a single pane, Shell tries left/right, then top/bottom, then temporarily replaces the current window. Closing or minimizing the new window restores the covered pane and returns focus to the app that opened it.
+
+The Editor opens File Explorer in a separate window for Open, first save and Save As. Once you choose a file or confirm a filename, the picker closes and sends the path to the original Editor. Esc or Close cancels the picker. The draft stays with the Editor.
+
 The bottom row is dedicated to the window bar. Click a title to focus or restore that window. Click its minus button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
 
 The screen keyboard fits inside the app content. Its bottom row, including Paste, Space, and Hide, sits above the window frame and the window bar.

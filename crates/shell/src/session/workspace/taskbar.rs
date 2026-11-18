@@ -107,6 +107,7 @@ impl Workspace {
                         window.launch.for_new_session(),
                         true,
                         state.auth_session(),
+                        None,
                     )?;
                 }
             }

@@ -11,9 +11,9 @@ use ui::{
     WorkspaceWindowViewModel,
 };
 use workspace_protocol::{
-    AppStartupTimings, AppToShell, CursorShape, LayoutGeneration, ProcessState, SessionId,
-    ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame, WindowInit,
-    WindowStatus, WorkerId, WorkerRole, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, CursorShape, LayoutGeneration, NativePath, ProcessState,
+    SessionId, ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame,
+    WindowInit, WindowStatus, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 mod chooser;
@@ -42,6 +42,7 @@ struct Window {
     queued: VecDeque<ShellToApp>,
     viewport: Option<ShellToApp>,
     close: CloseProgress,
+    picked_file: Option<NativePath>,
     force_when_started: bool,
     view_requested: Option<ShellToApp>,
     launch_error: bool,

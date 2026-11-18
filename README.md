@@ -22,7 +22,7 @@ Browse, search, and organize files and folders.
 
 ## Split view
 
-Open several apps in the same workspace and use them at the same time.
+Open several apps in the same workspace and use them at the same time. When an app opens a file in another window, closing it returns you to the original app.
 
 ![Editor and command line in split view](docs/screenshots/Split_View.png)
 

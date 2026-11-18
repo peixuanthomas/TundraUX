@@ -204,9 +204,7 @@ impl ShellSession {
             return;
         };
 
-        if self.active_screen() != ShellScreen::Editor
-            && self.route_window_launch(WindowLaunch::Explorer)
-        {
+        if self.route_window_launch(WindowLaunch::Explorer) {
             return;
         }
         let user_dirs = match self.explorer_user_dirs(platform) {
@@ -261,13 +259,11 @@ impl ShellSession {
         start_path: std::path::PathBuf,
         purpose: ExplorerPurpose,
     ) {
-        if self.active_screen() != ShellScreen::Editor
-            && self.route_window_launch(WindowLaunch::ExplorerPath {
-                path: start_path.as_os_str().to_owned(),
-                diagnostics: matches!(purpose, ExplorerPurpose::DiagnosticsLogs),
-                select: None,
-            })
-        {
+        if self.route_window_launch(WindowLaunch::ExplorerPath {
+            path: start_path.as_os_str().to_owned(),
+            diagnostics: matches!(purpose, ExplorerPurpose::DiagnosticsLogs),
+            select: None,
+        }) {
             return;
         }
         self.enter_new_page(ShellScreen::Explorer);
@@ -837,7 +833,13 @@ impl ShellSession {
                     });
                 }
                 ExplorerOpenTarget::Editor => {
-                    let _ = self.open_editor_path(request.path);
+                    if self.window_owner.is_app()
+                        && self.pages.explorer.explorer_purpose == ExplorerPurpose::EditorOpen
+                    {
+                        self.window_picked_file = Some(request.path);
+                    } else {
+                        self.open_editor_path(request.path);
+                    }
                 }
                 ExplorerOpenTarget::Launcher => self.open_launcher_for_path(request.path, platform),
             },

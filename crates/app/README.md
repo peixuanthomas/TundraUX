@@ -54,7 +54,7 @@ Updates prepare Shell, CLI, and the complete `vim/` together, validate assets, l
 
 Source updates can build a commit from any branch in the public remote history. Git reads the history and draws its branches and merges without checking out files. After confirmation, the updater downloads and builds the selected commit. It reuses a complete installed Vim when its upstream metadata matches the selected source's pin. Cargo and Vim output goes to an `update-*.log` file that remains after build failure or cancellation.
 
-Runtime logs merge failure reports that the user is authorized to access at the highest severity, `Critical`, sort them by time, and respect report access restrictions.
+Runtime logs merge failure reports that the user is authorized to access at the highest severity, `Critical`, sort them by time, and respect report access restrictions. A read-only Editor window can use the original selection and filters to refresh a log snapshot.
 
 ## Documentation
 

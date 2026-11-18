@@ -11,6 +11,78 @@ fn area() -> WorkspaceLayout {
     )
 }
 
+fn layout(windows: &WindowSelection, width: u16, height: u16) -> WorkspaceLayout {
+    WorkspaceLayout::new(
+        ratatui::layout::Rect::new(0, 0, width, height),
+        ratatui::layout::Rect::new(0, 1, width, height - 2),
+        &[],
+        &windows.visible(),
+        windows.focused(),
+        windows.tree.as_ref(),
+    )
+}
+
+#[test]
+fn related_windows_try_right_then_below_then_replace_and_return_to_the_opener() {
+    let (opener, child) = (SessionId(1), SessionId(2));
+    for (width, height, columns, rows) in [(217, 39, 2, 1), (108, 39, 1, 2), (108, 20, 1, 1)] {
+        let mut windows = WindowSelection::default();
+        windows.open(opener);
+        windows.open_from(opener, child, &layout(&windows, width, height));
+        assert_eq!(windows.focused(), Some(child));
+        assert_eq!(windows.tree.as_ref().unwrap().dimensions(), (columns, rows));
+        assert_eq!(
+            windows.visible(),
+            if (columns, rows) == (1, 1) {
+                vec![child]
+            } else {
+                vec![opener, child]
+            }
+        );
+        windows.remove(child);
+        assert_eq!(windows.visible(), vec![opener]);
+        assert_eq!(windows.focused(), Some(opener));
+    }
+}
+
+#[test]
+fn a_related_window_covers_the_first_unfocused_pane_and_restores_it_in_place() {
+    let [a, b, c, d, child] = [1, 2, 3, 4, 5].map(SessionId);
+    for four_panes in [false, true] {
+        let mut windows = WindowSelection::default();
+        windows.open(a);
+        windows.split(a, WorkspaceSplitMode::LeftRight);
+        windows.open(b);
+        if four_panes {
+            windows.split(a, WorkspaceSplitMode::TopBottom);
+            windows.open(c);
+            windows.split(b, WorkspaceSplitMode::TopBottom);
+            windows.open(d);
+        }
+        windows.focus(a);
+        let initial = windows.tree.clone();
+        let layout = layout(&windows, 217, 39);
+        windows.open_from(a, child, &layout);
+        assert_eq!(
+            windows.visible(),
+            if four_panes {
+                vec![a, child, b, d]
+            } else {
+                vec![a, child]
+            }
+        );
+        assert_eq!(windows.focused(), Some(child));
+        windows.minimize(child);
+        assert_eq!(windows.tree, initial);
+        assert_eq!(windows.focused(), Some(a));
+        windows.activate(child, &layout);
+        assert_eq!(windows.focused(), Some(child));
+        windows.remove(child);
+        assert_eq!(windows.tree, initial);
+        assert_eq!(windows.focused(), Some(a));
+    }
+}
+
 #[test]
 fn opening_replaces_focused_slot_and_background_stays_explicit() {
     let (a, b, c) = (SessionId(1), SessionId(2), SessionId(3));

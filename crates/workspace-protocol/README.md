@@ -17,7 +17,7 @@ Private IPC messages and framing for the workspace guardian, Shell, app hosts, a
 | Connection | Messages |
 | --- | --- |
 | Guardian and workers | Identity handshake, event-loop progress, probes, process state, shutdown, and Windows desktop opens |
-| Shell and app host | Window initialization, viewport, input, Launcher open requests, close, and rendered frames |
+| Shell and app host | Window initialization, viewport, input, app open requests, file picker results, close, and rendered frames |
 | Worker and shared services | Request IDs, configuration, profile, authorization policy, file operations, and system status |
 | Embedded Linux CLI and guardian | Ancestry-checked resource registration and retirement |
 
@@ -44,6 +44,8 @@ AppHost sends a reliable persisted external-control configuration receipt before
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration. The language JSON is reference-counted within each process so queueing and cloning initialization do not copy its strings; its wire representation remains a JSON object.
 
 Shell initializes each window with the latest viewport size, layout generation, and focus. AppHost also folds already received viewport updates into initialization before constructing its session, then applies retained input and control messages in order.
+
+File Explorer reports a selected path to Shell. After the picker exits, Shell returns the result to the opening Editor with its request ID. The result carries a native path or indicates cancellation. Document data stays in the Editor process.
 
 ## Shared state
 

@@ -234,7 +234,7 @@ impl Workspace {
                 new_session,
             } = request
             {
-                self.open_requested(launch, new_session, state.auth_session())?;
+                self.open_requested(launch, new_session, state.auth_session(), None)?;
             }
         }
         if self
@@ -255,11 +255,12 @@ impl Workspace {
         launch: WindowLaunch,
         new_session: bool,
         auth: Option<&AuthSession>,
+        source: Option<SessionId>,
     ) -> io::Result<()> {
         if !new_session && self.restore_running_window(|running| launch.can_reuse(running)) {
             return Ok(());
         }
-        self.open(launch, auth)?;
+        self.open_window(launch, auth, source)?;
         Ok(())
     }
 
@@ -296,6 +297,15 @@ impl Workspace {
         launch: WindowLaunch,
         auth: Option<&AuthSession>,
     ) -> io::Result<SessionId> {
+        self.open_window(launch, auth, None)
+    }
+
+    fn open_window(
+        &mut self,
+        launch: WindowLaunch,
+        auth: Option<&AuthSession>,
+        source: Option<SessionId>,
+    ) -> io::Result<SessionId> {
         // The watchdog can receive an older window ID.
         static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
         let id = SessionId(NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
@@ -317,10 +327,15 @@ impl Workspace {
                 application: launch.id().into(),
             })?;
         self.cancel_capture();
-        if let Some(chooser) = self.chooser.take() {
-            self.split_launch = Some((chooser.source, id));
+        if let Some(source) = source {
+            self.cancel_chooser();
+            self.selection.open_from(source, id, &self.layout);
+        } else {
+            if let Some(chooser) = self.chooser.take() {
+                self.split_launch = Some((chooser.source, id));
+            }
+            self.selection.open(id);
         }
-        self.selection.open(id);
         self.taskbar_order.push(id);
         self.windows.insert(
             id,
@@ -338,6 +353,7 @@ impl Workspace {
                 queued: VecDeque::new(),
                 viewport: None,
                 close: CloseProgress::Idle,
+                picked_file: None,
                 force_when_started: false,
                 view_requested: None,
                 launch_error: false,
@@ -447,6 +463,21 @@ impl Workspace {
         forced: bool,
         state: &mut ShellSession,
     ) {
+        if let Some(window) = self.windows.get_mut(&id)
+            && let WindowLaunch::ExplorerPicker { request, .. } = window.launch
+            && let Some(source) = self.selection.opener(id)
+        {
+            let path = if code == Some(0) && !forced {
+                window.picked_file.take()
+            } else {
+                None
+            };
+            if let Some(opener) = self.windows.get_mut(&source) {
+                opener
+                    .queued
+                    .push_back(ShellToApp::FilePickerResult { request, path });
+            }
+        }
         if self.deleting_launcher.remove(&id)
             && code == Some(0)
             && !forced
@@ -605,13 +636,19 @@ impl Workspace {
                 window.update_status(status);
             }
             AppToShell::OpenApp(launch) => {
+                let request = serde_json::from_value(launch)?;
                 if self.selection.focused() == Some(id) && self.pending_global.is_none() {
-                    match serde_json::from_value(launch)? {
+                    match request {
                         WindowRequest::Open {
                             launch,
                             new_session,
                         } => {
-                            self.open_requested(launch, new_session, state.auth_session())?;
+                            self.open_requested(
+                                launch,
+                                new_session,
+                                state.auth_session(),
+                                Some(id),
+                            )?;
                         }
                         WindowRequest::LauncherEntry { id: entry }
                             if window.launch.application()
@@ -626,6 +663,23 @@ impl Workspace {
                         }
                         _ => {}
                     }
+                } else if let WindowRequest::Open {
+                    launch: WindowLaunch::ExplorerPicker { request, .. },
+                    ..
+                } = request
+                {
+                    window.queued.push_back(ShellToApp::FilePickerResult {
+                        request,
+                        path: None,
+                    });
+                }
+            }
+            AppToShell::FilePicked(path) => {
+                if matches!(window.launch, WindowLaunch::ExplorerPicker { .. })
+                    && window.close == CloseProgress::Idle
+                {
+                    window.picked_file = Some(path);
+                    self.request_close(id);
                 }
             }
             AppToShell::BackgroundRequested => {
@@ -650,6 +704,7 @@ impl Workspace {
             }
             AppToShell::CloseCancelled => {
                 window.close = CloseProgress::Idle;
+                window.picked_file = None;
                 self.deleting_launcher.remove(&id);
                 self.hide_close_wait(id);
                 self.pending_global = None;
@@ -671,6 +726,9 @@ impl Workspace {
                     self.selection.minimize(id);
                     self.selection.focus(source);
                     self.split_launch = None;
+                }
+                if self.selection.opener(id).is_some() {
+                    self.selection.minimize(id);
                 }
                 report_launch_failure(state, reason);
             }

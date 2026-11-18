@@ -1,4 +1,4 @@
-use super::{Hello, LayoutGeneration, WorkerId};
+use super::{Hello, LayoutGeneration, NativePath, WorkerId};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -74,6 +74,10 @@ pub enum ShellToApp {
     OpenLauncherEntry {
         id: String,
     },
+    FilePickerResult {
+        request: u64,
+        path: Option<NativePath>,
+    },
     Back {
         layout: LayoutGeneration,
     },
@@ -99,6 +103,7 @@ pub enum AppToShell {
     Status(WindowStatus),
     ToggleTasks,
     OpenApp(Value),
+    FilePicked(NativePath),
     LaunchFailed(String),
     BackgroundRequested,
     CloseRequested,

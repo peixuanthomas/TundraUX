@@ -16,7 +16,7 @@ pub struct LogsSnapshot {
     pub incidents: Vec<watchdog::IncidentReportSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LogDocumentSelection {
     Events,
     File(PathBuf),

@@ -12,6 +12,45 @@ fn insert(state: &mut ShellSession, text: &str) {
 }
 
 #[test]
+fn managed_save_picker_keeps_its_draft_in_the_editor_and_cancels_a_pending_close() {
+    let mut state = session();
+    state.open_editor();
+    let owner = state.active_page_id();
+    state.window_owner = window_launch::WindowOwner::App(window_launch::WindowApplication::Editor);
+    insert(&mut state, "untitled draft");
+    state.window_close = app_host::WindowClose::Checking;
+    state.pages.editor.editor_close_after_save = true;
+    let platform = &platform::mock::UnsupportedPlatform;
+    state.apply_editor_command(app::editor::EditorCommand::RequestSave, platform);
+
+    let Some(WindowRequest::Open {
+        launch:
+            WindowLaunch::ExplorerPicker {
+                request,
+                suggested_name: Some(_),
+            },
+        ..
+    }) = state.window_launches.pop_front()
+    else {
+        panic!("the editor should request a separate save picker");
+    };
+    assert_eq!(state.active_page_id(), owner);
+    assert_eq!(state.editor_file_picker.as_ref().unwrap().owner, owner);
+    state.finish_editor_file_picker(request + 1, None, platform);
+    assert_eq!(state.window_close, app_host::WindowClose::Checking);
+    state.finish_editor_file_picker(request, None, platform);
+
+    assert_eq!(state.window_close, app_host::WindowClose::Cancelled);
+    assert!(state.editor_file_picker.is_none());
+    assert_eq!(state.active_page_id(), owner);
+    assert_eq!(
+        state.app.editor_state().unwrap().export_text(),
+        "untitled draft"
+    );
+    assert!(state.app.editor_state().unwrap().is_dirty());
+}
+
+#[test]
 fn cancelling_save_as_cancels_the_window_close_and_keeps_the_draft() {
     let mut state = session();
     state.open_editor();
@@ -32,7 +71,7 @@ fn cancelling_save_as_cancels_the_window_close_and_keeps_the_draft() {
     state.enter_new_page(ShellScreen::Explorer);
     state.pages.explorer.editor_picker_owner = Some(editor);
     state.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
-        snapshot,
+        snapshot: Some(snapshot),
         input: ui::components::TextInput::new("save.filename"),
         focus: ui::ExplorerSaveFocus::Filename,
     };
@@ -81,7 +120,7 @@ fn a_busy_save_picker_registers_the_save_to_its_original_editor() {
     let picker = state.active_page_id();
     state.pages.explorer.editor_picker_owner = Some(original);
     state.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
-        snapshot: snapshot.clone(),
+        snapshot: Some(snapshot.clone()),
         input: ui::components::TextInput::new("save.filename"),
         focus: ui::ExplorerSaveFocus::Filename,
     };

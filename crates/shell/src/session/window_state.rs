@@ -9,6 +9,12 @@ pub(super) struct WindowSelection {
     saved: HashMap<SessionId, WorkspaceTree>,
     focused: Option<SessionId>,
     pending_source: Option<SessionId>,
+    opened_from: HashMap<SessionId, WindowReturn>,
+}
+
+struct WindowReturn {
+    source: Option<SessionId>,
+    covered: Option<SessionId>,
 }
 
 impl WindowSelection {
@@ -39,16 +45,50 @@ impl WindowSelection {
         }
     }
 
+    pub(super) fn open_from(&mut self, source: SessionId, id: SessionId, layout: &WorkspaceLayout) {
+        self.cancel_add();
+        let covered = layout
+            .panes
+            .iter()
+            .map(|pane| pane.id)
+            .find(|&pane| pane != source && self.includes(pane));
+        let covered = if let Some(covered) = covered {
+            self.replace(covered, id);
+            self.focused = Some(id);
+            Some(covered)
+        } else if [WorkspaceSplitMode::LeftRight, WorkspaceSplitMode::TopBottom]
+            .into_iter()
+            .any(|axis| {
+                self.tree
+                    .as_ref()
+                    .is_some_and(|tree| layout.can_split(tree, source, axis))
+                    && self.split(source, axis)
+            })
+        {
+            self.open(id);
+            None
+        } else {
+            self.switch(id);
+            Some(source)
+        };
+        self.opened_from.insert(
+            id,
+            WindowReturn {
+                source: Some(source),
+                covered,
+            },
+        );
+    }
+
+    pub(super) fn opener(&self, id: SessionId) -> Option<SessionId> {
+        self.opened_from.get(&id)?.source
+    }
+
     pub(super) fn switch(&mut self, id: SessionId) {
         self.cancel_add();
         if !self.includes(id) {
-            if let Some(tree) = &mut self.tree {
-                if let Some(focused) = self.focused {
-                    self.saved.insert(focused, tree.clone());
-                    tree.replace(focused, id);
-                } else {
-                    *tree = WorkspaceTree::Window(id);
-                }
+            if let Some(focused) = self.focused {
+                self.replace(focused, id);
             } else {
                 self.tree = Some(WorkspaceTree::Window(id));
             }
@@ -56,7 +96,22 @@ impl WindowSelection {
         self.focused = Some(id);
     }
 
+    fn replace(&mut self, previous: SessionId, next: SessionId) {
+        let tree = self.tree.as_mut().expect("visible window");
+        self.saved.insert(previous, tree.clone());
+        tree.replace(previous, next);
+    }
+
     pub(super) fn activate(&mut self, id: SessionId, layout: &WorkspaceLayout) {
+        if !self.includes(id)
+            && let Some(covered) = self.opened_from.get(&id).and_then(|window| window.covered)
+            && self.includes(covered)
+        {
+            self.cancel_add();
+            self.replace(covered, id);
+            self.focused = Some(id);
+            return;
+        }
         if !self.includes(id)
             && let (Some(tree), Some(previous)) = (&self.tree, self.saved.get(&id))
             && let Some(restored) = tree.restore(previous, id)
@@ -120,20 +175,44 @@ impl WindowSelection {
         let Some(index) = ids.iter().position(|candidate| *candidate == id) else {
             return;
         };
-        self.saved.insert(id, tree.clone());
-        self.tree = tree.without(id);
+        let covered = self
+            .opened_from
+            .get(&id)
+            .and_then(|window| window.covered)
+            .filter(|covered| !ids.contains(covered));
+        let source = self.opener(id);
+        if let Some(covered) = covered {
+            self.replace(id, covered);
+        } else {
+            self.saved.insert(id, tree.clone());
+            self.tree = tree.without(id);
+        }
         if self.focused == Some(id) {
-            self.focused = ids[index + 1..]
-                .iter()
-                .chain(ids[..index].iter().rev())
-                .copied()
-                .next();
+            self.focused = covered.or_else(|| {
+                ids[index + 1..]
+                    .iter()
+                    .chain(ids[..index].iter().rev())
+                    .copied()
+                    .next()
+            });
+            if let Some(source) = source {
+                self.focus(source);
+            }
         }
     }
 
     pub(super) fn remove(&mut self, id: SessionId) {
         self.minimize(id);
         self.saved.remove(&id);
+        self.opened_from.remove(&id);
+        for window in self.opened_from.values_mut() {
+            if window.source == Some(id) {
+                window.source = None;
+            }
+            if window.covered == Some(id) {
+                window.covered = None;
+            }
+        }
     }
 
     pub(super) fn fullscreen(&mut self, id: SessionId) {

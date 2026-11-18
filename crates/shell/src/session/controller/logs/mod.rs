@@ -35,6 +35,13 @@ pub(in crate::session) struct LogsUiState {
     filter_form: Option<ui::ManagementForm>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(in crate::session) struct LogsDocumentSource {
+    query: LogQuery,
+    time_filter: u8,
+    selection: Option<LogDocumentSelection>,
+}
+
 #[derive(Clone)]
 struct LogsJob(Arc<LogsJobShared>);
 struct LogsJobShared {
@@ -481,16 +488,26 @@ impl ShellSession {
 
     fn show_logs_document(&mut self, path: PathBuf) {
         if self.active_screen() == ShellScreen::Logs {
-            let context = LogsUiState {
-                category: self.pages.logs.logs_state.category,
+            let mut source = LogsDocumentSource {
                 query: self.pages.logs.logs_state.query.clone(),
                 time_filter: self.pages.logs.logs_state.time_filter,
-                last_document: self.pages.logs.logs_state.last_document.clone(),
-                editor_snapshot: Some(path.clone()),
-                ..LogsUiState::default()
+                selection: self.pages.logs.logs_state.last_document.clone(),
             };
-            match self.open_diagnostics_editor(EditorReloadPolicy::Log { path }) {
-                Ok(()) => self.pages.logs.logs_state = context,
+            source.query.source = if self.pages.logs.logs_state.category == ui::LogsCategory::Linux
+            {
+                LogSource::Linux
+            } else {
+                LogSource::Ux
+            };
+            if self.route_window_launch(WindowLaunch::EditorReport {
+                path: path.as_os_str().to_owned(),
+                log: true,
+                source: Some(source.clone()),
+            }) {
+                return;
+            }
+            match self.open_diagnostics_editor(EditorReloadPolicy::Log { path: path.clone() }) {
+                Ok(()) => self.set_logs_editor_snapshot(path, source),
                 Err(error) => self.pages.logs.logs_state.feedback = Some(error),
             }
         } else if self.active_screen() == ShellScreen::Editor
@@ -503,6 +520,25 @@ impl ShellSession {
             self.pages.logs.logs_state.refreshing_editor = false;
             self.reload_log_editor_file();
         }
+    }
+
+    pub(in crate::session) fn set_logs_editor_snapshot(
+        &mut self,
+        path: PathBuf,
+        source: LogsDocumentSource,
+    ) {
+        self.pages.logs.logs_state = LogsUiState {
+            category: if source.query.source == LogSource::Linux {
+                ui::LogsCategory::Linux
+            } else {
+                ui::LogsCategory::Ux
+            },
+            query: source.query,
+            time_filter: source.time_filter,
+            last_document: source.selection,
+            editor_snapshot: Some(path),
+            ..LogsUiState::default()
+        };
     }
 
     fn logs_id_at(&self, index: usize) -> Option<String> {

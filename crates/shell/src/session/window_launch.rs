@@ -56,8 +56,13 @@ pub(super) enum WindowLaunch {
     EditorReport {
         path: OsString,
         log: bool,
+        source: Option<LogsDocumentSource>,
     },
     Explorer,
+    ExplorerPicker {
+        request: u64,
+        suggested_name: Option<String>,
+    },
     ExplorerPath {
         path: OsString,
         diagnostics: bool,
@@ -120,20 +125,21 @@ impl WindowLaunch {
             Self::Launcher { select } => select.is_none(),
             Self::EditorPath(_)
             | Self::EditorReport { .. }
+            | Self::ExplorerPicker { .. }
             | Self::ExplorerPath { .. }
             | Self::ServiceLogs { .. } => false,
             Self::Management(query) => *query == Self::management_query(query.kind),
             _ => true,
         };
         // Requests for a specific file, directory, or view must deliver their arguments.
-        regular_open && self.id() == running.id()
+        regular_open && self.id() == running.id() && !matches!(running, Self::ExplorerPicker { .. })
     }
 
     pub(super) fn for_new_session(&self) -> Self {
         match self {
             Self::CommandLine { external: None, .. } => Self::command_line(),
             Self::EditorPath(_) | Self::EditorReport { .. } => Self::Editor,
-            Self::ExplorerPath { .. } => Self::Explorer,
+            Self::ExplorerPath { .. } | Self::ExplorerPicker { .. } => Self::Explorer,
             Self::Launcher { .. } => Self::Launcher { select: None },
             Self::ServiceLogs { .. } => Self::Logs,
             Self::Management(query) if query.kind != ManagementKind::Tasks => {
@@ -150,7 +156,9 @@ impl WindowLaunch {
             Self::Editor | Self::EditorPath(_) | Self::EditorReport { .. } | Self::Script => {
                 WindowApplication::Editor
             }
-            Self::Explorer | Self::ExplorerPath { .. } => WindowApplication::Explorer,
+            Self::Explorer | Self::ExplorerPath { .. } | Self::ExplorerPicker { .. } => {
+                WindowApplication::Explorer
+            }
             Self::Launcher { .. } => WindowApplication::Launcher,
             Self::Logs | Self::ServiceLogs { .. } => WindowApplication::Logs,
             Self::Management(query) => WindowApplication::Management(query.kind),
@@ -216,18 +224,29 @@ impl WindowLaunch {
             Self::EditorPath(path) => {
                 state.open_editor_path(path.into());
             }
-            Self::EditorReport { path, log } => {
-                let path = path.into();
+            Self::EditorReport { path, log, source } => {
+                let path = PathBuf::from(path);
                 let reload = if log {
-                    EditorReloadPolicy::Log { path }
+                    EditorReloadPolicy::Log { path: path.clone() }
                 } else {
-                    EditorReloadPolicy::DiagnosticsReport { path }
+                    EditorReloadPolicy::DiagnosticsReport { path: path.clone() }
                 };
-                if let Err(error) = state.open_diagnostics_editor(reload) {
-                    state.report_editor_error(error);
+                match state.open_diagnostics_editor(reload) {
+                    Ok(()) => {
+                        if let Some(source) = source {
+                            state.set_logs_editor_snapshot(path, source);
+                        }
+                    }
+                    Err(error) => state.report_editor_error(error),
                 }
             }
             Self::Explorer => state.open_explorer(platform),
+            Self::ExplorerPicker { suggested_name, .. } => {
+                state.open_explorer(platform);
+                if state.active_screen() == ShellScreen::Explorer {
+                    state.configure_editor_picker(suggested_name, None);
+                }
+            }
             Self::ExplorerPath {
                 path,
                 diagnostics,
@@ -312,7 +331,6 @@ impl ShellSession {
             {
                 false
             }
-            WindowOwner::App(Logs) if matches!(&launch, WindowLaunch::EditorReport { .. }) => false,
             WindowOwner::App(_) => true,
         };
         if route {

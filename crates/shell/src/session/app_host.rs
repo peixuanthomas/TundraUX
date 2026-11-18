@@ -637,6 +637,15 @@ impl AppHostSession {
                 );
                 self.redraw.request_input_redraw();
             }
+            ShellToApp::FilePickerResult { request, path } => {
+                let _language = i18n::enter_snapshot(self.state.language.clone());
+                self.state.finish_editor_file_picker(
+                    request,
+                    path.map(|path| path.0),
+                    self.platform.as_ref(),
+                );
+                self.redraw.request_redraw();
+            }
             _ => {}
         }
         Ok(())
@@ -715,6 +724,10 @@ impl AppHostSession {
         for launch in self.state.window_launches.drain(..) {
             self.output
                 .push_back(AppToShell::OpenApp(serde_json::to_value(launch)?));
+        }
+        if let Some(path) = self.state.window_picked_file.take() {
+            self.output
+                .push_back(AppToShell::FilePicked(workspace_protocol::NativePath(path)));
         }
         if let Some((id, cancel)) = self.state.window_task_action.take() {
             self.output.push_back(AppToShell::TaskAction { id, cancel });
