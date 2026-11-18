@@ -8,7 +8,8 @@ use crate::{RenderContext, TundraTheme};
 
 use super::{
     Button, ComponentEvent, ComponentId, ComponentState, DialogLayout, InputEvent, Key, List,
-    ListItem, MouseButton, MouseKind, TextInput, contains_point,
+    ListItem, MouseButton, MouseInput, MouseKind, Scrollbar, ScrollbarOrientation, TextInput,
+    contains_point,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,6 +70,8 @@ pub struct CommandPalette {
     results: List,
     close_button: Button,
     pressed: Option<(ComponentId, Rect)>,
+    scroll_offset: Option<usize>,
+    scrollbar_grab: Option<u16>,
 }
 
 impl CommandPalette {
@@ -96,7 +99,14 @@ impl CommandPalette {
         if let Some((id, _)) = &self.pressed {
             results.set_hovered(results.items.iter().position(|item| &item.id == id));
         }
-        let results_area = Self::results_area(layout);
+        let (results_area, track) = self.results_layout(layout, results.items.len());
+        if let Some(offset) = self.scroll_offset {
+            let max_offset = results
+                .items
+                .len()
+                .saturating_sub(usize::from(results_area.height));
+            results.set_viewport_start(offset.min(max_offset));
+        }
         if results.items.is_empty() {
             let message = i18n::tr!("management-empty");
             Paragraph::new(message)
@@ -112,6 +122,14 @@ impl CommandPalette {
                 );
         } else {
             results.render_borderless(results_area, buffer, &theme);
+        }
+        if let Some(track) = track {
+            Scrollbar::new(
+                results.items.len(),
+                usize::from(track.height),
+                self.scroll_offset.unwrap_or(0),
+            )
+            .render(track, buffer, context);
         }
     }
 
@@ -133,6 +151,8 @@ impl CommandPalette {
             query_input,
             results,
             pressed: None,
+            scroll_offset: None,
+            scrollbar_grab: None,
         }
     }
 
@@ -146,12 +166,18 @@ impl CommandPalette {
         self
     }
 
+    pub fn with_scrollbar(mut self) -> Self {
+        self.scroll_offset = Some(0);
+        self
+    }
+
     pub fn input_area(&self, area: Rect) -> Rect {
         Self::query_edit_area(self.layout(area))
     }
 
     pub fn cancel_pointer(&mut self) {
         self.pressed = None;
+        self.scrollbar_grab = None;
         self.results.set_hovered(None);
     }
 
@@ -169,6 +195,7 @@ impl CommandPalette {
         self.query_input.set_focused(open);
         self.results.set_focused(open);
         if !open {
+            self.scrollbar_grab = None;
             self.results.set_hovered(None);
             self.close_button.set_focused(false);
             self.close_button.state.hovered = false;
@@ -213,8 +240,16 @@ impl CommandPalette {
 
         self.sync_results(false);
         let layout = self.layout(area);
+        let (results_area, track) = self.results_layout(layout, self.results.items.len());
+        let rows = usize::from(results_area.height);
+        let max_offset = self.results.items.len().saturating_sub(rows);
+        if let Some(offset) = &mut self.scroll_offset {
+            *offset = (*offset).min(max_offset);
+            self.results.set_viewport_start(*offset);
+        }
         if !matches!(event, InputEvent::Mouse(_)) {
             self.pressed = None;
+            self.scrollbar_grab = None;
             self.close_button.set_focused(false);
         }
         match event {
@@ -233,7 +268,16 @@ impl CommandPalette {
                 self.close();
                 ComponentEvent::Dismissed(self.id.clone())
             }
-            InputEvent::Key(key) if key.key == Key::Enter => self.activate_selected(),
+            InputEvent::Key(key) if key.key == Key::Enter => {
+                if let (Some(offset), Some(index)) =
+                    (&mut self.scroll_offset, self.results.selected_index())
+                    && !(*offset..offset.saturating_add(rows)).contains(&index)
+                {
+                    *offset = (*offset).clamp(List::automatic_viewport_start(index, rows), index);
+                    return ComponentEvent::Changed(self.id.clone());
+                }
+                self.activate_selected()
+            }
             InputEvent::Key(key)
                 if matches!(key.key, Key::Up | Key::Down | Key::Tab | Key::BackTab)
                     || key.modifiers.is_control_only()
@@ -246,8 +290,13 @@ impl CommandPalette {
                 };
                 let event = self.results.handle_event_borderless(
                     InputEvent::key_with_modifiers(list_key, key.modifiers),
-                    Self::results_area(layout),
+                    results_area,
                 );
+                if let (Some(offset), Some(index)) =
+                    (&mut self.scroll_offset, self.results.selected_index())
+                {
+                    *offset = (*offset).clamp(List::automatic_viewport_start(index, rows), index);
+                }
                 self.translate_results_event(event)
             }
             event @ (InputEvent::Key(_) | InputEvent::Paste(_)) => {
@@ -263,6 +312,17 @@ impl CommandPalette {
             }
             InputEvent::Mouse(mouse) => {
                 let point = (mouse.column(), mouse.row());
+                if let Some(track) = track
+                    && self.handle_scrollbar(mouse, Self::results_area(layout), track, max_offset)
+                {
+                    return ComponentEvent::Changed(self.id.clone());
+                }
+                if self.scroll_offset.is_some()
+                    && matches!(mouse.kind, MouseKind::ScrollUp | MouseKind::ScrollDown)
+                {
+                    self.cancel_pointer();
+                    return ComponentEvent::Consumed;
+                }
                 let inside = contains_point(area, point.0, point.1);
                 if !inside
                     && matches!(
@@ -289,7 +349,6 @@ impl CommandPalette {
                     self.close();
                     return ComponentEvent::Dismissed(self.id.clone());
                 }
-                let results_area = Self::results_area(layout);
                 let row = self
                     .results
                     .borderless_item_index_at(results_area, point.0, point.1)
@@ -410,6 +469,9 @@ impl CommandPalette {
     }
 
     fn sync_results(&mut self, reset_selection: bool) {
+        if reset_selection && let Some(offset) = &mut self.scroll_offset {
+            *offset = 0;
+        }
         let selected_id = (!reset_selection)
             .then(|| self.results.selected_item().map(|item| item.id.clone()))
             .flatten();
@@ -497,4 +559,75 @@ impl CommandPalette {
             body.height - offset,
         )
     }
+
+    fn results_layout(&self, layout: DialogLayout, content_len: usize) -> (Rect, Option<Rect>) {
+        let mut rows = Self::results_area(layout);
+        if self.scroll_offset.is_none()
+            || rows.width < 3
+            || rows.height == 0
+            || content_len <= usize::from(rows.height)
+        {
+            return (rows, None);
+        }
+        let track = Rect::new(rows.right() - 1, rows.y, 1, rows.height);
+        rows.width -= 2;
+        (rows, Some(track))
+    }
+
+    fn handle_scrollbar(
+        &mut self,
+        mouse: MouseInput,
+        area: Rect,
+        track: Rect,
+        max_offset: usize,
+    ) -> bool {
+        let offset = self.scroll_offset.expect("scrollable results");
+        let point = (mouse.column(), mouse.row());
+        let (start, len) =
+            Scrollbar::new(self.results.items.len(), usize::from(track.height), offset)
+                .thumb_range(track);
+        let row = point.1.saturating_sub(track.y);
+        let next = match mouse.kind {
+            MouseKind::ScrollUp | MouseKind::ScrollDown if area.contains(point.into()) => {
+                self.scrollbar_grab = None;
+                offset.saturating_add_signed(if mouse.kind == MouseKind::ScrollDown {
+                    1
+                } else {
+                    -1
+                })
+            }
+            MouseKind::Down(MouseButton::Left) | MouseKind::Click(MouseButton::Left)
+                if area.contains(point.into())
+                    && ScrollbarOrientation::VerticalRight.hit_test(track, point) =>
+            {
+                if (start..start + len).contains(&row) {
+                    self.scrollbar_grab = Some(row - start);
+                    offset
+                } else {
+                    self.scrollbar_grab = Some(len / 2);
+                    scrollbar_offset(row.saturating_sub(len / 2), track.height - len, max_offset)
+                }
+            }
+            MouseKind::Drag(MouseButton::Left) => {
+                let Some(grab) = self.scrollbar_grab else {
+                    return false;
+                };
+                scrollbar_offset(row.saturating_sub(grab), track.height - len, max_offset)
+            }
+            MouseKind::Up(MouseButton::Left) if self.scrollbar_grab.take().is_some() => offset,
+            _ => return false,
+        };
+        self.pressed = None;
+        self.results.set_hovered(None);
+        self.scroll_offset = Some(next.min(max_offset));
+        true
+    }
+}
+
+fn scrollbar_offset(row: u16, travel: u16, max_offset: usize) -> usize {
+    let travel = usize::from(travel.max(1));
+    usize::from(row)
+        .min(travel)
+        .saturating_mul(max_offset)
+        .div_ceil(travel)
 }

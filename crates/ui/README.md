@@ -97,6 +97,8 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 
 Selection dialogs keep this extended scrollbar hit area clear of option rows and the Close button, including the last row of long paths.
 
+The split picker shows a scrollbar when the result rows overflow. Wheel, track and thumb input scroll the rows. Keyboard navigation keeps the selected row in view.
+
 Inside app windows, pages use headings, backgrounds, and whitespace to separate content. Navigation entries and table rows use one line. Shared spacing is one row between groups, two columns between groups, and one cell between grid items; full rows remain clickable. A modal, menu, or input may retain one boundary.
 
 ### Page controls

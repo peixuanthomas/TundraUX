@@ -93,7 +93,8 @@ impl Workspace {
         }
         let mut list = SelectionList::new("workspace.choose", items)
             .titled(i18n::tr!("ui-workspace-choose-application"))
-            .with_placeholder(i18n::tr!("ui-workspace-search"));
+            .with_placeholder(i18n::tr!("ui-workspace-search"))
+            .with_scrollbar();
         list.open();
         self.chooser = Some(WindowChooser {
             source,

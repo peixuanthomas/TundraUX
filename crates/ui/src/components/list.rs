@@ -105,8 +105,12 @@ impl List {
         }
     }
     pub const fn with_viewport_start(mut self, start: usize) -> Self {
-        self.viewport_start = Some(start);
+        self.set_viewport_start(start);
         self
+    }
+
+    pub(crate) const fn set_viewport_start(&mut self, start: usize) {
+        self.viewport_start = Some(start);
     }
     pub fn with_highlight_symbol(mut self, symbol: Option<impl Into<String>>) -> Self {
         self.highlight_symbol = symbol.map(Into::into);
