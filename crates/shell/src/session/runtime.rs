@@ -936,12 +936,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     if show_terminal_graphics_notice {
         state.apply_terminal_graphics_startup_policy(terminal_graphics_probe.status());
     }
-    if workspace.is_none() {
-        state.launcher_task_runtime = Some(ShellLauncherTaskRuntime::new_managed(
-            std::sync::Arc::clone(&platform),
-            shell_watchdog.clone(),
-        ));
-    }
+    state.launcher_task_runtime = Some(ShellLauncherTaskRuntime::new_managed(
+        std::sync::Arc::clone(&platform),
+        shell_watchdog.clone(),
+    ));
     let mut command_line_hosts = CommandLineHosts::new(shell_watchdog.clone());
     let terminal_cell_size = terminal_graphics_probe
         .picker()

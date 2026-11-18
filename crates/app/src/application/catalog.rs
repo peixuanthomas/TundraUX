@@ -82,7 +82,6 @@ pub struct BuiltInApplicationDescriptor {
     pub description: &'static str,
     pub type_label: &'static str,
     pub admin_only: bool,
-    pub fixed_in_launcher: bool,
     pub platforms: &'static [PlatformKind],
 }
 
@@ -92,6 +91,10 @@ impl BuiltInApplicationDescriptor {
             "builtin.command-line" => msg!("app-catalog-command-line-name").into(),
             "builtin.editor" => msg!("app-catalog-editor-name").into(),
             "builtin.script-editor" => msg!("app-catalog-script-editor-name").into(),
+            "builtin.explorer" => msg!("shell-explorer").into(),
+            "builtin.settings" => msg!("shell-settings").into(),
+            "builtin.system-status" => msg!("shell-system-status").into(),
+            "builtin.clock" => msg!("shell-clock").into(),
             "builtin.logs" => msg!("app-catalog-logs-name").into(),
             "builtin.services" => msg!("app-catalog-services-name").into(),
             "builtin.processes" => msg!("app-catalog-processes-name").into(),
@@ -112,6 +115,10 @@ impl BuiltInApplicationDescriptor {
             "builtin.command-line" => msg!("app-catalog-command-line-description").into(),
             "builtin.editor" => msg!("app-catalog-editor-description").into(),
             "builtin.script-editor" => msg!("app-catalog-script-editor-description").into(),
+            "builtin.explorer" => msg!("shell-browse-files").into(),
+            "builtin.settings" => msg!("shell-adjust-tundraux").into(),
+            "builtin.system-status" => msg!("shell-view-storage-and-network-health").into(),
+            "builtin.clock" => msg!("app-catalog-clock-description").into(),
             "builtin.logs" => msg!("app-catalog-logs-description").into(),
             "builtin.services" => msg!("app-catalog-services-description").into(),
             "builtin.processes" => msg!("app-catalog-processes-description").into(),
@@ -142,7 +149,6 @@ pub const COMMAND_LINE_APPLICATION: BuiltInApplicationDescriptor = BuiltInApplic
     description: "TundraUX CLI and operating-system commands",
     type_label: "Built-in application",
     admin_only: true,
-    fixed_in_launcher: true,
     platforms: ALL_PLATFORMS,
 };
 
@@ -152,7 +158,6 @@ pub const EDITOR_APPLICATION: BuiltInApplicationDescriptor = BuiltInApplicationD
     description: "Edit plain-text files",
     type_label: "Built-in application",
     admin_only: false,
-    fixed_in_launcher: true,
     platforms: ALL_PLATFORMS,
 };
 
@@ -162,11 +167,10 @@ pub const SCRIPT_EDITOR_APPLICATION: BuiltInApplicationDescriptor = BuiltInAppli
     description: "Edit, run and debug shell scripts",
     type_label: "Built-in application",
     admin_only: false,
-    fixed_in_launcher: true,
     platforms: &[PlatformKind::Linux],
 };
 
-const fn management_application(
+const fn application(
     id: &'static str,
     name: &'static str,
     description: &'static str,
@@ -177,8 +181,18 @@ const fn management_application(
         description,
         type_label: "Built-in application",
         admin_only: false,
-        fixed_in_launcher: false,
+        platforms: ALL_PLATFORMS,
+    }
+}
+
+const fn management_application(
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+) -> BuiltInApplicationDescriptor {
+    BuiltInApplicationDescriptor {
         platforms: &[PlatformKind::Linux],
+        ..application(id, name, description)
     }
 }
 
@@ -186,6 +200,14 @@ pub const BUILT_IN_APPLICATIONS: &[BuiltInApplicationDescriptor] = &[
     COMMAND_LINE_APPLICATION,
     EDITOR_APPLICATION,
     SCRIPT_EDITOR_APPLICATION,
+    application("builtin.explorer", "Explorer", "Browse files"),
+    application("builtin.settings", "Settings", "Adjust TundraUX"),
+    application(
+        "builtin.system-status",
+        "System Status",
+        "View storage and network health",
+    ),
+    application("builtin.clock", "Clock", "Set alarms and countdowns"),
     management_application(
         "builtin.users",
         "Users",
@@ -197,7 +219,6 @@ pub const BUILT_IN_APPLICATIONS: &[BuiltInApplicationDescriptor] = &[
         description: "Inspect application and system logs",
         type_label: "Built-in application",
         admin_only: false,
-        fixed_in_launcher: false,
         platforms: ALL_PLATFORMS,
     },
     management_application(
@@ -258,7 +279,6 @@ pub const BUILT_IN_APPLICATIONS: &[BuiltInApplicationDescriptor] = &[
         description: "Find running tasks and review saved results",
         type_label: "Built-in application",
         admin_only: false,
-        fixed_in_launcher: false,
         platforms: &[
             PlatformKind::Linux,
             PlatformKind::Windows,

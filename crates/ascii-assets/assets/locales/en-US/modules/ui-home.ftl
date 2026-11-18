@@ -8,3 +8,5 @@ ui-home-current-user = System user: { $user }
 ui-home-edit = Edit icons F2
 ui-home-edit-done = Done F2
 ui-home-editing = Editing Home · Drag icons to reorder
+ui-home-add-shortcut = Add to Home
+ui-home-remove-shortcut = Remove from Home

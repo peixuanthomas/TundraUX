@@ -10,6 +10,69 @@ impl ShellSession {
         if self.is_strict_guest() {
             return Vec::new();
         }
+        let mut entries = self.default_home_entries();
+        if let Some(shortcuts) = &self.pages.home.shortcuts {
+            entries.retain(|entry| {
+                entry.icon_identity() == "launcher"
+                    || shortcuts.iter().any(|key| key == entry.icon_identity())
+            });
+            for application in self.available_built_in_applications() {
+                let key = Self::home_shortcut_key(application.id);
+                if shortcuts.contains(&key)
+                    && !entries.iter().any(|entry| entry.icon_identity() == key)
+                {
+                    entries.push(
+                        ui::ShellEntry::new(
+                            application.localized_name().render_current(),
+                            application.localized_description().render_current(),
+                        )
+                        .with_icon_key(key),
+                    );
+                }
+            }
+            for record in &self.app.storage_config().launcher.entries {
+                let key = Self::home_shortcut_key(&record.id);
+                if shortcuts.contains(&key) {
+                    entries.push(
+                        ui::ShellEntry::new(
+                            app::launcher::launcher_entry_name(record),
+                            &record.path,
+                        )
+                        .with_icon_key(key),
+                    );
+                }
+            }
+        }
+        entries.sort_by_key(|entry| {
+            let key = entry.icon_identity();
+            (
+                self.pages
+                    .home
+                    .order
+                    .iter()
+                    .position(|id| id == key)
+                    .unwrap_or(usize::MAX),
+                self.pages
+                    .home
+                    .shortcuts
+                    .as_ref()
+                    .and_then(|shortcuts| shortcuts.iter().position(|id| id == key))
+                    .unwrap_or(usize::MAX),
+            )
+        });
+        entries
+    }
+
+    pub(in crate::session) fn home_shortcut_key(id: &str) -> String {
+        match id.strip_prefix("builtin.") {
+            Some("system-status") => "system_status".into(),
+            Some(key) => key.into(),
+            None => format!("launcher.{id}"),
+        }
+    }
+
+    pub(in crate::session) fn default_home_entries(&self) -> Vec<ui::ShellEntry> {
+        let _language = i18n::enter_snapshot(self.language.clone());
         let mut entries = user_home_entries();
         let applications = self.available_built_in_applications();
         let tasks = [
@@ -40,14 +103,6 @@ impl ShellSession {
             )
         });
         entries.splice(1..1, tasks);
-        entries.sort_by_key(|entry| {
-            self.pages
-                .home
-                .order
-                .iter()
-                .position(|id| id == entry.icon_identity())
-                .unwrap_or(usize::MAX)
-        });
         entries
     }
 
@@ -120,25 +175,16 @@ impl ShellSession {
 
         self.pages.home.selected_home_entry_index = index;
         match entry.icon_identity() {
-            "explorer" => self.open_explorer(platform),
             "launcher" => self.open_launcher(platform),
-            "settings" => self.open_settings(),
-            "system_status" => self.open_system_status(),
             "users" => self.open_user_management(),
             "tasks" => self.toggle_tasks(),
-            "logs" => self.open_logs(),
-            "packages" => self.open_management(platform::management::ManagementKind::Packages),
-            "services" => self.open_management(platform::management::ManagementKind::Services),
-            "processes" => self.open_management(platform::management::ManagementKind::Processes),
-            "network" => self.open_management(platform::management::ManagementKind::Network),
-            "disks" => self.open_management(platform::management::ManagementKind::Disks),
-            "firewall" => self.open_management(platform::management::ManagementKind::Firewall),
-            "ssh" => self.open_management(platform::management::ManagementKind::Ssh),
-            "backups" => self.open_management(platform::management::ManagementKind::Backups),
-            "scheduled-tasks" => {
-                self.open_management(platform::management::ManagementKind::ScheduledTasks)
+            key => {
+                if let Some(launch) = WindowLaunch::for_builtin(key) {
+                    launch.activate(self, platform);
+                } else if let Some(id) = key.strip_prefix("launcher.") {
+                    self.launch_saved_application(id.to_owned(), platform, false);
+                }
             }
-            _ => {}
         }
     }
 

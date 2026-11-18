@@ -20,7 +20,6 @@ fn management_logs_and_scripts_keep_platform_visibility_and_distinct_entry_point
             .iter()
             .find(|item| item.id == id)
             .expect("built-in application");
-        assert_eq!(application.fixed_in_launcher, id == "builtin.script-editor");
         assert!(!application.admin_only);
         assert!(!application.description.is_empty());
         assert_eq!(
@@ -41,7 +40,7 @@ fn user_management_is_a_linux_home_application() {
         .iter()
         .find(|item| item.id == "builtin.users")
         .expect("user management entry");
-    assert!(!users.fixed_in_launcher && !users.admin_only);
+    assert!(!users.admin_only);
     for platform in [
         PlatformKind::Linux,
         PlatformKind::Windows,

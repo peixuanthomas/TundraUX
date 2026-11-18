@@ -88,6 +88,7 @@ impl Fixture {
             ..Default::default()
         });
         storage.save_config(&config).unwrap();
+        self.state.replace_storage_config(config.clone());
         self.state.app.dispatch_at(
             app::AppCommand::SetLauncherState(Some(LauncherState::from_config(&config.launcher))),
             Instant::now(),
@@ -187,10 +188,10 @@ impl Fixture {
 
 #[test]
 fn custom_icon_open_reuses_its_entry_and_new_session_launches_independently() {
-    use crate::session::window_launch::{WindowApplication, WindowOwner};
+    use crate::session::window_launch::WindowOwner;
     let mut fixture = Fixture::new();
     fixture.make_custom();
-    fixture.state.window_owner = WindowOwner::App(WindowApplication::Launcher);
+    fixture.state.window_owner = WindowOwner::Shell;
     fixture.input(InputEvent::key(InputKey::Enter));
     assert!(matches!(
         fixture.state.window_launches.pop_front(),
@@ -204,6 +205,36 @@ fn custom_icon_open_reuses_its_entry_and_new_session_launches_independently() {
             new_session: true,
         }) if id == "tui"
     ));
+}
+
+#[test]
+fn custom_launcher_entry_can_be_added_to_home_without_changing_its_definition() {
+    let mut fixture = Fixture::new();
+    fixture.make_custom();
+    let config = fixture
+        .state
+        .storage_manager
+        .as_ref()
+        .unwrap()
+        .load_config()
+        .unwrap();
+    fixture.choose_context_action(ui::LauncherEntryAction::AddToHome, false);
+    assert!(
+        fixture.state.user_home_entries().iter().any(|entry| {
+            entry.icon_identity() == "launcher.tui" && entry.label == "custom tool"
+        })
+    );
+    assert_eq!(
+        fixture
+            .state
+            .storage_manager
+            .as_ref()
+            .unwrap()
+            .load_config()
+            .unwrap()
+            .launcher,
+        config.launcher
+    );
 }
 
 #[test]
@@ -276,6 +307,7 @@ fn context_exit_switch_persists_for_custom_and_embedded_programs_and_is_hidden_f
             );
             fixture.input(InputEvent::from_key_label("Esc"));
             assert_eq!(fixture.open_context_menu().wait_for_enter, Some(true));
+            fixture.input(InputEvent::from_key_label("Up"));
             fixture.input(InputEvent::from_key_label("Up"));
             let menu = &fixture
                 .state

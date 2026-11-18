@@ -17,6 +17,12 @@ impl ShellSession {
         if self.screen_saver.active {
             return Some(input);
         }
+        if matches!(input, InputEvent::FocusLost | InputEvent::Resize { .. })
+            && self.content_screen() == ShellScreen::Home
+            && self.pages.home.context_menu.is_some()
+        {
+            self.handle_home_context_input(input.clone());
+        }
         match &input {
             InputEvent::Mouse(mouse) if matches!(mouse.kind, ui::MouseEventKind::Down(_)) => {
                 self.interaction.motion_origin = Some(

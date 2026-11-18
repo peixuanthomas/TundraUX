@@ -13,6 +13,9 @@ pub(super) enum WindowRequest {
     LauncherEntry {
         id: String,
     },
+    ShowLauncher {
+        select: Option<OsString>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -35,7 +38,6 @@ pub(super) enum WindowApplication {
     CommandLine,
     Editor,
     Explorer,
-    Launcher,
     Logs,
     Management(ManagementKind),
     Settings,
@@ -68,9 +70,6 @@ pub(super) enum WindowLaunch {
         diagnostics: bool,
         select: Option<OsString>,
     },
-    Launcher {
-        select: Option<OsString>,
-    },
     Logs,
     ServiceLogs {
         unit: String,
@@ -92,6 +91,33 @@ impl WindowLaunch {
             external: None,
             launcher_id: None,
         }
+    }
+
+    pub(super) fn for_builtin(key: &str) -> Option<Self> {
+        Some(match key {
+            "explorer" => Self::Explorer,
+            "settings" => Self::Settings,
+            "system-status" | "system_status" => Self::SystemStatus,
+            "logs" => Self::Logs,
+            "clock" => Self::Clock,
+            "command-line" => Self::command_line(),
+            "editor" => Self::Editor,
+            "script-editor" => Self::Script,
+            key => Self::Management(Self::management_query(match key {
+                "packages" => ManagementKind::Packages,
+                "services" => ManagementKind::Services,
+                "processes" => ManagementKind::Processes,
+                "network" => ManagementKind::Network,
+                "disks" => ManagementKind::Disks,
+                "firewall" => ManagementKind::Firewall,
+                "ssh" => ManagementKind::Ssh,
+                "users" => ManagementKind::Users,
+                "backups" => ManagementKind::Backups,
+                "scheduled-tasks" => ManagementKind::ScheduledTasks,
+                "tasks" => ManagementKind::Tasks,
+                _ => return None,
+            })),
+        })
     }
 
     pub(super) fn management_query(kind: ManagementKind) -> ManagementQuery {
@@ -122,7 +148,6 @@ impl WindowLaunch {
                 external,
                 ..
             } => directory.is_none() && external.is_none(),
-            Self::Launcher { select } => select.is_none(),
             Self::EditorPath(_)
             | Self::EditorReport { .. }
             | Self::ExplorerPicker { .. }
@@ -140,7 +165,6 @@ impl WindowLaunch {
             Self::CommandLine { external: None, .. } => Self::command_line(),
             Self::EditorPath(_) | Self::EditorReport { .. } => Self::Editor,
             Self::ExplorerPath { .. } | Self::ExplorerPicker { .. } => Self::Explorer,
-            Self::Launcher { .. } => Self::Launcher { select: None },
             Self::ServiceLogs { .. } => Self::Logs,
             Self::Management(query) if query.kind != ManagementKind::Tasks => {
                 Self::Management(Self::management_query(query.kind))
@@ -159,7 +183,6 @@ impl WindowLaunch {
             Self::Explorer | Self::ExplorerPath { .. } | Self::ExplorerPicker { .. } => {
                 WindowApplication::Explorer
             }
-            Self::Launcher { .. } => WindowApplication::Launcher,
             Self::Logs | Self::ServiceLogs { .. } => WindowApplication::Logs,
             Self::Management(query) => WindowApplication::Management(query.kind),
             Self::Settings => WindowApplication::Settings,
@@ -178,7 +201,6 @@ impl WindowLaunch {
                 WindowApplication::CommandLine => "command-line",
                 WindowApplication::Editor => "editor",
                 WindowApplication::Explorer => "explorer",
-                WindowApplication::Launcher => "launcher",
                 WindowApplication::Logs => "logs",
                 WindowApplication::Management(kind) => kind.id(),
                 WindowApplication::Settings => "settings",
@@ -201,7 +223,6 @@ impl WindowLaunch {
                 WindowApplication::CommandLine => i18n::tr!("shell-command-line"),
                 WindowApplication::Editor => i18n::tr!("shell-editor"),
                 WindowApplication::Explorer => i18n::tr!("shell-explorer"),
-                WindowApplication::Launcher => i18n::tr!("shell-launcher"),
                 WindowApplication::Logs => i18n::tr!("shell-logs"),
                 WindowApplication::Management(kind) => management_title(kind),
                 WindowApplication::Settings => i18n::tr!("settings-title"),
@@ -265,10 +286,6 @@ impl WindowLaunch {
                     state.select_explorer_path(Path::new(&select));
                 }
             }
-            Self::Launcher { select: Some(path) } => {
-                state.open_launcher_for_path(path.into(), platform);
-            }
-            Self::Launcher { select: None } => state.open_launcher(platform),
             Self::Logs => state.open_logs(),
             Self::ServiceLogs {
                 unit,

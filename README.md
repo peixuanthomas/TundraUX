@@ -10,7 +10,7 @@ You can use it with a keyboard, mouse or both.
 
 ## Home
 
-Select an icon to open an app, settings, or a system tool.
+Select a shortcut to open an app. Open Launcher to browse available apps, add custom ones, and choose which shortcuts appear on Home.
 
 ![TundraUX home screen](docs/screenshots/Main_menu.png)
 

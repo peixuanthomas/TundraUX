@@ -68,7 +68,7 @@ impl Message for ShellToApp {
                             .as_ref()
                             .map_or(0, |language| value_bytes(language))
                 }
-                Self::TaskAction { id, .. } | Self::OpenLauncherEntry { id } => id.capacity(),
+                Self::TaskAction { id, .. } => id.capacity(),
                 Self::FilePickerResult { path, .. } => {
                     path.as_ref().map_or(0, |path| path.0.as_os_str().len())
                 }

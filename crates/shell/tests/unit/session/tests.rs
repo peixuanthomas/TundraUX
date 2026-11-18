@@ -6526,7 +6526,7 @@ fn explorer_blank_context_opens_terminal_at_directory_and_returns_without_reusin
         state.enter_screen(ShellScreen::Launcher);
         state.pages.common.focused_component = ShellComponent::Launcher;
         state.pages.launcher.launcher_selected_index = state
-            .built_in_launcher_applications()
+            .available_built_in_applications()
             .iter()
             .position(|application| application.id == app::COMMAND_LINE_APPLICATION.id)
             .unwrap();

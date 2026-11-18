@@ -6,6 +6,7 @@ pub enum LauncherEntryAction {
     Toolbar(LauncherToolbarAction),
     NewSession,
     Move,
+    AddToHome,
     Name,
     Command,
     Icon,
@@ -19,6 +20,7 @@ impl LauncherEntryAction {
             Self::Toolbar(action) => action.label(),
             Self::NewSession => i18n::tr!("ui-workspace-new-session"),
             Self::Move => i18n::tr!("shell-move"),
+            Self::AddToHome => i18n::tr!("ui-home-add-shortcut"),
             Self::Name => i18n::tr!("ui-launcher-change-name"),
             Self::Command => i18n::tr!("ui-launcher-change-command"),
             Self::Icon => i18n::tr!("ui-launcher-change-icon"),
@@ -33,6 +35,7 @@ pub struct LauncherContextMenu {
     pub editable: bool,
     pub new_session: bool,
     pub move_item: Option<bool>,
+    pub add_to_home: Option<bool>,
     pub toolbar: Vec<LauncherToolbarButtonViewModel>,
     pub anchor: (u16, u16),
     pub selected: usize,
@@ -51,6 +54,7 @@ impl LauncherContextMenu {
             .chain(self.editable.then_some(Remove))
             .chain([Name, Command, Icon].into_iter().filter(|_| self.editable))
             .chain((self.editable && self.wait_for_enter.is_some()).then_some(WaitForEnter))
+            .chain(self.add_to_home.map(|_| AddToHome))
     }
 
     pub fn enabled(&self, action: LauncherEntryAction) -> bool {
@@ -64,6 +68,7 @@ impl LauncherContextMenu {
                     && self.enabled(LauncherEntryAction::Toolbar(LauncherToolbarAction::Open))
             }
             LauncherEntryAction::Move => self.move_item == Some(true),
+            LauncherEntryAction::AddToHome => self.add_to_home == Some(true),
             LauncherEntryAction::Command => self.command_enabled,
             _ => self.editable,
         }

@@ -653,6 +653,10 @@ impl ShellSession {
                 self.toggle_home_editing();
                 ShellAction::Redraw
             }
+            ShellCommand::HomeContextInput(input) => {
+                self.handle_home_context_input(input);
+                ShellAction::Redraw
+            }
             ShellCommand::HomeMove(delta) => {
                 self.move_home_entry(delta);
                 ShellAction::Redraw
@@ -813,8 +817,15 @@ impl ShellSession {
                 self.window_delete_launcher = Some(id);
                 ShellAction::Redraw
             }
-            ShellCommand::ConfirmLauncherWindowSession(id) => {
-                self.open_taskbar_launcher_session(LauncherCommand::ConfirmLaunch(id), platform);
+            ShellCommand::ConfirmSavedApp { id, new_session } => {
+                if new_session {
+                    self.open_taskbar_launcher_session(
+                        LauncherCommand::ConfirmLaunch(id),
+                        platform,
+                    );
+                } else {
+                    self.apply_launcher_command(LauncherCommand::ConfirmLaunch(id), platform);
+                }
                 ShellAction::Redraw
             }
             ShellCommand::LauncherRefresh => {
@@ -1995,6 +2006,11 @@ impl ShellSession {
                 target,
                 coordinates,
             } => {
+                if self.active_screen() == ShellScreen::Home && target == Some(ShellComponent::Home)
+                {
+                    self.open_home_context_menu(coordinates);
+                    return ShellAction::Redraw;
+                }
                 if target == Some(ShellComponent::Explorer)
                     && let Some(index) = self.explorer_index_at(coordinates)
                 {
@@ -2041,6 +2057,7 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::ClosePopup => {
+                self.pages.home.context_menu = None;
                 if self.pages.explorer.explorer_overlay_mode.is_some() {
                     self.close_explorer_popup();
                 }

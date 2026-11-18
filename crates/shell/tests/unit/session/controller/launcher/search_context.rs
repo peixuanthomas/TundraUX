@@ -194,6 +194,7 @@ fn launcher_builtin_context_opens_the_clicked_item_and_blank_context_adds_direct
             ui::LauncherEntryAction::Toolbar(ui::LauncherToolbarAction::Open),
             ui::LauncherEntryAction::NewSession,
             ui::LauncherEntryAction::Move,
+            ui::LauncherEntryAction::AddToHome,
         ],
     );
     let open = menu

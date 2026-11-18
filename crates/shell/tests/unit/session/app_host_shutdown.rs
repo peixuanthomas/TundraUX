@@ -56,7 +56,6 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
             system_requests: unavailable,
         }),
         compositor: ScreenCompositor::default(),
-        launcher_icons: None,
         terminal: Terminal::new(TestBackend::new(120, 40)).unwrap(),
         theme: ui::TundraTheme::default_dark(),
         theme_reloader: UserThemeReloader::new(storage, now),

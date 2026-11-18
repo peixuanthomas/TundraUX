@@ -8,3 +8,5 @@ ui-home-current-user = 系统用户：{ $user }
 ui-home-edit = 编辑图标 F2
 ui-home-edit-done = 完成 F2
 ui-home-editing = 正在编辑主界面 · 拖动图标调整顺序
+ui-home-add-shortcut = 添加到主页
+ui-home-remove-shortcut = 从主页移除

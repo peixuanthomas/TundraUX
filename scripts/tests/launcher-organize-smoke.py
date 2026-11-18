@@ -107,7 +107,7 @@ def main():
                 if any(node["id"].startswith("modal/") and node["actionable"] for node in current["nodes"]):
                     key("Enter")
                 elif current["page"] == "FirstRunSetup":
-                    key("F10")
+                    key("F9")
                 else:
                     key("Enter")
                 time.sleep(0.1)
@@ -152,24 +152,22 @@ def main():
             assert [node["name"] for node in home_items()] == original_home
             print("PASS: Home edit button, touch drag, saved order, keyboard reorder, and normal activation")
 
-            key("End")
-            key("Left")
-            key("Left")
-            key("Enter")
-            current = until(lambda current: current["page"] == "Launcher")
-
             def window_ids(current):
                 return {node["id"] for node in current["nodes"] if node["role"] == "button"
                         and "workspace.taskbar." in node["id"] and not node["id"].endswith(".close")}
 
-            launcher_window = node_by(current, lambda node: node["id"] in window_ids(current)
-                                      and node["selected"])["id"]
+            before_command = window_ids(snapshot())
 
-            def restore_launcher():
-                click(launcher_window)
-                return until(lambda current: current["page"] == "Launcher"
-                    and any(node["id"] == launcher_window and node["selected"] for node in current["nodes"])
+            def open_launcher():
+                current = until(lambda current: current["page"] == "Home")
+                launcher = node_by(current, lambda node: "home.entry." in node["id"] and node["name"] == "Launcher")
+                click(launcher["id"])
+                current = until(lambda current: current["page"] == "Launcher"
                     and any("launcher.item." in node["id"] and node["actionable"] for node in current["nodes"]))
+                assert not window_ids(current)
+                return current
+
+            current = open_launcher()
 
             def toolbar(label):
                 current = snapshot()
@@ -224,6 +222,10 @@ def main():
             assert config["launcher"]["order"]
             custom_id = custom["id"]
 
+            def saved_custom():
+                config = tomllib.loads(config_file.read_text())
+                return next(entry["custom"] for entry in config["launcher"]["entries"] if entry["id"] == custom_id)
+
             def open_context():
                 card = next(node for node in items() if f"launcher.item.{custom_id}" in node["id"])
                 ui("wait", "--id", card["id"])
@@ -242,7 +244,8 @@ def main():
             assert switch["selected"]
             for checked in [False, True]:
                 click(switch["id"])
-                current = snapshot()
+                current = until(lambda current: any(
+                    node["id"] == switch["id"] and node["selected"] == checked for node in current["nodes"]))
                 switch = node_by(current, lambda node: node["id"] == switch["id"])
                 assert switch["selected"] == checked
                 saved = next(entry for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"]
@@ -258,24 +261,26 @@ def main():
             key("a", "--modifiers", "ctrl")
             ui("text", "Renamed PTY tool")
             key("F10")
+            until(lambda current: saved_custom()["name"] == "Renamed PTY tool"
+                  and any(node["name"] == "Renamed PTY tool" for node in current["nodes"]))
             context_action("Change launch command")
             key("a", "--modifiers", "ctrl")
             ui("text", "printf 'EDITED_LAUNCHER_PTY_OK\\n'; exit 75")
             key("F10")
+            until(lambda current: saved_custom()["command"] == "printf 'EDITED_LAUNCHER_PTY_OK\\n'; exit 75")
             context_action("Change icon")
             ui("text", "中文x\n★")
             ui("text", "!")
             assert "Icons allow two rows" in "\n".join(snapshot()["lines"])
             key("F10")
-            current = snapshot()
-            assert "中文x" in "\n".join(current["lines"])
+            current = until(lambda current: saved_custom()["icon"] == "中文x\n★"
+                            and "中文x" in "\n".join(current["lines"]))
             config = tomllib.loads(config_file.read_text())
             custom = next(entry for entry in config["launcher"]["entries"] if entry["id"] == custom_id)
             assert custom["custom"]["name"] == "Renamed PTY tool"
             assert custom["custom"]["icon"] == "中文x\n★"
             assert custom["custom"]["wait_for_enter"]
             print("PASS: context menu closes outside; name, command and bounded Unicode icon persist")
-            before_command = window_ids(current)
             key("Enter")
             current = until(lambda current: current["page"] == "CommandLine"
                 and "EDITED_LAUNCHER_PTY_OK" in "\n".join(current["lines"])
@@ -284,10 +289,9 @@ def main():
             command_windows = window_ids(current) - before_command
             assert len(command_windows) == 1, "Custom commands require an independent AppHost"
             key("Enter")
-            until(lambda current: window_ids(current) == before_command)
-            # Closing the command window leaves the original Launcher in the bottom bar.
-            current = restore_launcher()
-            print("PASS: custom settings persist; Enter closes retained PTY output and the original Launcher restores")
+            until(lambda current: current["page"] == "Home" and window_ids(current) == before_command)
+            current = open_launcher()
+            print("PASS: custom settings persist; Enter closes retained PTY output and returns to the workspace")
             for code in [0, 9]:
                 toolbar("Organize")
                 toolbar("Add launcher")
@@ -298,18 +302,35 @@ def main():
                 key("F10")
                 toolbar("Done organizing")
                 key("End")
-                before_command = window_ids(snapshot())
                 key("Enter")
-                until(lambda current: marker.exists() and window_ids(current) == before_command)
+                until(lambda current: marker.exists() and current["page"] == "Home" and window_ids(current) == before_command)
                 assert marker.read_text() == "done"
-                current = restore_launcher()
-            print("PASS: default custom commands exit without Enter after success and failure; Launcher restores")
+                current = open_launcher()
+            print("PASS: default custom commands exit without Enter after success and failure")
+            key("End")
+            context_action("Add to Home")
+            key("Escape")
+            until(lambda current: current["page"] == "Home")
+            key("End")
+            shortcut = node_by(snapshot(), lambda node: "home.entry." in node["id"] and node["name"] == "Renamed PTY tool")
+            click(shortcut["id"])
+            until(lambda current: current["page"] == "CommandLine" and "EDITED_LAUNCHER_PTY_OK" in "\n".join(current["lines"]))
+            key("Enter")
+            until(lambda current: current["page"] == "Home" and window_ids(current) == before_command)
+            ui("click", "--id", shortcut["id"], "--button", "right")
+            current = until(lambda current: any(node["name"] == "Remove from Home" and node["actionable"] for node in current["nodes"]))
+            click(node_by(current, lambda node: node["name"] == "Remove from Home")["id"])
+            assert any(entry["id"] == custom_id for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"])
+            open_launcher()
+            key("End")
+            print("PASS: a custom app launches from Home and remains installed after removing its shortcut")
             context_action("Delete")
             key("Escape")
             assert any(entry["id"] == custom_id for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"])
             context_action("Delete")
             key("Enter")
-            assert not any(entry["id"] == custom_id for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"])
+            until(lambda current: not any(entry["id"] == custom_id
+                for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"]))
             key("Home")
             ui("click", "--id", items()[0]["id"], "--button", "right")
             current = until(lambda current: not current["animation_running"]

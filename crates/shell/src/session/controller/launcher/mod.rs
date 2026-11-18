@@ -2,7 +2,7 @@ mod edit;
 mod input;
 mod settings;
 pub(in crate::session) mod tasks;
-use crate::session::window_launch::{WindowApplication, WindowOwner};
+use crate::session::window_launch::WindowOwner;
 use crate::session::*;
 impl ShellSession {
     pub(in crate::session) fn current_launcher_entry(
@@ -26,7 +26,7 @@ impl ShellSession {
             return;
         }
         let config = self.app.storage_config().launcher.clone();
-        let builtins = self.built_in_launcher_applications();
+        let builtins = self.available_built_in_applications();
         let builtin_count = builtins.len();
         for page in pages {
             self.with_page_context(page, |state| {
@@ -111,16 +111,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn built_in_launcher_count(&self) -> usize {
-        self.built_in_launcher_applications().len()
-    }
-
-    pub(in crate::session) fn built_in_launcher_applications(
-        &self,
-    ) -> Vec<app::BuiltInApplicationDescriptor> {
-        self.available_built_in_applications()
-            .into_iter()
-            .filter(|descriptor| descriptor.fixed_in_launcher)
-            .collect()
+        self.available_built_in_applications().len()
     }
 
     pub(in crate::session) fn available_built_in_applications(
@@ -155,7 +146,7 @@ impl ShellSession {
     ) -> Option<app::BuiltInApplicationDescriptor> {
         let model = self.to_launcher_view_model();
         let item = model.items.get(model.selected_index?)?;
-        self.built_in_launcher_applications()
+        self.available_built_in_applications()
             .into_iter()
             .find(|application| application.id == item.id)
     }
@@ -173,7 +164,12 @@ impl ShellSession {
             )));
             return;
         };
-        if self.route_window_launch(WindowLaunch::Launcher { select: None }) {
+        if self.window_owner.is_app() {
+            self.window_launches
+                .push_back(WindowRequest::ShowLauncher { select: None });
+            return;
+        }
+        if self.active_screen() == ShellScreen::Launcher {
             return;
         }
         match self.launcher_controller().load(&storage) {
@@ -327,7 +323,7 @@ impl ShellSession {
     }
 
     fn canonical_launcher_index(&self, id: &str) -> Option<usize> {
-        self.built_in_launcher_applications()
+        self.available_built_in_applications()
             .iter()
             .position(|app| app.id == id)
             .or_else(|| {
@@ -617,9 +613,9 @@ impl ShellSession {
                 })
             }
             LauncherEffect::ConfirmationRequired { id, path, .. }
-                if new_session && self.window_owner == WindowOwner::Shell =>
+                if self.active_screen() != ShellScreen::Launcher =>
             {
-                self.confirm_taskbar_launcher_session(id, path);
+                self.confirm_saved_app_launch(id, path, new_session);
             }
             LauncherEffect::ConfirmationRequired { id, path, kind } => {
                 self.pages.launcher.launcher_confirm_selected = true;
@@ -730,44 +726,40 @@ impl ShellSession {
 
     fn open_selected_launcher_item(&mut self, platform: &dyn Platform, new_session: bool) {
         if let Some(application) = self.selected_built_in_launcher_application() {
-            let launch = match application.id {
-                id if id == app::COMMAND_LINE_APPLICATION.id => WindowLaunch::command_line(),
-                id if id == app::EDITOR_APPLICATION.id => WindowLaunch::Editor,
-                "builtin.script-editor" => WindowLaunch::Script,
-                _ => {
-                    self.notify_status(i18n::msg!(
-                        "shell-arg1-is-not-available-in-this-build",
-                        arg1 = application.localized_name()
-                    ));
-                    return;
-                }
-            };
-            if !new_session || !self.route_window_request(launch.clone(), true) {
+            if let Some(launch) =
+                WindowLaunch::for_builtin(application.id.trim_start_matches("builtin."))
+                && (!new_session || !self.route_window_request(launch.clone(), true))
+            {
                 launch.activate(self, platform);
             }
             return;
         }
         if let Some(id) = self.selected_launcher_id() {
-            let terminal_entry = self.app.launcher_state().is_some_and(|state| {
-                state.items.iter().any(|item| {
-                    item.record.id == id
-                        && (item.record.custom.is_some() || item.record.terminal.is_some())
-                })
-            });
-            if !new_session
-                && self.window_owner == WindowOwner::App(WindowApplication::Launcher)
-                && self.can_execute_command_line()
-                && terminal_entry
-            {
-                self.window_launches
-                    .push_back(WindowRequest::LauncherEntry { id });
-            } else {
-                self.apply_launcher_command_with_session(
-                    LauncherCommand::RequestLaunch(id),
-                    platform,
-                    new_session,
-                );
-            }
+            self.launch_saved_application(id, platform, new_session);
+        }
+    }
+
+    pub(in crate::session) fn launch_saved_application(
+        &mut self,
+        id: String,
+        platform: &dyn Platform,
+        new_session: bool,
+    ) {
+        if !new_session
+            && self.window_owner == WindowOwner::Shell
+            && self.can_execute_command_line()
+            && self
+                .current_launcher_entry(&id)
+                .is_some_and(|entry| entry.custom.is_some() || entry.terminal.is_some())
+        {
+            self.window_launches
+                .push_back(WindowRequest::LauncherEntry { id });
+        } else {
+            self.apply_launcher_command_with_session(
+                LauncherCommand::RequestLaunch(id),
+                platform,
+                new_session,
+            );
         }
     }
 
@@ -843,9 +835,10 @@ impl ShellSession {
         path: std::path::PathBuf,
         platform: &dyn Platform,
     ) {
-        if self.route_window_launch(WindowLaunch::Launcher {
-            select: Some(path.as_os_str().to_owned()),
-        }) {
+        if self.window_owner.is_app() {
+            self.window_launches.push_back(WindowRequest::ShowLauncher {
+                select: Some(path.into_os_string()),
+            });
             return;
         }
         self.open_launcher(platform);
@@ -1156,7 +1149,7 @@ impl ShellSession {
 
     pub fn to_launcher_view_model(&self) -> ui::LauncherViewModel {
         let _language = i18n::enter_snapshot(self.language.clone());
-        let built_in_applications = self.built_in_launcher_applications();
+        let built_in_applications = self.available_built_in_applications();
         let built_in_count = built_in_applications.len();
         let mut items = built_in_applications
             .into_iter()

@@ -50,7 +50,7 @@ Markdown files opened in the standard editor are edited as source text. In Vim, 
 
 ## Launch programs and run commands
 
-Open **Launcher** to find Editor, Command Line, Linux Script Editor, and your own entries. Search by name, path, command, or type, then press **Enter** to open the selected result. Right-click an entry for options such as **New session** or **Move**, or right-click empty space to add an entry. **F4** opens Run settings for supported entries: arguments, working directory, and launch mode.
+Open **Launcher** to browse all apps available on your platform and add your own entries. Search by name, path, command, or type, then press **Enter** to open the selected result. **Esc** returns to the workspace. Right-click an entry for **Add to Home**, **New session**, or **Move** where available. Use **Remove from Home** on a Home shortcut to hide it from Home. Right-click empty space in Launcher to add a custom entry. **F4** opens Run settings for supported entries.
 
 In **Command Line**, type a normal command such as `pwd` (Unix) or `cd` (Windows) to use the OS command interpreter. Prefix a TundraUX command with a slash, for example `/help` or `/doctor`; from an external terminal, use `tundra-cli help` or `tundra-cli doctor` without the slash. The built-in session keeps its working directory and exported environment. At the end of the input, **Right** cycles completion candidates and **Tab** accepts the gray suggestion. Type `exit` to close that session normally.
 

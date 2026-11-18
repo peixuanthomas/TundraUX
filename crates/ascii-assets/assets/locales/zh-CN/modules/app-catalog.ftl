@@ -33,6 +33,7 @@ app-catalog-editor-name = 编辑器
 app-catalog-command-line-description = TundraUX 命令行及操作系统命令
 app-catalog-editor-description = 编辑纯文本文件
 app-catalog-builtin-type = 内置应用
+app-catalog-clock-description = 设置闹钟和倒计时
 app-catalog-logs-name = 日志
 app-catalog-services-name = 服务
 app-catalog-processes-name = 进程

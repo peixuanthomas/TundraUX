@@ -207,6 +207,61 @@ impl Drop for StoredHome {
 }
 
 #[test]
+fn removing_a_home_shortcut_keeps_the_app_in_launcher_and_saves_the_choice() {
+    let mut fixture = StoredHome::new();
+    let state = &mut fixture.state;
+    state.set_home_shortcut("editor".into(), true);
+    let index = order(state).iter().position(|key| key == "editor").unwrap();
+    state.select_home_entry(index);
+    draw_buttons(state);
+    let area = state
+        .home_content_layout()
+        .unwrap()
+        .items
+        .iter()
+        .find(|item| item.index == index)
+        .unwrap()
+        .area;
+    let point = (area.x + 1, area.y + area.height / 2);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Right, point));
+    state.apply_input(InputEvent::mouse_up(PointerButton::Right, point));
+    let bounds = Rect::new(0, 0, 120, 40);
+    let (menu, menu_area) = state.home_context_menu(main_area(state)).unwrap();
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+    let mut remove = shell_control::Rect::default();
+    terminal
+        .draw(|frame| {
+            let capture = ui::automation::FrameCapture::begin(bounds, "Home");
+            menu.render_frame(frame, menu_area, &ui::TundraTheme::default_dark());
+            remove = capture
+                .finish(frame.buffer_mut())
+                .nodes
+                .into_iter()
+                .find(|node| node.id.ends_with("/remove"))
+                .unwrap()
+                .rect;
+        })
+        .unwrap();
+    let point = (remove.x + remove.width / 2, remove.y);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    assert!(order(state).contains(&"editor".into()));
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert!(!order(state).contains(&"editor".into()));
+    assert!(
+        state
+            .to_launcher_view_model()
+            .items
+            .iter()
+            .any(|item| item.id == "builtin.editor")
+    );
+    let mut reopened = super::state((120, 40));
+    reopened.storage_manager = Some(fixture.storage.clone());
+    reopened.refresh_hit_map();
+    assert_eq!(order(state), order(&reopened));
+    assert!(order(&reopened).contains(&"launcher".into()));
+}
+
+#[test]
 fn home_order_survives_reopening_and_is_private_to_each_user() {
     let mut fixture = StoredHome::new();
     let original = order(&fixture.state);

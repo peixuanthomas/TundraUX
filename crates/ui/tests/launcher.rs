@@ -27,6 +27,7 @@ fn launcher_context_menu_fits_complete_button_labels_in_both_languages() {
                 editable: true,
                 new_session: wait_for_enter.is_some(),
                 move_item: Some(true),
+                add_to_home: Some(true),
                 toolbar: vec![ui::LauncherToolbarButtonViewModel::new(
                     LauncherToolbarAction::Open,
                     true,
@@ -51,7 +52,7 @@ fn launcher_context_menu_fits_complete_button_labels_in_both_languages() {
                 .draw(|frame| ui::render_launcher_overlay(frame, main, &model, &context))
                 .unwrap();
             assert_eq!(area.intersection(main), area);
-            assert_eq!(rows.len(), 6 + 2 * usize::from(wait_for_enter.is_some()));
+            assert_eq!(rows.len(), 7 + 2 * usize::from(wait_for_enter.is_some()));
             for (action, row) in menu.actions().zip(rows) {
                 if row.is_empty() {
                     continue;
@@ -90,6 +91,7 @@ fn launcher_entry_overlays_keep_wide_characters_inside_fixed_frames() {
             editable: true,
             new_session: false,
             move_item: None,
+            add_to_home: None,
             toolbar: vec![],
             anchor: (main.right(), main.bottom()),
             selected: 0,

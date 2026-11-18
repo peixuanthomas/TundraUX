@@ -106,6 +106,9 @@ impl ShellSession {
                     disabled: false,
                 });
         }
+        if self.content_screen() == ShellScreen::Home && self.pages.home.context_menu.is_some() {
+            return None;
+        }
         if let Some(form) = self.active_form_dialog()
             && rect_contains(self.touch_main(), point)
         {

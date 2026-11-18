@@ -33,6 +33,7 @@ app-catalog-editor-name = Editor
 app-catalog-command-line-description = TundraUX CLI and operating-system commands
 app-catalog-editor-description = Edit plain-text files
 app-catalog-builtin-type = Built-in application
+app-catalog-clock-description = Set alarms and countdowns
 app-catalog-logs-name = Logs
 app-catalog-services-name = Services
 app-catalog-processes-name = Processes

@@ -161,7 +161,7 @@ fn core_home_tasks_are_visible_and_open_without_launcher_at_minimum_size() {
 }
 
 #[test]
-fn launcher_excludes_applications_already_available_on_home() {
+fn launcher_includes_available_home_applications_and_omits_its_own_shortcut() {
     let state = state((108, 20));
     let home = state.user_home_entries();
     let launcher = state.to_launcher_view_model();
@@ -172,13 +172,25 @@ fn launcher_excludes_applications_already_available_on_home() {
     for key in ["packages", "tasks", "logs"] {
         assert!(home.iter().any(|entry| entry.icon_identity() == key));
     }
-    for entry in &home {
-        let id = format!("builtin.{}", entry.icon_identity());
+    for entry in home
+        .iter()
+        .filter(|entry| entry.icon_identity() != "launcher")
+    {
         assert!(
-            launcher.items.iter().all(|item| item.id != id),
-            "{id} must only be shown on Home"
+            launcher
+                .items
+                .iter()
+                .any(|item| ShellSession::home_shortcut_key(&item.id) == entry.icon_identity()),
+            "{} should be available in Launcher",
+            entry.icon_identity()
         );
     }
+    assert!(
+        launcher
+            .items
+            .iter()
+            .all(|item| item.id != "builtin.launcher")
+    );
     assert!(
         launcher
             .items
@@ -393,7 +405,7 @@ fn launcher_open_button_waits_for_release_and_drag_cancels_activation() {
     let mut state = state((72, 20));
     state.enter_screen(ShellScreen::Launcher);
     state.pages.launcher.launcher_selected_index = state
-        .built_in_launcher_applications()
+        .available_built_in_applications()
         .iter()
         .position(|app| app.id == app::EDITOR_APPLICATION.id)
         .unwrap();

@@ -321,9 +321,11 @@ impl ScreenCompositor {
         let mut frame_context = prepared.context.clone();
         frame_context.motion = state.interaction_motion_frame(frame_context.motion);
         let mut chrome = prepared.chrome.clone();
-        if let Some(status) = workspace
-            .as_ref()
-            .and_then(|windows| windows.focused_status())
+        let launcher_visible = state.content_screen() == ShellScreen::Launcher;
+        if !launcher_visible
+            && let Some(status) = workspace
+                .as_ref()
+                .and_then(|windows| windows.focused_status())
         {
             chrome.status.status = status.to_owned();
         }
@@ -341,26 +343,37 @@ impl ScreenCompositor {
         .with_back_shortcut(chrome.back_shortcut)
         .with_help_button(state.help_button_available())
         .with_tasks_button(chrome.tasks_label.as_deref());
-        let workspace_keyboard = workspace
-            .as_ref()
-            .is_some_and(|windows| windows.keyboard_available())
+        let workspace_keyboard = !launcher_visible
+            && workspace
+                .as_ref()
+                .is_some_and(|windows| windows.keyboard_available())
             && overlays.is_empty();
         let layout = state
             .input_keyboard_content_layout(layout)
             .with_keyboard_launcher(workspace_keyboard)
-            .with_workspace_taskbar(workspace.as_ref().is_some_and(|windows| windows.active()));
+            .with_workspace_taskbar(
+                !launcher_visible && workspace.as_ref().is_some_and(|windows| windows.active()),
+            );
         if let Some(windows) = workspace.as_deref_mut() {
-            windows.relayout(bounds, layout.main, !overlays.is_empty());
+            windows.launcher_visible = launcher_visible;
+            windows.relayout(
+                bounds,
+                layout.main,
+                launcher_visible || !overlays.is_empty(),
+            );
         }
-        let workspace_content = workspace
-            .as_ref()
-            .is_some_and(|windows| windows.hides_home());
-        let workspace_overlay = workspace
-            .as_ref()
-            .is_some_and(|windows| windows.has_overlay());
+        let workspace_content = !launcher_visible
+            && workspace
+                .as_ref()
+                .is_some_and(|windows| windows.hides_home());
+        let workspace_overlay = !launcher_visible
+            && workspace
+                .as_ref()
+                .is_some_and(|windows| windows.has_overlay());
         let mut capture = self.capture_enabled.then(|| {
             let page = workspace
                 .as_ref()
+                .filter(|_| !launcher_visible)
                 .and_then(|windows| windows.focused_page())
                 .map_or_else(|| format!("{:?}", state.content_screen()), str::to_owned);
             ui::automation::FrameCapture::begin(bounds, page)
@@ -547,6 +560,9 @@ impl ScreenCompositor {
         }
         if visible_content {
             content.render_overlay_top(frame, &layout, context);
+            if let Some((menu, area)) = state.home_context_menu(layout.main) {
+                menu.render_frame(frame, area, &context.compatibility_theme());
+            }
         }
         if let Some(capture) = &mut capture {
             capture.set_group("chrome", "toolbar", bounds, workspace_overlay || modal);
@@ -720,7 +736,9 @@ impl ScreenCompositor {
             capture.set_group("keyboard", "keyboard", area, false);
         }
         self.render_input_keyboard(frame, state, context);
-        if let Some(windows) = workspace.as_deref_mut() {
+        if let Some(windows) = workspace.as_deref_mut()
+            && !launcher_visible
+        {
             windows.render_overlay(frame, context, capture.as_ref(), !overlays.is_empty());
         }
         state.button_regions = buttons.regions();
@@ -768,15 +786,17 @@ impl ScreenCompositor {
                     node.rect.y + node.rect.height / 2,
                 );
                 if toast_area.is_some_and(|area| area.contains(point.into()))
-                    || (workspace.as_ref().is_some_and(|windows| windows.blocked())
+                    || (!launcher_visible
+                        && workspace.as_ref().is_some_and(|windows| windows.blocked())
                         && node.id.starts_with("chrome/"))
                 {
                     node.actionable = false;
                 } else if let Some(id) = node.id.strip_prefix("chrome/")
                     && node.role == "button"
-                    && !workspace
-                        .as_ref()
-                        .is_some_and(|windows| windows.owns_chrome_target(point))
+                    && (launcher_visible
+                        || !workspace
+                            .as_ref()
+                            .is_some_and(|windows| windows.owns_chrome_target(point)))
                 {
                     node.actionable = state
                         .button_at(point)

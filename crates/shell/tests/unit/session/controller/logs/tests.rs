@@ -631,9 +631,10 @@ fn logs_home_entry_and_direct_route_enforce_guest_gate() {
         );
         assert!(
             state
-                .built_in_launcher_applications()
+                .to_launcher_view_model()
+                .items
                 .iter()
-                .all(|entry| entry.id != "builtin.logs")
+                .any(|entry| entry.id == "builtin.logs")
         );
         state.open_logs();
         assert_eq!(

@@ -71,9 +71,6 @@ pub enum ShellToApp {
     TaskCatalog {
         ids: Vec<String>,
     },
-    OpenLauncherEntry {
-        id: String,
-    },
     FilePickerResult {
         request: u64,
         path: Option<NativePath>,

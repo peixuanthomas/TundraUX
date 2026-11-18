@@ -18,7 +18,9 @@ impl Workspace {
             self.pointer_hovered = false;
             return Ok(false);
         }
-        if !state.interactive_overlays().is_empty() {
+        if state.content_screen() == ShellScreen::Launcher
+            || !state.interactive_overlays().is_empty()
+        {
             self.cancel_capture();
             self.close_split_menu();
             self.taskbar_menu = None;

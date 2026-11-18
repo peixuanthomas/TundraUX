@@ -1,4 +1,4 @@
-use super::window_launch::{WindowApplication, WindowOwner};
+use super::window_launch::WindowOwner;
 use super::*;
 use crate::process_host::WorkerConnection;
 use crate::session_services::SessionServicesClient;
@@ -89,7 +89,6 @@ struct AppHostSession {
     watchdog: AppWatchdog,
     services: Arc<SessionServicesClient>,
     compositor: ScreenCompositor,
-    launcher_icons: Option<LauncherIconRuntime>,
     command_lines: CommandLineHosts,
     vim: vim_host::EditorVimHost,
     scripts: script_host::ScriptHosts,
@@ -223,12 +222,6 @@ impl AppHostSession {
         timings.language_load_us = language_restore_us + construction_language_us;
         timings.session_build_us = build_started.elapsed().as_micros() as u64;
         state.set_terminal_text_sizing_support(init.text_sizing);
-        if application == WindowApplication::Launcher {
-            state.launcher_task_runtime = Some(ShellLauncherTaskRuntime::new_managed(
-                platform.clone(),
-                watchdog.clone(),
-            ));
-        }
         let sync_started = Instant::now();
         services.sync_session(&mut state);
         timings.session_sync_us = sync_started.elapsed().as_micros() as u64;
@@ -259,7 +252,6 @@ impl AppHostSession {
             platform,
             services,
             compositor: ScreenCompositor::default(),
-            launcher_icons: None,
             command_lines: CommandLineHosts::new(watchdog.clone()),
             vim: vim_host::EditorVimHost::new(watchdog.clone()),
             scripts: script_host::ScriptHosts::new(watchdog.clone()),
@@ -290,14 +282,6 @@ impl AppHostSession {
             host.vim.set_cell_size(width, height);
             host.scripts.set_cell_size(width, height);
             host.compositor.capture_workspace_images = true;
-            if application == WindowApplication::Launcher {
-                host.launcher_icons = LauncherIconRuntime::spawn(
-                    host.platform.clone(),
-                    ui::EditorImagePicker::for_workspace(width, height),
-                    &host.watchdog,
-                )
-                .ok();
-            }
         }
         host.compositor.capture_enabled = true;
         if !init.focused {
@@ -628,15 +612,6 @@ impl AppHostSession {
                 self.state.window_task_ids = ids.into_iter().collect();
                 self.redraw.request_redraw();
             }
-            ShellToApp::OpenLauncherEntry { id }
-                if self.focused && self.state.active_screen() == ShellScreen::Launcher =>
-            {
-                self.state.apply_launcher_command(
-                    LauncherCommand::RequestLaunch(id),
-                    self.platform.as_ref(),
-                );
-                self.redraw.request_input_redraw();
-            }
             ShellToApp::FilePickerResult { request, path } => {
                 let _language = i18n::enter_snapshot(self.state.language.clone());
                 self.state.finish_editor_file_picker(
@@ -662,13 +637,6 @@ impl AppHostSession {
                 self.close_status = WindowClose::Confirmed;
                 return Ok(());
             }
-        }
-        if self
-            .launcher_icons
-            .as_mut()
-            .is_some_and(LauncherIconRuntime::poll_results)
-        {
-            self.redraw.request_redraw();
         }
         if changed || self.background_poll_timeout(now).is_zero() {
             let (action, background_changed) =
@@ -896,7 +864,7 @@ impl AppHostSession {
             now,
             ui::TerminalCellAspectRatio::default(),
             context,
-            self.launcher_icons.as_mut(),
+            None,
         );
         let content = Rect::new(0, 1, self.size.width, self.size.height);
         let headings = ui::components::WorkspaceHeadingCapture::begin(content);
@@ -904,13 +872,9 @@ impl AppHostSession {
         let mut animating = false;
         self.terminal
             .draw(|frame| {
-                animating = self.compositor.render(
-                    frame,
-                    &mut self.state,
-                    &prepared,
-                    self.launcher_icons.as_ref(),
-                    None,
-                );
+                animating = self
+                    .compositor
+                    .render(frame, &mut self.state, &prepared, None, None);
             })
             .map_err(io::Error::other)?;
         let completed = Instant::now();

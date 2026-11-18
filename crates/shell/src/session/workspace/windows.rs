@@ -224,17 +224,33 @@ impl Workspace {
         }
         if toggle_tasks && self.pending_global.is_none() {
             self.toggle_tasks(state)?;
+            state.close_launcher();
         }
         for request in launches.drain(..) {
             if self.pending_global.is_some() {
                 break;
             }
-            if let WindowRequest::Open {
-                launch,
-                new_session,
-            } = request
-            {
-                self.open_requested(launch, new_session, state.auth_session(), None)?;
+            match request {
+                WindowRequest::Open {
+                    launch,
+                    new_session,
+                } => {
+                    self.open_requested(launch, new_session, state.auth_session(), None)?;
+                    state.close_launcher();
+                }
+                WindowRequest::LauncherEntry { id } => {
+                    if self
+                        .restore_running_window(|launch| launch.launcher_id() == Some(id.as_str()))
+                    {
+                        state.close_launcher();
+                    } else {
+                        state.apply_launcher_command(
+                            LauncherCommand::RequestLaunch(id),
+                            platform::native_platform().as_ref(),
+                        );
+                    }
+                }
+                WindowRequest::ShowLauncher { .. } => {}
             }
         }
         if self
@@ -601,7 +617,7 @@ impl Workspace {
                 }
             }
             AppToShell::InputFence { serial } => {
-                if !self.layout.panes.iter().any(|pane| pane.id == id)
+                if (self.launcher_visible || !self.layout.panes.iter().any(|pane| pane.id == id))
                     && self
                         .input_fences
                         .get(&id)
@@ -637,7 +653,10 @@ impl Workspace {
             }
             AppToShell::OpenApp(launch) => {
                 let request = serde_json::from_value(launch)?;
-                if self.selection.focused() == Some(id) && self.pending_global.is_none() {
+                if state.content_screen() != ShellScreen::Launcher
+                    && self.selection.focused() == Some(id)
+                    && self.pending_global.is_none()
+                {
                     match request {
                         WindowRequest::Open {
                             launch,
@@ -650,15 +669,12 @@ impl Workspace {
                                 Some(id),
                             )?;
                         }
-                        WindowRequest::LauncherEntry { id: entry }
-                            if window.launch.application()
-                                == window_launch::WindowApplication::Launcher
-                                && state.can_execute_command_line() =>
-                        {
-                            if !self.restore_running_window(|launch| {
-                                launch.launcher_id() == Some(entry.as_str())
-                            }) {
-                                self.enqueue(id, ShellToApp::OpenLauncherEntry { id: entry });
+                        WindowRequest::ShowLauncher { select } => {
+                            let platform = platform::native_platform();
+                            if let Some(path) = select {
+                                state.open_launcher_for_path(path.into(), platform.as_ref());
+                            } else {
+                                state.open_launcher(platform.as_ref());
                             }
                         }
                         _ => {}

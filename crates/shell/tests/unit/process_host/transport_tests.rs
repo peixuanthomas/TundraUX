@@ -121,8 +121,9 @@ fn backpressure_and_frame_replacement_keep_persisted_control_before_its_confirma
 
 #[test]
 fn byte_backpressure_recovers_after_the_writer_consumes_a_message() {
-    let message = ShellToApp::OpenLauncherEntry {
+    let message = ShellToApp::TaskAction {
         id: "x".repeat(1024),
+        cancel: false,
     };
     let queue = Queue::new(message.resident_bytes() * 2 - 1);
     queue.push(message.clone()).unwrap();

@@ -65,18 +65,33 @@ impl ShellSession {
         );
     }
 
-    pub(super) fn confirm_taskbar_launcher_session(&mut self, id: String, path: PathBuf) {
+    pub(super) fn confirm_saved_app_launch(
+        &mut self,
+        id: String,
+        path: PathBuf,
+        new_session: bool,
+    ) {
+        let path = path.display().to_string();
+        let message: i18n::LocalizedText = if new_session {
+            i18n::msg!("workspace-confirm-launcher-session", path = path).into()
+        } else {
+            path.into()
+        };
         self.notify_modal_with_options(
             ShellNotification::modal(
                 i18n::msg!("shell-confirm-launch"),
-                i18n::msg!(
-                    "workspace-confirm-launcher-session",
-                    path = path.display().to_string()
-                ),
+                message,
                 ui::NotificationTone::Warning,
                 vec![
-                    ShellNotificationAction::new("launch", i18n::msg!("ui-workspace-new-session"))
-                        .with_follow_up(ShellCommand::ConfirmLauncherWindowSession(id)),
+                    ShellNotificationAction::new(
+                        "launch",
+                        if new_session {
+                            i18n::msg!("ui-workspace-new-session")
+                        } else {
+                            i18n::msg!("ui-launcher-open")
+                        },
+                    )
+                    .with_follow_up(ShellCommand::ConfirmSavedApp { id, new_session }),
                     ShellNotificationAction::new("cancel", i18n::msg!("shell-cancel"))
                         .with_shortcut(InputKey::Escape)
                         .cancel(),
@@ -178,6 +193,13 @@ impl ShellSession {
                 selected: 0,
                 command_enabled,
                 wait_for_enter,
+                add_to_home: item.map(|item| {
+                    let key = Self::home_shortcut_key(&item.id);
+                    !self
+                        .user_home_entries()
+                        .iter()
+                        .any(|entry| entry.icon_identity() == key)
+                }),
             },
         });
         self.last_click = None;
@@ -233,6 +255,10 @@ impl ShellSession {
             return;
         }
         self.pages.launcher.context_menu = None;
+        if action == LauncherEntryAction::AddToHome {
+            self.set_home_shortcut(Self::home_shortcut_key(&id), true);
+            return;
+        }
         if action == LauncherEntryAction::NewSession {
             self.open_selected_launcher_item(platform, true);
             return;
@@ -306,6 +332,7 @@ impl ShellSession {
                     .collect()
             }
             LauncherEntryAction::Toolbar(_)
+            | LauncherEntryAction::AddToHome
             | LauncherEntryAction::NewSession
             | LauncherEntryAction::Move
             | LauncherEntryAction::WaitForEnter
@@ -587,6 +614,7 @@ impl ShellSession {
             LauncherEntryAction::Toolbar(_)
             | LauncherEntryAction::NewSession
             | LauncherEntryAction::Move
+            | LauncherEntryAction::AddToHome
             | LauncherEntryAction::WaitForEnter
             | LauncherEntryAction::Remove => unreachable!(),
         };

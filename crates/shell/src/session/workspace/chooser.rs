@@ -57,8 +57,8 @@ impl Workspace {
             choices.insert(key, Choice::Window(id));
         }
         let group = i18n::tr!("ui-workspace-start-application");
-        for entry in state.user_home_entries() {
-            let Some(launch) = launch_for_key(entry.icon_identity()) else {
+        for entry in state.default_home_entries() {
+            let Some(launch) = WindowLaunch::for_builtin(entry.icon_identity()) else {
                 continue;
             };
             let key = format!("application.{}", entry.icon_identity());
@@ -69,10 +69,16 @@ impl Workspace {
             );
             choices.insert(key, Choice::Application(launch));
         }
-        for app in state.built_in_launcher_applications() {
-            let Some(launch) = launch_for_key(app.id.trim_start_matches("builtin.")) else {
+        for app in state.available_built_in_applications() {
+            let Some(launch) = WindowLaunch::for_builtin(app.id.trim_start_matches("builtin."))
+            else {
                 continue;
             };
+            if choices.values().any(
+                |choice| matches!(choice, Choice::Application(existing) if *existing == launch),
+            ) {
+                continue;
+            }
             items.push(
                 SelectionListItem::new(app.id, app.localized_name().render_current())
                     .with_keywords([app.localized_description().render_current()])
@@ -196,32 +202,4 @@ impl Workspace {
             .list
             .render_with_context(chooser.area, frame.buffer_mut(), context);
     }
-}
-
-fn launch_for_key(key: &str) -> Option<WindowLaunch> {
-    Some(match key {
-        "explorer" => WindowLaunch::Explorer,
-        "launcher" => WindowLaunch::Launcher { select: None },
-        "settings" => WindowLaunch::Settings,
-        "system_status" => WindowLaunch::SystemStatus,
-        "logs" => WindowLaunch::Logs,
-        "clock" => WindowLaunch::Clock,
-        "command-line" => WindowLaunch::command_line(),
-        "editor" => WindowLaunch::Editor,
-        "script-editor" => WindowLaunch::Script,
-        key => WindowLaunch::Management(WindowLaunch::management_query(match key {
-            "packages" => ManagementKind::Packages,
-            "services" => ManagementKind::Services,
-            "processes" => ManagementKind::Processes,
-            "network" => ManagementKind::Network,
-            "disks" => ManagementKind::Disks,
-            "firewall" => ManagementKind::Firewall,
-            "ssh" => ManagementKind::Ssh,
-            "users" => ManagementKind::Users,
-            "backups" => ManagementKind::Backups,
-            "scheduled-tasks" => ManagementKind::ScheduledTasks,
-            "tasks" => ManagementKind::Tasks,
-            _ => return None,
-        })),
-    })
 }

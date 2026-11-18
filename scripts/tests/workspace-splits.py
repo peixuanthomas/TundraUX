@@ -55,21 +55,34 @@ def main():
                 if predicate(current):
                     return current
                 smoke.read_available(master, output, 0.02)
-            raise AssertionError(f"UI condition timed out: {current}")
+            raise AssertionError(f"UI condition timed out on {current['page']}\n" + "\n".join(current["lines"]))
 
         def find(frame, suffix):
             return next(node for node in frame["nodes"] if node["id"].endswith(suffix))
 
-        def tap(frame, suffix):
+        def tap(frame, suffix, button=0):
             node = next(node for node in frame["nodes"] if node["id"].endswith(suffix) and node["actionable"])
             x, y = smoke.control_position(frame, node["id"])
-            send(f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
+            send(f"\x1b[<{button};{x};{y}M\x1b[<{button};{x};{y}m".encode())
 
         def titles(frame):
             return [node for node in frame["nodes"] if "workspace.title." in node["id"]]
 
         def chooser(frame):
             return any(node["id"].endswith("workspace.choose.query") for node in frame["nodes"])
+
+        def chooser_scrollbar(frame, part):
+            return next(node for node in frame["nodes"]
+                        if "workspace.choose" in node["id"]
+                        and node["id"].endswith(f"scrollbar.vertical/{part}"))
+
+        def open_launcher(frame):
+            launcher = next(node for node in frame["nodes"] if "home.entry." in node["id"] and node["name"] == "Launcher")
+            tap(frame, launcher["id"])
+            frame = until(lambda frame: frame["page"] == "Launcher")
+            assert not any(node["id"].startswith("workspace/") or "workspace.taskbar." in node["id"] for node in frame["nodes"])
+            assert not any("workspace.title." in node["id"] for node in frame["nodes"])
+            return frame
 
         def choose(query, suffix):
             until(chooser)
@@ -91,16 +104,36 @@ def main():
                 current = snapshot()
                 if current["page"] == "Home" and not any(node["id"].startswith("modal/") for node in current["nodes"]):
                     break
-                send(b"\x1b[21~" if current["page"] == "FirstRunSetup" else b"\r")
+                send(b"\x1b[20~" if current["page"] == "FirstRunSetup" else b"\r")
                 smoke.read_available(master, output, 0.1)
             current = until(lambda frame: frame["page"] == "Home")
             sessions = subprocess.run([str(cli), "ui", "sessions"], env=env, capture_output=True, text=True, timeout=15)
             assert sessions.returncode == 0, sessions.stderr
             shell_pid = next(session["pid"] for session in json.loads(sessions.stdout)["sessions"] if session["session"] == current["session"])
-            launcher = next(node for node in current["nodes"] if "home.entry." in node["id"] and "Launcher" in node["name"])
-            tap(current, launcher["id"])
-            current = until(lambda frame: frame["page"] == "Launcher" and len(titles(frame)) == 1)
+            current = open_launcher(current)
+            tap(current, "launcher.item.builtin.editor", button=2)
+            current = until(lambda frame: any(node["name"] == "Add to Home" and node["actionable"] for node in frame["nodes"]))
+            tap(current, next(node["id"] for node in current["nodes"] if node["name"] == "Add to Home"))
+            send(b"\x1b")
+            current = until(lambda frame: frame["page"] == "Home")
+            editor_shortcut = next(node for node in current["nodes"] if "home.entry." in node["id"] and node["name"] == "Editor")
+            tap(current, editor_shortcut["id"], button=2)
+            current = until(lambda frame: any(node["name"] == "Remove from Home" and node["actionable"] for node in frame["nodes"]))
+            tap(current, next(node["id"] for node in current["nodes"] if node["name"] == "Remove from Home"))
+            current = until(lambda frame: not any(node["id"] == editor_shortcut["id"] for node in frame["nodes"]))
+            current = open_launcher(current)
+            assert find(current, "launcher.item.builtin.editor")["actionable"]
+            tap(current, "launcher.item.builtin.logs")
+            current = until(lambda frame: frame["page"] == "Logs" and len(titles(frame)) == 1)
             source = titles(current)[0]["id"].rsplit(".", 1)[1]
+            send(b"\x1b")
+            current = open_launcher(until(lambda frame: frame["page"] == "Home"))
+            send(b"\x1b")
+            current = until(lambda frame: frame["page"] == "Home")
+            tap(current, f"workspace.taskbar.{source}")
+            current = until(lambda frame: frame["page"] == "Logs" and len(titles(frame)) == 1)
+            print("PASS: Launcher is a catalog; adding and removing a Home shortcut leaves the app and live windows available")
+
             original = titles(current)[0]["rect"]
             assert not any("workspace.maximize." in node["id"] for node in current["nodes"])
             send(b"\x17v")
@@ -110,6 +143,23 @@ def main():
             current = until(lambda frame: not chooser(frame) and len(titles(frame)) == 1)
             assert find(current, f"workspace.title.{source}")["rect"] == original
             print("PASS: Ctrl+W,v opens the right-hand selector and Escape restores the original pane")
+
+            resize(217, 20, 1)
+            send(b"\x17v")
+            current = until(chooser)
+            track = chooser_scrollbar(current, "track")
+            thumb = chooser_scrollbar(current, "thumb")
+            selected = next(node["id"] for node in current["nodes"] if "workspace.choose" in node["id"] and node["role"] == "listitem" and node["selected"])
+            x, y = track["rect"]["x"] + 1, track["rect"]["y"] + 1
+            send(f"\x1b[<65;{x};{y}M".encode() * 6)
+            until(lambda frame: chooser_scrollbar(frame, "thumb")["rect"]["y"] > thumb["rect"]["y"])
+            send(f"\x1b[<64;{x};{y}M".encode() * 6)
+            current = until(lambda frame: any(node["id"] == selected and node["selected"] for node in frame["nodes"]))
+            assert chooser_scrollbar(current, "thumb")["rect"] == thumb["rect"]
+            send(b"\x1b")
+            until(lambda frame: not chooser(frame))
+            resize(217, 39, 1)
+            print("PASS: wheel scrolls the compact app picker and preserves its selection")
 
             send(b"\x17v")
             current = choose("Settings", "application.settings")
@@ -152,7 +202,7 @@ def main():
             tap(current, f"workspace.maximize.{focused_id}")
             current = until(lambda frame: len(titles(frame)) == 1)
             tap(current, f"workspace.taskbar.{source}")
-            current = until(lambda frame: len(titles(frame)) == 1 and frame["page"] == "Launcher")
+            current = until(lambda frame: len(titles(frame)) == 1 and frame["page"] == "Logs")
             send(b"\x17v")
             current = choose("Settings", f"window.{settings}")
             current = until(lambda frame: len(titles(frame)) == 2)

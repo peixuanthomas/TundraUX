@@ -134,6 +134,7 @@ pub(super) struct Workspace {
     text_sizing: bool,
     windows: BTreeMap<SessionId, Window>,
     selection: WindowSelection,
+    pub(super) launcher_visible: bool,
     chooser: Option<chooser::WindowChooser>,
     split_launch: Option<(SessionId, SessionId)>,
     generation: LayoutGeneration,
@@ -189,6 +190,7 @@ impl Workspace {
             text_sizing,
             windows: BTreeMap::new(),
             selection: Default::default(),
+            launcher_visible: false,
             chooser: None,
             split_launch: None,
             generation: LayoutGeneration(0),
@@ -380,26 +382,27 @@ impl Workspace {
 
     pub(super) fn external_snapshot_ready(&self) -> bool {
         self.input_fences.is_empty()
-            && self
-                .layout
-                .panes
-                .iter()
-                .filter_map(|pane| self.windows.get(&pane.id))
-                .all(|window| {
-                    window
-                        .frame
-                        .as_ref()
-                        .is_some_and(|frame| frame.layout == self.generation)
-                        || window.state == ProcessState::Unresponsive
-                        || matches!(window.state, ProcessState::ForceStopping)
-                        || matches!(
-                            window.close,
-                            CloseProgress::Cleaning(_)
-                                | CloseProgress::Waiting
-                                | CloseProgress::Exiting
-                        )
-                        || window.status.unresponsive
-                })
+            && (self.launcher_visible
+                || self
+                    .layout
+                    .panes
+                    .iter()
+                    .filter_map(|pane| self.windows.get(&pane.id))
+                    .all(|window| {
+                        window
+                            .frame
+                            .as_ref()
+                            .is_some_and(|frame| frame.layout == self.generation)
+                            || window.state == ProcessState::Unresponsive
+                            || matches!(window.state, ProcessState::ForceStopping)
+                            || matches!(
+                                window.close,
+                                CloseProgress::Cleaning(_)
+                                    | CloseProgress::Waiting
+                                    | CloseProgress::Exiting
+                            )
+                            || window.status.unresponsive
+                    }))
     }
 
     pub(super) fn take_input_rejection(&mut self) -> (bool, bool) {
@@ -564,6 +567,7 @@ impl Workspace {
         }
         let input_focus = focused.filter(|id| {
             !modal
+                && !self.launcher_visible
                 && self.terminal_focused
                 && !self.has_overlay()
                 && layout.panes.iter().any(|pane| pane.id == *id)
@@ -596,7 +600,7 @@ impl Workspace {
             let message = ShellToApp::Viewport {
                 layout: self.generation,
                 size,
-                visible: pane.is_some(),
+                visible: pane.is_some() && !self.launcher_visible,
                 focused: self.input_focus == Some(id),
             };
             if window.viewport.as_ref() != Some(&message) {

@@ -281,6 +281,12 @@ impl ShellSession {
     ) -> (RoutedTarget, ShellCommand) {
         let target = RoutedTarget::Popup(ShellComponent::ContextMenu);
 
+        if self.active_screen() == ShellScreen::Home && self.pages.home.context_menu.is_some() {
+            return (
+                target,
+                ShellCommand::HomeContextInput(InputEvent::Key(key.clone())),
+            );
+        }
         if self.pages.explorer.explorer_overlay_mode.is_some() {
             return self.route_explorer_overlay_key(key);
         }
@@ -662,6 +668,12 @@ impl ShellSession {
         hit_target: Option<ShellComponent>,
         received_at: Instant,
     ) -> (RoutedTarget, ShellCommand) {
+        if self.active_screen() == ShellScreen::Home && self.pages.home.context_menu.is_some() {
+            return (
+                RoutedTarget::Popup(ShellComponent::ContextMenu),
+                ShellCommand::HomeContextInput(InputEvent::Mouse(mouse)),
+            );
+        }
         let coordinates = mouse.coordinates();
 
         if hit_target != Some(ShellComponent::ContextMenu) {
