@@ -14,6 +14,51 @@ use ui::{
 use unicode_width::UnicodeWidthStr;
 
 #[test]
+fn built_in_launcher_tiles_render_theme_art_and_supply_terminal_images() {
+    let items = app::BUILT_IN_APPLICATIONS
+        .iter()
+        .copied()
+        .map(LauncherItemViewModel::built_in)
+        .collect();
+    let model = LauncherViewModel::new(items, Some(0), LauncherViewMode::LargeIcons, false);
+    let area = Rect::new(0, 0, 140, 40);
+    let layout = launcher_layout(area, &model);
+    assert_eq!(layout.items.len(), model.items.len());
+    let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
+    let context = ui::RenderContext::default();
+    terminal
+        .draw(|frame| ui::render_launcher_content(frame, area, &model, &context, None))
+        .unwrap();
+
+    let graphics = ui::TerminalGraphicsProbe::from_terminal_capabilities(
+        ui::EditorGraphicsProtocol::Iterm2,
+        8,
+        16,
+        false,
+        false,
+    );
+    let picker = graphics.picker().unwrap();
+    let buffer = terminal.backend().buffer();
+    for tile in &layout.items {
+        let item = &model.items[tile.index];
+        let icon = model.item_icon(item).unwrap();
+        assert_ne!(Some(icon), model.default_app_icon(), "{}", item.id);
+        for (y, line) in (tile.icon_area.y..tile.icon_area.bottom()).zip(icon.lines()) {
+            let painted: String = (tile.icon_area.x..tile.icon_area.right())
+                .map(|x| buffer[(x, y)].symbol())
+                .collect();
+            assert_eq!(painted.trim(), line.trim(), "{}", item.id);
+        }
+        let bytes = model
+            .item_graphic_bytes(item)
+            .unwrap_or_else(|| panic!("missing image for {}", item.id));
+        picker
+            .prepare_bytes(bytes, tile.icon_area)
+            .unwrap_or_else(|error| panic!("invalid image for {}: {error}", item.id));
+    }
+}
+
+#[test]
 fn launcher_context_menu_fits_complete_button_labels_in_both_languages() {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
     for language in ["en-US", "zh-CN"] {

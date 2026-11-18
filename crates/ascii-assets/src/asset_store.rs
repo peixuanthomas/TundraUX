@@ -95,9 +95,10 @@ impl AsciiAssetStore {
         let banners = load_art_set(&resolver, theme_id, "banner", "banner.toml")?;
         let explorer_icons = load_explorer_icons(&resolver, theme_id)?;
         let home_icons = load_home_icon_catalog(&resolver, theme_id)?;
-        let launcher_icons = load_launcher_icons(&resolver, theme_id)?;
+        let mut icon_resolver = resolver.clone();
+        let launcher_icons = load_launcher_icons(&mut icon_resolver, theme_id)?;
         let image_assets = if load_images {
-            load_image_assets(&resolver, theme_id, &home_icons, &launcher_icons)?
+            load_image_assets(&icon_resolver, theme_id, &home_icons, &launcher_icons)?
         } else {
             BTreeMap::new()
         };
@@ -189,7 +190,15 @@ impl AsciiAssetStore {
         } else {
             key
         };
-        self.launcher_icons.get(key)
+        self.launcher_icons.get(key).or_else(|| {
+            let home_key = match key {
+                "builtin.explorer" => "explorer",
+                "builtin.settings" => "settings",
+                "builtin.system-status" => "system_status",
+                _ => return None,
+            };
+            self.home_icons.icon_for_key(home_key)
+        })
     }
 
     pub fn launcher_icon_image_path(&self, key: &str) -> Option<PathBuf> {

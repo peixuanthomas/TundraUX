@@ -346,6 +346,39 @@ fn automatic_recovery_validates_required_launcher_entries() {
 }
 
 #[test]
+fn older_default_launcher_catalog_keeps_its_overrides_and_gains_the_clock_icon() {
+    let root = TempDir::new("older-launcher-catalog");
+    restore_default_theme(root.path()).unwrap();
+    let theme = root.path().join("themes/default");
+    let catalog = theme.join("launcher_icons.toml");
+    let mut contents: toml::Table = fs::read_to_string(&catalog).unwrap().parse().unwrap();
+    let items = contents.get_mut("items").unwrap().as_table_mut().unwrap();
+    items.remove("builtin.clock").unwrap();
+    items.get_mut("builtin.command-line").unwrap()["label"] = "Custom Command Line".into();
+    let custom_catalog = toml::to_string(&contents).unwrap();
+    fs::write(&catalog, &custom_catalog).unwrap();
+    let clock_path = "launcher_icons/clock.png";
+    fs::remove_file(theme.join(clock_path)).unwrap();
+
+    let store = AsciiAssetStore::load_with_root(root.path(), DEFAULT_THEME_ID).unwrap();
+    let clock = store.launcher_icon("builtin.clock").unwrap();
+    assert_eq!(clock.image_path(), Some(clock_path));
+    assert_eq!(
+        store.launcher_icon_image_bytes("builtin.clock"),
+        Some(embedded_default_theme_file(clock_path).unwrap().contents)
+    );
+    assert_eq!(
+        store.launcher_icon("builtin.command-line").unwrap().label(),
+        Some("Custom Command Line")
+    );
+
+    let (_, report) = AsciiAssetStore::load_default_with_root_and_recovery(root.path()).unwrap();
+    assert_eq!(report.repaired.len(), 1);
+    assert_eq!(report.repaired[0].key, clock_path);
+    assert_eq!(fs::read_to_string(catalog).unwrap(), custom_catalog);
+}
+
+#[test]
 fn restore_atomically_replaces_the_destination_instead_of_truncating_it() {
     let root = TempDir::new("atomic-replacement");
     let theme = root.path().join("themes/default");

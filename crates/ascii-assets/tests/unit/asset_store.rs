@@ -50,6 +50,17 @@ fn default_store_loads_canonical_assets() {
             .is_some_and(|path| path.is_file())
     );
     assert!(store.home_icon_image_bytes("system_status").is_some());
+    for (application, home_key) in [
+        ("builtin.explorer", "explorer"),
+        ("builtin.settings", "settings"),
+        ("builtin.system-status", "system_status"),
+    ] {
+        assert_eq!(store.launcher_icon(application), store.home_icon(home_key));
+        assert_eq!(
+            store.launcher_icon_image_bytes(application),
+            store.home_icon_image_bytes(home_key)
+        );
+    }
     let command_line = store
         .launcher_icon("builtin.command-line")
         .expect("Command Line Launcher icon");

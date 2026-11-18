@@ -80,3 +80,8 @@ lines = [' _____ ', '| (o) |', '|     |', '|___o_|']
 label = "Tasks"
 image = "launcher_icons/tasks.png"
 lines = [' _____ ', '|v == |', '|v == |', '|o____|']
+
+[items."builtin.clock"]
+label = "Clock"
+image = "launcher_icons/clock.png"
+lines = ['  ___  ', ' / | \ ', '|  +--|', ' \___/ ']

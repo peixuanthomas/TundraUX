@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::asset_error::AssetError;
 use crate::asset_resolver::AssetResolver;
+use crate::embedded_defaults::embedded_default_theme_file;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextArt {
@@ -242,10 +243,10 @@ pub(crate) fn load_home_icon_catalog(
 }
 
 pub(crate) fn load_launcher_icons(
-    resolver: &AssetResolver,
+    resolver: &mut AssetResolver,
     theme_id: &str,
 ) -> Result<ArtSet, AssetError> {
-    let icons = load_art_set(resolver, theme_id, "launcher_icons", "launcher_icons.toml")?;
+    let mut icons = load_art_set(resolver, theme_id, "launcher_icons", "launcher_icons.toml")?;
     for required in ["builtin.command-line", "builtin.editor"] {
         if icons.get(required).is_none() {
             return Err(AssetError::InvalidAsset {
@@ -275,6 +276,28 @@ pub(crate) fn load_launcher_icons(
                     message: format!("missing required built-in application icon {required}"),
                 });
             }
+        }
+
+        // Keep older default catalogs and their overrides usable after upgrading.
+        let clock_key = "builtin.clock";
+        if icons.get(clock_key).is_none() {
+            let catalog = embedded_default_theme_file("launcher_icons").expect("embedded catalog");
+            let mut defaults_resolver = resolver.clone();
+            defaults_resolver.use_embedded_default(catalog.relative_path, catalog.contents);
+            let mut defaults = load_art_set(
+                &defaults_resolver,
+                theme_id,
+                catalog.key,
+                catalog.relative_path,
+            )?;
+            let clock = defaults
+                .items
+                .remove(clock_key)
+                .expect("embedded Clock icon");
+            let png = embedded_default_theme_file("launcher_icons/clock.png")
+                .expect("embedded Clock image");
+            resolver.use_embedded_default(png.relative_path, png.contents);
+            icons.items.insert(clock_key.to_string(), clock);
         }
     }
     Ok(icons)

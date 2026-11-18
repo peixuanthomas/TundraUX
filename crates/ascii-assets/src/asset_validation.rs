@@ -226,7 +226,7 @@ fn validate_required_asset(
         AssetKind::ArtSet => match asset.key {
             "explorer_icons" => load_explorer_icons(resolver, theme_id).map(|_| ()),
             "home_icons" => load_home_icon_catalog(resolver, theme_id).map(|_| ()),
-            "launcher_icons" => load_launcher_icons(resolver, theme_id).map(|_| ()),
+            "launcher_icons" => load_launcher_icons(&mut resolver.clone(), theme_id).map(|_| ()),
             _ => load_art_set(resolver, theme_id, asset.key, asset.relative_path).map(|_| ()),
         },
         AssetKind::Font => load_clock_font(resolver, theme_id).map(|_| ()),

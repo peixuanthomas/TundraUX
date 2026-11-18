@@ -23,6 +23,7 @@ The default manifest contains 25 items: 20 text assets, 4 TOML art sets, and 1 c
 - Default image bytes are shared through a static asset table; validation, repair, and in-memory fallback reuse the same data.
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
 - Home resolves system-application icons from the existing built-in application artwork and images when no Home-specific icon is defined.
+- Launcher uses the themed Home icons for Explorer, Settings, and System Status when there is no Launcher-specific entry. Older default Launcher catalogs inherit the embedded Clock artwork and image.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
 
 Asset roots are resolved in this order:
