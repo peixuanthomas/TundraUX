@@ -14,7 +14,7 @@ use crate::{RenderContext, TundraTheme};
 
 const HOME_SUMMARY_HEIGHT: u16 = 1;
 const HOME_ICON_HEIGHT: u16 = 4;
-const HOME_TILE_MAX_HEIGHT: u16 = 6;
+const HOME_TILE_MAX_HEIGHT: u16 = HOME_ICON_HEIGHT + 1;
 const HOME_TILE_MIN_HEIGHT: u16 = 2;
 const HOME_TILE_GAP: u16 = 1;
 const HOME_CONTENT_MAX_WIDTH: u16 = 112;
@@ -179,27 +179,6 @@ fn render_user_main(
                 ))
                 .alignment(HorizontalAlignment::Left),
                 Rect::new(inner.x, label_y, inner.width, 1),
-            );
-        }
-        let description_y = label_y.saturating_add(1);
-        if description_y < inner.bottom() {
-            let description_style = if style.bg == Some(context.theme.surface)
-                || style.bg == Some(context.theme.raised)
-            {
-                style
-                    .fg(context.theme.muted)
-                    .remove_modifier(Modifier::BOLD)
-            } else {
-                style.remove_modifier(Modifier::BOLD)
-            };
-            frame.render_widget(
-                Paragraph::new(centered_home_tile_text(
-                    &entry.description,
-                    content_width,
-                    description_style,
-                ))
-                .alignment(HorizontalAlignment::Left),
-                Rect::new(inner.x, description_y, inner.width, 1),
             );
         }
     }

@@ -21,11 +21,11 @@ ui-launcher-missing = Missing
 ui-launcher-needs-approval = Needs approval
 ui-launcher-unsupported = Unsupported
 
-ui-launcher-title = Launcher · { $mode }
+ui-launcher-view-mode = View: { $mode }
 
 ui-launcher-item-count = { $count ->
-        [one] { $count } item · Enter launch · Esc back
-       *[other] { $count } items · Enter launch · Esc back
+        [one] { $count } item
+       *[other] { $count } items
     }
 
 ui-launcher-empty = No launcher shortcuts yet

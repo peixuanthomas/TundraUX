@@ -264,10 +264,9 @@ impl ShellSession {
         ];
         model.status_actions.push((
             ui::EditorMenuAction::GoToLine,
-            format!(
-                "Ctrl+G {}:{}",
-                model.cursor.unwrap_or_default().line + 1,
-                model.cursor.unwrap_or_default().column + 1
+            model.cursor.map_or_else(
+                || format!("Ctrl+G {}", i18n::tr!("ui-editor-go-to-line")),
+                |cursor| format!("Ctrl+G {}:{}", cursor.line + 1, cursor.column + 1),
             ),
         ));
         model.status_actions.push((

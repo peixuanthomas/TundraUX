@@ -44,7 +44,6 @@ ui-logs-loading-logs = 正在加载日志…
 ui-logs-linux-events = Linux 事件
 ui-logs-loading-events = 正在加载事件…
 ui-logs-no-events-match-the-current-query = 没有符合当前查询的事件
-ui-logs-select-an-event-to-inspect-its-operation-and-correlation-identifiers = 选择事件以查看其操作和关联标识。
 
 ui-logs-event-detail = 时间：{ $time }
     级别：{ $level }
@@ -53,6 +52,7 @@ ui-logs-event-detail = 时间：{ $time }
     { $detail }{ $incident }
 
 ui-logs-incident-link = { "\u000A" }故障事件：{ $id }
+ui-logs-operation-id = 操作 ID：{ $id }
 
 ui-logs-clear-filters = C 清除过滤
 ui-logs-show-incident = I 打开故障报告

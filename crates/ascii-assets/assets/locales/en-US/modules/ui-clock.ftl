@@ -1,7 +1,5 @@
 # UI clock messages.
 
-ui-clock-clock = Clock
-ui-clock-alarms-timers = Alarms & Timers
 ui-clock-new-button = { "[" } + New ]
 ui-clock-alarms-none = ALARMS (none)
 ui-clock-alarms = ALARMS

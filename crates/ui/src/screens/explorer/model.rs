@@ -602,6 +602,7 @@ pub struct ExplorerSavePickerViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerViewModel {
+    pub browse_title_id: Option<&'static str>,
     pub save_picker: Option<ExplorerSavePickerViewModel>,
     pub current_path: String,
     pub address_value: String,
@@ -670,6 +671,7 @@ impl ExplorerViewModel {
         let selected_count = entries.iter().filter(|entry| entry.selected).count();
         let current_path = current_path.into();
         Self {
+            browse_title_id: Some(i18n::ids::SHELL_EXPLORER),
             save_picker: None,
             address_value: current_path.clone(),
             current_path,

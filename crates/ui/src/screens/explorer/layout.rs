@@ -115,6 +115,7 @@ pub enum ExplorerHitTarget {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerLayout {
+    pub(super) title_id: Option<&'static str>,
     pub save_name_label: Rect,
     pub save_name: Rect,
     pub save_button: Rect,
@@ -251,7 +252,16 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         ExplorerLayoutMode::Compact
     };
     let panel = area;
-    let mut inner = crate::components::Surface::new().titled("").inner(panel);
+    let title_id = if model.save_picker.is_some() {
+        Some(i18n::ids::UI_EXPLORER_SAVE_TITLE)
+    } else {
+        model.browse_title_id
+    };
+    let mut inner = if title_id.is_some() {
+        crate::components::Surface::new().titled("").inner(panel)
+    } else {
+        panel
+    };
     let side = u16::from(area.width >= EXPLORER_SIDEBAR_MIN_WIDTH) * 2;
     inner.x += side;
     inner.width -= side * 2;
@@ -306,7 +316,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         toolbar_rows.min(inner.height.saturating_sub(3).max(1)),
     );
     let remaining_height = inner.height.saturating_sub(toolbar.height + 2);
-    let bar = super::render::explorer_action_bar(model);
+    let bar = super::render::explorer_action_bar(model, mode);
     let footer_height = bar.height(inner.width).min(remaining_height);
     let footer = Rect::new(
         inner.x,
@@ -538,6 +548,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
     let overlay = explorer_overlay_layout(area, model);
 
     ExplorerLayout {
+        title_id,
         save_name_label,
         save_name,
         save_button,

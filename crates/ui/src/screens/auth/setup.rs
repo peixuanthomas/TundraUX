@@ -12,23 +12,22 @@ use crate::{RenderContext, TundraTheme, setup_standard_color_options};
 const SETUP_WIDE_MAP_MIN_WIDTH: u16 = 90;
 const SETUP_WIDE_MAP_MIN_HEIGHT: u16 = 14;
 const SETUP_CONTROLS_WIDTH: u16 = 48;
-const SETUP_TIMEZONE_HEADER_HEIGHT: u16 = 4;
+const SETUP_TIMEZONE_HEADER_HEIGHT: u16 = 2;
 const SETUP_TIMEZONE_TOP_GAP_HEIGHT: u16 = 1;
 const SETUP_TIMEZONE_BOTTOM_GAP_HEIGHT: u16 = 1;
 const SETUP_TIMEZONE_FOOTER_HEIGHT: u16 = 3;
-const SETUP_LANGUAGE_LIST_LINE: u16 = 3;
-const SETUP_APPEARANCE_HEADER_HEIGHT: u16 = 2;
-const SETUP_APPEARANCE_SHAPE_LINE: u16 = 2;
+const SETUP_LANGUAGE_LIST_LINE: u16 = 1;
+const SETUP_APPEARANCE_SHAPE_LINE: u16 = 1;
 const SETUP_APPEARANCE_SHAPE_HEIGHT: u16 = 3;
-const SETUP_APPEARANCE_THEME_LINE: u16 = 5;
+const SETUP_APPEARANCE_THEME_LINE: u16 = 4;
 const SETUP_APPEARANCE_PALETTE_HEIGHT: u16 = 4;
-const SETUP_APPEARANCE_THEME_CUSTOM_LINE: u16 = 9;
-const SETUP_APPEARANCE_ACCENT_LINE: u16 = 11;
-const SETUP_APPEARANCE_ACCENT_CUSTOM_LINE: u16 = 15;
-const SETUP_APPEARANCE_PREVIEW_LINE: u16 = 17;
-const SETUP_APPEARANCE_PREVIEW_HEIGHT: u16 = 4;
-const SETUP_APPEARANCE_SUBMIT_LINE: u16 = 22;
-const SETUP_APPEARANCE_ERROR_LINE: u16 = 24;
+const SETUP_APPEARANCE_THEME_CUSTOM_LINE: u16 = 8;
+const SETUP_APPEARANCE_ACCENT_LINE: u16 = 10;
+const SETUP_APPEARANCE_ACCENT_CUSTOM_LINE: u16 = 14;
+const SETUP_APPEARANCE_PREVIEW_LINE: u16 = 16;
+const SETUP_APPEARANCE_PREVIEW_HEIGHT: u16 = 3;
+const SETUP_APPEARANCE_SUBMIT_LINE: u16 = 20;
+const SETUP_APPEARANCE_ERROR_LINE: u16 = 22;
 const SETUP_APPEARANCE_BUTTON_GAP: u16 = 1;
 
 pub fn setup_render_context(model: &SetupViewModel, context: &RenderContext) -> RenderContext {
@@ -92,9 +91,9 @@ pub fn setup_viewport(main: Rect, model: &SetupViewModel) -> super::AuthViewport
         SetupStep::Language => u16::try_from(model.languages.len())
             .unwrap_or(200)
             .min(200)
-            .saturating_add(12),
+            .saturating_add(9),
         SetupStep::Timezone => 15,
-        SetupStep::Appearance => 29,
+        SetupStep::Appearance => 27,
     };
     super::auth_viewport(main, minimum, model.scroll_offset)
 }
@@ -225,15 +224,8 @@ fn render_setup_language_page(
 
     let content = super::common::auth_content_area(area);
     frame.render_widget(
-        Paragraph::new(setup_language_header_lines(model, theme))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        Rect::new(
-            content.x,
-            content.y,
-            content.width,
-            SETUP_LANGUAGE_LIST_LINE.min(content.height),
-        ),
+        Paragraph::new(setup_step_heading(model.step, theme)),
+        setup_line_area(area, 0, SETUP_LANGUAGE_LIST_LINE),
     );
 
     let list_area = setup_language_list_area(area, model.languages.len());
@@ -267,18 +259,14 @@ fn render_setup_language_page(
     list.render_borderless_frame(frame, list_area, theme);
 
     let footer_y = list_area.bottom().saturating_add(1);
+    let [back, _] = setup_navigation_areas(area);
     let footer = Rect::new(
         content.x,
         footer_y,
         content.width,
-        content.bottom().saturating_sub(footer_y),
+        back.y.saturating_sub(footer_y),
     );
-    frame.render_widget(
-        Paragraph::new(setup_language_footer_lines(model, theme))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        footer,
-    );
+    render_setup_error(frame, footer, model, theme);
 }
 
 fn render_setup_timezone_page(
@@ -302,18 +290,23 @@ fn render_setup_timezone_page(
         content.width,
         SETUP_TIMEZONE_HEADER_HEIGHT.min(content.height),
     );
+    let footer_y = content.bottom() - SETUP_TIMEZONE_FOOTER_HEIGHT.min(content.height);
+    let [back, _] = setup_navigation_areas(area);
     let footer = Rect::new(
         content.x,
-        content
-            .y
-            .saturating_add(content.height.saturating_sub(SETUP_TIMEZONE_FOOTER_HEIGHT)),
+        footer_y,
         content.width,
-        SETUP_TIMEZONE_FOOTER_HEIGHT.min(content.height),
+        back.y.saturating_sub(footer_y),
     );
 
     frame.render_widget(
-        Paragraph::new(setup_timezone_header_lines(model, theme))
-            .alignment(HorizontalAlignment::Left),
+        Paragraph::new(vec![
+            setup_step_heading(model.step, theme),
+            Line::styled(
+                selected_timezone_description_summary(model),
+                theme.muted_style(),
+            ),
+        ]),
         header,
     );
     let items = if model.timezones.is_empty() {
@@ -350,12 +343,7 @@ fn render_setup_timezone_page(
         Scrollbar::new(model.timezones.len(), visible_rows, start)
             .render_frame(frame, list_area, &context);
     }
-    frame.render_widget(
-        Paragraph::new(setup_timezone_footer_lines(model, theme))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-        footer,
-    );
+    render_setup_error(frame, footer, model, theme);
 }
 
 fn render_setup_appearance_page(
@@ -367,26 +355,9 @@ fn render_setup_appearance_page(
     let theme = &context.compatibility_theme();
     render_setup_surface(frame, area, context, model.border_shape);
 
-    let content = super::common::auth_content_area(area);
-    let header = Rect::new(
-        content.x,
-        content.y,
-        content.width,
-        SETUP_APPEARANCE_HEADER_HEIGHT.min(content.height),
-    );
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::styled(
-                i18n::tr!("ui-auth-step", step = setup_step_label(model.step)),
-                theme.title_style(),
-            ),
-            Line::from(i18n::tr!(
-                "ui-auth-choose-the-frame-shape-theme-color-and-accent-color"
-            )),
-        ])
-        .alignment(HorizontalAlignment::Left)
-        .wrap(Wrap { trim: true }),
-        header,
+        Paragraph::new(setup_step_heading(model.step, theme)),
+        setup_line_area(area, 0, SETUP_APPEARANCE_SHAPE_LINE),
     );
 
     render_setup_shape_buttons(frame, area, model, context);
@@ -434,15 +405,11 @@ fn render_setup_appearance_page(
         let inner = surface.inner(preview);
         surface.render_frame(frame, preview, context);
         frame.render_widget(
-            Paragraph::new(vec![
-                Line::styled(i18n::tr!("ui-auth-live-preview"), theme.title_style()),
-                Line::from(i18n::tr!(
-                    "ui-auth-appearance-preview",
-                    theme = model.theme_color_value.clone(),
-                    accent = model.accent_color_value.clone()
-                )),
-            ])
-            .alignment(HorizontalAlignment::Left),
+            Paragraph::new(i18n::tr!(
+                "ui-auth-appearance-preview",
+                theme = model.theme_color_value.clone(),
+                accent = model.accent_color_value.clone()
+            )),
             inner,
         );
     }
@@ -458,17 +425,7 @@ fn render_setup_appearance_page(
         theme,
     );
 
-    if let Some(error) = &model.error {
-        frame.render_widget(
-            Paragraph::new(Line::styled(
-                i18n::tr!("ui-auth-error", error = error),
-                theme.error_style(),
-            ))
-            .alignment(HorizontalAlignment::Left)
-            .wrap(Wrap { trim: true }),
-            setup_appearance_error_area(area),
-        );
-    }
+    render_setup_error(frame, setup_appearance_error_area(area), model, theme);
 }
 
 fn render_setup_shape_buttons(
@@ -704,52 +661,22 @@ fn render_focused_surface(
         .render_frame(frame, area, &focused_context(context, focused));
 }
 
-fn setup_language_header_lines(model: &SetupViewModel, theme: &TundraTheme) -> Vec<Line<'static>> {
-    vec![
-        Line::styled(
-            i18n::tr!("ui-auth-step", step = setup_step_label(model.step)),
-            theme.title_style(),
-        ),
-        Line::from(i18n::tr!("ui-auth-choose-a-language-then-continue")),
-        Line::from(""),
-    ]
-}
-
-fn setup_language_footer_lines(model: &SetupViewModel, theme: &TundraTheme) -> Vec<Line<'static>> {
-    let mut lines = vec![Line::styled(
-        selected_language_summary(model),
-        theme.muted_style(),
-    )];
-    append_setup_error(&mut lines, model, theme);
-    lines
-}
-
-fn setup_timezone_header_lines(model: &SetupViewModel, theme: &TundraTheme) -> Vec<Line<'static>> {
-    vec![
-        Line::styled(
-            i18n::tr!("ui-auth-step", step = setup_step_label(model.step)),
-            theme.title_style(),
-        ),
-        Line::from(i18n::tr!(
-            "ui-auth-choose-a-city-or-iana-zone-then-continue"
-        )),
-        Line::from(selected_timezone_id_summary(model)),
-        Line::styled(
-            selected_timezone_description_summary(model),
-            theme.muted_style(),
-        ),
-    ]
-}
-
-fn setup_timezone_footer_lines(model: &SetupViewModel, theme: &TundraTheme) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
+fn render_setup_error(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    model: &SetupViewModel,
+    theme: &TundraTheme,
+) {
     if let Some(error) = &model.error {
-        lines.push(Line::styled(
-            i18n::tr!("ui-auth-error", error = error),
-            theme.error_style(),
-        ));
+        frame.render_widget(
+            Paragraph::new(Line::styled(
+                i18n::tr!("ui-auth-error", error = error),
+                theme.error_style(),
+            ))
+            .wrap(Wrap { trim: true }),
+            area,
+        );
     }
-    lines
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -784,16 +711,6 @@ fn render_setup_inline_button(
     button.state.selected = focused;
     button.set_disabled(disabled);
     button.render_borderless_frame(frame, area, theme);
-}
-
-fn append_setup_error(lines: &mut Vec<Line<'static>>, model: &SetupViewModel, theme: &TundraTheme) {
-    if let Some(error) = &model.error {
-        lines.push(Line::from(""));
-        lines.push(Line::styled(
-            i18n::tr!("ui-auth-error", error = error),
-            theme.error_style(),
-        ));
-    }
 }
 
 pub fn setup_timezone_list_area(main: Rect) -> Rect {
@@ -984,25 +901,6 @@ fn setup_timezone_window_bounds(model: &SetupViewModel, visible_rows: usize) -> 
     (start, end)
 }
 
-fn selected_language_summary(model: &SetupViewModel) -> String {
-    model
-        .selected_language()
-        .map(|language| {
-            i18n::tr!(
-                "ui-auth-selected-language",
-                language = language.code.clone()
-            )
-        })
-        .unwrap_or_else(|| i18n::tr!("ui-auth-selected-language-none"))
-}
-
-fn selected_timezone_id_summary(model: &SetupViewModel) -> String {
-    model
-        .selected_timezone()
-        .map(|timezone| i18n::tr!("ui-auth-selected-timezone", timezone = timezone.id.clone()))
-        .unwrap_or_else(|| i18n::tr!("ui-auth-selected-timezone-none"))
-}
-
 fn selected_timezone_description_summary(model: &SetupViewModel) -> String {
     model
         .selected_timezone()
@@ -1016,12 +914,13 @@ fn selected_timezone_description_summary(model: &SetupViewModel) -> String {
         .unwrap_or_else(|| i18n::tr!("ui-auth-no-timezone-selected"))
 }
 
-fn setup_step_label(step: SetupStep) -> String {
-    match step {
+fn setup_step_heading(step: SetupStep, theme: &TundraTheme) -> Line<'static> {
+    let label = match step {
         SetupStep::Language => i18n::tr!("ui-auth-language"),
         SetupStep::Timezone => i18n::tr!("ui-auth-timezone"),
         SetupStep::Appearance => i18n::tr!("ui-auth-appearance"),
-    }
+    };
+    Line::styled(i18n::tr!("ui-auth-step", step = label), theme.title_style())
 }
 
 pub fn render_setup_overlay(

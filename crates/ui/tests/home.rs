@@ -164,12 +164,13 @@ fn short_home_cards_show_names_without_clipping_ascii_or_image_icons_after_resiz
                 for item in &layout.items {
                     let tile = item.area;
                     let entry = &home.entries()[item.index];
-                    assert_eq!(tile.height, tile_height);
+                    assert_eq!(tile.height, tile_height.min(5));
                     let text = (tile.y..tile.bottom())
                         .map(|y| buffer_row_text(&terminal, tile.x, y, tile.width))
                         .collect::<Vec<_>>()
                         .join("\n");
                     assert!(text.replace(' ', "").contains(&entry.label));
+                    assert!(!text.contains("DESCRIPTION"));
                     let buffer = terminal.backend().buffer();
                     let underlined: String = tile
                         .positions()
@@ -193,7 +194,6 @@ fn short_home_cards_show_names_without_clipping_ascii_or_image_icons_after_resiz
                     if tile_height < 5 {
                         assert!(ui::home_entry_icon_area(tile).is_empty());
                         assert!(!text.contains("IMAGE"));
-                        assert!(!text.contains("DESCRIPTION"));
                         let first_icon_line = icon
                             .lines()
                             .iter()

@@ -1,6 +1,5 @@
 # UI explorer messages.
 
-ui-explorer-explorer = 文件管理器
 ui-explorer-open-terminal-here = 在此处打开终端
 ui-explorer-explorer-ascii-assets-are-unavailable = 文件管理器 ASCII 资源不可用
 ui-explorer-edit-button = { "[" }Ctrl+L 编辑]
@@ -19,7 +18,6 @@ ui-explorer-search-padded = 搜索：{ " " }
 ui-explorer-entries = 条目
 ui-explorer-active = 已启用
 ui-explorer-inactive = 未启用
-ui-explorer-none = 无
 ui-explorer-name = 名称
 ui-explorer-type = 类型
 ui-explorer-size = 大小
@@ -51,13 +49,9 @@ ui-explorer-replace = 替换
 ui-explorer-skip = 跳过
 ui-explorer-cancel = 取消
 
-ui-explorer-selected-count = 已选择 { $count } 项
-
-ui-explorer-selected-names = 已选择：{ $names }
-
-ui-explorer-entry-details = 名称：{ $name } | 类型：{ $kind } | 大小：{ $size }
-
-ui-explorer-entry-metadata = 修改时间：{ $modified } | 属性：{ $attributes }
+ui-explorer-entry-size = 大小：{ $size }
+ui-explorer-entry-modified = 修改时间：{ $modified }
+ui-explorer-entry-attributes = 属性：{ $attributes }
 
 ui-explorer-error = 错误：{ $error }
 
@@ -83,6 +77,7 @@ ui-explorer-search-matches = { " " }（{ $count } 个匹配，{ $mode }）
 
 ui-explorer-open-selected = 打开
 ui-explorer-actions-menu = 更多操作
+ui-explorer-open-title = 打开文档
 ui-explorer-save-title = 保存文档
 ui-explorer-save-filename = 文件名
 ui-explorer-save-confirm = F10 保存

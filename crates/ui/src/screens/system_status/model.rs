@@ -440,6 +440,7 @@ impl SystemStatusProcessSort {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemStatusViewModel {
+    pub show_title: bool,
     pub content: SystemStatusContentViewModel,
     pub diagnostics: DiagnosticsViewModel,
     pub route: SystemStatusRoute,

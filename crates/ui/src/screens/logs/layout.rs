@@ -131,7 +131,11 @@ pub fn logs_more_controls() -> Vec<(LogsHitTarget, String)> {
 
 /// Geometry is derived from the same Tabs and diagnostics composition used to render.
 pub fn logs_layout(main: Rect, model: &LogsViewModel) -> LogsLayout {
-    let inner = crate::components::Surface::new().titled("").inner(main);
+    let inner = if model.show_title {
+        crate::components::Surface::new().titled("").inner(main)
+    } else {
+        main
+    };
     let bar = logs_action_bar(model);
     let bar_height = bar.height(inner.width).min(inner.height);
     let footer = Rect::new(

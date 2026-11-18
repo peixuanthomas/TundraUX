@@ -296,6 +296,7 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
     let mut management = ManagementViewModel::default();
     let mut diagnostics = DiagnosticsViewModel::default();
     let mut system_status = SystemStatusViewModel {
+        show_title: false,
         content: SystemStatusContentViewModel::User(UserSystemStatusViewModel {
             storage_status: "Healthy".into(),
             storage_tone: components::ComponentTone::Success,

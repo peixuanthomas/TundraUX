@@ -117,6 +117,12 @@ impl CommandLineHost {
                         "TUNDRA_COMMAND_LINE_ACCENT".into(),
                         terminal_runtime::ansi_foreground(accent).into(),
                     ),
+                    (
+                        "TUNDRA_COMMAND_LINE_STARTUP_HINT".into(),
+                        ui::terminal_safe_text(&i18n::tr!("shell-command-line-startup-hint"))
+                            .into_owned()
+                            .into(),
+                    ),
                 ];
                 #[cfg(target_os = "linux")]
                 if let Some(worker) = crate::process_host::WorkerConnection::current()
@@ -814,23 +820,24 @@ impl CommandLineHosts {
                 .hosts
                 .entry(id)
                 .or_insert_with(|| CommandLineHost::new(self.watchdog.clone()));
-            changed |= matches!(host.state, CommandLineHostState::Inactive);
-            if matches!(host.state, CommandLineHostState::Inactive)
-                && let Some(area) = state.command_line_input_area()
-            {
-                host.install_snapshot(
-                    ui::CommandLineTerminalSnapshot::blank(area.width, area.height),
-                    0,
+            if matches!(host.state, CommandLineHostState::Inactive) {
+                changed = true;
+                if let Some(area) = state.command_line_input_area() {
+                    host.install_snapshot(
+                        ui::CommandLineTerminalSnapshot::blank(area.width, area.height),
+                        0,
+                    );
+                }
+                let _language = i18n::enter_snapshot(state.language.clone());
+                host.ensure_started_recorded(
+                    platform,
+                    state.current_home_username().unwrap_or("tundra"),
+                    accent,
+                    state.command_line_start_directory_for(id),
+                    external.as_ref(),
+                    history,
                 );
             }
-            host.ensure_started_recorded(
-                platform,
-                state.current_home_username().unwrap_or("tundra"),
-                accent,
-                state.command_line_start_directory_for(id),
-                external.as_ref(),
-                history,
-            );
             if let CommandLineHostState::Running(pty) = &host.state
                 && let Err(error) = pty.set_cell_size(self.cell_size.0, self.cell_size.1)
             {

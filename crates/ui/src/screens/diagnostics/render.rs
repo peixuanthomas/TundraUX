@@ -178,7 +178,7 @@ pub(crate) fn render_diagnostics_content_titled(
     _theme: &TundraTheme,
     context: &RenderContext,
     title: &str,
-    empty_content: Option<(String, String)>,
+    empty_list_message: Option<String>,
 ) {
     Surface::new()
         .titled(title)
@@ -197,18 +197,12 @@ pub(crate) fn render_diagnostics_content_titled(
         context,
     );
     if model.item_count() == 0 {
-        if let Some((list_message, detail_message)) = empty_content {
+        if let Some(list_message) = empty_list_message {
             frame.render_widget(
                 Paragraph::new(list_message)
                     .style(Style::default().fg(context.theme.muted))
                     .wrap(Wrap { trim: true }),
                 layout.list_rows_area,
-            );
-            frame.render_widget(
-                Paragraph::new(detail_message)
-                    .style(detail_theme.muted_style())
-                    .wrap(Wrap { trim: true }),
-                super::layout::diagnostics_detail_inner(layout.detail_panel),
             );
             return;
         }

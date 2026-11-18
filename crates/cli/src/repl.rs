@@ -165,6 +165,7 @@ pub const EMBEDDED_RESET_EXIT_CODE: i32 = 75;
 
 /// Private environment contract with the Shell's embedded Command Line host.
 const COMMAND_LINE_USERNAME_ENV: &str = "TUNDRA_COMMAND_LINE_USERNAME";
+const COMMAND_LINE_STARTUP_HINT_ENV: &str = "TUNDRA_COMMAND_LINE_STARTUP_HINT";
 
 /// Runs an interactive Tundra command loop. The callback is deliberately the
 /// normal CLI dispatcher, so REPL input cannot drift from the regular CLI
@@ -218,14 +219,24 @@ where
     }
     editor.set_helper(Some(helper));
     let mut system_session = None;
-    #[cfg(target_os = "linux")]
-    println!(
-        "System commands use your default shell. /help: UX help; help: shell help (if supported); exit: leave."
-    );
-    #[cfg(windows)]
-    println!("System commands use cmd.exe. /help: UX help; help: cmd help; exit: leave.");
-    #[cfg(not(any(target_os = "linux", windows)))]
-    println!("System commands use /bin/sh. /help: UX help; exit: leave.");
+    if embedded {
+        let hint = std::env::var(COMMAND_LINE_STARTUP_HINT_ENV)
+            .ok()
+            .filter(|hint| !hint.is_empty() && !hint.chars().any(char::is_control))
+            .unwrap_or_else(|| {
+                i18n::render_diagnostic(&i18n::msg!("shell-command-line-startup-hint"))
+            });
+        println!("{hint}");
+    } else {
+        #[cfg(target_os = "linux")]
+        println!(
+            "System commands use your default shell. /help: UX help; help: shell help (if supported); exit: leave."
+        );
+        #[cfg(windows)]
+        println!("System commands use cmd.exe. /help: UX help; help: cmd help; exit: leave.");
+        #[cfg(not(any(target_os = "linux", windows)))]
+        println!("System commands use /bin/sh. /help: UX help; exit: leave.");
+    }
     let mut separate_next_prompt = false;
 
     loop {

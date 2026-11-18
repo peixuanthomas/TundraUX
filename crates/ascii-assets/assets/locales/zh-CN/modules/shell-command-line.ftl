@@ -7,3 +7,4 @@ shell-command-line-close-failed = 无法终止命令行：{ $reason }
 shell-command-line-suggestions = 候选命令
 shell-command-line-did-you-mean = 您是否要输入
 shell-command-line-cycle-more = { " | ...（右方向键循环切换）" }
+shell-command-line-startup-hint = /help 查看 TundraUX 帮助 · exit 退出

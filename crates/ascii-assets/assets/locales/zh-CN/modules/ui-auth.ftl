@@ -2,13 +2,11 @@
 
 ui-auth-no-languages-available = 没有可用语言
 ui-auth-no-timezones-available = 没有可用时区
-ui-auth-choose-the-frame-shape-theme-color-and-accent-color = 请选择边框形状、主题色和强调色。
 ui-auth-theme-color = 主题色
 ui-auth-use-a-custom-theme-color = 使用自定义主题色…
 ui-auth-accent-color = 强调色
 ui-auth-use-a-custom-accent-color = 使用自定义强调色…
 ui-auth-preview = 预览
-ui-auth-live-preview = 实时预览
 ui-auth-frame-shape = 边框形状
 ui-auth-rounded = 圆角
 ui-auth-square = 直角
@@ -18,10 +16,6 @@ ui-auth-accent-color-must-differ-from-the-theme-color = 强调色必须与主题
 ui-auth-valid-color-press-enter-to-apply = 颜色有效 - 按 Enter 应用
 ui-auth-enter-a-complete-color-code = 请输入完整的颜色代码
 ui-auth-first-run-setup = 首次运行设置
-ui-auth-choose-a-language-then-continue = 请选择语言，然后继续。
-ui-auth-choose-a-city-or-iana-zone-then-continue = 请选择城市或 IANA 时区，然后继续。
-ui-auth-selected-language-none = 已选语言：无
-ui-auth-selected-timezone-none = 已选时区：无
 ui-auth-no-timezone-selected = 未选择时区
 ui-auth-language = 语言
 ui-auth-timezone = 时区
@@ -32,12 +26,6 @@ ui-auth-error = 错误：{ $error }
 ui-auth-step = 步骤：{ $step }
 
 ui-auth-appearance-preview = 主题色：{ $theme }    强调色：{ $accent }
-
-ui-auth-selected-language = 已选语言：{ $language }
-
-ui-auth-selected-timezone = 已选时区：{ $timezone }
-
-
 
 ui-auth-color-white = 白色
 

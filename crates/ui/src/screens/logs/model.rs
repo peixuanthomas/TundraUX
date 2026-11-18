@@ -21,6 +21,7 @@ pub struct LogsEventViewModel {
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LogsViewModel {
+    pub show_title: bool,
     pub category: LogsCategory,
     pub sort: Option<crate::TableSort>,
     pub diagnostics: DiagnosticsViewModel,

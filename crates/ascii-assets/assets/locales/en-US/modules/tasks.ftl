@@ -1,6 +1,6 @@
 tasks-title = Tasks
 tasks-title-count = Tasks ({ $count })
-tasks-title-usage = Tasks · { $size }
+tasks-history-size = Saved history: { $size }
 app-catalog-tasks-name = Tasks
 app-catalog-tasks-description = Find running tasks and review saved results
 task-column-name = Task

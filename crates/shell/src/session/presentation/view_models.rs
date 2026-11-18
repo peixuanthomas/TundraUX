@@ -1,4 +1,5 @@
 use super::super::controller::system_status::format_bytes;
+use super::super::window_launch::{WindowApplication, WindowOwner};
 use super::super::*;
 impl ShellSession {
     pub fn to_system_status_view_model(&self) -> Option<ui::SystemStatusViewModel> {
@@ -181,6 +182,7 @@ impl ShellSession {
             })
             .unwrap_or_default();
         let mut model = ui::SystemStatusViewModel {
+            show_title: self.window_owner != WindowOwner::App(WindowApplication::SystemStatus),
             content: ui::SystemStatusContentViewModel::Admin(ui::AdminSystemStatusViewModel {
                 overview: ui::SystemStatusOverviewViewModel {
                     storage_status: pressure_label(pressure).into(),
@@ -1494,13 +1496,21 @@ impl ShellSession {
 
     pub fn to_explorer_view_model(&self) -> ui::ExplorerViewModel {
         let _language = i18n::enter_snapshot(self.language.clone());
+        let purpose = &self.pages.explorer.explorer_purpose;
+        let browse_title_id = match purpose {
+            ExplorerPurpose::EditorOpen => Some(i18n::ids::UI_EXPLORER_OPEN_TITLE),
+            _ if self.window_owner == WindowOwner::App(WindowApplication::Explorer) => None,
+            _ => Some(i18n::ids::SHELL_EXPLORER),
+        };
         let app_snapshot = self.app.snapshot();
         let Some(state) = self.app.explorer_state() else {
-            return ui::ExplorerViewModel::new(
+            let mut model = ui::ExplorerViewModel::new(
                 i18n::tr!("shell-explorer-unavailable"),
                 Vec::new(),
                 None,
             );
+            model.browse_title_id = browse_title_id;
+            return model;
         };
         let is_trash = state.current_location.is_trash();
         let display_path = if is_trash {
@@ -1535,10 +1545,9 @@ impl ShellSession {
             selected_index,
             self.ascii_assets.clone(),
         );
+        model.browse_title_id = browse_title_id;
         model.is_trash = is_trash;
-        if let ExplorerPurpose::EditorSaveAs { input, focus, .. } =
-            &self.pages.explorer.explorer_purpose
-        {
+        if let ExplorerPurpose::EditorSaveAs { input, focus, .. } = purpose {
             model.save_picker = Some(ui::ExplorerSavePickerViewModel {
                 input: input.clone(),
                 focus: if self.pages.explorer.explorer_input_mode == ExplorerInputMode::Browse {

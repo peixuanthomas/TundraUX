@@ -8,6 +8,7 @@ mod task_center;
 mod workspace;
 use scheduled::ScheduledWizard;
 mod backups;
+use crate::session::window_launch::{WindowApplication, WindowOwner};
 use crate::session::*;
 use platform::management::*;
 use std::hash::{Hash, Hasher};
@@ -1713,9 +1714,43 @@ impl ShellSession {
     pub(in crate::session) fn to_management_view_model(&self) -> ui::ManagementViewModel {
         let s = &self.pages.management.management_state;
         let actions = self.management_actions();
+        let title = s.kind.map(management_title).unwrap_or_default();
+        let mut heading = Vec::new();
+        if let Some(kind) = s.kind {
+            if self.window_owner != WindowOwner::App(WindowApplication::Management(kind)) {
+                heading.push(title.clone());
+            }
+            match kind {
+                ManagementKind::Packages => {
+                    let scope = s
+                        .query
+                        .as_ref()
+                        .map(|query| query.scope.as_str())
+                        .filter(|scope| !scope.is_empty())
+                        .unwrap_or("installed");
+                    heading.push(management_label(&format!("scope-{scope}"), scope));
+                }
+                ManagementKind::Tasks => {
+                    let size = crate::session::controller::system_status::format_bytes(
+                        s.snapshot
+                            .task_history_usage
+                            .iter()
+                            .map(|usage| usage.bytes)
+                            .sum(),
+                    );
+                    heading.push(i18n::tr!("tasks-history-size", size = size));
+                }
+                _ => {}
+            }
+        }
+        if let Some(selection) = &s.selection {
+            heading.push(i18n::tr!("selection-count", count = selection.len()));
+        }
         ui::ManagementViewModel {
             workspace: self.management_workspace_model(&actions),
             scope_id: format!("{:?}", s.kind),
+            title,
+            heading: heading.join(" · "),
             action_tones: actions.iter().map(|(action, _)| if action.dangerous { ui::components::ComponentTone::Danger } else { ui::components::ComponentTone::Default }).collect(),
             detail_action_start: Some(0),
             sort: s.sort,
@@ -1748,22 +1783,6 @@ impl ShellSession {
                     id
                 })
                 .collect(),
-            title: {
-                let title = s.kind.map(|kind| {
-                let title = management_title(kind);
-                if kind == ManagementKind::Packages {
-                    let scope = s.query.as_ref().map(|query| query.scope.as_str()).filter(|scope| !scope.is_empty()).unwrap_or("installed");
-                    format!("{title} · {}", management_label(&format!("scope-{scope}"), scope))
-                } else if kind == ManagementKind::Tasks {
-                    i18n::tr!("tasks-title-usage",size=crate::session::controller::system_status::format_bytes(s.snapshot.task_history_usage.iter().map(|usage|usage.bytes).sum()))
-                } else {
-                    title
-                }
-                }).unwrap_or_default();
-                if let Some(selection) = &s.selection {
-                    format!("{title} · {}", i18n::tr!("selection-count", count = selection.len()))
-                } else { title }
-            },
             columns: s
                 .snapshot
                 .columns

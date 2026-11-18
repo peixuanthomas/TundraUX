@@ -13,7 +13,7 @@
 | UX commands in the built-in Command Line | `/doctor`, `/config get` |
 | System commands in the built-in Command Line | `ls -la` or `dir` |
 
-Normal REPL input is passed to the system command interpreter; Tundra commands use the `/` prefix. The session retains its working directory and exported environment variables without changing the Tundra main process or system environment configuration.
+Normal REPL input is passed to the system command interpreter. Tundra commands use the `/` prefix. The built-in Command Line shows how to get help (`/help`) and leave (`exit`) in the workspace language. The session retains its working directory and exported environment variables without changing the Tundra main process or system environment configuration.
 
 On Linux the embedded REPL registers child process resources through its Command Line window's guardian. The guardian verifies the embedded CLI's process ancestry and tracks registered authorization helpers through cleanup if the window dies.
 

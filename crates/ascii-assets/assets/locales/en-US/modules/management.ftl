@@ -115,7 +115,6 @@ management-touch-clear = [Ctrl+U] Clear
 management-touch-details = [F4] Details
 management-touch-terminal = [Ctrl+T] Output
 management-touch-guide = Tap buttons or use their keys; drag scrollbars to read more.
-management-touch-items = Items
 management-touch-actions = Actions
 management-touch-close-choices = [Esc] Return to form
 management-touch-focus-field = Tap to type · Tab/Enter Next · Ctrl+U Clear

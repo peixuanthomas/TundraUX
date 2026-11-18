@@ -21,9 +21,9 @@ ui-launcher-missing = 缺失
 ui-launcher-needs-approval = 需要批准
 ui-launcher-unsupported = 不支持
 
-ui-launcher-title = 启动器 · { $mode }
+ui-launcher-view-mode = 视图：{ $mode }
 
-ui-launcher-item-count = { $count } 项 · Enter 启动 · Esc 返回
+ui-launcher-item-count = { $count } 项
 
 ui-launcher-empty = 还没有启动器快捷方式
 ui-launcher-empty-open-explorer = Enter 打开文件浏览器

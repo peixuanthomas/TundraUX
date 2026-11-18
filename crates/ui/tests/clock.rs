@@ -84,11 +84,11 @@ fn entry_window_slices_alarms_then_countdowns_and_preserves_ids() {
         .map(|row| row.id)
         .collect::<Vec<_>>();
 
-    assert_eq!(layout.entry_capacity, 14);
-    assert_eq!(layout.entry_window_start, 6);
-    assert_eq!(ids, (7..=20).collect::<Vec<_>>());
+    assert_eq!(layout.entry_capacity, 15);
+    assert_eq!(layout.entry_window_start, 5);
+    assert_eq!(ids, (6..=20).collect::<Vec<_>>());
     assert_eq!(layout.entry_rows[0].kind, ClockEntryKind::Alarm);
-    assert_eq!(layout.entry_rows[4].kind, ClockEntryKind::Countdown);
+    assert_eq!(layout.entry_rows[5].kind, ClockEntryKind::Countdown);
     assert!(layout.alarms_heading.y < layout.countdowns_heading.y);
 }
 
@@ -161,7 +161,7 @@ fn small_fallback_keeps_entries_and_compacts_dialog_controls() {
     assert_eq!(layout.mode, ClockPageMode::DigitalOnly);
     assert!(layout.new_button.width > 0);
     assert!(layout.new_button.height > 0);
-    assert_eq!(layout.entry_capacity, 6);
+    assert_eq!(layout.entry_capacity, 7);
     assert_eq!(
         layout
             .entry_rows

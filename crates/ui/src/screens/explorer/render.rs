@@ -4,9 +4,9 @@ use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 
 use super::{
-    ExplorerConflictChoice, ExplorerEntryViewModel, ExplorerLayout, ExplorerOverlayControl,
-    ExplorerOverlayLayout, ExplorerOverlayViewModel, ExplorerSearchViewModel, ExplorerSortColumn,
-    ExplorerViewModel, explorer_layout,
+    ExplorerConflictChoice, ExplorerEntryViewModel, ExplorerLayout, ExplorerLayoutMode,
+    ExplorerOverlayControl, ExplorerOverlayLayout, ExplorerOverlayViewModel,
+    ExplorerSearchViewModel, ExplorerSortColumn, ExplorerViewModel, explorer_layout,
 };
 use crate::components::{
     Button, ButtonEmphasis, ComponentTone, DataTable, DialogLayout, List, ListItem, PageAction,
@@ -28,17 +28,13 @@ pub fn render_explorer_content(
     }
     let context = &content_context;
     let theme = &context.compatibility_theme();
-    Surface::new()
-        .background(context.theme.canvas)
-        .titled(i18n::tr!(if model.save_picker.is_some() {
-            "ui-explorer-save-title"
-        } else {
-            "ui-explorer-explorer"
-        }))
-        .bordered(false)
-        .render_frame(frame, area, context);
-
     let layout = explorer_layout(area, model);
+    let mut surface = Surface::new().background(context.theme.canvas);
+    if let Some(title_id) = layout.title_id {
+        surface = surface.titled(i18n::tr!(title_id));
+    }
+    surface.render_frame(frame, layout.panel, context);
+
     Surface::new().render_frame(frame, layout.table, context);
     let Some(assets) = model.ascii_assets.as_ref() else {
         frame.render_widget(
@@ -435,7 +431,10 @@ fn render_explorer_table(
     }
 }
 
-pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
+pub(super) fn explorer_action_bar(
+    model: &ExplorerViewModel,
+    mode: ExplorerLayoutMode,
+) -> PageActionBar {
     let actions = super::layout::explorer_page_action_buttons(model)
         .into_iter()
         .map(|button| {
@@ -491,39 +490,45 @@ pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
             tone: ComponentTone::Muted,
         });
     }
-    let names = selected_entry_names(model);
-    let text = if model.selection_mode {
-        i18n::tr!("selection-count", count = model.effective_selected_count())
-    } else if names.is_empty() {
-        i18n::tr!(
-            "ui-explorer-selected-count",
-            count = model.effective_selected_count()
-        )
-    } else {
-        i18n::tr!("ui-explorer-selected-names", names = names.join(", "))
-    };
-    status.push(PageActionStatus {
-        text,
-        tone: ComponentTone::Muted,
-    });
-    if let Some(entry) = model.selected_entry() {
+    let count = model.effective_selected_count();
+    if model.selection_mode || count > 1 {
         status.push(PageActionStatus {
-            text: i18n::tr!(
-                "ui-explorer-entry-details",
-                name = entry.name.clone(),
-                kind = entry.kind.clone(),
-                size = entry.size.as_deref().unwrap_or("-")
-            ),
+            text: i18n::tr!("selection-count", count = count),
             tone: ComponentTone::Muted,
         });
+    } else if count == 1
+        && let Some(entry) = model.entries.iter().enumerate().find_map(|(index, entry)| {
+            let selected = model
+                .entry_presentation(index)
+                .map_or(entry.selected, |presentation| presentation.selected);
+            selected.then_some(entry)
+        })
+    {
         status.push(PageActionStatus {
-            text: i18n::tr!(
-                "ui-explorer-entry-metadata",
-                modified = entry.modified.as_deref().unwrap_or("-"),
-                attributes = format_attributes(&entry.attributes)
-            ),
+            text: entry.name.clone(),
             tone: ComponentTone::Muted,
         });
+        let mut metadata = Vec::new();
+        if !mode.shows_all_columns() {
+            if let Some(size) = entry.size.as_deref().filter(|size| !size.is_empty()) {
+                metadata.push(i18n::tr!("ui-explorer-entry-size", size = size));
+            }
+            if let Some(modified) = entry.modified.as_deref().filter(|date| !date.is_empty()) {
+                metadata.push(i18n::tr!("ui-explorer-entry-modified", modified = modified));
+            }
+        }
+        if !entry.attributes.is_empty() {
+            metadata.push(i18n::tr!(
+                "ui-explorer-entry-attributes",
+                attributes = entry.attributes.join(", ")
+            ));
+        }
+        if !metadata.is_empty() {
+            status.push(PageActionStatus {
+                text: metadata.join(" · "),
+                tone: ComponentTone::Muted,
+            });
+        }
     }
     PageActionBar::new("explorer")
         .with_status(status)
@@ -537,7 +542,7 @@ fn render_explorer_footer(
     assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
 ) {
-    explorer_action_bar(model).render(frame, layout.footer, context);
+    explorer_action_bar(model, layout.mode).render(frame, layout.footer, context);
     if let (Some(cancel), Some(operation)) = (layout.cancel_operation, model.operation.as_ref()) {
         let icon = explorer_icon_line(assets, "cancel");
         render_explorer_button(
@@ -1011,28 +1016,5 @@ fn explorer_search_suffix(search: &ExplorerSearchViewModel) -> String {
     match search.match_count {
         Some(count) => i18n::tr!("ui-explorer-search-matches", count = count, mode = mode),
         None => format!(" ({mode})"),
-    }
-}
-
-fn selected_entry_names(model: &ExplorerViewModel) -> Vec<String> {
-    model
-        .entries
-        .iter()
-        .enumerate()
-        .filter(|(index, entry)| {
-            model
-                .entry_presentation(*index)
-                .map(|presentation| presentation.selected)
-                .unwrap_or(entry.selected)
-        })
-        .map(|(_, entry)| entry.name.clone())
-        .collect()
-}
-
-fn format_attributes(attributes: &[String]) -> String {
-    if attributes.is_empty() {
-        i18n::tr!("ui-explorer-none")
-    } else {
-        attributes.join(", ")
     }
 }

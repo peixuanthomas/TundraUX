@@ -24,13 +24,7 @@ impl SettingsViewModel {
                 (
                     "weather-location-editor",
                     i18n::tr!("ui-settings-weather-location-padded"),
-                    format!(
-                        "{}\n{}",
-                        i18n::tr!(
-                            "ui-settings-enter-a-detailed-city-or-address-using-english-characters"
-                        ),
-                        i18n::tr!("ui-settings-leave-empty-to-use-the-timezone-location")
-                    ),
+                    i18n::tr!("ui-settings-weather-location-help"),
                     &editor.value,
                     &editor.editing,
                     &editor.error,
@@ -40,15 +34,7 @@ impl SettingsViewModel {
                 (
                     "file-extensions-editor",
                     i18n::tr!("ui-settings-explorer-files-opened-in-editor-padded"),
-                    format!(
-                        "{}\n{}",
-                        i18n::tr!(
-                            "ui-settings-enter-comma-separated-filename-suffixes-explorer-should-open-here"
-                        ),
-                        i18n::tr!(
-                            "ui-settings-examples-md-txt-rs-d-ts-matching-is-case-insensitive"
-                        )
-                    ),
+                    i18n::tr!("ui-settings-file-extensions-help"),
                     &editor.value,
                     &editor.editing,
                     &editor.error,
@@ -92,8 +78,12 @@ impl SettingsViewModel {
                         "ui-settings-synchronizing-with-this-server"
                     })
                 )
+            } else if let Some(error) = error {
+                format!("{help}\n{error}")
+            } else if matches!(id, "weather-location-editor" | "file-extensions-editor") {
+                help
             } else {
-                format!("{help}\n{}", error.as_deref().unwrap_or_default())
+                format!("{help}\n")
             };
             form.selected = self.form_selected;
             form.submit_disabled = busy;

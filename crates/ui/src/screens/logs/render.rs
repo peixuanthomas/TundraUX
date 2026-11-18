@@ -102,9 +102,7 @@ pub fn logs_detail_text(model: &LogsViewModel) -> String {
         .get(model.selected_event)
         .map(|event| {
             format!(
-                "{} {}\n{}\n{}\n{}",
-                event.timestamp,
-                event.operation,
+                "{}\n{}\n{}",
                 event.module,
                 event.summary,
                 i18n::tr!(
@@ -122,11 +120,7 @@ pub fn logs_detail_text(model: &LogsViewModel) -> String {
                 )
             )
         })
-        .unwrap_or_else(|| {
-            i18n::tr!(
-                "ui-logs-select-an-event-to-inspect-its-operation-and-correlation-identifiers"
-            )
-        })
+        .unwrap_or_default()
 }
 
 /// Adapts event data to the existing list/details presentation, without I/O or new widgets.
@@ -205,11 +199,11 @@ pub fn render_logs_content(
     let theme = background_context.compatibility_theme();
 
     let layout = logs_layout(main, model);
-    Surface::new()
-        .background(context.theme.canvas)
-        .titled(i18n::tr!("ui-logs-logs"))
-        .bordered(false)
-        .render_frame(frame, layout.panel, context);
+    let mut surface = Surface::new().background(context.theme.canvas);
+    if model.show_title {
+        surface = surface.titled(i18n::tr!("ui-logs-logs"));
+    }
+    surface.render_frame(frame, layout.panel, context);
     for tab in &layout.category_tabs {
         let label = if tab.category == LogsCategory::Ux {
             i18n::tr!("ui-logs-ux-log")
@@ -279,20 +273,15 @@ pub fn render_logs_content(
             &theme,
             &background_context,
             &title,
-            Some((
-                if model.loading {
-                    format!(
-                        "{} {}",
-                        crate::components::BusyIndicator::from_motion(context.motion).symbol(),
-                        i18n::tr!("ui-logs-loading-events")
-                    )
-                } else {
-                    i18n::tr!("ui-logs-no-events-match-the-current-query")
-                },
-                i18n::tr!(
-                    "ui-logs-select-an-event-to-inspect-its-operation-and-correlation-identifiers"
-                ),
-            )),
+            Some(if model.loading {
+                format!(
+                    "{} {}",
+                    BusyIndicator::from_motion(context.motion).symbol(),
+                    i18n::tr!("ui-logs-loading-events")
+                )
+            } else {
+                i18n::tr!("ui-logs-no-events-match-the-current-query")
+            }),
         );
         frame.render_widget(Clear, layout.detail_text);
         Surface::new()

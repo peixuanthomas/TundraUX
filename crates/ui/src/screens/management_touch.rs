@@ -30,6 +30,7 @@ pub struct ManagementViewModel {
     /// Actions before this index belong to the toolbar; the rest sit below details.
     pub detail_action_start: Option<usize>,
     pub title: String,
+    pub heading: String,
     pub columns: Vec<String>,
     pub sort: Option<crate::TableSort>,
     pub column_width_limits: Vec<usize>,
@@ -519,6 +520,7 @@ pub fn management_toolbar(
 pub struct ManagementLayout {
     pub workspace: Option<crate::components::SidebarWorkspaceLayout>,
     pub compact_actions: bool,
+    pub heading: Rect,
     pub filter: Rect,
     pub controls: Vec<(ManagementControl, Rect)>,
     pub list: Rect,
@@ -642,8 +644,7 @@ fn management_content_layout(
     form_area: Rect,
     workspace_footer: u16,
 ) -> ManagementLayout {
-    // Very short shell content areas keep actionable controls before repeated
-    // titles, status text, borders, and the list/detail preview.
+    // Very short content areas give priority to actionable controls.
     let compact_actions = model.detail_action_start.is_some()
         && main.height
             < if model
@@ -656,10 +657,13 @@ fn management_content_layout(
                 10
             }
         && !model.terminal;
-    let header_y = main
-        .y
-        .saturating_add(u16::from(!compact_actions))
-        .min(main.bottom());
+    let heading = Rect::new(
+        main.x,
+        main.y,
+        main.width,
+        u16::from(!model.heading.is_empty() && !compact_actions && main.height > 2),
+    );
+    let header_y = heading.bottom();
     let min_filter_width = management_search_prefix(0).width() as u16 + 3;
     let refresh_width = management_controls()[0].1.width() as u16 + 2;
     let show_refresh = main.width >= refresh_width + 1 + min_filter_width;
@@ -931,13 +935,12 @@ fn management_content_layout(
         column_widths.push(8);
     }
     let total_width = column_widths.iter().sum::<usize>();
-    let list_inner = pane_inner(list);
-    let horizontal = total_width > usize::from(list_inner.width.saturating_sub(1));
+    let horizontal = list.height > 1 && total_width > usize::from(list.width.saturating_sub(1));
     let list_rows = Rect::new(
-        list_inner.x,
-        list_inner.y.saturating_add(1),
-        list_inner.width.saturating_sub(1),
-        list_inner.height.saturating_sub(1 + u16::from(horizontal)),
+        list.x,
+        list.y.saturating_add(list.height.min(1)),
+        list.width.saturating_sub(1),
+        list.height.saturating_sub(1 + u16::from(horizontal)),
     );
     let mut offset = 0;
     let mut headers = Vec::new();
@@ -949,12 +952,12 @@ fn management_content_layout(
     {
         let start = offset.max(model.table_scroll);
         let end = (offset + width).min(model.table_scroll + usize::from(list_rows.width));
-        if start < end && list_inner.height > 0 {
+        if start < end && list.height > 0 {
             headers.push((
                 index,
                 Rect::new(
                     list_rows.x + (start - model.table_scroll) as u16,
-                    list_inner.y,
+                    list.y,
                     (end - start) as u16,
                     1,
                 ),
@@ -970,9 +973,9 @@ fn management_content_layout(
     if let Some(bar) = management_scrollbar(
         ManagementScrollTarget::Rows,
         Rect::new(
-            list_inner.right().saturating_sub(1),
+            list.right().saturating_sub(1),
             list_rows.y,
-            u16::from(list_inner.width > 0),
+            u16::from(list.width > 0),
             list_rows.height,
         ),
         model.rows.len(),
@@ -985,7 +988,7 @@ fn management_content_layout(
     if horizontal {
         if let Some(bar) = management_scrollbar(
             ManagementScrollTarget::Columns,
-            bottom_track(list_inner),
+            bottom_track(list),
             total_width,
             usize::from(list_rows.width),
             model.table_scroll,
@@ -1353,6 +1356,7 @@ fn management_content_layout(
         workspace: None,
         primary_action_bar: Default::default(),
         compact_actions,
+        heading,
         filter,
         controls,
         list,
@@ -1589,20 +1593,11 @@ pub fn render_management_content(
             .workspace
             .as_ref()
             .is_none_or(|workspace| workspace.focus == crate::components::WorkspaceFocus::List);
-    if !layout.compact_actions {
-        let title_area = layout
-            .workspace
-            .as_ref()
-            .map_or(main, |workspace| workspace.content);
+    if !layout.heading.is_empty() {
         frame.render_widget(
-            Paragraph::new(model.title.clone())
+            Paragraph::new(model.heading.as_str())
                 .style(theme.body_style().add_modifier(Modifier::BOLD)),
-            Rect::new(
-                title_area.x,
-                title_area.y,
-                title_area.width,
-                u16::from(title_area.height > 0),
-            ),
+            layout.heading,
         );
     }
     if let (Some(workspace), Some(workspace_layout)) = (&model.workspace, &layout.workspace) {
@@ -1677,9 +1672,7 @@ pub fn render_management_content(
             model.workspace.as_ref().is_some_and(|workspace| {
                 workspace.focus == crate::components::WorkspaceFocus::Details
             }) && model.form.is_none();
-        Surface::new()
-            .titled(i18n::tr!("management-touch-items"))
-            .render_frame(frame, layout.list, context);
+        Surface::new().render_frame(frame, layout.list, context);
         Surface::new()
             .focused(details_focused)
             .titled(i18n::tr!("management-touch-details"))
@@ -1806,13 +1799,13 @@ pub fn render_management_content(
         }
         let area = Rect::new(
             layout.list_rows.x,
-            layout.list_rows.y.saturating_sub(1),
+            layout.list.y,
             layout.list_rows.width,
             layout.list_rows.height.saturating_add(1),
         );
         frame.render_widget(
             Paragraph::new(lines).scroll((0, model.table_scroll.min(u16::MAX as usize) as u16)),
-            area.intersection(main),
+            area.intersection(layout.list),
         );
         if model.rows.is_empty() {
             if model.loading {

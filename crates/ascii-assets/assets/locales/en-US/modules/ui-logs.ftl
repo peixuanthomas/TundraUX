@@ -44,7 +44,6 @@ ui-logs-loading-logs = Loading logs...
 ui-logs-linux-events = Linux events
 ui-logs-loading-events = Loading events...
 ui-logs-no-events-match-the-current-query = No events match the current query
-ui-logs-select-an-event-to-inspect-its-operation-and-correlation-identifiers = Select an event to inspect its operation and correlation identifiers.
 
 ui-logs-event-detail = Time: { $time }
     Level: { $level }
@@ -53,6 +52,7 @@ ui-logs-event-detail = Time: { $time }
     { $detail }{ $incident }
 
 ui-logs-incident-link = { "\u000A" }Incident: { $id }
+ui-logs-operation-id = Operation ID: { $id }
 
 ui-logs-clear-filters = C Clear filters
 ui-logs-show-incident = I Open incident report

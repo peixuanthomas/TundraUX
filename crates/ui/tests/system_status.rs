@@ -217,10 +217,10 @@ fn dashboard_partial_scroll_clips_cards_without_overlap() {
 #[test]
 fn too_short_uses_empty_state_but_keeps_footer() {
     let m = model();
-    for (height, empty) in [(7, true), (8, false)] {
+    for (height, empty) in [(6, true), (7, false)] {
         let l = system_status_layout(Rect::new(0, 0, 80, height), &m);
         assert_eq!(l.empty_canvas, empty);
-        assert_eq!(l.canvas.height, height - 3);
+        assert_eq!(l.canvas.height, height - 2);
         assert!(!l.refresh_button.is_empty());
     }
 }
@@ -358,6 +358,7 @@ fn widget(
 }
 fn model() -> SystemStatusViewModel {
     SystemStatusViewModel {
+        show_title: false,
         content: SystemStatusContentViewModel::Admin(AdminSystemStatusViewModel {
             overview: SystemStatusOverviewViewModel {
                 storage_status: "Healthy".into(),

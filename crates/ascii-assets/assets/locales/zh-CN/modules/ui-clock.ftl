@@ -1,7 +1,5 @@
 # UI clock messages.
 
-ui-clock-clock = 时钟
-ui-clock-alarms-timers = 闹钟与计时器
 ui-clock-new-button = { "[" } + 新建 ]
 ui-clock-alarms-none = 闹钟（无）
 ui-clock-alarms = 闹钟

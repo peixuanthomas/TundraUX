@@ -115,7 +115,6 @@ management-touch-clear = [Ctrl+U] 清除
 management-touch-details = [F4] 详情
 management-touch-terminal = [Ctrl+T] 输出
 management-touch-guide = 点击按钮或按所示快捷键；拖动滚动条查看内容。
-management-touch-items = 项目列表
 management-touch-actions = 可用操作
 management-touch-close-choices = [Esc] 返回表单
 management-touch-focus-field = 点击输入 · Tab/Enter 下一项 · Ctrl+U 清空

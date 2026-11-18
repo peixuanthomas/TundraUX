@@ -64,7 +64,7 @@ impl Workspace {
             let key = format!("application.{}", entry.icon_identity());
             items.push(
                 SelectionListItem::new(key.as_str(), entry.label)
-                    .with_hint(entry.description)
+                    .with_keywords([entry.description])
                     .with_group(&group),
             );
             choices.insert(key, Choice::Application(launch));
@@ -75,7 +75,7 @@ impl Workspace {
             };
             items.push(
                 SelectionListItem::new(app.id, app.localized_name().render_current())
-                    .with_hint(app.localized_description().render_current())
+                    .with_keywords([app.localized_description().render_current()])
                     .with_group(&group),
             );
             choices.insert(app.id.to_owned(), Choice::Application(launch));

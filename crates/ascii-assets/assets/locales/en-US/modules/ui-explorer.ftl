@@ -1,6 +1,5 @@
 # UI explorer messages.
 
-ui-explorer-explorer = Explorer
 ui-explorer-open-terminal-here = Open Terminal Here
 ui-explorer-explorer-ascii-assets-are-unavailable = Explorer ASCII assets are unavailable
 ui-explorer-edit-button = { "[" }Ctrl+L Edit]
@@ -19,7 +18,6 @@ ui-explorer-search-padded = Search:{ " " }
 ui-explorer-entries = Entries
 ui-explorer-active = active
 ui-explorer-inactive = inactive
-ui-explorer-none = none
 ui-explorer-name = Name
 ui-explorer-type = Type
 ui-explorer-size = Size
@@ -51,13 +49,9 @@ ui-explorer-replace = Replace
 ui-explorer-skip = Skip
 ui-explorer-cancel = Cancel
 
-ui-explorer-selected-count = { $count } selected
-
-ui-explorer-selected-names = Selected: { $names }
-
-ui-explorer-entry-details = Name: { $name } | Type: { $kind } | Size: { $size }
-
-ui-explorer-entry-metadata = Modified: { $modified } | Attributes: { $attributes }
+ui-explorer-entry-size = Size: { $size }
+ui-explorer-entry-modified = Modified: { $modified }
+ui-explorer-entry-attributes = Attributes: { $attributes }
 
 ui-explorer-error = Error: { $error }
 
@@ -92,6 +86,7 @@ ui-explorer-search-matches = { " " }({ $count ->
 
 ui-explorer-open-selected = Open
 ui-explorer-actions-menu = Actions
+ui-explorer-open-title = Open document
 ui-explorer-save-title = Save document
 ui-explorer-save-filename = File name
 ui-explorer-save-confirm = F10 Save

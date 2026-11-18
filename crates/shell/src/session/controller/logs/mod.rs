@@ -1,3 +1,4 @@
+use crate::session::window_launch::{WindowApplication, WindowOwner};
 use crate::session::*;
 use app::runtime_logs::{LogAccess, LogDocumentSelection, LogsSnapshot};
 use runtime_log::{LogLevel, LogQuery, LogSource};
@@ -1078,6 +1079,7 @@ impl ShellSession {
                     .map(i18n::LocalizedText::render_current),
             };
         ui::LogsViewModel {
+            show_title: self.window_owner != WindowOwner::App(WindowApplication::Logs),
             category: state.category,
             sort: self
                 .pages
@@ -1312,13 +1314,12 @@ fn service_log_query(unit: &str, scope: &str) -> Option<LogQuery> {
 
 fn serde_event_detail(event: &runtime_log::RuntimeLogEvent) -> String {
     format!(
-        "Event: {}\nTime: {}\nRun: {}\nModule: {}\nOperation: {} ({})\nTask: {}\nPhase: {:?}\nCode: {} / OS {:?}\nReason chain: {}\nSource: {}\nTarget: {}\nIncident: {}\nCount: {} / retries {}{}",
-        event.event_id,
-        event.timestamp.to_rfc3339(),
+        "Run: {}\n{}\nTask: {}\nPhase: {:?}\nCode: {} / OS {:?}\nReason chain: {}\nSource: {}\nTarget: {}\nCount: {} / retries {}{}",
         event.context.run_id.as_deref().unwrap_or("—"),
-        event.context.module,
-        event.context.operation,
-        event.context.operation_id.as_deref().unwrap_or("—"),
+        i18n::tr!(
+            "ui-logs-operation-id",
+            id = event.context.operation_id.as_deref().unwrap_or("—")
+        ),
         event.context.task_id.as_deref().unwrap_or("—"),
         event.phase,
         event.error_code.as_deref().unwrap_or("—"),
@@ -1334,7 +1335,6 @@ fn serde_event_detail(event: &runtime_log::RuntimeLogEvent) -> String {
             .as_ref()
             .map(|p| p.display().to_string())
             .unwrap_or_default(),
-        event.incident_id.as_deref().unwrap_or("—"),
         event.repeat_count,
         event.retry_count,
         event

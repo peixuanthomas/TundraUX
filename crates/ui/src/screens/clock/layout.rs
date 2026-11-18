@@ -97,38 +97,37 @@ pub fn clock_page_layout(main: Rect, model: &ClockViewModel) -> ClockPageLayout 
                 panel_width,
                 main.height,
             );
-            let inner = clock_content_area(clock);
-            let digital_height = 2.min(inner.height);
+            let digital_height = 2.min(clock.height);
             let digital = Rect::new(
-                inner.x,
-                inner
+                clock.x,
+                clock
                     .y
-                    .saturating_add(inner.height.saturating_sub(digital_height)),
-                inner.width,
+                    .saturating_add(clock.height.saturating_sub(digital_height)),
+                clock.width,
                 digital_height,
             );
-            let face_height = inner
+            let face_height = clock
                 .height
                 .saturating_sub(digital_height)
                 .saturating_sub(1);
-            let analog = (inner.width > 0 && face_height > 0).then_some(Rect::new(
-                inner.x,
-                inner.y,
-                inner.width,
+            let analog = (clock.width > 0 && face_height > 0).then_some(Rect::new(
+                clock.x,
+                clock.y,
+                clock.width,
                 face_height,
             ));
             (clock, analog, digital, panel)
         }
         ClockPageMode::DigitalOnly => {
             if main.width < 50 {
-                let clock = Rect::new(main.x, main.y, main.width, main.height.min(4));
+                let clock = Rect::new(main.x, main.y, main.width, main.height.min(3));
                 let panel = Rect::new(
                     main.x,
                     clock.bottom(),
                     main.width,
                     main.height.saturating_sub(clock.height),
                 );
-                (clock, None, clock_content_area(clock), panel)
+                (clock, None, clock, panel)
             } else {
                 let panel_width = (main.width / 2)
                     .clamp(CLOCK_PANEL_MIN_WIDTH, CLOCK_PANEL_MAX_WIDTH)
@@ -146,13 +145,12 @@ pub fn clock_page_layout(main: Rect, model: &ClockViewModel) -> ClockPageLayout 
                     panel_width,
                     main.height,
                 );
-                let digital = clock_content_area(clock);
-                (clock, None, digital, panel)
+                (clock, None, clock, panel)
             }
         }
     };
 
-    let mut panel_inner = clock_content_area(panel);
+    let mut panel_inner = panel;
     let bar = clock_action_bar(model);
     let bar_height = bar.height(panel_inner.width).min(panel_inner.height);
     let action_bar = bar.layout(Rect::new(
@@ -340,14 +338,5 @@ pub(super) fn clock_action_bar(model: &ClockViewModel) -> crate::components::Pag
     ])
     .with_selected(
         (model.selected_entry_id.is_none() && model.create_dialog.is_none()).then(|| "new".into()),
-    )
-}
-
-fn clock_content_area(area: Rect) -> Rect {
-    Rect::new(
-        area.x,
-        area.y.saturating_add(u16::from(area.height > 0)),
-        area.width,
-        area.height.saturating_sub(1),
     )
 }

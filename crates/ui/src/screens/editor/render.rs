@@ -613,12 +613,6 @@ fn render_status_bar(
     if layout.status_bar.is_empty() {
         return;
     }
-    let cursor = if model.soft_wrap {
-        model.cursor
-    } else {
-        effective_cursor(layout, model)
-    }
-    .unwrap_or_default();
     let style = Style::default()
         .fg(context.theme.muted)
         .bg(context.theme.surface);
@@ -650,31 +644,38 @@ fn render_status_bar(
         layout.reload_button.x.saturating_sub(1)
     };
     let remaining = right_edge.saturating_sub(start);
-    let mut right = format!(
-        "{}:{} {}{}",
-        cursor.line + 1,
-        cursor.column + 1,
-        terminal_safe_text(&model.file_name),
-        if model.dirty { " *" } else { "" }
-    );
+    let has_action = |action| layout.status_items.iter().any(|item| item.action == action);
+    let mut status = Vec::new();
+    if model.cursor.is_none() || !has_action(EditorMenuAction::GoToLine) {
+        let cursor = if model.soft_wrap {
+            model.cursor
+        } else {
+            effective_cursor(layout, model)
+        }
+        .unwrap_or_default();
+        status.push(format!("{}:{}", cursor.line + 1, cursor.column + 1));
+    }
+    if !has_action(EditorMenuAction::GoToFile) {
+        status.push(terminal_safe_text(&model.file_name).into_owned());
+    }
+    if model.dirty {
+        status.push("*".into());
+    }
     if model.reload_available {
         let button = Button::new("editor.reload", i18n::tr!("ui-editor-reload"))
             .with_emphasis(crate::components::ButtonEmphasis::Primary);
         button.render_borderless_frame(frame, layout.reload_button, &status_theme);
     }
     if let Some(window) = model.read_window {
-        right.push_str(&format!(
-            "  {}",
-            i18n::tr!(
-                "ui-editor-byte-window",
-                start = window.start_byte.saturating_add(1).min(window.total_bytes),
-                end = window.total_bytes,
-                total = window.total_bytes
-            )
+        status.push(i18n::tr!(
+            "ui-editor-byte-window",
+            start = window.start_byte.saturating_add(1).min(window.total_bytes),
+            end = window.total_bytes,
+            total = window.total_bytes
         ));
     }
     frame.render_widget(
-        Paragraph::new(fit_text(&right, usize::from(remaining)))
+        Paragraph::new(fit_text(&status.join("  "), usize::from(remaining)))
             .alignment(HorizontalAlignment::Right)
             .style(style),
         Rect::new(start, layout.status_bar.y, remaining, 1),

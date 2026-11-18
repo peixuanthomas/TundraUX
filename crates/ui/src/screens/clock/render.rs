@@ -39,10 +39,7 @@ fn render_clock_face(
         return;
     }
     let theme = &context.compatibility_theme();
-    Surface::new()
-        .titled(i18n::tr!("ui-clock-clock"))
-        .bordered(false)
-        .render_frame(frame, layout.clock, context);
+    Surface::new().render_frame(frame, layout.clock, context);
 
     if let Some(analog) = layout
         .analog
@@ -89,9 +86,7 @@ fn render_clock_panel(
     }
     let theme = &DialogLayout::footer_theme(context);
     Surface::new()
-        .titled(format!("  {}", i18n::tr!("ui-clock-alarms-timers")))
         .raised(true)
-        .bordered(false)
         .render_frame(frame, layout.panel, context);
 
     super::layout::clock_action_bar(model).render(frame, layout.action_bar.area, context);

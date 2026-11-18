@@ -95,11 +95,11 @@ pub fn render_system_status_content(
     context: &RenderContext,
 ) {
     let l = system_status_layout(main, model);
-    Surface::new()
-        .background(context.theme.canvas)
-        .titled(i18n::tr!("ui-system-status-system-status"))
-        .bordered(false)
-        .render_frame(frame, l.panel, context);
+    let mut surface = Surface::new().background(context.theme.canvas);
+    if model.show_title {
+        surface = surface.titled(i18n::tr!("ui-system-status-system-status"));
+    }
+    surface.render_frame(frame, l.panel, context);
     match model.route {
         SystemStatusRoute::Dashboard => render_dashboard(frame, &l, model, context),
         SystemStatusRoute::Detail(d) => render_detail(frame, &l, model, d, context),
@@ -135,11 +135,10 @@ fn render_dashboard(
         .background(context.theme.canvas)
         .render_frame(frame, l.content_panel, context);
     if l.empty_canvas {
-        EmptyState::new(i18n::tr!("ui-system-status-dashboard-needs-more-room"))
-            .detail(i18n::tr!(
-                "ui-system-status-increase-the-terminal-height-to-show-metric-cards"
-            ))
-            .render_frame(frame, l.canvas, context)
+        EmptyState::new(i18n::tr!(
+            "ui-system-status-increase-the-terminal-height-to-show-metric-cards"
+        ))
+        .render_frame(frame, l.canvas, context)
     } else {
         let widgets = model.dashboard.widgets(l.profile);
         for g in &l.widgets {
@@ -307,8 +306,7 @@ fn render_detail(
             if let Some(vm) = model.detail_widget(d) {
                 render_formatted_detail(frame, l, model, vm, context)
             } else {
-                EmptyState::new(i18n::tr!("ui-system-status-no-data"))
-                    .detail(i18n::tr!("ui-system-status-this-metric-is-not-available"))
+                EmptyState::new(i18n::tr!("ui-system-status-this-metric-is-not-available"))
                     .render_frame(frame, l.canvas, context)
             }
         }

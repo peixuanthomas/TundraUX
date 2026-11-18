@@ -1,6 +1,6 @@
 tasks-title = 任务
 tasks-title-count = 任务（{ $count }）
-tasks-title-usage = 任务 · { $size }
+tasks-history-size = 历史记录占用 { $size }
 app-catalog-tasks-name = 任务
 app-catalog-tasks-description = 找回运行中的任务，查看保存的执行结果
 task-column-name = 任务

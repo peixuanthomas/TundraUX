@@ -526,9 +526,9 @@ pub fn launcher_layout(main: Rect, model: &LauncherViewModel) -> LauncherLayout 
     let side = u16::from(main.width >= 96) * 2;
     let inner = Rect::new(
         panel.x + side,
-        panel.y.saturating_add(u16::from(panel.height > 0)),
+        panel.y,
         panel.width.saturating_sub(side * 2),
-        panel.height.saturating_sub(1),
+        panel.height,
     );
     let bar = launcher_action_bar(model);
     let bar_height = bar.height(inner.width).min(inner.height.saturating_sub(1));
@@ -677,9 +677,16 @@ fn launcher_action_bar(model: &LauncherViewModel) -> PageActionBar {
         LauncherToolbarAction::Organize,
     ] {
         if let Some(button) = model.toolbar.iter().find(|button| button.action == action) {
+            let mode_label = (action == LauncherToolbarAction::ToggleView).then(|| {
+                i18n::tr!(
+                    "ui-launcher-view-mode",
+                    mode = launcher_view_mode_label(model.view_mode)
+                )
+            });
+            let label = mode_label.as_deref().unwrap_or(&button.label);
             let page = PageAction::new(
                 format!("toolbar.{action:?}"),
-                format!("{} {}", action.shortcut(), button.label),
+                format!("{} {label}", action.shortcut()),
             )
             .disabled(!button.enabled);
             actions.push(match action {
@@ -704,7 +711,7 @@ fn launcher_action_bar(model: &LauncherViewModel) -> PageActionBar {
         )
     };
     let mut status = vec![PageActionStatus { text, tone }];
-    if let Some(item) = model.selected_item() {
+    if let Some(item) = model.selected_item().filter(|item| !item.is_builtin()) {
         status.push(PageActionStatus {
             text: item.path.clone(),
             tone: ComponentTone::Muted,
@@ -770,12 +777,12 @@ fn launcher_grid_layout(
                 .saturating_sub(GRID_TILE_GAP)
                 .min(content.bottom().saturating_sub(y)),
         );
-        let inner = area;
+        let label_rows = 1 + u16::from(model.items[index].status != LauncherItemStatus::Ready);
         let icon_area = Rect::new(
-            inner.x,
-            inner.y,
-            inner.width,
-            inner.height.saturating_sub(2).min(4),
+            area.x,
+            area.y,
+            area.width,
+            area.height.saturating_sub(label_rows).min(4),
         );
         items.push(LauncherItemLayout {
             index,
@@ -926,21 +933,6 @@ pub fn render_launcher_content(
     Surface::new()
         .background(context.theme.canvas)
         .render_frame(frame, layout.panel, context);
-    Surface::new()
-        .background(context.theme.canvas)
-        .titled(i18n::tr!(
-            "ui-launcher-title",
-            mode = if model.organizing {
-                i18n::tr!("ui-launcher-organize")
-            } else {
-                launcher_view_mode_label(model.view_mode)
-            }
-        ))
-        .render_frame(
-            frame,
-            Rect::new(layout.search.x, main.y, layout.content.width, 1).intersection(main),
-            context,
-        );
     render_launcher_toolbar(frame, &layout, model, context);
     let input_theme = DialogLayout::body_theme(context);
     model.search.render_borderless_frame_with_prefix(
@@ -1044,40 +1036,26 @@ fn render_launcher_grid(
         if !rendered_native {
             render_default_ascii_icon(frame, item_layout.icon_area, model, item, context, style);
         }
-        let inner = item_layout.area;
-        let name_y = item_layout
-            .icon_area
-            .bottom()
-            .min(inner.bottom().saturating_sub(2.min(inner.height)))
-            .max(inner.y);
-        let detail_style =
-            if style.bg == Some(context.theme.surface) || style.bg == Some(context.theme.raised) {
-                style
-                    .fg(context.theme.muted)
-                    .remove_modifier(Modifier::BOLD)
-            } else {
-                style.remove_modifier(Modifier::BOLD)
-            };
+        let area = item_layout.area;
+        let name_y = item_layout.icon_area.bottom();
         frame.render_widget(
-            Paragraph::new(Line::styled(fit_text(&item.name, inner.width), label_style))
+            Paragraph::new(Line::styled(fit_text(&item.name, area.width), label_style))
                 .alignment(HorizontalAlignment::Center),
-            Rect::new(inner.x, name_y, inner.width, u16::from(inner.height > 0)),
+            Rect::new(area.x, name_y, area.width, 1),
         );
-        frame.render_widget(
-            Paragraph::new(if item.is_builtin() {
-                fit_text(&item.path, inner.width)
-            } else {
-                launcher_status_label(item.status)
-            })
-            .style(detail_style)
-            .alignment(HorizontalAlignment::Center),
-            Rect::new(
-                inner.x,
-                name_y.saturating_add(1).min(inner.bottom()),
-                inner.width,
-                u16::from(inner.height > 1 && name_y.saturating_add(1) < inner.bottom()),
-            ),
-        );
+        let status_y = name_y.saturating_add(1);
+        if item.status != LauncherItemStatus::Ready && status_y < area.bottom() {
+            let mut status_style = style.remove_modifier(Modifier::BOLD);
+            if style.bg == Some(context.theme.surface) || style.bg == Some(context.theme.raised) {
+                status_style = status_style.fg(context.theme.muted);
+            }
+            frame.render_widget(
+                Paragraph::new(launcher_status_label(item.status))
+                    .style(status_style)
+                    .alignment(HorizontalAlignment::Center),
+                Rect::new(area.x, status_y, area.width, 1),
+            );
+        }
     }
 }
 

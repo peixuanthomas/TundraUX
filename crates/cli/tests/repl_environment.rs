@@ -25,6 +25,7 @@ fn run_repl(test: &str, input: &str, embedded: bool) -> Output {
     let mut child = command
         .args(["--exact", test, "--nocapture"])
         .env(CHILD, if embedded { "embedded" } else { "standalone" })
+        .env_remove("TUNDRA_COMMAND_LINE_STARTUP_HINT")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -140,11 +141,18 @@ fn bare_help_is_passed_to_the_system_without_ux_interception() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.success(), "{stdout}\n{stderr}");
         assert!(stdout.contains("/help: UX help"));
+        assert_eq!(stdout.contains("/help: UX help · exit: leave"), embedded);
         assert!(stdout.contains("[system exit code: 0]"), "{stdout}");
         #[cfg(target_os = "linux")]
         {
-            assert!(stdout.contains("System commands use your default shell."));
-            assert!(stdout.contains("help: shell help (if supported)"));
+            assert_eq!(
+                stdout.contains("System commands use your default shell."),
+                !embedded
+            );
+            assert_eq!(
+                stdout.contains("help: shell help (if supported)"),
+                !embedded
+            );
             assert!(stdout.contains("GNU bash"), "{stdout}");
             assert!(!stderr.contains("Permission denied"), "{stderr}");
             assert!(

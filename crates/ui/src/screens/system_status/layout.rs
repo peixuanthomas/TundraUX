@@ -121,7 +121,11 @@ pub(super) fn system_status_picker_area(
 
 pub fn system_status_layout(main: Rect, model: &SystemStatusViewModel) -> SystemStatusLayout {
     let panel = main;
-    let inner = crate::components::Surface::new().titled("").inner(panel);
+    let inner = if model.show_title {
+        crate::components::Surface::new().titled("").inner(panel)
+    } else {
+        panel
+    };
     let header = line_in_rect(inner, inner.y);
     let footer_height = match model.route {
         SystemStatusRoute::Detail(detail) if detail.diagnostics_tab().is_some() => {
