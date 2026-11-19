@@ -32,25 +32,40 @@ fn solid_fills_choose_the_higher_contrast_black_or_white_text() {
 }
 
 #[test]
-fn gauge_labels_follow_each_region_without_changing_the_track() {
+fn gauge_uses_cell_backgrounds_under_and_around_the_label() {
     for fill in [Color::Yellow, Color::Blue, Color::Rgb(230, 240, 250)] {
         for track in [Color::Rgb(7, 17, 22), Color::White] {
             let tokens = ThemeTokens::default();
-            for ratio in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            for (ratio, filled_columns) in [
+                (0.0, 0),
+                (0.25, 5),
+                (0.5, 10),
+                (0.53, 11),
+                (0.75, 15),
+                (1.0, 20),
+            ] {
                 let area = Rect::new(2, 1, 20, 3);
+                let label_area = Rect::new(8, 2, 8, 1);
                 let mut buffer = Buffer::empty(Rect::new(0, 0, 24, 5));
                 ProgressGauge::new("Progress", ratio, fill, track, &tokens)
                     .render(area, &mut buffer);
-                let end = area.x + (f64::from(area.width) * ratio).floor() as u16;
-                for (offset, symbol) in "Progress".chars().enumerate() {
-                    let x = 8 + offset as u16;
-                    let cell = &buffer[(x, 2)];
-                    let background = if x < end { fill } else { track };
-                    assert_eq!(cell.symbol(), symbol.to_string());
-                    assert_eq!(cell.bg, background);
-                    assert_eq!(cell.fg, tokens.filled_style(background).fg.unwrap());
+                for position in area.positions() {
+                    let cell = &buffer[position];
+                    let background = if position.x < area.x + filled_columns {
+                        fill
+                    } else {
+                        track
+                    };
+                    assert_eq!(cell.bg, background, "ratio {ratio}, cell {position:?}");
+                    if !label_area.contains(position) {
+                        assert_eq!(cell.symbol(), " ");
+                    }
                 }
-                assert_eq!(buffer[(21, 1)].bg, track);
+                for (position, symbol) in label_area.positions().zip("Progress".chars()) {
+                    let cell = &buffer[position];
+                    assert_eq!(cell.symbol(), symbol.to_string());
+                    assert_eq!(cell.fg, tokens.filled_style(cell.bg).fg.unwrap());
+                }
                 assert_eq!(buffer[(0, 0)].symbol(), " ");
             }
         }

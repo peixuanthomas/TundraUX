@@ -3,15 +3,13 @@ use ratatui::{
     layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Gauge, Paragraph, Widget},
+    widgets::{Paragraph, Widget},
 };
 use unicode_width::UnicodeWidthStr;
 
 use crate::ThemeTokens;
 
-/// Native Gauge with a label whose contrast follows the background beneath it.
-/// Ratatui couples its filled-label foreground to the unfilled track colour;
-/// a Paragraph supplies independent label styles without changing that track.
+/// Paints progress with cell backgrounds for a uniform height around the label.
 pub struct ProgressGauge<'a> {
     label: Span<'a>,
     ratio: f64,
@@ -51,12 +49,15 @@ impl Widget for ProgressGauge<'_> {
             Default::default(),
             &[],
         );
-        Gauge::default()
-            .ratio(self.ratio)
-            .use_unicode(true)
-            .label(self.label.clone())
-            .gauge_style(Style::default().fg(self.fill).bg(self.track))
-            .render(area, buffer);
+        let end = area.x + (f64::from(area.width) * self.ratio).round() as u16;
+        for position in area.intersection(buffer.area).positions() {
+            let background = if position.x < end {
+                self.fill
+            } else {
+                self.track
+            };
+            buffer[position].set_symbol(" ").set_bg(background);
+        }
 
         let width = usize::from(area.width).min(self.label.width()) as u16;
         let label_area = Rect::new(
@@ -65,7 +66,6 @@ impl Widget for ProgressGauge<'_> {
             width,
             1,
         );
-        let end = area.x + (f64::from(area.width) * self.ratio).floor() as u16;
         let mut column = label_area.x;
         let spans = self
             .label

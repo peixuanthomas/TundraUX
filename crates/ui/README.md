@@ -62,6 +62,8 @@ Shell can compose a retained app frame at a new pane size, clipping from the top
 | `metric_card`, `progress_gauge`, `update_activity`, `command_status`, `toast` | Present metrics, execution or download progress, command results, and transient feedback |
 | `empty_state`, `skeleton`, `busy_indicator`, `rainbow_text`, `big_text` | Empty/loading states, motion and color affordances, and larger text for supported terminals |
 
+`ProgressGauge` paints the fill and track with terminal cell backgrounds. The fill rounds to the nearest column, and the centered label uses contrast colors for the background beneath each character.
+
 ### Forms
 
 `DialogLayout` gives shared and page-specific dialogs the same padded header, top-right close action, body, and raised footer. Its geometry also drives hit testing and automation. Shell dims covered content; only the topmost dialog receives input. Selection lists keep a fixed marker column and a full-row background, while supporting text stays muted.

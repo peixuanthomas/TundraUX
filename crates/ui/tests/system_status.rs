@@ -490,21 +490,22 @@ fn chrome(w: u16, h: u16) -> ShellChromeViewModel {
     }
 }
 fn render(w: u16, h: u16, m: &SystemStatusViewModel) -> String {
-    render_theme(w, h, m, TundraTheme::default_dark())
-}
-fn render_theme(w: u16, h: u16, m: &SystemStatusViewModel, t: TundraTheme) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-    let c = chrome(w, h);
-    terminal
-        .draw(|f| render_system_status(f, f.area(), &c, m, &t))
-        .unwrap();
-    terminal
+    render_terminal(w, h, m)
         .backend()
         .buffer()
         .content()
         .iter()
         .map(|c| c.symbol())
         .collect()
+}
+fn render_terminal(w: u16, h: u16, m: &SystemStatusViewModel) -> Terminal<TestBackend> {
+    let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+    let c = chrome(w, h);
+    let theme = TundraTheme::default_dark();
+    terminal
+        .draw(|f| render_system_status(f, f.area(), &c, m, &theme))
+        .unwrap();
+    terminal
 }
 fn full_main(w: u16, h: u16) -> Rect {
     match compute_shell_layout(Rect::new(0, 0, w, h)) {
@@ -538,8 +539,11 @@ fn overview_shows_usage_graphs_and_preserves_missing_and_stale_states() {
         message: "No sensor".into(),
     };
     m.dashboard.overview_metrics[5].state = SystemStatusWidgetState::Loading;
+    let accent = TundraTheme::default_dark().tokens().accent;
     for (w, h) in [(80, 24), (100, 24), (120, 40)] {
-        let output = render(w, h, &m);
+        let terminal = render_terminal(w, h, &m);
+        let buffer = terminal.backend().buffer();
+        let output: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
         for kind in kinds {
             assert!(
                 output.contains(&kind.label()),
@@ -549,8 +553,14 @@ fn overview_shows_usage_graphs_and_preserves_missing_and_stale_states() {
         assert!(output.contains("Stale"));
         assert!(output.contains("Unavailable"));
         assert!(output.contains("Loading..."));
-        assert!(output.contains('█'), "missing usage graph at {w}x{h}");
         let layout = system_status_layout(full_main(w, h), &m);
+        assert!(
+            layout.canvas.positions().any(|position| {
+                let cell = &buffer[position];
+                cell.bg == accent && cell.symbol() == " "
+            }),
+            "missing usage graph at {w}x{h}"
+        );
         assert!(layout.widgets.is_empty());
         assert!(layout.rows.is_empty());
         assert_eq!(
