@@ -46,7 +46,7 @@ Explorer's asynchronous Rename and Undo completions merge refreshed listings int
 
 Shell attaches to the current system user, initializes assets and storage, and opens first-time setup or Home. It owns global input, pane focus, the display, and idle weather. AppHosts own their page state and child processes. Keeping idle weather in the Shell prevents an AppHost from interpreting a wake action in its active dialog.
 
-AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
+AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. If the Windows Shell stops during an inline image, the guardian releases the terminal display before restoring the original cursor. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
 
 SessionServices shares configuration, profile, clock, system status, and file operation state. It checks the profile revision and saves appearance and dashboard changes before publication. A background connection owns the I/O. AppHosts initialize from one coherent snapshot and reuse an immutable cached snapshot for reads.
 

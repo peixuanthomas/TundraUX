@@ -373,12 +373,41 @@ fn centered_iterm_icon_keeps_all_its_pixels_inside_the_tile() {
     for scale in 1..=if cfg!(windows) { 3 } else { 1 } {
         terminal.set_cell_size(4 * scale, 8 * scale);
         terminal.process(b"\x1b[2J\x1b[?25l\x1b[4;6H");
-        terminal.process(packet.as_bytes());
+        for chunk in packet.as_bytes().chunks(5) {
+            terminal.process(chunk);
+            assert!(
+                !terminal.snapshot().cursor_visible,
+                "cursor appeared while drawing an icon"
+            );
+        }
+        assert!(terminal.synchronized.is_none());
         let images = terminal.ui_snapshot().images;
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].area, expected);
         assert_eq!(images[0].source, [0, 0, 16, 16]);
+
+        terminal.process(b"\x1b[2;12H\x1b[?25h");
+        let snapshot = terminal.snapshot();
+        assert!(snapshot.cursor_visible);
+        assert_eq!((snapshot.cursor_row, snapshot.cursor_column), (1, 11));
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn interrupted_inline_image_releases_the_display_for_the_returning_prompt() {
+    let (mut terminal, _writer, _replies) = terminal(4, 20);
+    terminal.process(b"\x1b[?25l\x1b[?2026;25h\x1b]1337;File=inline=1:");
+    assert!(terminal.synchronized.is_some());
+
+    let mut output = Vec::new();
+    crate::session::finish_pending_image(&mut output).unwrap();
+    terminal.process(&output);
+    terminal.process(b"\x1b[2;1H> \x1b[?25h");
+    assert!(terminal.synchronized.is_none());
+    let snapshot = terminal.snapshot();
+    assert!(snapshot.cursor_visible);
+    assert_eq!((snapshot.cursor_row, snapshot.cursor_column), (1, 2));
 }
 
 #[test]

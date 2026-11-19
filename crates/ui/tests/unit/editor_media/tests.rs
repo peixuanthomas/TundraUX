@@ -61,13 +61,13 @@ fn pure_capabilities_select_protocols_and_measured_render_geometry() {
 
 #[cfg(windows)]
 #[test]
-fn iterm_packet_forwards_the_cursor_position_through_conpty() {
+fn windows_iterm_image_hides_the_cursor_before_releasing_the_update() {
     for tmux in [false, true] {
         let packet = prepare_iterm2(DynamicImage::new_rgba8(16, 16), Size::new(4, 2), tmux)
             .unwrap()
             .data;
-        assert!(packet.starts_with("\x1b[?25h"));
-        assert!(packet.ends_with("\x1b[?25l"));
+        assert!(packet.starts_with("\x1b[?2026;25h"));
+        assert!(packet.ends_with("\x1b[?25;2026l"));
         assert!(packet.contains("width=4;height=2;preserveAspectRatio=0;"));
         assert_eq!(packet.contains("\x1bPtmux;"), tmux);
     }

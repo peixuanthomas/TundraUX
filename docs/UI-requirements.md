@@ -73,6 +73,7 @@ The shared Button, Theme, and RenderContext own control states. Pages pass focus
 - A double click needs a released first click followed by a second press on the same target and cell within 500ms. Scrolling, dragging, keyboard input, focus loss, and resizing clear that record.
 - Only the topmost dialog receives hover, press, text, or keyboard input. Covered pages keep their state. Toasts do not take keyboard focus, but their painted area blocks pointer activation of covered controls until the toast disappears.
 - Hide keyboard emphasis on window focus loss while keeping logical focus. Current-page and record-selection emphasis stays independent of the input method.
+- Drawing a native image keeps the terminal cursor hidden at the image position, including during partial redraws.
 - Selected text fields use accent feedback and a blinking underscore cursor at the actual position. Up/Down switches fields; Left/Right moves the cursor. Mask passwords and scroll long text with the cursor.
 - Keyboard, mouse, and touch trigger the same transition behavior. Focus, activation, text input, scrolling, and cancellation take effect immediately, including during animation.
 
