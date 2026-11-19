@@ -17,7 +17,7 @@ The default dark appearance uses Glacier Night blue surfaces and one accent. Lay
 | Border | `#29434E` | Inputs and necessary overlay boundaries |
 
 - Each application window has one complete outer frame with its own title and controls. Separate the page's internal groups, lists, tables, and action areas with headings, whitespace, alignment, or a background change; do not nest decorative frames.
-- Launcher is a Shell page covering the workspace. It lists available built-in and user-added apps, with no window frame or window bar entry. Home and Launcher look up the same themed icons by built-in application ID. Home keeps the Launcher shortcut visible. Users can add shortcuts from Launcher and remove them through the Home context menu without changing the Launcher entries.
+- Launcher is a Shell page covering the workspace. It lists available built-in and user-added apps, with no window frame or window bar entry. Home and Launcher look up the same themed icons by built-in application ID. Each graphical icon fits completely above its label and stays centered when the selection, window size, or terminal font changes. Home keeps the Launcher shortcut visible. Users can add shortcuts from Launcher and remove them through the Home context menu without changing the Launcher entries.
 - A modal, menu, or input may use one boundary. Temporary messages use the shared surface and the matching success, warning, or danger color.
 - Dialogs share three-column side padding, a title and top-right close action, a readable body, and a raised footer when actions exist. Compact windows reduce vertical gaps before hiding required content. Dim covered content without moving it; toasts stay in the upper-right and do not take focus.
 - Ordinary buttons use plain action text without `[]` on a visible control surface, distinct from nearby static text. Primary actions use an accent fill; destructive actions use the danger color. Selection and the current item use background emphasis independently of keyboard focus.
@@ -116,7 +116,7 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 
 ## Pages, navigation, and global bars
 
-- `ScreenCompositor` draws the header and bottom window bar. In the active workspace session, Tasks shows running or awaiting-approval status. Pages draw only `ShellFrameLayout.main` and their own overlays.
+- `ScreenCompositor` draws the header and bottom window bar. The Tasks label and its clickable area stay fixed when task activity changes. Pages draw only `ShellFrameLayout.main` and their own overlays.
 - Create an independent instance when opening a subpage or explicitly starting a new application session. An ordinary application launch restores an existing window when available. Check instance IDs for state, task results, and focus restoration so late results cannot enter a reopened page.
 - Shell handles entry and overlays. Esc first cancels the top dialog, menu, or page-local action. At an ordinary app root, Esc moves only the focused app to the background and keeps its state and work. Command Line, native Vim, and custom terminal apps receive their own Esc.
 - Every visible window, including a single or maximized window, has a complete frame. Its top edge holds the title, Minimize, Split, and Close buttons. Full screen is an action inside Split. Clicking the frame focuses that window. Buttons act on their own window on release, even if another window had focus before.

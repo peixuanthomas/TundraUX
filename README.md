@@ -18,13 +18,11 @@ Select a shortcut to open an app. Open Launcher to browse available apps, add cu
 
 Browse, search, and organize files and folders.
 
-The built-in editor previews Word (`.docx`) and Excel (`.xlsx`) files as rendered, read-only Markdown.
-
 ![File explorer](docs/screenshots/Explorer.png)
 
 ## Split view
 
-Open several apps in the same workspace and use them at the same time. When an app opens a file in another window, closing it returns you to the original app.
+Open several apps in the same workspace and use them at the same time.
 
 ![Editor and command line in split view](docs/screenshots/Split_View.png)
 

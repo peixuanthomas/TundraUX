@@ -38,7 +38,7 @@ The notification panel sits under the header. Its full status and single column 
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. Tasks is available after first-time setup and shows running or awaiting-approval status.
+The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
@@ -155,7 +155,7 @@ Default acceleration/constant-speed/deceleration phases are page `[40, 80, 40]`,
 
 `TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. `TerminalImageCache` clips and caches Kitty, Sixel, and iTerm2 images by viewport. An app host captures the visible image placements alongside its rasterized cells. Shell rebuilds native graphics in the pane and retires native resources when the pane moves, closes, or becomes obscured.
 
-Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
+Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. On Windows, inline images use the tile's width and height in cells so they stay centered when WezTerm and the console report different font sizes. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
 
 Text terminals, dialog occlusion, layout transitions, and transparent or overlapping images use character-block compositing. Snapshots preserve wide characters, italics, and native cursor shapes; the editor's Vim region shares rendering, PTY sizing, and mouse coordinates through `editor_vim_terminal_area`.
 

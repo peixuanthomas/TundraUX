@@ -59,6 +59,20 @@ fn pure_capabilities_select_protocols_and_measured_render_geometry() {
     assert_eq!(prepared.render_size(), Size::new(10, 5));
 }
 
+#[cfg(windows)]
+#[test]
+fn iterm_packet_forwards_the_cursor_position_through_conpty() {
+    for tmux in [false, true] {
+        let packet = prepare_iterm2(DynamicImage::new_rgba8(16, 16), Size::new(4, 2), tmux)
+            .unwrap()
+            .data;
+        assert!(packet.starts_with("\x1b[?25h"));
+        assert!(packet.ends_with("\x1b[?25l"));
+        assert!(packet.contains("width=4;height=2;preserveAspectRatio=0;"));
+        assert_eq!(packet.contains("\x1bPtmux;"), tmux);
+    }
+}
+
 #[test]
 fn workspace_icons_center_and_capture_the_same_pixels_as_the_fallback() {
     let picker = EditorImagePicker::for_workspace(2, 4);

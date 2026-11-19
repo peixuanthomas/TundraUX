@@ -9,9 +9,7 @@ use ratatui::buffer::Cell;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui_image::Image;
-use ratatui_image::protocol::{
-    Protocol, halfblocks::Halfblocks, iterm2::Iterm2, kitty::Kitty, sixel::Sixel,
-};
+use ratatui_image::protocol::{Protocol, halfblocks::Halfblocks, kitty::Kitty, sixel::Sixel};
 
 use crate::{
     CommandLineColor, CommandLineTerminalSnapshot, EDITOR_IMAGE_MAX_PIXELS, EditorGraphicsProtocol,
@@ -563,7 +561,7 @@ fn prepare_image(
             Protocol::Sixel(Sixel::new(resized, key.size, tmux).ok()?)
         }
         Some(EditorGraphicsProtocol::Iterm2) => {
-            Protocol::ITerm2(Iterm2::new(resized, key.size, tmux).ok()?)
+            Protocol::ITerm2(crate::editor_media::prepare_iterm2(resized, key.size, tmux).ok()?)
         }
         None => Protocol::Halfblocks(Halfblocks::new(resized, key.size).ok()?),
     };

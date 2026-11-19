@@ -486,34 +486,43 @@ fn global_tasks_entry_closes_tasks_opened_from_home() {
 }
 
 #[test]
-fn global_task_status_distinguishes_operations_queries_and_pending_approval() {
-    let mut state = state((108, 20));
-    let initial = state.tasks_button_label().unwrap();
-    state.tasks.register(
-        TaskDomain::Logs,
-        1,
-        TaskOwner::Session,
-        TaskClass::Query,
-        TaskControl::new(|| {}, || false),
-    );
-    assert_eq!(state.tasks_button_label().unwrap(), initial);
-    state.tasks.register(
-        TaskDomain::Explorer,
-        2,
-        TaskOwner::Session,
-        TaskClass::Operation,
-        TaskControl::new(|| {}, || false),
-    );
-    assert_eq!(
-        state.tasks_button_label().unwrap(),
-        i18n::tr!("ui-shell-tasks-active")
-    );
-    let (tx, _rx) = mpsc::channel();
-    state
-        .begin_auto_admin("test approval".into(), true, tx)
-        .unwrap();
-    assert_eq!(
-        state.tasks_button_label().unwrap(),
-        i18n::tr!("ui-shell-tasks-waiting")
-    );
+fn global_tasks_entry_keeps_its_label_during_queries_operations_and_approval() {
+    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    for (language, label) in [("en-US", "Tasks"), ("zh-CN", "任务")] {
+        let mut state = state((108, 20));
+        state.language = Arc::new(
+            i18n::LanguageSnapshot::load(&assets, language, 1)
+                .unwrap()
+                .snapshot,
+        );
+        let _language = i18n::enter_snapshot(state.language.clone());
+        let check = |state: &ShellSession| {
+            assert_eq!(
+                state.to_shell_chrome_view_model().tasks_label.as_deref(),
+                Some(label)
+            );
+        };
+        check(&state);
+        state.tasks.register(
+            TaskDomain::Logs,
+            1,
+            TaskOwner::Session,
+            TaskClass::Query,
+            TaskControl::new(|| {}, || false),
+        );
+        check(&state);
+        state.tasks.register(
+            TaskDomain::Explorer,
+            2,
+            TaskOwner::Session,
+            TaskClass::Operation,
+            TaskControl::new(|| {}, || false),
+        );
+        check(&state);
+        let (tx, _rx) = mpsc::channel();
+        state
+            .begin_auto_admin("test approval".into(), true, tx)
+            .unwrap();
+        check(&state);
+    }
 }

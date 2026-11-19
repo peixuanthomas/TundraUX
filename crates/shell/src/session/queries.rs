@@ -25,15 +25,7 @@ impl ShellSession {
         if self.app.auth_session().is_none() || self.is_strict_guest() {
             return None;
         }
-        let active = self.tasks.has_running_operations();
-        let waiting = self.auto_admin.waiting_for_approval();
-        Some(if waiting {
-            i18n::tr!("ui-shell-tasks-waiting")
-        } else if active {
-            i18n::tr!("ui-shell-tasks-active")
-        } else {
-            i18n::tr!("ui-shell-tasks-button")
-        })
+        Some(i18n::tr!("ui-shell-tasks-button"))
     }
 
     pub fn home_mode(&self) -> ShellHomeMode {

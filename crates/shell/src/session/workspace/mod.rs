@@ -446,24 +446,6 @@ impl Workspace {
         self.windows.values().any(|window| window.status.busy)
     }
 
-    pub(super) fn tasks_label(&self) -> Option<String> {
-        if self
-            .windows
-            .values()
-            .any(|window| window.status.awaiting_approval)
-        {
-            Some(i18n::tr!("ui-shell-tasks-waiting"))
-        } else if self
-            .windows
-            .values()
-            .any(|window| window.status.running_operations)
-        {
-            Some(i18n::tr!("ui-shell-tasks-active"))
-        } else {
-            None
-        }
-    }
-
     pub(super) fn animating(&self) -> bool {
         self.placeholder_redraw_at.is_some()
             || self
