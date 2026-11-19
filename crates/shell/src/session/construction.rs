@@ -261,6 +261,7 @@ impl ShellSession {
 
             frame_layout: None,
             displayed_status: None,
+            notification_history: Default::default(),
             hit_map: ShellHitMap::empty(terminal_size),
             hit_map_generation: 0,
             overlay_interaction_ready: true,

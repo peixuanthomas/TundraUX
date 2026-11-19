@@ -1,2 +1,11 @@
 notifications-action-ok = 确定
 notifications-status-ready = 就绪
+notification-source-desktop = 桌面
+notification-previous-crash = 上次运行崩溃
+notification-previous-unclean = 上次异常退出
+notification-panel-title = 通知
+notification-panel-empty = 暂无通知
+notification-panel-clear = 全部清除
+notification-panel-dismiss = 清除此通知
+notification-panel-open-log = 打开日志
+notification-panel-cross = ×

@@ -81,6 +81,7 @@ pub fn capture_workspace_frame(
         animation_running: false,
         keyboard_available: false,
         status: String::new(),
+        status_report: None,
     }
 }
 

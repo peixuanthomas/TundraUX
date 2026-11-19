@@ -592,6 +592,12 @@ impl AppHostSession {
                 self.state.cancel_pointer_gestures_for_modal();
                 self.redraw.request_input_redraw();
             }
+            ShellToApp::DismissNotificationReports { ids } => {
+                for id in ids {
+                    self.state.app.dismiss_notification_report(id);
+                }
+                self.redraw.request_redraw();
+            }
             ShellToApp::RequestClose => self.request_close(),
             ShellToApp::InputFence { serial } => {
                 self.input_fences
@@ -931,6 +937,7 @@ impl AppHostSession {
         }
         frame.keyboard_available = self.state.keyboard_launcher_area().is_some();
         frame.status = self.state.displayed_status.clone().unwrap_or_default();
+        frame.status_report = self.state.app.notification_center().active_report_id();
         if !frame.modal {
             let native_area = if self.state.active_screen() == ShellScreen::CommandLine {
                 self.state.command_line_input_area()
@@ -1116,6 +1123,12 @@ pub fn run_app_host(
                     host.receive(message)?;
                 }
                 host.poll(now)?;
+                for report in host.state.app.take_notification_reports() {
+                    host.output
+                        .push_back(AppToShell::NotificationReport(serde_json::to_value(
+                            report,
+                        )?));
+                }
             }
             if let Some(timings) = &mut startup
                 && !first_poll_done

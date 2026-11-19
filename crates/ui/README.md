@@ -32,6 +32,8 @@
 
 Screens with separate `model.rs`, `layout.rs`, and `render.rs` keep the data, rectangles, and drawing code together. Reuse the layout result wherever pointer targets, focus, or an embedded viewport need to match the display.
 
+The notification panel sits under the header. Its full status and single column of cards share a scrollable area. Dismiss, open-log, clear-all, and close buttons use the same rectangles for drawing, keyboard navigation, mouse input, and automation.
+
 ## Workspace frames
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.

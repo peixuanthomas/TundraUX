@@ -420,6 +420,7 @@ impl ShellSession {
                             }));
                         }
                         if !matches_button {
+                            self.notification_history.pressed = None;
                             self.notification_pointer_capture = None;
                         }
                         return Some(input);

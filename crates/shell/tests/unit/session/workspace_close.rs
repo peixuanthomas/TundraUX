@@ -959,3 +959,115 @@ fn directional_focus_does_not_jump_diagonally_across_a_t_layout() {
     navigate(&mut workspace, &mut state, 'h');
     assert_eq!(workspace.selection.focused(), Some(left));
 }
+
+#[test]
+fn notification_panel_collects_hidden_windows_and_keeps_reports_after_close() {
+    use ui::NotificationPanelAction as Action;
+    let mut state = shell_state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    let mut workspace = Workspace::new(None, false);
+    let (clock, editor) = (SessionId(3), SessionId(4));
+    workspace.windows.insert(clock, window(Size::new(106, 16)));
+    let mut editor_window = window(Size::new(106, 16));
+    editor_window.launch = WindowLaunch::Editor;
+    workspace.windows.insert(editor, editor_window);
+    workspace.selection.open(editor);
+
+    let mut clock_host = shell_state();
+    let mut editor_host = shell_state();
+    use crate::session::window_launch::{WindowApplication, WindowOwner};
+    clock_host.window_owner = WindowOwner::App(WindowApplication::Clock);
+    editor_host.window_owner = WindowOwner::App(WindowApplication::Editor);
+    let deliver =
+        |ws: &mut Workspace, desktop: &mut ShellSession, window, host: &mut ShellSession| {
+            let reports = host.app.take_notification_reports();
+            assert_eq!(reports.len(), 1);
+            for report in reports {
+                ws.receive(
+                    window,
+                    AppToShell::NotificationReport(serde_json::to_value(report).unwrap()),
+                    desktop,
+                )
+                .unwrap();
+            }
+        };
+    clock_host.notify_alert_with_tone("Background clock", ui::NotificationTone::Error);
+    editor_host.notify_alert_with_tone("Foreground app", ui::NotificationTone::Error);
+    let editor_report_id = editor_host
+        .app
+        .notification_center()
+        .active_report_id()
+        .unwrap();
+    deliver(&mut workspace, &mut state, clock, &mut clock_host);
+    deliver(&mut workspace, &mut state, editor, &mut editor_host);
+    workspace.remove(clock);
+    state.open_status_details();
+    let cards = state.notification_history.panel(false).cards;
+    assert_eq!(cards.len(), 2);
+    assert_eq!(cards[0].message, "Foreground app");
+    assert_eq!(cards[1].message, "Background clock");
+    assert_eq!(cards[0].source, WindowLaunch::Editor.title());
+    assert_eq!(cards[1].source, WindowLaunch::Clock.title());
+    state.activate_panel_action(Action::Dismiss(cards[0].id));
+    assert_eq!(
+        state.notification_history.pending_dismissals.get(&editor),
+        Some(&vec![editor_report_id])
+    );
+    assert_eq!(state.notification_history.panel(false).cards[0], cards[1]);
+    editor_host.notify_critical_modal("Critical", "New failure", vec![]);
+    deliver(&mut workspace, &mut state, editor, &mut editor_host);
+    assert!(!state.status_details_visible());
+    state.open_status_details();
+    state.activate_panel_action(Action::Clear(cards[1].id));
+    let remaining = state.notification_history.panel(false).cards;
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].message, "New failure");
+}
+
+#[test]
+fn notification_panel_drains_the_last_report_when_the_window_exit_arrives_first() {
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let id = SessionId(7);
+    let (mut window, peer, _listener) = connected_window(Size::new(106, 16));
+    window.state = ProcessState::Exited {
+        code: Some(0),
+        forced: false,
+    };
+    window.close = CloseProgress::Exiting;
+    workspace.windows.insert(id, window);
+    workspace
+        .drain_exited_window(id, Some(0), false, &mut state)
+        .unwrap();
+    assert!(workspace.windows.contains_key(&id));
+    let report = app::NotificationReport {
+        id: 1,
+        tone: ui::NotificationTone::Error,
+        title: None,
+        message: "Last window report".into(),
+    };
+    let message = AppToShell::NotificationReport(serde_json::to_value(report).unwrap());
+    let bytes = serde_json::to_vec(&message).unwrap();
+    let mut peer = peer.into_inner();
+    crate::process_host::event_loop::runtime().block_on(async {
+        use tokio::io::AsyncWriteExt;
+        peer.write_all(&(bytes.len() as u32).to_be_bytes())
+            .await
+            .unwrap();
+        peer.write_all(&bytes).await.unwrap();
+        peer.shutdown().await.unwrap();
+    });
+    drop(peer);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while workspace.windows.contains_key(&id) && Instant::now() < deadline {
+        workspace
+            .drain_exited_window(id, Some(0), false, &mut state)
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(!workspace.windows.contains_key(&id));
+    assert_eq!(
+        state.notification_history.panel(false).cards[0].message,
+        "Last window report"
+    );
+}

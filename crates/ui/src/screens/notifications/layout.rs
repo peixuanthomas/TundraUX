@@ -14,10 +14,34 @@ pub fn notification_too_small_message() -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotificationLayout {
     Dialog(NotificationDialogLayout),
+    Panel(super::panel::NotificationPanelLayout),
     TooSmall {
         required_width: u16,
         required_height: u16,
     },
+}
+
+impl NotificationLayout {
+    pub fn area(&self) -> Option<Rect> {
+        match self {
+            Self::Dialog(d) => Some(d.dialog),
+            Self::Panel(p) => Some(p.area),
+            Self::TooSmall { .. } => None,
+        }
+    }
+
+    pub fn scroll_geometry(&self) -> Option<(Rect, Option<Rect>, usize, usize)> {
+        match self {
+            Self::Dialog(d) => Some((
+                d.message,
+                d.scrollbar,
+                d.message_line_count,
+                d.scroll_offset,
+            )),
+            Self::Panel(p) => Some((p.body, p.scrollbar, p.line_count(), p.scroll_offset)),
+            Self::TooSmall { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +64,11 @@ pub struct NotificationActionLayout {
 }
 
 pub fn notification_layout(area: Rect, model: &NotificationViewModel) -> NotificationLayout {
+    if let Some(panel) = &model.panel {
+        return NotificationLayout::Panel(super::panel::NotificationPanelLayout::new(
+            area, model, panel,
+        ));
+    }
     let action_texts = model
         .actions
         .iter()

@@ -329,9 +329,6 @@ impl ShellSession {
             return false;
         };
         let area = self.shell_modal_area();
-        matches!(
-            ui::notification_layout(area, &model),
-            ui::NotificationLayout::Dialog(_)
-        )
+        ui::notification_layout(area, &model).area().is_some()
     }
 }

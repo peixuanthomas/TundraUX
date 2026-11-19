@@ -122,6 +122,18 @@ impl Workspace {
             }
         }
         if let InputEvent::Mouse(mouse) = input {
+            if self
+                .input_focus
+                .and_then(|id| self.windows.get(&id))
+                .and_then(|w| w.frame.as_ref())
+                .is_some_and(|f| f.modal)
+                && self
+                    .chrome_layout
+                    .and_then(|layout| layout.status_message)
+                    .is_some_and(|r| r.contains(mouse.coordinates().into()))
+            {
+                return Ok(true);
+            }
             return self.mouse(*mouse, state);
         }
         if matches!(input, InputEvent::Paste(_))
@@ -134,7 +146,7 @@ impl Workspace {
         Ok(self.has_overlay() || self.layout.blocked)
     }
 
-    fn shortcut(&mut self, shortcut: WindowShortcut, state: &ShellSession) -> io::Result<()> {
+    fn shortcut(&mut self, shortcut: WindowShortcut, state: &mut ShellSession) -> io::Result<()> {
         let focused = self.selection.focused();
         match shortcut {
             WindowShortcut::Pass | WindowShortcut::Consume => {}
@@ -143,6 +155,7 @@ impl Workspace {
                     self.send_input(id, &InputEvent::Key(key))?;
                 }
             }
+            WindowShortcut::Notifications => state.open_status_details(),
             WindowShortcut::Panel => {
                 self.close_split_menu();
                 if self.panel.take().is_none() {

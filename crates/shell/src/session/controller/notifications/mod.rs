@@ -24,22 +24,27 @@ impl ShellSession {
         if matches!(mouse.kind, ui::MouseEventKind::Up(PointerButton::Left)) {
             return self.notification_scrollbar_drag.take().is_some();
         }
+        if !matches!(
+            mouse.kind,
+            ui::MouseEventKind::Down(PointerButton::Left)
+                | ui::MouseEventKind::Drag(PointerButton::Left)
+        ) {
+            return false;
+        }
         let Some(model) = self.notification_active_modal_view_model() else {
             return false;
         };
         let area = self.shell_modal_area();
-        let ui::NotificationLayout::Dialog(layout) = ui::notification_layout(area, &model) else {
+        let Some((viewport, track, count, offset)) =
+            ui::notification_layout(area, &model).scroll_geometry()
+        else {
             return false;
         };
-        let Some(track) = layout.scrollbar else {
+        let Some(track) = track else {
             self.notification_scrollbar_drag = None;
             return false;
         };
-        let scrollbar = ui::components::Scrollbar::new(
-            layout.message_line_count,
-            layout.message.height as usize,
-            layout.scroll_offset,
-        );
+        let scrollbar = ui::components::Scrollbar::new(count, viewport.height as usize, offset);
         let (start, thumb_len) = scrollbar.thumb_range(track);
         match mouse.kind {
             ui::MouseEventKind::Down(PointerButton::Left)
@@ -53,6 +58,7 @@ impl ShellSession {
                 };
                 self.notification_scrollbar_drag = Some((id, grab));
                 self.notification_pointer_capture = None;
+                self.notification_history.pressed = None;
             }
             ui::MouseEventKind::Drag(PointerButton::Left)
                 if self.notification_scrollbar_drag.is_some() => {}
@@ -64,8 +70,8 @@ impl ShellSession {
             track.y,
             track.height,
             thumb_len,
-            layout.message_line_count,
-            layout.message.height as usize,
+            count,
+            viewport.height as usize,
         );
         true
     }
@@ -185,6 +191,18 @@ impl ShellSession {
         )
     }
 
+    pub(in crate::session) fn notify_problem_modal(
+        &mut self,
+        title: impl Into<LocalizedText>,
+        message: impl Into<LocalizedText>,
+        tone: ui::NotificationTone,
+        actions: Vec<ShellNotificationAction>,
+    ) -> u64 {
+        self.notify_modal_with_options(
+            ShellNotification::modal(title, message, tone, actions).reporting_problem(),
+        )
+    }
+
     pub fn notify_critical_modal(
         &mut self,
         title: impl Into<LocalizedText>,
@@ -194,9 +212,11 @@ impl ShellSession {
         self.capture_modal_focus_context();
         let notification =
             ShellNotification::modal(title, message, ui::NotificationTone::Critical, actions)
+                .reporting_problem()
                 .with_component(ShellComponent::NotificationDialog);
         let app_notification = notification.to_app_notification();
         let id = self.app.push_critical_notification_modal(app_notification);
+        self.collect_desktop_reports();
         self.cancel_pointer_gestures_for_modal();
         self.pages.common.notification_message_scroll = 0;
         self.ui.notification_bindings.bind(id, &notification);
@@ -268,6 +288,7 @@ impl ShellSession {
         let previous_modal = self.notification_active_modal_id();
         self.app
             .dispatch_at(app::AppCommand::Notification(command), at);
+        self.collect_desktop_reports();
         if previous_modal != self.notification_active_modal_id() {
             self.pages.common.notification_message_scroll = 0;
         }
@@ -326,6 +347,15 @@ impl ShellSession {
         model.stacked_actions =
             self.notification_active_modal_component() == Some(ShellComponent::ExitDialog);
         model.scroll_offset = self.pages.common.notification_message_scroll;
+        if self.status_details_visible() {
+            model.panel = Some(
+                self.notification_history
+                    .panel(self.diagnostics_can_view_details()),
+            );
+            if let Some(header) = &self.notification_history.header_override {
+                model.message.clone_from(header);
+            }
+        }
         Some(model)
     }
 
@@ -342,22 +372,23 @@ impl ShellSession {
             return ShellAction::Redraw;
         };
         let area = self.shell_modal_area();
-        let ui::NotificationLayout::Dialog(layout) = ui::notification_layout(area, &model) else {
+        let Some((viewport, _, count, offset)) =
+            ui::notification_layout(area, &model).scroll_geometry()
+        else {
             return ShellAction::Redraw;
         };
         let step = if page {
-            usize::from(layout.message.height).max(1)
+            usize::from(viewport.height).max(1)
         } else {
             1
         };
         let distance = delta.unsigned_abs().saturating_mul(step);
         self.pages.common.notification_message_scroll = if delta < 0 {
-            layout.scroll_offset.saturating_sub(distance)
+            offset.saturating_sub(distance)
         } else {
-            layout
-                .scroll_offset
+            offset
                 .saturating_add(distance)
-                .min(layout.max_scroll_offset)
+                .min(count.saturating_sub(usize::from(viewport.height)))
         };
         ShellAction::Redraw
     }
@@ -461,6 +492,7 @@ impl ShellSession {
         app_notification.page = owner;
         let previous_modal = self.notification_active_modal_id();
         let id = self.app.push_notification_modal(app_notification);
+        self.collect_desktop_reports();
         self.ui.notification_bindings.bind(id, &notification);
         if !visible {
             return id;

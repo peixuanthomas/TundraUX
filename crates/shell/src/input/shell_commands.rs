@@ -343,6 +343,7 @@ pub enum ShellCommand {
     NotificationNextAction,
     NotificationPreviousAction,
     NotificationActivateSelected,
+    NotificationPanelAction(ui::NotificationPanelAction),
     NotificationActivateAction(usize),
     NotificationCancel,
     CaptureOverlayInput,

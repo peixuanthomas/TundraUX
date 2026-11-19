@@ -499,3 +499,42 @@ fn invalid_action_keeps_active_modal_and_dismiss_without_response_promotes_next(
     );
     assert_eq!(center.response_count(), 0);
 }
+
+#[test]
+fn reports_record_each_problem_once_and_dismiss_only_the_original_occurrence() {
+    let mut center = NotificationCenter::new("Ready");
+    center.notify_toast("Saved");
+    center.notify_alert("Connected", NotificationTone::Success);
+    center.push_modal(Notification::modal(
+        "Delete?",
+        "Choose",
+        NotificationTone::Warning,
+        vec![],
+    ));
+    assert!(center.take_reports().is_empty());
+
+    let text = i18n::LocalizedText::from(i18n::msg!("notifications-action-ok"));
+    center.notify_alert_with_key("disk", text.clone(), NotificationTone::Warning);
+    let first = center.take_reports().pop().unwrap();
+    center.notify_alert_with_key("disk", text.clone(), NotificationTone::Warning);
+    let second = center.take_reports().pop().unwrap();
+    assert_eq!(first.message, text);
+    assert_ne!(first.id, second.id);
+    center.dismiss_report(first.id);
+    assert_eq!(center.active_report_id(), Some(second.id));
+    center.dismiss_report(second.id);
+    assert!(center.active_report_id().is_none());
+    center.notify_alert_with_key("disk", text.clone(), NotificationTone::Error);
+    center.resolve_alert("disk");
+    let mut problem =
+        Notification::modal("Failure", text.clone(), NotificationTone::Critical, vec![]);
+    problem.reports_problem = true;
+    center.push_critical_modal(problem);
+    let reports = center.take_reports();
+    assert_eq!(reports.len(), 2);
+    assert_eq!(reports[0].tone, NotificationTone::Error);
+    assert_ne!(reports[0].id, second.id);
+    assert_eq!(reports[1].title, Some("Failure".into()));
+    assert_eq!(reports[1].message, text);
+    assert!(center.take_reports().is_empty());
+}

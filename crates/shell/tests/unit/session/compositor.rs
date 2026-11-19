@@ -2233,3 +2233,62 @@ fn auto_admin_entry_accepts_keyboard_and_pointer_operations_on_its_first_frame()
         assert!(text(terminal.backend().buffer(), dialog).contains("Immediate operation"));
     }
 }
+
+#[test]
+fn notification_panel_automation_renders_both_languages_and_scrolls_at_minimum_size() {
+    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    for (language, clear, source) in [
+        ("en-US", "Clear all", "Desktop"),
+        ("zh-CN", "全部清除", "桌面"),
+    ] {
+        let mut state = session();
+        state.terminal_size = (108, 20);
+        state.language = Arc::new(
+            i18n::LanguageSnapshot::load(&assets, language, 1)
+                .unwrap()
+                .snapshot,
+        );
+        let _language = i18n::enter_snapshot(state.language.clone());
+        state.notify_status("Full header");
+        state.notify_alert_with_tone(
+            format!("{}END_OF_REPORT", "长报告👩‍💻 ".repeat(160)),
+            ui::NotificationTone::Error,
+        );
+        state.clear_notification_alert();
+        state.open_status_details();
+        let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+        let mut compositor = ScreenCompositor {
+            capture_enabled: true,
+            ..Default::default()
+        };
+        let mut frame = home_frame(&state, 500, true);
+        frame.notification = state.to_notification_view_model();
+        draw(&mut compositor, &mut terminal, &mut state, &frame);
+        let snapshot = compositor.snapshot.as_ref().unwrap();
+        let has_text = |snapshot: &shell_control::Snapshot, text: &str| {
+            snapshot.lines.iter().any(|line| line.contains(text))
+        };
+        assert!(has_text(snapshot, "Full header"));
+        assert!(has_text(snapshot, source));
+        assert!(
+            snapshot
+                .nodes
+                .iter()
+                .any(|n| n.actionable && n.id.ends_with(".action.clear") && n.name == clear)
+        );
+        assert!(
+            snapshot
+                .nodes
+                .iter()
+                .any(|n| n.actionable && n.id.contains(".action.dismiss-"))
+        );
+        state.apply_input(InputEvent::key(InputKey::End));
+        frame.notification = state.to_notification_view_model();
+        draw(&mut compositor, &mut terminal, &mut state, &frame);
+        assert!(has_text(
+            compositor.snapshot.as_ref().unwrap(),
+            "END_OF_REPORT"
+        ));
+        assert!(state.status_details_visible());
+    }
+}

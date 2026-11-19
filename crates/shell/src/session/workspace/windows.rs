@@ -58,19 +58,9 @@ impl Workspace {
                         ) {
                             self.input_fences.remove(&id);
                         }
-                        if let ProcessState::Exited { code, forced } = status {
-                            let launching = window.frame.is_none()
-                                && matches!(window.close, CloseProgress::Idle)
-                                && !window.force_when_started
-                                && !window.launch_error;
-                            self.finish_window_exit(id, code, forced, state);
-                            if launching {
-                                report_launch_failure(
-                                    state,
-                                    i18n::tr!("ui-components-unavailable"),
-                                );
-                            }
-                        } else if window.force_when_started {
+                        if !matches!(status, ProcessState::Exited { .. })
+                            && window.force_when_started
+                        {
                             window.force_when_started = false;
                             self.force(id)?;
                         }
@@ -104,6 +94,10 @@ impl Workspace {
         let mut received = Vec::new();
         for id in ids {
             let window = self.windows.get_mut(&id).expect("live window");
+            if let ProcessState::Exited { code, forced } = window.state {
+                redraw |= self.drain_exited_window(id, code, forced, state)?;
+                continue;
+            }
             flush_window_requests(window);
             let Some(stream) = &mut window.stream else {
                 continue;
@@ -142,6 +136,18 @@ impl Workspace {
         for (id, message) in received {
             redraw |= self.receive(id, message, state)?;
         }
+        state
+            .notification_history
+            .pending_dismissals
+            .retain(|id, reports| {
+                self.windows.contains_key(id)
+                    && !self.enqueue(
+                        *id,
+                        ShellToApp::DismissNotificationReports {
+                            ids: reports.clone(),
+                        },
+                    )
+            });
         self.sync_task_catalogs();
         // A modal prompt is user time. Start the timer when work starts, or
         // while a close request has yet to get any response from the app.
@@ -533,6 +539,35 @@ impl Workspace {
         Ok(())
     }
 
+    pub(super) fn drain_exited_window(
+        &mut self,
+        id: SessionId,
+        code: Option<i32>,
+        forced: bool,
+        state: &mut ShellSession,
+    ) -> io::Result<bool> {
+        let window = self.windows.get_mut(&id).expect("live window");
+        // The guardian can report exit before the window reader delivers its final messages.
+        if let Some(stream) = &mut window.stream
+            && let Ok(messages) = stream.poll()
+        {
+            let mut redraw = false;
+            for message in messages {
+                redraw |= self.receive(id, message, state)?;
+            }
+            return Ok(redraw);
+        }
+        let launching = window.frame.is_none()
+            && matches!(window.close, CloseProgress::Idle)
+            && !window.force_when_started
+            && !window.launch_error;
+        self.finish_window_exit(id, code, forced, state);
+        if launching {
+            report_launch_failure(state, i18n::tr!("ui-components-unavailable"));
+        }
+        Ok(true)
+    }
+
     pub(super) fn receive(
         &mut self,
         id: SessionId,
@@ -614,6 +649,26 @@ impl Workspace {
                     })
                 {
                     self.cancel_capture();
+                }
+            }
+            AppToShell::NotificationReport(value) => {
+                let report = serde_json::from_value::<app::NotificationReport>(value)?;
+                if report.tone.is_warning_or_higher() {
+                    if report.tone == ui::NotificationTone::Critical
+                        && report.title.is_some()
+                        && self.selection.focused() == Some(id)
+                        && !matches!(window.state, ProcessState::Exited { .. })
+                        && !self.launcher_visible
+                        && state.status_details_visible()
+                    {
+                        state.activate_panel_action(ui::NotificationPanelAction::Close);
+                    }
+                    state.notification_history.add(
+                        Some(id),
+                        window.launch.localized_title(),
+                        report,
+                        None,
+                    );
                 }
             }
             AppToShell::InputFence { serial } => {

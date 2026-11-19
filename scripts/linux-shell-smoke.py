@@ -336,7 +336,7 @@ def check_status_details(master, output, child, cli, env):
             modal = any(item["id"] == "modal" or item["id"].startswith("modal/")
                         for item in frame["nodes"])
             if frame["page"] == page and (
-                close and any("Status details" in line for line in frame["lines"])
+                close and any("Notifications" in line for line in frame["lines"])
                 if opened else not modal
             ):
                 break

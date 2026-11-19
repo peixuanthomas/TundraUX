@@ -132,6 +132,7 @@ impl ShellSession {
                         .with_follow_up(ShellCommand::CloseTimeSyncDialog),
                 ],
             )
+            .reporting_problem()
             .for_session()
             .with_key(TIME_SYNC_NOTIFICATION_KEY)
             .with_component(ShellComponent::TimeSyncDialog),

@@ -49,6 +49,7 @@ pub struct NotificationViewModel {
     pub scroll_offset: usize,
     pub align_left: bool,
     pub show_tone_prefix: bool,
+    pub panel: Option<super::panel::NotificationPanelModel>,
 }
 
 impl NotificationViewModel {
@@ -71,6 +72,7 @@ impl NotificationViewModel {
             scroll_offset: 0,
             align_left: false,
             show_tone_prefix: true,
+            panel: None,
         }
     }
 }

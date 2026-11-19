@@ -40,6 +40,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | --- | --- |
 | `ui-launcher.ftl` | Persistent search, no results, search shortcuts, and entry/context-menu actions |
 | `ui-home.ftl` | Home shortcut actions and icon editing |
+| `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, and Tab focus navigation with arrows in the focused region |
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through title-bar Tasks |

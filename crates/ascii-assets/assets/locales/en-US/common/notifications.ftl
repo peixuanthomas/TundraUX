@@ -1,2 +1,11 @@
 notifications-action-ok = OK
 notifications-status-ready = Ready
+notification-source-desktop = Desktop
+notification-previous-crash = Previous session crashed
+notification-previous-unclean = Previous session ended unexpectedly
+notification-panel-title = Notifications
+notification-panel-empty = No notifications
+notification-panel-clear = Clear all
+notification-panel-dismiss = Dismiss notification
+notification-panel-open-log = Open log
+notification-panel-cross = ×

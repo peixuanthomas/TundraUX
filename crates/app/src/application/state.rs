@@ -296,6 +296,14 @@ impl AppState {
         &self.notifications
     }
 
+    pub fn take_notification_reports(&mut self) -> Vec<super::notification::NotificationReport> {
+        self.notifications.take_reports()
+    }
+
+    pub fn dismiss_notification_report(&mut self, id: u64) {
+        self.notifications.dismiss_report(id);
+    }
+
     pub fn push_notification_modal(&mut self, notification: Notification) -> u64 {
         self.notifications.push_modal(notification)
     }
@@ -319,7 +327,7 @@ impl AppState {
     fn apply_notification_command(&mut self, command: NotificationCommand, at: Instant) {
         match command {
             NotificationCommand::Reset(status) => {
-                self.notifications = NotificationCenter::new(status);
+                self.notifications.reset(status);
             }
             NotificationCommand::SetStatus(message) => self.notifications.notify_status(message),
             NotificationCommand::ShowToast(message) => {

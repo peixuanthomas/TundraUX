@@ -87,6 +87,9 @@ pub enum ShellToApp {
     CancelPointer {
         layout: LayoutGeneration,
     },
+    DismissNotificationReports {
+        ids: Vec<u64>,
+    },
     RequestClose,
 }
 
@@ -98,6 +101,7 @@ pub enum AppToShell {
     InputFence { serial: u64 },
     TaskAction { id: String, cancel: bool },
     Status(WindowStatus),
+    NotificationReport(Value),
     ToggleTasks,
     OpenApp(Value),
     FilePicked(NativePath),
@@ -231,6 +235,8 @@ pub struct WindowFrame {
     pub keyboard_available: bool,
     #[serde(default)]
     pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_report: Option<u64>,
     /// Exactly one cell per viewport position, in row-major order.
     #[serde(with = "cell_encoding")]
     pub cells: Vec<Cell>,
@@ -260,6 +266,7 @@ impl WindowFrame {
             animation_running: false,
             keyboard_available: false,
             status: String::new(),
+            status_report: None,
             cells: vec![Cell::default(); size.area()],
             cursor: None,
             images: Vec::new(),

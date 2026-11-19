@@ -230,6 +230,7 @@ pub(super) enum WindowShortcut {
     SendPrefix(KeyInput),
     Background,
     Panel,
+    Notifications,
     Split(ui::WorkspaceSplitMode),
     Maximize,
     MoveFocus(i16, i16),
@@ -269,6 +270,7 @@ impl WindowPrefix {
             return WindowShortcut::Pass;
         }
         match key.key {
+            InputKey::Char('n' | 'N') => WindowShortcut::Notifications,
             InputKey::Char('b' | 'B') => WindowShortcut::Background,
             InputKey::Char('w' | 'W') => WindowShortcut::Panel,
             InputKey::Char('v' | 'V') => WindowShortcut::Split(ui::WorkspaceSplitMode::LeftRight),

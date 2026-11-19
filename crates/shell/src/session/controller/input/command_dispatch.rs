@@ -2075,6 +2075,13 @@ impl ShellSession {
             ShellCommand::NotificationScrollMessage { delta, page } => {
                 self.scroll_notification_message(delta, page)
             }
+            ShellCommand::NotificationPanelAction(action) => self.activate_panel_action(action),
+            ShellCommand::NotificationNextAction | ShellCommand::NotificationPreviousAction
+                if self.status_details_visible() =>
+            {
+                self.move_panel_focus(routed.command == ShellCommand::NotificationPreviousAction);
+                ShellAction::Redraw
+            }
             ShellCommand::NotificationNextAction => {
                 self.notification_select_next_action();
                 ShellAction::Redraw

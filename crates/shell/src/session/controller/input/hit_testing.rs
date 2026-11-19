@@ -363,11 +363,11 @@ pub(in crate::session) fn build_shell_hit_map(
 
     if overlay_interaction_ready
         && let (Some(component), Some(model)) = (notification_modal_component, notification_model)
-        && let ui::NotificationLayout::Dialog(layout) = ui::notification_layout(modal_area, model)
+        && let Some(area) = ui::notification_layout(modal_area, model).area()
     {
         regions.push(ShellHitRegion {
             component,
-            area: layout.dialog,
+            area,
             layer: ShellHitLayer::ShellModal,
         });
     }
