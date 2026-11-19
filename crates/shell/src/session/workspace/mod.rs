@@ -423,16 +423,13 @@ impl Workspace {
         window.frame.as_ref().map(|frame| frame.page.as_str())
     }
 
-    pub(super) fn focused_status(&self) -> Option<&str> {
+    pub(super) fn focused_status(&self) -> Option<(SessionId, &WindowFrame)> {
         if self.layout.blocked || self.layout.panes.is_empty() {
             return None;
         }
-        self.windows
-            .get(&self.selection.focused()?)?
-            .frame
-            .as_ref()
-            .map(|frame| frame.status.as_str())
-            .filter(|status| !status.is_empty())
+        let id = self.selection.focused()?;
+        let frame = self.windows.get(&id)?.frame.as_deref()?;
+        (!frame.status.is_empty()).then_some((id, frame))
     }
 
     pub(super) fn keyboard_available(&self) -> bool {

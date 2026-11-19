@@ -751,6 +751,7 @@ impl UserThemeReloader {
                             .cancel(),
                     ],
                 )
+                .reporting_problem()
                 .with_key(THEME_RELOAD_NOTIFICATION_KEY);
                 state.notify_modal_with_options(notification);
             }
@@ -909,6 +910,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         },
         None,
     );
+    if let Some(previous) = process_watchdog.take_previous_session_exit() {
+        state.previous_session_report(previous.crashed, previous.report_path);
+    }
     if state.active_screen() == ShellScreen::FirstRunSetup {
         display_first_run_banner_with_assets_colored(
             guard.terminal_mut().backend_mut(),
@@ -2009,7 +2013,7 @@ pub(super) fn finalize_session_panic(caught: CaughtPanic, session_name: &str) ->
     let reason = caught.payload().to_string();
     // Use the receipt from the writer: it contains the hook's source location
     // and the actual report path, including when the fallback directory is used.
-    match caught.finalize(RecoveryOutcome::Unrecoverable(format!(
+    match caught.finalize_session_crash(RecoveryOutcome::Unrecoverable(format!(
         "the {session_name} stopped; waiting for the user to restart or exit"
     ))) {
         Ok(incident) => panic_incident_message(&incident),
@@ -2357,6 +2361,7 @@ pub(super) fn drain_watchdog_incidents(
     let changed = !incidents.is_empty();
     for incident in incidents {
         if incident.kind == IncidentKind::Panic {
+            watchdog.mark_session_crash(&incident.incident_id);
             panic_messages.push(panic_incident_message(&incident));
         } else {
             show_watchdog_incident(state, incident);
@@ -2397,9 +2402,7 @@ pub(super) fn show_watchdog_incident(state: &mut ShellSession, incident: Inciden
         }
     }
 
-    // Unclean-exit receipts describe a previous process, not a failure in the
-    // current UI session. The watchdog has already persisted them for the
-    // Diagnostics screen, so they can wait until the first Shell frame.
+    // Startup already added the previous desktop exit to the notification panel.
     if incident.kind == IncidentKind::UncleanExit {
         return;
     }

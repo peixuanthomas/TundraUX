@@ -210,23 +210,25 @@ impl WindowLaunch {
     }
 
     pub(super) fn title(&self) -> String {
+        self.localized_title().render_current()
+    }
+
+    pub(super) fn localized_title(&self) -> i18n::LocalizedText {
         match self {
-            Self::Script => app::SCRIPT_EDITOR_APPLICATION
-                .localized_name()
-                .render_current(),
+            Self::Script => app::SCRIPT_EDITOR_APPLICATION.localized_name(),
             Self::CommandLine {
                 external: Some(external),
                 ..
-            } => external.title(),
+            } => external.title().into(),
             _ => match self.application() {
-                WindowApplication::Clock => i18n::tr!("shell-clock"),
-                WindowApplication::CommandLine => i18n::tr!("shell-command-line"),
-                WindowApplication::Editor => i18n::tr!("shell-editor"),
-                WindowApplication::Explorer => i18n::tr!("shell-explorer"),
-                WindowApplication::Logs => i18n::tr!("shell-logs"),
-                WindowApplication::Management(kind) => management_title(kind),
-                WindowApplication::Settings => i18n::tr!("settings-title"),
-                WindowApplication::SystemStatus => i18n::tr!("shell-system-status"),
+                WindowApplication::Clock => i18n::msg!("shell-clock").into(),
+                WindowApplication::CommandLine => i18n::msg!("shell-command-line").into(),
+                WindowApplication::Editor => i18n::msg!("shell-editor").into(),
+                WindowApplication::Explorer => i18n::msg!("shell-explorer").into(),
+                WindowApplication::Logs => i18n::msg!("shell-logs").into(),
+                WindowApplication::Management(kind) => management_title_text(kind),
+                WindowApplication::Settings => i18n::msg!("settings-title").into(),
+                WindowApplication::SystemStatus => i18n::msg!("shell-system-status").into(),
             },
         }
     }

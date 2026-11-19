@@ -286,22 +286,27 @@ impl ManagementState {
 }
 
 pub(in crate::session) fn management_title(kind: ManagementKind) -> String {
+    management_title_text(kind).render_current()
+}
+
+pub(in crate::session) fn management_title_text(kind: ManagementKind) -> i18n::LocalizedText {
     match kind {
-        ManagementKind::Services => i18n::tr!("management-services"),
-        ManagementKind::Processes => i18n::tr!("management-processes"),
-        ManagementKind::Packages => i18n::tr!("management-packages"),
-        ManagementKind::Network => i18n::tr!("management-network"),
-        ManagementKind::Disks => i18n::tr!("management-disks"),
-        ManagementKind::Users => i18n::tr!("management-users"),
-        ManagementKind::SystemConfig => i18n::tr!("management-system-config"),
-        ManagementKind::Firewall => i18n::tr!("management-firewall"),
-        ManagementKind::Ssh => i18n::tr!("management-ssh"),
-        ManagementKind::Backups => i18n::tr!("management-backups"),
-        ManagementKind::ScheduledTasks => i18n::tr!("management-scheduled-tasks"),
-        ManagementKind::Tasks => i18n::tr!("tasks-title"),
-        ManagementKind::FilePermissions => i18n::tr!("permissions-title"),
-        ManagementKind::SystemSettings => i18n::tr!("system-settings-title"),
+        ManagementKind::Services => i18n::msg!("management-services"),
+        ManagementKind::Processes => i18n::msg!("management-processes"),
+        ManagementKind::Packages => i18n::msg!("management-packages"),
+        ManagementKind::Network => i18n::msg!("management-network"),
+        ManagementKind::Disks => i18n::msg!("management-disks"),
+        ManagementKind::Users => i18n::msg!("management-users"),
+        ManagementKind::SystemConfig => i18n::msg!("management-system-config"),
+        ManagementKind::Firewall => i18n::msg!("management-firewall"),
+        ManagementKind::Ssh => i18n::msg!("management-ssh"),
+        ManagementKind::Backups => i18n::msg!("management-backups"),
+        ManagementKind::ScheduledTasks => i18n::msg!("management-scheduled-tasks"),
+        ManagementKind::Tasks => i18n::msg!("tasks-title"),
+        ManagementKind::FilePermissions => i18n::msg!("permissions-title"),
+        ManagementKind::SystemSettings => i18n::msg!("system-settings-title"),
     }
+    .into()
 }
 fn management_label(id: &str, fallback: &str) -> String {
     let key = format!("management-action-{}", id.replace('_', "-"));

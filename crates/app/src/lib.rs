@@ -24,7 +24,7 @@ pub use application::catalog::{
 pub use application::notification::{
     DEFAULT_ALERT_KEY, DEFAULT_TOAST_DURATION, MAX_ACTIVE_ALERTS, MAX_NOTIFICATION_RESPONSES,
     Notification, NotificationAction, NotificationCenter, NotificationCommand, NotificationLevel,
-    NotificationResponse, NotificationTone,
+    NotificationReport, NotificationResponse, NotificationTone,
 };
 pub use application::{AppAction, AppCommand, AppSnapshot, AppState, AppSystemStatusSnapshot};
 

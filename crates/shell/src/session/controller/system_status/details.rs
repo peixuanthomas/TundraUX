@@ -12,8 +12,7 @@ impl ShellSession {
 
     pub(in crate::session) fn open_status_details(&mut self) {
         // Chrome must never replace or jump ahead of an existing shell modal.
-        if self.auto_admin_visible()
-            || self.notification_has_active_modal()
+        if !self.interactive_overlays().is_empty()
             || self.time_sync_dialog_visible
             || self.active_screen() == ShellScreen::ExitConfirm
         {
@@ -23,6 +22,7 @@ impl ShellSession {
             .displayed_status
             .clone()
             .unwrap_or_else(|| self.to_shell_chrome_view_model().status.full_message());
+        self.notification_history.open_panel();
         self.notify_modal_with_options(
             ShellNotification::modal(
                 i18n::msg!("shell-status-details-title"),

@@ -193,6 +193,8 @@ impl<W: Write> TerminalGuard<W> {
         };
         #[cfg(not(unix))]
         let win32_result = Ok(());
+        #[cfg(windows)]
+        let image_result = finish_pending_image(self.terminal.backend_mut());
         let terminal_result = execute!(
             self.terminal.backend_mut(),
             Show,
@@ -201,6 +203,8 @@ impl<W: Write> TerminalGuard<W> {
             DisableMouseCapture,
             LeaveAlternateScreen
         );
+        #[cfg(windows)]
+        let terminal_result = image_result.and(terminal_result);
         let raw_mode_result = disable_raw_mode();
         self.restored = true;
         #[cfg(unix)]
@@ -408,9 +412,18 @@ impl Drop for TemporaryRawMode {
     }
 }
 
+/// Release the display if a Windows inline image was interrupted before its closing sequence.
+#[cfg(windows)]
+pub fn finish_pending_image(output: &mut impl Write) -> io::Result<()> {
+    output.write_all(b"\x1b\\")?;
+    execute!(output, crossterm::terminal::EndSynchronizedUpdate)
+}
+
 pub fn restore_terminal_best_effort() {
     let _ = disable_raw_mode();
     let mut stderr = io::stderr();
+    #[cfg(windows)]
+    let _ = finish_pending_image(&mut stderr);
     #[cfg(unix)]
     {
         let modes = KEYBOARD_MODES.swap(0, std::sync::atomic::Ordering::Relaxed);

@@ -72,6 +72,7 @@ impl Message for ShellToApp {
                 Self::FilePickerResult { path, .. } => {
                     path.as_ref().map_or(0, |path| path.0.as_os_str().len())
                 }
+                Self::DismissNotificationReports { ids } => ids.capacity() * size_of::<u64>(),
                 Self::TaskCatalog { ids } => ids
                     .iter()
                     .map(|id| size_of::<String>() + id.capacity())
@@ -128,7 +129,7 @@ impl Message for AppToShell {
         size_of_val(self)
             + match self {
                 Self::TaskAction { id, .. } | Self::LaunchFailed(id) => id.capacity(),
-                Self::OpenApp(value) => value_bytes(value),
+                Self::OpenApp(value) | Self::NotificationReport(value) => value_bytes(value),
                 Self::FilePicked(path) => path.0.as_os_str().len(),
                 Self::Status(status) => status
                     .task_ids

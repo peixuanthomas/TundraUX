@@ -104,7 +104,7 @@ The window's Split button offers left/right, top/bottom, and full screen. A spli
 
 The requested topology is a binary split tree with each axis once per path and at most four panes. Splits add one cell of space between adjacent frames. Windows hidden by a resize return when room permits. Minimized windows wait in the bottom bar until restored. The workspace compares the minimum of every running app before routing application input. If that minimum does not fit, the selected frame and window controls stay available. A close that needs an app confirmation displays a Shell prompt until there is room for the original confirmation.
 
-Clicking the status area in the header opens the full text. The dialog retains the content from the moment of the click and supports scrolling.
+Clicking the status text opens the notification panel below the header. It keeps the full status from the click and lists reports from the desktop and all app windows. Each occurrence carries a window-local ID, so clearing a card also clears the matching live alert. Closing an app or resolving its alert leaves the card available. Status updates, toasts, and ordinary confirmation dialogs create no cards. After a desktop crash or unexpected exit, startup adds a silent card linked to its saved report. Opening the report checks diagnostics permissions and uses the read-only editor.
 
 ## Exit, suspend, and failures
 

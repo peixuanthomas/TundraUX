@@ -1,6 +1,10 @@
 mod layout;
 mod model;
+mod panel;
 mod render;
+pub use panel::{
+    NotificationCard, NotificationPanelAction, NotificationPanelLayout, NotificationPanelModel,
+};
 
 pub use layout::{
     NotificationActionLayout, NotificationDialogLayout, NotificationLayout, notification_layout,

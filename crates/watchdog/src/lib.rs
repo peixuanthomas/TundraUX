@@ -25,7 +25,10 @@ pub use log_error::capture_error;
 pub use model::*;
 pub use report_catalog::{IncidentReportCatalog, IncidentReportSummary};
 pub use resource::ManagedResource;
-pub use runtime::{AppWatchdog, CaughtPanic, EmergencyCleanup, ProcessWatchdog, WatchdogRuntime};
+pub use runtime::{
+    AppWatchdog, CaughtPanic, EmergencyCleanup, PreviousSessionExit, ProcessWatchdog,
+    WatchdogRuntime,
+};
 #[cfg(target_os = "macos")]
 pub use supervisor::OwnedProcessSession;
 #[cfg(target_os = "linux")]

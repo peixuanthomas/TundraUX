@@ -323,8 +323,8 @@ impl ShellSession {
             return (RoutedTarget::Global, ShellCommand::RequestCommandLineClose);
         }
 
-        if self.notification_has_active_modal()
-            && self.notification_scrollbar_drag.is_some()
+        if (self.status_details_visible() || self.notification_scrollbar_drag.is_some())
+            && self.notification_has_active_modal()
             && let Some(routed) = self.route_overlay_mouse(mouse, hit_target, received_at)
         {
             return routed;

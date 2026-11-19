@@ -15,13 +15,27 @@ pub enum NotificationLevel {
     Modal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NotificationTone {
     Info,
     Success,
     Warning,
     Error,
     Critical,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NotificationReport {
+    pub id: u64,
+    pub tone: NotificationTone,
+    pub title: Option<LocalizedText>,
+    pub message: LocalizedText,
+}
+
+impl NotificationTone {
+    pub fn is_warning_or_higher(self) -> bool {
+        matches!(self, Self::Warning | Self::Error | Self::Critical)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +77,7 @@ pub struct Notification {
     pub title: LocalizedText,
     pub message: LocalizedText,
     pub actions: Vec<NotificationAction>,
+    pub reports_problem: bool,
 }
 
 impl Notification {
@@ -81,6 +96,7 @@ impl Notification {
             title: title.into(),
             message: message.into(),
             actions: normalized_actions(actions),
+            reports_problem: false,
         }
     }
 
@@ -161,7 +177,8 @@ pub struct NotificationCenter {
     modal_queue: VecDeque<Notification>,
     responses: VecDeque<NotificationResponse>,
     next_id: u64,
-    next_alert_sequence: u64,
+    next_report_id: u64,
+    pending_reports: Vec<NotificationReport>,
 }
 
 impl NotificationCenter {
@@ -176,8 +193,15 @@ impl NotificationCenter {
             modal_queue: VecDeque::new(),
             responses: VecDeque::new(),
             next_id: 1,
-            next_alert_sequence: 1,
+            next_report_id: 1,
+            pending_reports: Vec::new(),
         }
+    }
+
+    pub(super) fn reset(&mut self, status: LocalizedText) {
+        let previous = std::mem::replace(self, Self::new(status));
+        self.next_report_id = previous.next_report_id;
+        self.pending_reports = previous.pending_reports;
     }
 
     pub fn set_visible_page(&mut self, page: super::pages::PageInstanceId) {
@@ -257,15 +281,15 @@ impl NotificationCenter {
         tone: NotificationTone,
     ) {
         let key = key.into();
-        let sequence = self.next_alert_sequence;
-        self.next_alert_sequence = self.next_alert_sequence.saturating_add(1).max(1);
+        let message = message.into();
+        let sequence = self.record_report(tone, None, &message);
 
         if let Some(alert) = self
             .alerts
             .iter_mut()
             .find(|alert| alert.page == page && alert.key == key)
         {
-            alert.message = message.into();
+            alert.message = message;
             alert.tone = tone;
             alert.sequence = sequence;
             return;
@@ -285,7 +309,7 @@ impl NotificationCenter {
         self.alerts.push_back(AlertState {
             page,
             key,
-            message: message.into(),
+            message,
             tone,
             sequence,
         });
@@ -363,6 +387,13 @@ impl NotificationCenter {
     }
 
     pub fn push_modal(&mut self, mut notification: Notification) -> u64 {
+        if notification.reports_problem {
+            self.record_report(
+                notification.tone,
+                Some(&notification.title),
+                &notification.message,
+            );
+        }
         notification.actions = normalized_actions(std::mem::take(&mut notification.actions));
         if let Some(key) = notification.key.clone()
             && let Some(existing) = self.modal_with_key_mut(&key, notification.page)
@@ -386,6 +417,13 @@ impl NotificationCenter {
     }
 
     pub fn push_critical_modal(&mut self, mut notification: Notification) -> u64 {
+        if notification.reports_problem {
+            self.record_report(
+                notification.tone,
+                Some(&notification.title),
+                &notification.message,
+            );
+        }
         notification.actions = normalized_actions(std::mem::take(&mut notification.actions));
         if let Some(key) = notification.key.clone()
             && let Some(existing) = self.modal_with_key_mut(&key, notification.page)
@@ -530,6 +568,41 @@ impl NotificationCenter {
 
     pub fn alert(&self) -> Option<&LocalizedText> {
         self.active_alert().map(|alert| &alert.message)
+    }
+
+    pub fn active_report_id(&self) -> Option<u64> {
+        self.active_alert()
+            .filter(|alert| alert.tone.is_warning_or_higher())
+            .map(|alert| alert.sequence)
+    }
+
+    pub fn dismiss_report(&mut self, id: u64) {
+        let had_alerts = !self.alerts.is_empty();
+        self.alerts.retain(|alert| alert.sequence != id);
+        self.resume_toast_if_last_alert_cleared(had_alerts, Instant::now());
+    }
+
+    pub fn take_reports(&mut self) -> Vec<NotificationReport> {
+        std::mem::take(&mut self.pending_reports)
+    }
+
+    fn record_report(
+        &mut self,
+        tone: NotificationTone,
+        title: Option<&LocalizedText>,
+        message: &LocalizedText,
+    ) -> u64 {
+        let id = self.next_report_id;
+        self.next_report_id += 1;
+        if tone.is_warning_or_higher() {
+            self.pending_reports.push(NotificationReport {
+                id,
+                tone,
+                title: title.cloned(),
+                message: message.clone(),
+            });
+        }
+        id
     }
 
     pub fn alert_key(&self) -> Option<&str> {

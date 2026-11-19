@@ -657,6 +657,7 @@ pub struct UiSessionState {
     pub(super) frame_layout: Option<ui::ShellFrameLayout>,
     /// Last message actually painted, retained before click diagnostics change it.
     pub(super) displayed_status: Option<String>,
+    pub(super) notification_history: super::notification_history::NotificationHistory,
     pub(super) hit_map: ShellHitMap,
     pub(super) hit_map_generation: u64,
     pub(super) overlay_interaction_ready: bool,

@@ -2,6 +2,8 @@
 
 `app` owns application state and domain commands. Shell turns keys, clicks, and focus changes into domain actions, then reads an application snapshot to prepare the UI. This crate has no dependency on UI, Ratatui, or Crossterm. Native I/O uses `platform`; structured application documents use `storage`.
 
+Each warning, error, or critical alert gets a report ID and keeps its original localizable message. A dialog produces a report when its caller marks it as a problem. Hosts drain these reports independently of the currently visible page. Dismissing an ID clears its matching live alert. A later occurrence under the same key has its own ID.
+
 ## Modules
 
 | Module | Responsibilities |

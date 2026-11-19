@@ -68,33 +68,37 @@ fn status_details_scroll_wrapped_unicode_and_close_from_the_shared_button() {
     click_status(&mut state);
     let model = state.to_notification_view_model().unwrap();
     assert_eq!(model.message, text);
-    let ui::NotificationLayout::Dialog(layout) =
+    let ui::NotificationLayout::Panel(layout) =
         ui::notification_layout(state.shell_modal_area(), &model)
     else {
         panic!("status details should fit");
     };
     assert!(layout.scrollbar.is_some());
-    assert!(layout.max_scroll_offset > usize::from(layout.message.height));
+    assert!(
+        (layout.line_count() - usize::from(layout.body.height)) > usize::from(layout.body.height)
+    );
     state.apply_input(InputEvent::key(InputKey::Down));
     assert_eq!(state.to_notification_view_model().unwrap().scroll_offset, 1);
     state.apply_input(InputEvent::key(InputKey::PageDown));
     assert_eq!(
         state.to_notification_view_model().unwrap().scroll_offset,
-        1 + usize::from(layout.message.height)
+        1 + usize::from(layout.body.height)
     );
     state.apply_input(InputEvent::key(InputKey::End));
     assert_eq!(
         state.to_notification_view_model().unwrap().scroll_offset,
-        layout.max_scroll_offset
+        (layout.line_count() - usize::from(layout.body.height))
     );
     state.apply_input(InputEvent::key(InputKey::Home));
     assert_eq!(state.to_notification_view_model().unwrap().scroll_offset, 0);
     state.apply_input(InputEvent::mouse_scroll(
         ScrollDirection::Down,
-        (layout.message.x, layout.message.y),
+        (layout.body.x, layout.body.y),
     ));
     assert_eq!(state.to_notification_view_model().unwrap().scroll_offset, 1);
-    let close = layout.actions[0].area;
+    let close = layout
+        .action_area(ui::NotificationPanelAction::Close)
+        .unwrap();
     let point = (close.x, close.y);
     state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
     assert!(state.status_details_visible());
@@ -173,4 +177,48 @@ fn status_details_capture_command_line_keys_paste_and_the_back_button() {
     state.apply_input(InputEvent::key(InputKey::Escape));
     assert!(!state.notification_has_active_modal());
     assert_eq!(state.active_screen(), ShellScreen::CommandLine);
+}
+
+#[test]
+fn notification_panel_keeps_reports_after_recovery_and_clears_the_clicked_occurrence() {
+    use ui::NotificationPanelAction as Action;
+    let mut state = session();
+    state.notify_alert_with_tone("Original", ui::NotificationTone::Warning);
+    let first = state.notification_history.panel(false).cards[0].id;
+    state.clear_notification_alert();
+    click_status(&mut state);
+    state.apply_input(InputEvent::key(InputKey::Tab));
+    assert_eq!(
+        state.notification_history.focus,
+        Some(Action::Dismiss(first))
+    );
+    let model = state.to_notification_view_model().unwrap();
+    let ui::NotificationLayout::Panel(layout) =
+        ui::notification_layout(state.shell_modal_area(), &model)
+    else {
+        panic!()
+    };
+    let x = layout.action_area(Action::Dismiss(first)).unwrap();
+    let point = (x.x + 1, x.y);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    state.notify_alert_with_tone("New report", ui::NotificationTone::Warning);
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert_eq!(state.notification_history.panel(false).cards.len(), 2);
+    state.activate_panel_action(Action::Dismiss(first));
+    assert_eq!(
+        state.app.notification_center().alert(),
+        Some(&"New report".into())
+    );
+    let new = state.notification_history.panel(false).cards[0].id;
+    state.apply_input(InputEvent::key(InputKey::Tab));
+    assert_eq!(state.notification_history.focus, Some(Action::Dismiss(new)));
+    state.apply_input(InputEvent::key(InputKey::Enter));
+    assert!(state.notification_history.panel(false).cards.is_empty());
+    assert!(state.app.notification_center().alert().is_none());
+    state.notify_alert_with_tone("New report", ui::NotificationTone::Warning);
+    assert_ne!(state.notification_history.panel(false).cards[0].id, new);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, (1, 5)));
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, (1, 5)));
+    assert!(!state.status_details_visible());
+    assert_eq!(state.focused_component(), ShellComponent::Home);
 }

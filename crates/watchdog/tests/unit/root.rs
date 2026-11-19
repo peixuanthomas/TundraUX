@@ -241,6 +241,11 @@ fn stale_run_marker_becomes_an_unclean_exit_incident() {
     assert_eq!(process.report_stale_runs(|_| false).unwrap(), 1);
     let receipt = receive_incident(&runtime);
     assert!(receipt.summary.contains("previous run previous-run"));
+    let previous = process.take_previous_session_exit().unwrap();
+    assert_eq!(previous.run_id, "previous-run");
+    assert!(!previous.crashed);
+    assert_eq!(previous.report_path, receipt.text_report_path);
+    assert!(process.take_previous_session_exit().is_none());
     assert!(matches!(
         receipt.recovery,
         RecoveryOutcome::Unrecoverable(_)
@@ -875,4 +880,101 @@ fn submitted_task_owner_and_operation_are_preserved_in_panic_report() {
     assert_eq!(report["operation_id"], operation);
     assert_eq!(report["task_id"], "load");
     cleanup(runtime, &root);
+}
+
+#[test]
+fn previous_session_crash_is_consumed_by_the_next_desktop_and_opens_its_own_report() {
+    let (runtime, process, root) = test_runtime("previous-crash");
+    let config = process.shared.config.clone();
+    let run = process.run_id().to_owned();
+    let app = test_app(&process);
+    let caught = app
+        .run_boundary(
+            BoundarySpec::new("desktop", BoundaryKind::UiSession),
+            || panic!("desktop test crash"),
+        )
+        .unwrap_err();
+    let saved = caught
+        .finalize_session_crash(RecoveryOutcome::Unrecoverable("exited".into()))
+        .unwrap();
+    runtime.shutdown().unwrap();
+
+    let mut cli_config = config.clone();
+    cli_config.process_name = "cli-test".into();
+    let (cli, cli_process) = WatchdogRuntime::start_isolated(cli_config).unwrap();
+    assert_eq!(cli_process.report_own_stale_runs(|_| false).unwrap(), 0);
+    cli.shutdown().unwrap();
+
+    let (second, next) = WatchdogRuntime::start_isolated(config.clone()).unwrap();
+    assert_eq!(next.report_stale_runs(|_| false).unwrap(), 1);
+    let previous = next.take_previous_session_exit().unwrap();
+    assert!(previous.crashed);
+    assert_eq!(previous.run_id, run);
+    assert_eq!(previous.report_path, saved.text_report_path);
+    assert!(
+        fs::read_to_string(previous.report_path.unwrap())
+            .unwrap()
+            .contains("desktop test crash")
+    );
+    assert_eq!(next.report_stale_runs(|_| false).unwrap(), 0);
+    assert!(next.take_previous_session_exit().is_none());
+    second.shutdown().unwrap();
+
+    let (third, clean) = WatchdogRuntime::start_isolated(config).unwrap();
+    assert_eq!(clean.report_stale_runs(|_| false).unwrap(), 0);
+    assert!(clean.take_previous_session_exit().is_none());
+    cleanup(third, &root);
+}
+
+#[test]
+fn previous_session_after_forced_process_exit_contains_that_runs_heartbeat() {
+    let (runtime, process, root) = test_runtime("force-exit");
+    let config = process.shared.config.clone();
+    runtime.shutdown().unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "tests::notification_marker_child", "--nocapture"])
+        .env("TUNDRA_WATCHDOG_MARKER_TEST", &root)
+        .spawn()
+        .unwrap();
+    let ready = root.join("ready");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !ready.exists()
+        && std::time::Instant::now() < deadline
+        && child.try_wait().unwrap().is_none()
+    {
+        thread::sleep(Duration::from_millis(10));
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let run = fs::read_to_string(ready).unwrap();
+    let (runtime, next) = WatchdogRuntime::start_isolated(config).unwrap();
+    assert_eq!(next.report_stale_runs(|_| false).unwrap(), 1);
+    let previous = next.take_previous_session_exit().unwrap();
+    assert!(!previous.crashed);
+    assert_eq!(previous.run_id, run);
+    assert!(
+        fs::read_to_string(previous.report_path.unwrap())
+            .unwrap()
+            .contains(&run)
+    );
+    cleanup(runtime, &root);
+}
+
+#[test]
+fn notification_marker_child() {
+    let Some(root) = std::env::var_os("TUNDRA_WATCHDOG_MARKER_TEST") else {
+        return;
+    };
+    let root = std::path::Path::new(&root);
+    let config = WatchdogConfig::new(
+        root.join("reports"),
+        root.join("fallback"),
+        root.join("data"),
+        "watchdog-test",
+        "test",
+    );
+    let (_runtime, process) = WatchdogRuntime::start_isolated(config).unwrap();
+    fs::write(root.join("run-id"), process.run_id()).unwrap();
+    fs::rename(root.join("run-id"), root.join("ready")).unwrap();
+    thread::sleep(Duration::from_secs(20));
 }

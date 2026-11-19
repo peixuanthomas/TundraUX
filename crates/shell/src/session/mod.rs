@@ -70,6 +70,7 @@ mod controller;
 mod localization;
 mod motion_effects;
 mod navigation;
+mod notification_history;
 mod panel_motion;
 use navigation::{NavigationCheckpoint, ShellNavigation};
 mod page_state;

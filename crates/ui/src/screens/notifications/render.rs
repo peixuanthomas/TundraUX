@@ -35,6 +35,12 @@ pub(crate) fn render_notification_overlay_context(
 
     let layout = match notification_layout(area, model) {
         NotificationLayout::Dialog(layout) => layout,
+        NotificationLayout::Panel(layout) => {
+            if let Some(panel) = &model.panel {
+                layout.render(frame, model, panel, context);
+            }
+            return;
+        }
         NotificationLayout::TooSmall { .. } => {
             render_notification_too_small(frame, area, theme);
             return;

@@ -1335,3 +1335,41 @@ fn restart_requirement_disables_follow_up_repairs() {
     assert!(state.diagnostics_restart_required);
     assert!(state.auth_session().is_some());
 }
+
+#[test]
+fn notification_panel_opens_the_recorded_report_read_only_and_preserves_it_on_clear() {
+    use ui::NotificationPanelAction as Action;
+    let (directory, path) = temporary_document("previous.txt", b"previous session\n");
+    for role in [UserRole::Guest, UserRole::Admin] {
+        let mut state = state(role);
+        while state.notification_dismiss_active_modal_without_response() {}
+        state.latest_watchdog_report = Some(directory.join("different.txt"));
+        state.previous_session_report(true, Some(path.clone()));
+        assert!(!state.notification_has_active_modal());
+        state.open_status_details();
+        let card = state
+            .to_notification_view_model()
+            .unwrap()
+            .panel
+            .unwrap()
+            .cards
+            .remove(0);
+        assert_eq!(card.open_log, state.diagnostics_can_view_details());
+        let driver = TestEditorTaskDriver::install(&mut state);
+        state.activate_panel_action(Action::Open(card.id));
+        if card.open_log {
+            driver.complete_next_load(&mut state);
+            let doc = state.app.editor_state().unwrap();
+            assert!(doc.is_read_only());
+            assert_eq!(doc.export_text(), "previous session\n");
+            state.open_status_details();
+        } else {
+            assert!(state.status_details_visible());
+            assert!(state.app.editor_state().is_none());
+        }
+        state.activate_panel_action(Action::Clear(card.id));
+        assert!(state.notification_history.panel(true).cards.is_empty());
+        assert_eq!(std::fs::read(&path).unwrap(), b"previous session\n");
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}

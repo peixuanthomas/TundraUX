@@ -33,7 +33,7 @@ Window frames also carry styled Markdown headings as text and geometry. The rece
 
 ## Window initialization and input receipts
 
-The current private protocol version is **5**; the public watchdog CLI messages keep their separate version **1**. Version 5 carries system-user session identity in place of the former application account lifecycle.
+The current private protocol version is **6**. The public watchdog CLI protocol remains at version **1**. App hosts send each localizable warning, error, or critical report as a control message, including while hidden. Frames identify the report displayed in their status. Shell can dismiss specific report IDs in the originating window.
 
 Window frames carry monotonic sequences and processed input serials for tracing. A separate `confirmed_input_fence` completes only after the relevant operation receipt and acceptance of a frame for the current viewport. Background I/O resolves image references in wire order before retaining the newest frame and preserves first-frame startup timing data.
 

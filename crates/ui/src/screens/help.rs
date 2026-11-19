@@ -105,6 +105,7 @@ fn workspace_navigation() -> PageHelpSection {
                 "Ctrl+W, h/j/k/l / ←→↑↓",
                 i18n::tr!("ui-help-workspace-focus"),
             ),
+            row("Ctrl+W, n", i18n::tr!("notification-panel-title")),
             row("Ctrl+W, v", i18n::tr!("ui-workspace-left-right")),
             row("Ctrl+W, s", i18n::tr!("ui-workspace-top-bottom")),
             row("Ctrl+W", i18n::tr!("ui-help-workspace-native")),

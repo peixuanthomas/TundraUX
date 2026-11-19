@@ -357,7 +357,7 @@ impl ShellSession {
                         Instant::now(),
                     );
                 }
-                self.notify_modal(
+                self.notify_problem_modal(
                     i18n::LocalizedText::from(i18n::msg!("shell-terminal-graphics-unsupported")),
                     i18n::LocalizedText::from(i18n::msg!("shell-this-terminal-responded-but-does-not-support-a-compatible-graphics-protocol-the-default-theme-will-use-ascii-i")),
                     ui::NotificationTone::Warning,
@@ -365,7 +365,7 @@ impl ShellSession {
                 );
             }
             ui::TerminalGraphicsProbeStatus::Unsupported => {
-                self.notify_modal(
+                self.notify_problem_modal(
                     i18n::LocalizedText::from(i18n::msg!("shell-terminal-graphics-unsupported")),
                     i18n::LocalizedText::from(i18n::msg!("shell-this-terminal-responded-but-does-not-support-a-compatible-graphics-protocol-the-custom-theme-was-left-unchange")),
                     ui::NotificationTone::Warning,
@@ -373,7 +373,7 @@ impl ShellSession {
                 );
             }
             ui::TerminalGraphicsProbeStatus::NoResponse { reason } => {
-                self.notify_modal(
+                self.notify_problem_modal(
                     i18n::LocalizedText::from(i18n::msg!("shell-no-terminal-graphics-response")),
                     i18n::LocalizedText::from(i18n::msg!("shell-tundraux-could-not-determine-whether-this-terminal-supports-a-graphics-protocol-reason-your-theme-was-not-chan", reason = reason.to_string())),
                     ui::NotificationTone::Warning,
@@ -719,7 +719,7 @@ impl ShellSession {
                 }
                 if restart_required && succeeded > 0 {
                     self.diagnostics_restart_required = true;
-                    self.notify_modal(
+                    self.notify_problem_modal(
                             i18n::LocalizedText::from(i18n::msg!("shell-restart-required")),
                             i18n::LocalizedText::from(i18n::msg!("shell-storage-was-repaired-and-the-current-in-memory-session-is-stale-restart-tundraux-before-continuing")),
                             ui::NotificationTone::Warning,

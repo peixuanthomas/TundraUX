@@ -46,7 +46,7 @@ Explorer's asynchronous Rename and Undo completions merge refreshed listings int
 
 Shell attaches to the current system user, initializes assets and storage, and opens first-time setup or Home. It owns global input, pane focus, the display, and idle weather. AppHosts own their page state and child processes. Keeping idle weather in the Shell prevents an AppHost from interpreting a wake action in its active dialog.
 
-AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
+AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. If the Windows Shell stops during an inline image, the guardian releases the terminal display before restoring the original cursor. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
 
 SessionServices shares configuration, profile, clock, system status, and file operation state. It checks the profile revision and saves appearance and dashboard changes before publication. A background connection owns the I/O. AppHosts initialize from one coherent snapshot and reuse an immutable cached snapshot for reads.
 
@@ -89,7 +89,7 @@ After an AppHost welcomes the Shell, its current viewport and initialization joi
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state. First-time setup can finish with the default appearance using F9.
+The header shows the focused app's status beside the title. Click the status to open the notification panel. It shows the full status followed by this session’s warning, error, and critical reports, newest first. Each card names its source and can be dismissed individually. Hidden and closed windows keep their history on the desktop. After an abnormal desktop exit, the panel offers that session’s report to users with diagnostics access. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state. First-time setup can finish with the default appearance using F9.
 
 ## Windows
 

@@ -322,12 +322,25 @@ impl ScreenCompositor {
         frame_context.motion = state.interaction_motion_frame(frame_context.motion);
         let mut chrome = prepared.chrome.clone();
         let launcher_visible = state.content_screen() == ShellScreen::Launcher;
+        let mut displayed_report = state
+            .app
+            .notification_center()
+            .active_report_id()
+            .and_then(|id| state.notification_history.find_report(None, id));
         if !launcher_visible
-            && let Some(status) = workspace
+            && let Some((window, frame)) = workspace
                 .as_ref()
                 .and_then(|windows| windows.focused_status())
         {
-            chrome.status.status = status.to_owned();
+            let remote_report = frame
+                .status_report
+                .and_then(|id| state.notification_history.find_report(Some(window), id));
+            if frame.status_report.is_none() || remote_report.is_some() {
+                chrome.status.status.clone_from(&frame.status);
+                if chrome.status.error.is_none() && chrome.status.toast.is_none() {
+                    displayed_report = remote_report;
+                }
+            }
         }
         chrome.terminal_size = (bounds.width, bounds.height);
         let layout = ui::ShellFrameLayout::new(
@@ -592,9 +605,17 @@ impl ScreenCompositor {
         {
             if toast.is_visible(context.motion) {
                 displayed_status.toast = Some(toast.message.clone());
+                displayed_report = None;
             }
         }
         state.displayed_status = Some(displayed_status.full_message());
+        state.notification_history.displayed_report = displayed_report;
+        let refreshed_header = state.notification_history.refresh_header;
+        if refreshed_header {
+            state.notification_history.header_override = state.displayed_status.clone();
+            state.notification_history.header_report = displayed_report;
+            state.notification_history.refresh_header = false;
+        }
         if capture_after_page_overlays {
             self.motion.capture_base(frame.buffer_mut(), state);
         }
@@ -617,6 +638,10 @@ impl ScreenCompositor {
             );
         }
         if let Some(notification) = &prepared.notification {
+            let refreshed = refreshed_header
+                .then(|| state.to_notification_view_model())
+                .flatten();
+            let notification = refreshed.as_ref().unwrap_or(notification);
             ui::render_notification_overlay_with_context(
                 frame,
                 layout.modal_area(),

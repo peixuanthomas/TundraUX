@@ -32,6 +32,8 @@
 
 Screens with separate `model.rs`, `layout.rs`, and `render.rs` keep the data, rectangles, and drawing code together. Reuse the layout result wherever pointer targets, focus, or an embedded viewport need to match the display.
 
+The notification panel sits under the header. Its full status and single column of cards share a scrollable area. Dismiss, open-log, clear-all, and close buttons use the same rectangles for drawing, keyboard navigation, mouse input, and automation.
+
 ## Workspace frames
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
@@ -153,7 +155,7 @@ Default acceleration/constant-speed/deceleration phases are page `[40, 80, 40]`,
 
 `TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. `TerminalImageCache` clips and caches Kitty, Sixel, and iTerm2 images by viewport. An app host captures the visible image placements alongside its rasterized cells. Shell rebuilds native graphics in the pane and retires native resources when the pane moves, closes, or becomes obscured.
 
-Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. On Windows, inline images use the tile's width and height in cells so they stay centered when WezTerm and the console report different font sizes. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
+Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. On Windows, inline images use the tile's width and height in cells so they stay centered when WezTerm and the console report different font sizes. WezTerm displays each Windows image after the cursor used to place it is hidden. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
 
 Text terminals, dialog occlusion, layout transitions, and transparent or overlapping images use character-block compositing. Snapshots preserve wide characters, italics, and native cursor shapes; the editor's Vim region shares rendering, PTY sizing, and mouse coordinates through `editor_vim_terminal_area`.
 

@@ -305,6 +305,7 @@ impl ShellSession {
                 },
                 resource_recovery_actions(),
             )
+            .reporting_problem()
             .with_key("shell.resource-recovery"),
         );
     }
@@ -365,6 +366,7 @@ impl ShellSession {
                 ui::NotificationTone::Error,
                 resource_recovery_actions(),
             )
+            .reporting_problem()
             .with_key("shell.resource-recovery"),
         );
         false

@@ -481,7 +481,7 @@ impl ShellSession {
                     arg1 = completion.path.display().to_string(),
                     error = error
                 );
-                self.notify_status(message.clone());
+                self.notify_status(i18n::msg!("shell-ready"));
                 self.notify_alert_with_tone(message, ui::NotificationTone::Error);
             }
         }

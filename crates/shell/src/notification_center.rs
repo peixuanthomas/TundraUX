@@ -92,6 +92,7 @@ pub struct ShellNotification {
     pub actions: Vec<ShellNotificationAction>,
     selected_action: usize,
     pub(crate) session_scope: bool,
+    reports_problem: bool,
 }
 
 impl ShellNotification {
@@ -112,7 +113,13 @@ impl ShellNotification {
             actions: non_empty_notification_actions(actions),
             selected_action: 0,
             session_scope: false,
+            reports_problem: false,
         }
+    }
+
+    pub fn reporting_problem(mut self) -> Self {
+        self.reports_problem = true;
+        self
     }
 
     pub fn for_session(mut self) -> Self {
@@ -144,7 +151,7 @@ impl ShellNotification {
     }
 
     pub(crate) fn to_app_notification(&self) -> app::Notification {
-        let notification = app::Notification::modal(
+        let mut notification = app::Notification::modal(
             self.title.clone(),
             self.message.clone(),
             self.tone,
@@ -154,6 +161,7 @@ impl ShellNotification {
                 .map(|(index, action)| action.to_app_action(index == self.selected_action))
                 .collect(),
         );
+        notification.reports_problem = self.reports_problem;
         match &self.key {
             Some(key) => notification.with_key(key),
             None => notification,

@@ -21,6 +21,20 @@ impl ShellSession {
             };
         }
 
+        if self.status_details_visible()
+            && key.phase == InputPhase::Press
+            && key.is_unmodified_action_key()
+            && matches!(key.key, InputKey::Enter | InputKey::Char(' '))
+        {
+            return (
+                target,
+                ShellCommand::NotificationPanelAction(
+                    self.notification_history
+                        .focus
+                        .unwrap_or(ui::NotificationPanelAction::Close),
+                ),
+            );
+        }
         if let Some(index) = self.notification_action_index_for_input(key) {
             return (target, ShellCommand::NotificationActivateAction(index));
         }
@@ -102,6 +116,9 @@ impl ShellSession {
             return (target, ShellCommand::CaptureOverlayInput);
         }
 
+        if self.status_details_visible() {
+            return (target, self.panel_mouse_command(mouse));
+        }
         match mouse.kind {
             ui::MouseEventKind::Moved => (target, ShellCommand::Hover(hit_target)),
             ui::MouseEventKind::Down(PointerButton::Left) => {

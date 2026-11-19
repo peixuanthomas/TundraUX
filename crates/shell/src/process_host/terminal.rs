@@ -210,9 +210,9 @@ mod windows {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Console::{
-        CONSOLE_CURSOR_INFO, GetConsoleCursorInfo, GetConsoleMode, GetStdHandle, STD_ERROR_HANDLE,
-        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleActiveScreenBuffer, SetConsoleCursorInfo,
-        SetConsoleMode,
+        CONSOLE_CURSOR_INFO, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleCursorInfo,
+        GetConsoleMode, GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        SetConsoleActiveScreenBuffer, SetConsoleCursorInfo, SetConsoleMode,
     };
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
@@ -256,9 +256,17 @@ mod windows {
             Ok(())
         }
 
-        pub(in crate::process_host) fn restore(&mut self, _abnormal: bool) -> io::Result<()> {
+        pub(in crate::process_host) fn restore(&mut self, abnormal: bool) -> io::Result<()> {
             if !self.owned {
                 return Ok(());
+            }
+            let mut mode = 0;
+            // The guardian still owns its original stdout handle after the Shell worker exits.
+            if abnormal
+                && unsafe { GetConsoleMode(self.screen, &mut mode) } != 0
+                && mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0
+            {
+                let _ = terminal_runtime::session::finish_pending_image(&mut io::stdout());
             }
             // SAFETY: the saved handles still refer to this console and its original screen buffer.
             unsafe {

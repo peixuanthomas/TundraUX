@@ -150,20 +150,15 @@ impl ShellSession {
                 ShellComponent::HelpDialog,
             ));
         }
-        if let Some(notification) = self.to_notification_view_model() {
+        if let Some(notification) = self.app.notification_center().active_modal() {
             if let Some(component) = self.notification_active_modal_component() {
                 let mut descriptor = dialog(
                     format!("notification:{}", notification.id),
                     ShellOverlayCategory::ShellModal,
                     component,
                 );
-                let key = self
-                    .app
-                    .notification_center()
-                    .active_modal()
-                    .and_then(|modal| modal.key.as_deref());
                 descriptor.immediate = notification.tone == ui::NotificationTone::Critical
-                    && key != Some(EXIT_CONFIRM_NOTIFICATION_KEY);
+                    && notification.key.as_deref() != Some(EXIT_CONFIRM_NOTIFICATION_KEY);
                 overlays.push(descriptor);
             }
         } else if self.time_sync_dialog_visible {
