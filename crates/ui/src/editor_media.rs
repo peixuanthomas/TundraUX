@@ -218,7 +218,7 @@ impl EditorImagePicker {
                 Sixel::new(image, size, self.is_tmux).map_err(EditorMediaError::Protocol)?,
             ),
             EditorGraphicsProtocol::Iterm2 => Protocol::ITerm2(
-                Iterm2::new(image, size, self.is_tmux).map_err(EditorMediaError::Protocol)?,
+                prepare_iterm2(image, size, self.is_tmux).map_err(EditorMediaError::Protocol)?,
             ),
         };
         Ok(PreparedEditorImage {
@@ -241,6 +241,32 @@ impl EditorImagePicker {
     ) -> Result<PreparedEditorImage, EditorMediaError> {
         self.prepare(rgba_image(width, height, rgba)?, area)
     }
+}
+
+pub(crate) fn prepare_iterm2(
+    image: DynamicImage,
+    size: Size,
+    is_tmux: bool,
+) -> Result<Iterm2, ratatui_image::errors::Errors> {
+    let pixels = (image.width(), image.height());
+    let mut protocol = Iterm2::new(image, size, is_tmux)?;
+    if cfg!(windows) {
+        // ConPTY's reported font can differ from the window's font, particularly after zooming.
+        let pixel_dimensions = format!("width={}px;height={}px", pixels.0, pixels.1);
+        if let Some(start) = protocol.data.find(&pixel_dimensions) {
+            protocol.data.replace_range(
+                start..start + pixel_dimensions.len(),
+                &format!(
+                    "width={};height={};preserveAspectRatio=0",
+                    size.width, size.height
+                ),
+            );
+        }
+        // ConPTY forwards the image's cursor position to WezTerm when the cursor is visible.
+        protocol.data.insert_str(0, "\x1b[?25h");
+        protocol.data.push_str("\x1b[?25l");
+    }
+    Ok(protocol)
 }
 
 pub(crate) fn next_kitty_image_id() -> u32 {

@@ -347,6 +347,41 @@ fn iterm_inline_images_are_decoded_and_download_requests_are_not_host_operations
 }
 
 #[test]
+fn centered_iterm_icon_keeps_all_its_pixels_inside_the_tile() {
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+    let probe = ui::TerminalGraphicsProbe::from_terminal_capabilities(
+        ui::EditorGraphicsProtocol::Iterm2,
+        4,
+        8,
+        false,
+        false,
+    );
+    let tile = Rect::new(3, 2, 8, 4);
+    let icon = probe
+        .picker()
+        .unwrap()
+        .prepare_rgba(16, 16, [30, 100, 210, 255].repeat(16 * 16), tile)
+        .unwrap();
+    let mut screen = Terminal::new(TestBackend::new(20, 10)).unwrap();
+    screen
+        .draw(|frame| icon.render_centered(frame, tile))
+        .unwrap();
+    let expected = Rect::new(5, 3, 4, 2);
+    let packet = screen.backend().buffer()[(expected.x, expected.y)].symbol();
+
+    let (mut terminal, _writer, _replies) = terminal(10, 20);
+    for scale in 1..=if cfg!(windows) { 3 } else { 1 } {
+        terminal.set_cell_size(4 * scale, 8 * scale);
+        terminal.process(b"\x1b[2J\x1b[?25l\x1b[4;6H");
+        terminal.process(packet.as_bytes());
+        let images = terminal.ui_snapshot().images;
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].area, expected);
+        assert_eq!(images[0].source, [0, 0, 16, 16]);
+    }
+}
+
+#[test]
 fn image_padding_preserves_native_pixels_and_kitty_offsets_after_coalescing() {
     let png = "iVBORw0KGgoAAAANSUhEUgAAABEAAAARCAYAAAA7bUf6AAAAG0lEQVR4nGP4z8Dwn1LMMGrIqCGjhowaQiVDAFqpP932QbKOAAAAAElFTkSuQmCC";
     for (offsets, expected_padding) in [("", [0, 0, 7, 15]), (",X=3,Y=4", [3, 4, 4, 11])] {

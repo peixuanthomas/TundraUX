@@ -44,7 +44,7 @@ Child-program output enters the WezTerm in-memory terminal rather than operating
 
 `ui_snapshot_with_revision`, `ui_snapshot_if_changed`, and `ui_snapshot_after_exit` can generate UI snapshots directly. Static frames reuse an `Arc`, updating on output, resize, or post-exit refresh. Snapshots preserve per-cell styles, italics, and DECSCUSR cursor shapes.
 
-Kitty keyboard negotiation supports presses, repeats, releases, and extended keys. Kitty, Sixel, and iTerm2 images are parsed into shared RGBA data and crop rectangles, with an image-decoding budget of 20 million pixels and 80 million bytes; text task history does not store image payloads. Synchronized updates publish the screen after the end sequence or a 200ms timeout.
+Kitty keyboard negotiation supports presses, repeats, releases, and extended keys. Kitty, Sixel, and iTerm2 images are parsed into shared RGBA data and crop rectangles, with an image-decoding budget of 20 million pixels and 80 million bytes; text task history does not store image payloads. Synchronized updates publish the screen after the end sequence or a 200ms timeout. Image tests replay the UI’s inline PNG output through the WezTerm parser and check its full source rectangle and final position.
 
 ## Command Line host
 
