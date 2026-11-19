@@ -114,7 +114,7 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 
 ## Pages, navigation, and global bars
 
-- `ScreenCompositor` draws the header and bottom window bar. In the active workspace session, Tasks shows running or awaiting-approval status. Pages draw only `ShellFrameLayout.main` and their own overlays.
+- `ScreenCompositor` draws the header and bottom window bar. The Tasks label and its clickable area stay fixed when task activity changes. Pages draw only `ShellFrameLayout.main` and their own overlays.
 - Create an independent instance when opening a subpage or explicitly starting a new application session. An ordinary application launch restores an existing window when available. Check instance IDs for state, task results, and focus restoration so late results cannot enter a reopened page.
 - Shell handles entry and overlays. Esc first cancels the top dialog, menu, or page-local action. At an ordinary app root, Esc moves only the focused app to the background and keeps its state and work. Command Line, native Vim, and custom terminal apps receive their own Esc.
 - Every visible window, including a single or maximized window, has a complete frame. Its top edge holds the title, Minimize, Split, and Close buttons. Full screen is an action inside Split. Clicking the frame focuses that window. Buttons act on their own window on release, even if another window had focus before.

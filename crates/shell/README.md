@@ -89,7 +89,7 @@ After an AppHost welcomes the Shell, its current viewport and initialization joi
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. Tasks is available after first-time setup. Background queries do not count as running operations. First-time setup can finish with the default appearance using F9.
+The header shows the focused app's status beside the title. Click the status to read the full message. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state. First-time setup can finish with the default appearance using F9.
 
 ## Windows
 

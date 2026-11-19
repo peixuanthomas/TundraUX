@@ -397,10 +397,10 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
 }
 
 #[test]
-fn task_status_entry_stays_separate_from_help_back_and_keyboard_content() {
+fn tasks_entry_stays_separate_from_help_back_and_keyboard_content() {
     for size in [(108, 20), (140, 40)] {
         let mut model = chrome(size.0, size.1);
-        model.tasks_label = Some("任务 · 待批准".into());
+        model.tasks_label = Some("任务".into());
         let context = RenderContext::default();
         let layout = ShellFrameLayout::new(Rect::new(0, 0, size.0, size.1), None, &context)
             .with_help_button(true)
@@ -410,7 +410,7 @@ fn task_status_entry_stays_separate_from_help_back_and_keyboard_content() {
         terminal
             .draw(|frame| render_shell_chrome(frame, &layout, &model, &context))
             .unwrap();
-        assert!(row(&terminal, 0).replace(' ', "").contains("任务·待批准"));
+        assert!(row(&terminal, 0).replace(' ', "").contains("任务"));
         let collapsed =
             layout.with_input_keyboard(Rect::new(0, size.1 / 2, size.0, size.1 / 2), 1000);
         assert_eq!(collapsed.tasks_button.unwrap().height, 1);
@@ -421,10 +421,7 @@ fn task_status_entry_stays_separate_from_help_back_and_keyboard_content() {
 #[test]
 fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
-        for tasks in [
-            "任务 · 待批准".to_string(),
-            "任务状态与等待批准的工作".repeat(30),
-        ] {
+        for tasks in ["任务".to_string(), "任务列表".repeat(60)] {
             let mut model = chrome(width, height);
             model.tasks_label = Some(tasks);
             let theme = TundraTheme::default();

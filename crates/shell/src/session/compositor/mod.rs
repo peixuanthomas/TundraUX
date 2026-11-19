@@ -329,11 +329,6 @@ impl ScreenCompositor {
         {
             chrome.status.status = status.to_owned();
         }
-        if chrome.tasks_label.is_some()
-            && let Some(label) = workspace.as_ref().and_then(|windows| windows.tasks_label())
-        {
-            chrome.tasks_label = Some(label);
-        }
         chrome.terminal_size = (bounds.width, bounds.height);
         let layout = ui::ShellFrameLayout::new(
             bounds,
