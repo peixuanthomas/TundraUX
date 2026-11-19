@@ -1,42 +1,54 @@
-# Project conventions
+# 用户交流
+- 用简单的语言回答用户，就像是在与另一位同事的工程师交谈，不要说一些日常对话里不常见的专有名词，使用对话的口吻和用户交流。说明具体的改动以及做出这些改动的原因。
 
-- Answer users in simple, direct Simplified Chinese, explaining the specific changes and why they were made.
-- If a user instruction is unclear, or the actual implementation differs from the user's description, ask the user before proceeding.
-- If there are multiple possible interpretations, point them out explicitly; do not assume or choose one on your own.
-- If there is a better or simpler approach, propose it to the user. You may challenge an unreasonable approach proposed by the user.
-- If anything becomes unclear while writing code, stop immediately and ask the user.
-- Keep everything simple. Write only the minimum code needed to solve the problem; do not add speculative extensions or provisions for future use unless the user emphasizes them.
-- Do not add content the user did not request.
-- Do not create abstractions for code used only once.
-- Do not write error handling for impossible cases.
-- When reviewing code, if a section can be implemented more simply, change it directly.
-- Each inline comment block may contain at most two lines. If more are needed, the code has a patchwork design problem that should be corrected; do not use long comments to explain what such code does.
-- Comments should explain why the code was written rather than repeat what it does. (Documentation comments for exported APIs, such as `@param`, `@returns`, and `@deprecated`, are documentation and are not subject to this restriction.)
-- Make targeted changes to the code that needs them; do not refactor code without a problem.
-- Follow the project's existing code style, even if it is unconventional.
-- Every code change must correspond to a user requirement.
-- Before writing code, turn the task into verifiable goals. For example, “fix a bug” means “write a test that reproduces the bug and make it pass”; “refactor” means “ensure the tests pass both before and after the refactor.”
-- For complex tasks, use several short plans and state how each step can be verified.
-- When running Linux-related tests on Windows, use local WSL and test both Windows and Linux functionality. In a Linux environment, use the current environment. In a Mac environment, run only Mac-related tests.
-- Refer to `docs/UI-requirements.md` when writing UI-related code.
-- Keep the project structure clear. Create files or crates when needed rather than mixing code responsible for different modules.
-- Read the local README. If a directory to be modified contains a README, also check its parent directories for READMEs and read them before making changes.
-- Fix upstream problems rather than patching them downstream. If a new feature exposes a limitation in an existing module, identify the upstream module responsible and propose a change to the user. Unless the user asks otherwise, do not implement the feature solely by adding a downstream patch.
-- Prefer existing libraries. Read the documentation or inspect the library to check for built-in options, existing solutions, or examples. Write custom code only when no sufficiently suitable alternative exists.
-- Promptly clean up temporary files used during development, such as temporary validation scripts and generated documents.
+# 代码编写
+- 如果用户指令不清晰，或者实际实现与用户的描述不符，在继续之前先询问用户。
+- 如果有多种可能的解释，明确指出来；不要自行假设或选择其一。
+- 如果有更好或更简单的方法，向用户提出。你可以质疑用户提出的不合理方法。
+- 如果在编写代码时有任何事情变得不清晰，立即停止并询问用户。
+- 保持一切简单。只编写解决问题所需的最少代码；除非用户强调，否则不要添加推测性的扩展或为未来使用做的准备。
+- 不要添加用户未要求的内容。
+- 不要为只使用一次的代码创建抽象。
+- 不要为不可能的情况编写错误处理。
+- 审查代码时，如果某个部分可以用更简单的方式实现，直接修改它。
+- 每个内联注释块最多可以包含两行。如果需要更多行，说明代码存在拼凑式的设计问题，应当修正；不要用长注释来解释这类代码做了什么。
+- 注释应该解释代码为什么这样写，而不是重复说明它做了什么。（针对导出 API 的文档注释，例如 `@param`、`@returns` 和 `@deprecated`，属于文档，不受此限制。）
+- 对需要改动的代码做有针对性的改动；不要在没有问题的时候重构代码。
+- 遵循项目现有的代码风格，即使它不合常规。
+- 每一处代码改动都必须对应用户需求。
+- 在编写代码之前，把任务转化为可验证的目标。例如，"修复 bug"意味着"编写一个能复现该 bug 的测试并让它通过"；"重构"意味着"确保重构前后测试都能通过"。
+- 对于复杂任务，使用几个简短的计划，并说明每一步如何验证。
+- 编写 UI 相关代码时，参考 `docs/UI-requirements.md`。
+- 保持项目结构清晰。需要时创建文件或 crate，而不是把负责不同模块的代码混在一起。
+- 阅读本地 README。如果要修改的目录包含 README，还要检查其父目录中是否有 README，并在修改前阅读它们。
+- 修复上游问题，而不是在下游打补丁。如果新功能暴露了现有模块的局限，找出负责该问题的上游模块并向用户提出改动建议。除非用户另有要求，不要仅通过添加下游补丁来实现该功能。
+- 优先使用现有库。阅读文档或检查库，查看是否有内置选项、现有解决方案或示例。只有在没有足够合适的替代方案时才编写自定义代码。
+- 及时清理开发过程中使用的临时文件，例如临时验证脚本和测试用的数据汇总。
+
+# 进行测试
+- 在 Windows 上运行与 Linux 相关的测试时，使用本地 WSL，并同时测试 Windows 和 Linux 功能。在 Linux 环境中，使用当前环境。在 Mac 环境中，只进行 Mac 相关的测试。
+- 使用WSL的时候，将项目整体拷贝至Linux文件系统下，而不是使用Windows文件系统里的那份，这样能大幅提升性能。
+- 完成测试的时候，请删除全部临时文件，包括在Windows环境中拷贝到Linux文件系统下的项目代码，编译文件等。
+- 项目提供UI-automation功能，agent可以在命令行中直接查看当前正在运行的会话界面上可用的按钮、UI树等，能够模拟操作正在运行的会话，也可以直接获得纯文本的界面快照用于检查。需要注意，UI-automation在默认状态下是关闭的，请确保在设置中开启了此功能。使用`.\tundra-cli config set automation.enabled true`来开启此功能。
 
 # Git
+- 项目工作中，如果是修复bug或者对界面进行小调整，直接推送至master，无需创建branch。如果用户要求添加新功能，或者进行大规模重写、整改，则新建一个以此次主要目标为名称的branch，在branch里工作。用户测试同意合并之后，再合并回master，并删除branch。
+- 在主代理开始修改任务之前，检查分支和 `git status --porcelain=v1`。任务开始之前不能存在已暂存、未暂存或未跟踪的文件；否则，停止修改并报告情况。只读分析和审查可以继续进行。当前任务产生的改动不会触发此停止条件。
+- 提交每个任务产生的所有代码、配置和文档改动，除非用户明确要求不提交。只暂存你负责的文件；提交前检查暂存区的差异，确保没有包含其他任务的改动。
+- 每次提交必须包含一个连贯的改动，使用 `feat:`、`fix:`、`refactor:`、`test:`、`docs:` 或 `chore:` 等前缀，并描述具体的改动。如果用户请求多项改动，就做多个小提交，每个提交只有一个目的；不要把许多不相关的改动合并到一次提交中。
+- 任务结束时，除非用户请求推送特定分支，否则只将 master 分支推送到远程仓库。
 
-- This is a personal project, so a new branch is not required for every change unless there is a special requirement or the user requests one.
-- Before the primary agent starts a modification task, check the branch and `git status --porcelain=v1`. There must be no staged, unstaged, or untracked files from before the task; otherwise, stop making changes and report the situation. Read-only analysis and review may continue. Changes produced by the current task do not trigger this stop condition.
-- Do not clean up, stage, discard, overwrite, or commit the user's existing changes, except files produced by the current task.
-- Commit all code, configuration, and documentation changes produced by each task, except anything the user explicitly asks not to commit. Stage only the files you are responsible for; inspect the staged diff before committing to ensure no other task's changes are included.
-- Each commit must contain one coherent change, use a prefix such as `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, or `chore:`, and describe the specific change. If the user requests several changes, make several small commits, each with a single purpose; do not combine many unrelated changes into one commit.
-- At the end of the task, push only the master branch to the remote unless the user requests pushing a specific branch.
-# Documentation
-- Every crate must have its own README explaining its purpose. Update the README whenever the corresponding code changes so that the documentation matches the current code.
-- Promptly summarize project-wide features in the root README, but keep the main README concise. Avoid excessive technical detail or long passages that discourage reading; ideally, combine text with illustrations.
-- When releasing a major version, record all additions and changes since the previous release in the changelog.
+# 文档
+- 禁止编辑项目根目录的README（以及对应的多语种版本），除非用户请求。
+- 每个 crate 都必须有自己的 README 来解释其用途。每当相应代码改动时都要更新 README，使文档与当前代码保持一致。
+- 及时在根 README 中总结项目范围内的功能，避免过多的技术细节或让人不想读下去的长篇段落；理想情况下，图文结合。
+- 发布主要版本时，在变更日志中记录自上一个版本以来的所有新增和改动。
 
-# Internationalization
-- All text displayed in the application must use i18n and support characters of different widths. Do not hardcode it in the program (except for certain emergency uses).
+# 国际化
+- 应用中显示的所有文本都必须使用 i18n，并支持不同宽度的字符。不要在程序中硬编码（某些紧急用途除外，例如严重崩溃无法读取外部文件时。紧急用途同一采用英语）。
+
+# 创建发布
+- 用户请求创建新版本发布的时候，先核对自从上一个发布标记以来的新增内容，向用户确认是主要版本更新，小型更新，还是修复推送。如果用户提供的版本数字和上一个发布版不连贯，向用户确认后再继续。
+- 主要版本更新为第一个数字，小型更新为第二个数字，修复推送为第三个数字。默认从0开始。
+- 推送统一使用github actions触发，让github actions编译Windows x86_64便携版，macOS Apple Silicon便携版，Linux x86_64便携版。完成后自动发布。
+- 推送时除非用户要求，否则一律不进行github actions的test运行。
