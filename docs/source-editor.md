@@ -4,7 +4,7 @@ The built-in editor handles multiple documents, syntax highlighting, search and 
 
 To open your first file, use Editor from Launcher and choose **File → Open**, or open a supported file from Explorer. **File → Save** writes the current document. If it has no path, the save picker asks for a directory and filename. Browsing and picker controls are in [File Explorer and saving](user-guide.md#browse-and-edit-files).
 
-Word (`.docx`) and Excel (`.xlsx`) files open as read-only, rendered Markdown. The preview shows Word headings, paragraphs and tables, and groups Excel cell values under their worksheet names. Use **File → Open** from Editor or **Open in Editor** from Explorer.
+Open Word (`.docx`) and Excel (`.xlsx`) files with **File → Open** in Editor. Explorer's regular **Open** action also sends these formats to Editor when their extensions are configured to use it. The read-only Markdown preview shows Word headings, paragraphs and tables, and groups Excel cell values under their worksheet names.
 
 ## Standard editor
 
