@@ -6,6 +6,21 @@
 
 版本名称保留 Git 标签原有写法，日期采用标签所指提交的日期（UTC+8），不代表 GitHub Release 的实际发布时间。`archive/` 等归档标签不作为发布版本。旧版本条目描述当时的行为；当前介绍和相关文档见 [项目说明](README.zh-CN.md) 和 [文档索引](README.md)。
 
+## v2.0.1 — 2026-11-19
+
+标签：[`v2.0.1`](https://github.com/peixuanthomas/TundraUX/tree/v2.0.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v2.0.0...v2.0.1)。
+
+### 新增与调整
+
+- **应用启动：**Launcher 集中列出内置和自定义应用，Home 可添加、移除和排序应用快捷方式；两处共用内置应用图标。
+- **Office 预览：**编辑器可将 Word（`.docx`）和 Excel（`.xlsx`）文件转换为只读 Markdown 预览。
+- **界面与文档：**精简界面上的重复文字，整理用户和技术文档，并更新项目截图。
+
+### 修复
+
+- 修复跨应用操作结束后窗口恢复，以及分屏应用选择器滚动时误选的问题。
+- 修复部分启动器主题图标缺失和进度条背景不均匀的问题。
+
 ## v2.0.0 — 2026-11-17
 
 标签：[`v2.0.0`](https://github.com/peixuanthomas/TundraUX/tree/v2.0.0)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v1.5.1...v2.0.0)。

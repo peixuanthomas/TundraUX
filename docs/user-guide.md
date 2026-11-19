@@ -12,7 +12,7 @@ This guide takes you from first launch to everyday tasks. On pages with contextu
 
 ## Install and start
 
-1. Download the archive for your OS and architecture from the project's releases. Check the [release notes](packaging/releases/v2.0.0.md#download-and-installation) for the v2.0.0 formats and the v1 data compatibility notice.
+1. Download the archive for your OS and architecture from the project's releases. Check the [release notes](packaging/releases/v2.0.1.md#download-and-installation) for the v2.0.1 formats and the v1 data compatibility notice.
 2. Extract it somewhere permanent. Keep `tundra-shell`, `tundra-cli`, `assets/`, and `vim/` together, plus the installation marker when one is included.
 3. Open a terminal in that directory. On Linux or macOS run `./tundra-shell`; in PowerShell on Windows run `./tundra-shell.exe`. The Linux archive also has `./install-tux.sh`, which puts `tux` on your PATH through `~/.local/bin`. Optional desktop integration and package requirements are in the [Linux runtime guide](packaging/linux/README-LINUX.txt).
 4. Start with a terminal of at least **108 columns × 20 rows**. Pick language and appearance during first-time setup, or press **F9** to accept the defaults. You can change them later in Settings.

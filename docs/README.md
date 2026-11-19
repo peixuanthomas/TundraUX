@@ -57,6 +57,6 @@ See the [complete crate responsibilities table](README-TECHNICAL.md#crate-respon
 
 ## Release and measurement records
 
-- [V2.0.0 release notes](packaging/releases/v2.0.0.md) · [Changelog](CHANGELOG.md)
+- [V2.0.1 release notes](packaging/releases/v2.0.1.md) · [Changelog](CHANGELOG.md)
 - [Linux performance measurements, 2026-11-17](performance-linux-2026-11-17.md)
 - [Linux candidate measurements, 2026-11-16](performance-linux-2026-11-16.md)

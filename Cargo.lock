@@ -96,7 +96,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "ascii-assets",
  "chrono",
@@ -120,7 +120,7 @@ dependencies = [
  "storage",
  "system-services",
  "tar",
- "time 2.0.0",
+ "time 2.0.1",
  "tokio",
  "toml",
  "unicode-segmentation",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "ascii-assets"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -386,7 +386,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auto-admin"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "i18n",
  "libc",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "cli"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "app",
  "arboard",
@@ -2242,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "i18n"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "ascii-assets",
  "fluent-bundle",
@@ -2376,7 +2376,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "i18n",
  "platform",
@@ -3614,7 +3614,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "arboard",
  "async-io",
@@ -4534,7 +4534,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-log"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "fs2",
@@ -4772,7 +4772,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "script-runtime"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "app",
  "base64",
@@ -4939,7 +4939,7 @@ dependencies = [
 
 [[package]]
 name = "shell"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "app",
  "ascii-assets",
@@ -4964,7 +4964,7 @@ dependencies = [
  "system-services",
  "tachyonfx",
  "terminal-runtime",
- "time 2.0.0",
+ "time 2.0.1",
  "tokio",
  "ui",
  "vim-runtime",
@@ -4978,7 +4978,7 @@ dependencies = [
 
 [[package]]
 name = "shell-control"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5145,7 +5145,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "i18n",
  "libc",
@@ -5325,7 +5325,7 @@ dependencies = [
 
 [[package]]
 name = "system-services"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5338,7 +5338,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
- "time 2.0.0",
+ "time 2.0.1",
  "tokio",
  "watchdog",
 ]
@@ -5607,7 +5607,7 @@ dependencies = [
 
 [[package]]
 name = "terminal-runtime"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "crossterm",
  "libc",
@@ -5761,7 +5761,7 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -6095,7 +6095,7 @@ dependencies = [
 
 [[package]]
 name = "ui"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "animate",
  "app",
@@ -6323,7 +6323,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vim-runtime"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "getrandom 0.3.4",
  "ratatui",
@@ -6481,7 +6481,7 @@ dependencies = [
 
 [[package]]
 name = "watchdog"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "futures-util",
@@ -6566,7 +6566,7 @@ dependencies = [
 
 [[package]]
 name = "weathr"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "crossterm",
@@ -7133,7 +7133,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-protocol"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "base64",
  "flate2",
