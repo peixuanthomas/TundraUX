@@ -41,6 +41,7 @@ Launcher lists the built-in applications available on the current platform, plus
 | `syntax`, `c_syntax`, `search`, `soft_wrap`, `json_format` | Compute highlighting, C lexical tokens, matches, visual row mapping, and JSON formatting |
 | `background`, `recovery` | Run revision-tagged computations and I/O away from the UI loop; persist and claim recoverable drafts separately |
 | `rich_document`, `rich_edit`, `markdown_codec` | Represent, edit, and serialize structured Markdown for rich-document support. Files normally opened in the standard editor use source text. |
+| `office_preview` | Convert `.docx` and `.xlsx` to Markdown in memory and create a read-only document with the original path. |
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 

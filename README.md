@@ -18,6 +18,8 @@ Select a shortcut to open an app. Open Launcher to browse available apps, add cu
 
 Browse, search, and organize files and folders.
 
+The built-in editor previews Word (`.docx`) and Excel (`.xlsx`) files as rendered, read-only Markdown.
+
 ![File explorer](docs/screenshots/Explorer.png)
 
 ## Split view

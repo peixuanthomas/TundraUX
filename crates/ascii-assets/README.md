@@ -44,6 +44,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through title-bar Tasks |
 | `ui-explorer.ftl` | Open and Save document picker titles, filename field, and actions |
+| `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global tasks and approval status, the shared terminal-size prompt, and first-time setup including completion with default appearance |
 | `shell-command-line.ftl` | Command Line startup hint, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |

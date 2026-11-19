@@ -795,6 +795,7 @@ impl EditorVimHost {
 
     fn input_visible(&self, state: &ShellSession) -> bool {
         state.active_screen() == ShellScreen::Editor
+            && state.editor_vim_available()
             && (!state.pages.editor.script.enabled
                 || state.pages.editor.script.focus == ui::ScriptPane::Source)
             && state.editor_vim_terminal.is_some()
@@ -913,6 +914,9 @@ fn vim_area(state: &ShellSession) -> Rect {
 fn input_for_page(state: &mut ShellSession, id: PageInstanceId) -> Option<BufferInput> {
     state
         .with_page_context(id, |session| {
+            if !session.editor_vim_available() {
+                return None;
+            }
             session.app.dispatch_at(
                 app::AppCommand::Editor(app::editor::EditorCommand::SetMode(
                     app::editor::EditorMode::Source,

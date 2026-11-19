@@ -266,12 +266,17 @@ pub(super) fn rich_document_fits_height(
 
     let width = width.max(1);
     let mut line_count = 0usize;
-    for block in blocks {
+    for (index, block) in blocks.iter().enumerate() {
         let remaining = height.saturating_sub(line_count);
         let big_heading = heading_uses_big_text(model, block);
-        let Some(block_line_count) =
-            rich_block_line_count_up_to_with_heading(block, width, remaining, big_heading)
-        else {
+        let Some(block_line_count) = rich_block_line_count_up_to_with_heading(
+            block,
+            width,
+            remaining,
+            big_heading,
+            model.read_only,
+            model.table_widths_for_block(index, block.table_id()),
+        ) else {
             return false;
         };
         line_count = line_count.saturating_add(block_line_count);
@@ -285,7 +290,7 @@ pub(super) fn rich_block_line_count_up_to(
     width: usize,
     limit: usize,
 ) -> Option<usize> {
-    rich_block_line_count_up_to_with_heading(block, width, limit, false)
+    rich_block_line_count_up_to_with_heading(block, width, limit, false, false, None)
 }
 
 fn rich_block_line_count_up_to_with_heading(
@@ -293,6 +298,8 @@ fn rich_block_line_count_up_to_with_heading(
     width: usize,
     limit: usize,
     big_heading: bool,
+    wrap_cells: bool,
+    table_widths: Option<&[usize]>,
 ) -> Option<usize> {
     match block {
         EditorRenderBlock::Paragraph(spans) => wrapped_line_count_up_to("", spans, width, limit),
@@ -341,6 +348,25 @@ fn rich_block_line_count_up_to_with_heading(
         EditorRenderBlock::Table { header, rows, .. }
         | EditorRenderBlock::RichTable { header, rows, .. } => {
             let has_columns = !header.is_empty() || rows.iter().any(|row| !row.is_empty());
+            if has_columns && wrap_cells {
+                let widths = table_column_widths(header, rows, table_widths);
+                let mut lines = 2 + usize::from(!header.is_empty());
+                let header = (!header.is_empty()).then_some(header);
+                for row in header.into_iter().chain(rows) {
+                    let remaining = limit.checked_sub(lines)?;
+                    let mut row_height = 1;
+                    for (cell, &width) in row.iter().zip(&widths) {
+                        row_height = row_height.max(wrapped_line_count_up_to(
+                            "",
+                            &cell.spans,
+                            width,
+                            remaining,
+                        )?);
+                    }
+                    lines = lines.saturating_add(row_height);
+                }
+                return fixed_line_count_up_to(lines, limit);
+            }
             let line_count = if !has_columns {
                 1
             } else {
@@ -516,6 +542,7 @@ pub(super) fn flatten_rich_document(model: &EditorViewModel, width: usize) -> Ve
             table_widths,
             model.source.as_deref(),
             heading_uses_big_text(model, block),
+            model.read_only,
         );
         output.extend(lines);
     }
@@ -542,6 +569,7 @@ pub(super) fn block_lines(
         table_widths,
         source,
         false,
+        false,
     )
 }
 
@@ -553,6 +581,7 @@ fn block_lines_with_heading(
     table_widths: Option<&[usize]>,
     source: Option<&str>,
     big_heading: bool,
+    wrap_cells: bool,
 ) -> Vec<DisplayLine> {
     let anchor = block_source.map(EditorBlockSourceMap::anchor);
     match block {
@@ -707,6 +736,7 @@ fn block_lines_with_heading(
             block_index,
             anchor,
             source,
+            wrap_cells,
         ),
         EditorRenderBlock::HorizontalRule => vec![DisplayLine {
             runs: vec![DisplayRun::virtual_text(
@@ -798,6 +828,7 @@ pub(super) fn table_lines(
     block_index: usize,
     anchor: Option<usize>,
     source: Option<&str>,
+    wrap_cells: bool,
 ) -> Vec<DisplayLine> {
     let columns = max(
         header.len(),
@@ -822,6 +853,29 @@ pub(super) fn table_lines(
         anchor,
         rich_anchor,
     };
+    let append_row = |output: &mut Vec<DisplayLine>, row: &[EditorTableCell], header: bool| {
+        let mut wrapped_cells = Vec::new();
+        if wrap_cells {
+            wrapped_cells.extend(row.iter().zip(&widths).map(|(cell, &width)| {
+                wrap_runs(Vec::new(), &cell.spans, width, block_index, true, source).into_iter()
+            }));
+        }
+        let height = wrapped_cells
+            .iter()
+            .map(ExactSizeIterator::len)
+            .max()
+            .unwrap_or(1);
+        output.extend((0..height).map(|_| {
+            table_row_line(
+                row,
+                alignments,
+                header,
+                source,
+                &context,
+                &mut wrapped_cells,
+            )
+        }));
+    };
     let mut output = vec![table_border_line(
         ('┌', '┬', '┐'),
         first_row,
@@ -829,13 +883,12 @@ pub(super) fn table_lines(
         &context,
     )];
     if !header.is_empty() {
-        output.push(table_row_line(header, alignments, true, source, &context));
+        append_row(&mut output, header, true);
         output.push(table_border_line(('├', '┼', '┤'), header, false, &context));
     }
-    output.extend(
-        rows.iter()
-            .map(|row| table_row_line(row, alignments, false, source, &context)),
-    );
+    for row in rows {
+        append_row(&mut output, row, false);
+    }
     let last_row = rows.last().map(Vec::as_slice).unwrap_or(first_row);
     output.push(table_border_line(
         ('└', '┴', '┘'),
@@ -853,12 +906,13 @@ pub(super) struct TableLineContext<'a> {
     rich_anchor: Option<RichPosition>,
 }
 
-pub(super) fn table_row_line(
+fn table_row_line(
     row: &[EditorTableCell],
     alignments: &[EditorTableAlignment],
     header: bool,
     source: Option<&str>,
     context: &TableLineContext<'_>,
+    wrapped_cells: &mut [std::vec::IntoIter<DisplayLine>],
 ) -> DisplayLine {
     let row_anchor = row
         .iter()
@@ -874,21 +928,33 @@ pub(super) fn table_row_line(
         let start = cell_range.map(|range| range.start);
         let end = cell_range.map(|range| range.end);
         let rich_range = cell.and_then(table_cell_rich_range);
-        let rich_start = rich_range.map(|range| range.start).or(row_anchor);
-        let rich_end = rich_range.map(|range| range.end).or(rich_start);
-        let mut content = cell.map_or_else(Vec::new, |cell| {
-            cell.spans
-                .iter()
+        let mut content = if let Some(lines) = wrapped_cells.get_mut(column) {
+            lines.next().map(|line| line.runs).unwrap_or_default()
+        } else {
+            cell.into_iter()
+                .flat_map(|cell| &cell.spans)
                 .flat_map(|span| {
-                    let mut style = span.clone();
-                    style.color = EditorSpanColor::Accent;
-                    style.bold |= header;
-                    mapped_text_runs(&span.text, style, span.source_range, source)
+                    mapped_text_runs(&span.text, span.clone(), span.source_range, source)
                 })
-                .collect::<Vec<_>>()
-        });
+                .collect()
+        };
+        for run in &mut content {
+            run.style.color = EditorSpanColor::Accent;
+            run.style.bold |= header;
+        }
+        let rich_start = content
+            .iter()
+            .find_map(display_run_rich_start)
+            .or(rich_range.map(|range| range.start))
+            .or(row_anchor);
+        let rich_end = content
+            .iter()
+            .rev()
+            .find_map(display_run_rich_end)
+            .or(rich_range.map(|range| range.end))
+            .or(rich_start);
         let (fitted, used) = fit_table_content(
-            std::mem::take(&mut content),
+            content,
             *width,
             end.or(start).or(context.anchor),
             rich_end,
@@ -1397,10 +1463,12 @@ pub(super) fn is_display_newline(value: &str) -> bool {
 
 pub(super) fn mapped_text_runs(
     text: &str,
-    style: EditorRenderSpan,
+    mut style: EditorRenderSpan,
     source_range: Option<EditorSourceRange>,
     source: Option<&str>,
 ) -> Vec<DisplayRun> {
+    // Each run keeps its own text. Cloning the full span per grapheme is quadratic.
+    style.text = String::new();
     let exact = source_range.filter(|range| {
         range.start <= range.end
             && source.and_then(|source| source.get(range.start..range.end)) == Some(text)

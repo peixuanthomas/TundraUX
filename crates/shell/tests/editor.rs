@@ -18,8 +18,8 @@ use shell::{
     prepare_shell_startup,
 };
 use ui::{
-    EditorHitTarget, EditorMenu, EditorMode, EditorSettingsControl, EditorSettingsField,
-    ShellLayout,
+    EditorHitTarget, EditorMenu, EditorMode, EditorRenderBlock, EditorSettingsControl,
+    EditorSettingsField, ShellLayout,
 };
 
 fn default_config() -> ShellLaunchConfig {
@@ -1338,6 +1338,158 @@ fn explorer_opens_markdown_and_ctrl_s_saves_the_edited_document() {
             .is_some_and(|message| message.starts_with("Saved "))
     );
     assert!(editor.line_markers.is_empty());
+}
+
+#[test]
+fn explorer_opens_word_as_rendered_read_only_markdown() {
+    let fixture = FixtureRoot::new("word-preview");
+    let platform = mock_platform(fixture.path());
+    initialize_system_profile(&platform);
+    let manager = storage::StorageManager::open(app_paths(fixture.path()))
+        .unwrap()
+        .manager;
+    let mut config = manager.load_config().unwrap();
+    config.editor.vim_mode_enabled = true;
+    manager.save_config(&config).unwrap();
+    let path = fixture.path().join("Documents/巡检.DOCX");
+    let original = include_bytes!("fixtures/editor/preview.docx");
+    fs::write(&path, original).unwrap();
+    let mut state = system_home(&platform);
+
+    open_only_document_in_editor(&mut state, &platform);
+
+    let editor = state.to_editor_view_model();
+    assert_eq!(editor.file_name, "巡检.DOCX");
+    assert_eq!(editor.mode, EditorMode::Rich);
+    assert!(editor.read_only);
+    assert!(editor.render_blocks().iter().any(|block| matches!(
+        block, EditorRenderBlock::Heading { level: 1, spans } if spans[0].text == "巡检报告"
+    )));
+    assert!(editor.render_blocks().iter().any(|block| matches!(
+        block, EditorRenderBlock::RichTable { rows, .. } if rows[0][1].spans[0].text == "通畅"
+    )));
+    assert!(!editor.toolbar.can_save);
+    assert!(current_editor_layout(&state).vim_toggle.is_empty());
+
+    type_text(&mut state, &platform, "ignored");
+    for input in [ctrl('s'), ctrl_shift('s'), InputEvent::key(InputKey::F(8))] {
+        state.apply_input_with_platform(input, &platform);
+    }
+    wait_for_editor_background_tasks(&mut state, &platform);
+
+    let preview = state.to_editor_view_model();
+    assert_eq!(state.active_screen(), ShellScreen::Editor);
+    assert_eq!(preview.render_blocks(), editor.render_blocks());
+    assert!(!preview.dirty);
+    assert_eq!(preview.vim_mode, None);
+    assert_eq!(fs::read(path).unwrap(), original);
+}
+
+#[test]
+fn editor_open_picker_renders_excel_sheets_and_multiline_cells() {
+    let fixture = FixtureRoot::new("excel-preview");
+    let platform = mock_platform(fixture.path());
+    let mut state = new_user_home_state(&platform);
+    let path = fixture.path().join("Documents/库存.xlsx");
+    let original = include_bytes!("fixtures/editor/preview.xlsx");
+    fs::write(&path, original).unwrap();
+    open_editor_from_home(&mut state, &platform);
+    state.apply_input_with_platform(ctrl('o'), &platform);
+    assert_eq!(state.active_screen(), ShellScreen::Explorer);
+    assert_eq!(state.to_explorer_view_model().entries.len(), 1);
+    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
+    wait_for_editor_background_tasks(&mut state, &platform);
+
+    let editor = state.to_editor_view_model();
+    assert_eq!(state.active_screen(), ShellScreen::Editor);
+    assert_eq!(editor.file_name, "库存.xlsx");
+    assert_eq!(editor.mode, EditorMode::Rich);
+    assert!(editor.read_only);
+    let headings: Vec<_> = editor
+        .render_blocks()
+        .iter()
+        .filter_map(|block| match block {
+            EditorRenderBlock::Heading { spans, .. } => Some(spans[0].text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(headings, ["库存", "价格"]);
+    let tables: Vec<_> = editor
+        .render_blocks()
+        .iter()
+        .filter_map(|block| match block {
+            EditorRenderBlock::RichTable { rows, .. } => Some(rows),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tables.len(), 2);
+    assert_eq!(tables[0][0][0].spans[0].text, "螺丝|A");
+    assert_eq!(
+        tables[0][0][1]
+            .spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect::<String>(),
+        format!("第一行\n第二行 <明细> {}End42", "a".repeat(40))
+    );
+    assert_eq!(tables[1][0][0].spans[0].text, "42.5");
+    assert_eq!(fs::read(path).unwrap(), original);
+
+    let context = ui::RenderContext::from_theme(
+        &ui::TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    for (width, height) in [(108, 20), (120, 36), (180, 50)] {
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = match ui::compute_shell_layout(frame.area()) {
+                    ShellLayout::Compact(compact) => compact,
+                    ShellLayout::Full { main, .. } => main,
+                };
+                ui::render_editor_contextual(frame, area, &editor, &context);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        assert!(
+            (0..height).any(|y| {
+                let row = (0..width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>();
+                row.contains("End42")
+            }),
+            "long cell text must remain visible at {width}x{height}"
+        );
+    }
+}
+
+#[test]
+fn invalid_office_file_reports_conversion_error_and_keeps_existing_document() {
+    let fixture = FixtureRoot::new("invalid-office-preview");
+    let platform = mock_platform(fixture.path());
+    let mut state = new_user_home_state(&platform);
+    fs::write(
+        fixture.path().join("Documents/corrupt.xlsx"),
+        "invalid workbook",
+    )
+    .unwrap();
+    open_editor_from_home(&mut state, &platform);
+    type_text(&mut state, &platform, "unsaved draft");
+
+    state.apply_input_with_platform(ctrl('o'), &platform);
+    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
+    wait_for_editor_background_tasks(&mut state, &platform);
+    assert_eq!(state.active_screen(), ShellScreen::Explorer);
+    let error = state.to_shell_chrome_view_model().status.error.unwrap();
+    assert!(error.contains("Office conversion failed"), "{error}");
+    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+
+    let editor = state.to_editor_view_model();
+    assert_eq!(state.active_screen(), ShellScreen::Editor);
+    assert_eq!(editor.source_lines.join("\n"), "unsaved draft");
+    assert!(editor.dirty);
 }
 
 #[test]

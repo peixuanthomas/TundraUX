@@ -827,15 +827,19 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
                 usize::from(canvas.width),
             )
         });
-    let vim_width = [
-        None,
-        Some(EditorVimMode::Normal),
-        Some(EditorVimMode::Insert),
-    ]
-    .into_iter()
-    .map(|mode| terminal_width(&vim_mode_label(mode)))
-    .max()
-    .unwrap_or(0);
+    let vim_width = if model.vim_available {
+        [
+            None,
+            Some(EditorVimMode::Normal),
+            Some(EditorVimMode::Insert),
+        ]
+        .into_iter()
+        .map(|mode| terminal_width(&vim_mode_label(mode)))
+        .max()
+        .unwrap_or(0)
+    } else {
+        0
+    };
     let vim_toggle = Rect::new(
         menu_bar
             .right()

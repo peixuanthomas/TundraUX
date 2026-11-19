@@ -4,7 +4,9 @@ use crate::session::*;
 impl ShellSession {
     pub fn to_editor_view_model(&self) -> ui::EditorViewModel {
         let _language = i18n::enter_snapshot(self.language.clone());
-        if let Some(terminal) = &self.editor_vim_terminal {
+        if let Some(terminal) = &self.editor_vim_terminal
+            && self.editor_vim_available()
+        {
             let mut model = ui::EditorViewModel::source(
                 self.app
                     .editor_state()
@@ -299,6 +301,7 @@ impl ShellSession {
                     })
             });
         model.selected_toolbar_action = self.pages.editor.editor_selected_toolbar_action;
+        model.vim_available = self.editor_vim_available();
         model.vim_mode = self
             .editor_vim_enabled()
             .then_some(ui::EditorVimMode::Normal);

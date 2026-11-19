@@ -14,7 +14,7 @@ pub(in crate::session) enum EditorTaskStage {
     Inspecting,
     Reading,
     Decoding,
-    ParsingMarkdown,
+    ConvertingOffice,
     Writing,
 }
 
@@ -24,7 +24,7 @@ impl EditorTaskStage {
             Self::Inspecting => i18n::tr!("shell-inspecting"),
             Self::Reading => i18n::tr!("shell-reading"),
             Self::Decoding => i18n::tr!("shell-decoding"),
-            Self::ParsingMarkdown => i18n::tr!("shell-parsing-markdown"),
+            Self::ConvertingOffice => i18n::tr!("shell-converting-office"),
             Self::Writing => i18n::tr!("shell-writing"),
         }
     }
@@ -234,7 +234,9 @@ impl ShellEditorTaskRuntime {
             }
         };
         let active_loads = StdArc::clone(&self.shared.active_loads);
+        let language = i18n::current_snapshot();
         let worker = match task_group.spawn_thread(TaskSpec::one_shot(task_id), move || {
+            let _language = i18n::enter_snapshot(StdArc::clone(&language));
             record_editor_task(
                 &request.log_context,
                 &request.path,
@@ -713,28 +715,35 @@ pub(in crate::session) fn load_editor_document_task(
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }
+    let loaded_bytes = loaded.bytes.len() as u64;
+    let office_format = app::editor::OfficeFormat::from_path(&request.path);
     let _ = events.send(EditorTaskEvent::Progress {
         id: request.id,
-        stage: EditorTaskStage::Decoding,
-        completed_bytes: loaded.bytes.len() as u64,
-        total_bytes: Some(loaded.bytes.len() as u64),
+        stage: if office_format.is_some() {
+            EditorTaskStage::ConvertingOffice
+        } else {
+            EditorTaskStage::Decoding
+        },
+        completed_bytes: loaded_bytes,
+        total_bytes: Some(loaded_bytes),
     });
-    if app::editor::DocumentKind::from_path(&request.path) == app::editor::DocumentKind::Markdown {
-        let _ = events.send(EditorTaskEvent::Progress {
-            id: request.id,
-            stage: EditorTaskStage::ParsingMarkdown,
-            completed_bytes: loaded.bytes.len() as u64,
-            total_bytes: Some(loaded.bytes.len() as u64),
-        });
-    }
-    let loaded_bytes = loaded.bytes.len() as u64;
-    let state = match request.access {
-        EditorTaskAccess::Editable => EditorState::open_owned(request.path.clone(), loaded.bytes),
-        EditorTaskAccess::ReadOnly => {
-            EditorState::open_read_only_owned(request.path.clone(), loaded.bytes)
+    let state = if let Some(format) = office_format {
+        format
+            .open_preview(request.path.clone(), loaded.bytes)
+            .map_err(|error| {
+                i18n::tr!("shell-office-conversion-failed", error = error.to_string())
+            })?
+    } else {
+        match request.access {
+            EditorTaskAccess::Editable => {
+                EditorState::open_owned(request.path.clone(), loaded.bytes)
+            }
+            EditorTaskAccess::ReadOnly => {
+                EditorState::open_read_only_owned(request.path.clone(), loaded.bytes)
+            }
         }
-    }
-    .map_err(|error| error.to_string())?;
+        .map_err(|error| error.to_string())?
+    };
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }

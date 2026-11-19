@@ -218,13 +218,15 @@ fn render_menu_bar(
             layout.menu_bar.height,
         ),
     );
-    let mut vim_toggle = Button::new("editor.vim-toggle", vim_mode_label(model.vim_mode))
-        .with_bracketed_label(false);
-    vim_toggle.state.selected = model.vim_mode.is_some();
-    if model.vim_mode.is_some() {
-        vim_toggle = vim_toggle.with_rainbow_label(context.motion.now);
+    if model.vim_available {
+        let mut vim_toggle = Button::new("editor.vim-toggle", vim_mode_label(model.vim_mode))
+            .with_bracketed_label(false);
+        vim_toggle.state.selected = model.vim_mode.is_some();
+        if model.vim_mode.is_some() {
+            vim_toggle = vim_toggle.with_rainbow_label(context.motion.now);
+        }
+        vim_toggle.render_inline_frame(frame, layout.vim_toggle, menu_theme);
     }
-    vim_toggle.render_inline_frame(frame, layout.vim_toggle, menu_theme);
 }
 
 fn render_menu_popup(

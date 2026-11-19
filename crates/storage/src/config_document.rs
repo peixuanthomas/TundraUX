@@ -404,6 +404,8 @@ pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
     "xml",
     "csv",
     "tsv",
+    "docx",
+    "xlsx",
     "c",
     "h",
     "automount",

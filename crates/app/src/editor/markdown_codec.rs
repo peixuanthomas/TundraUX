@@ -139,6 +139,15 @@ impl MarkdownCodec {
         utf8_bom: bool,
         preferred_line_ending: RichLineEnding,
     ) -> Result<MarkdownImport, MarkdownCodecError> {
+        Self::import_with_position_map(source, utf8_bom, preferred_line_ending, true)
+    }
+
+    pub(super) fn import_with_position_map(
+        source: &str,
+        utf8_bom: bool,
+        preferred_line_ending: RichLineEnding,
+        map_positions: bool,
+    ) -> Result<MarkdownImport, MarkdownCodecError> {
         #[cfg(test)]
         parse_counter::increment();
         let arena = Arena::new();
@@ -178,7 +187,9 @@ impl MarkdownCodec {
                 }
             });
             let block = RichBlock::imported(id, leading_trivia, raw, kind);
-            record_block_positions_from_ast(&block, node, source, &mut builder.positions);
+            if map_positions {
+                record_block_positions_from_ast(&block, node, source, &mut builder.positions);
+            }
             builder.document.blocks.push(block);
             previous_end = range.end;
         }
@@ -398,7 +409,7 @@ impl ImportBuilder {
         link: Option<LinkAttributes>,
         output: &mut Vec<InlineNode>,
     ) -> Result<(), String> {
-        let value = node.data().value.clone();
+        let value = editor_inline_value(node.data().value.clone());
         match value {
             NodeValue::Text(text) => output.push(InlineNode::Text(RichText {
                 text: text.into_owned(),
@@ -472,6 +483,19 @@ impl ImportBuilder {
             }
         }
         Ok(())
+    }
+}
+
+fn editor_inline_value(value: NodeValue) -> NodeValue {
+    match &value {
+        NodeValue::HtmlInline(html)
+            if ["<br>", "<br/>", "<br />"]
+                .iter()
+                .any(|tag| html.eq_ignore_ascii_case(tag)) =>
+        {
+            NodeValue::LineBreak
+        }
+        _ => value,
     }
 }
 
@@ -573,7 +597,7 @@ fn record_inline_node_from_ast<'a>(
     logical_offset: &mut usize,
     positions: &mut MarkdownPositionMap,
 ) {
-    match node.data().value.clone() {
+    match editor_inline_value(node.data().value.clone()) {
         NodeValue::Text(text) => {
             let text = text.into_owned();
             let range = node_source_range(node, source);

@@ -18,6 +18,8 @@ TundraUX 把系统工具、文件和日常应用放在同一个终端工作区�
 
 浏览、搜索和整理文件与文件夹。
 
+内置编辑器可以将 Word（`.docx`）和 Excel（`.xlsx`）文件渲染成只读 Markdown 预览。
+
 ![文件管理器](screenshots/Explorer.png)
 
 ## 分屏

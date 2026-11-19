@@ -45,7 +45,7 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 - `[appearance].icon_display_mode` defaults to `ascii` on Linux and `image` on other platforms. User profiles use the same default when the field is missing.
 - `screen_timeout_seconds` stores the idle-weather timeout; `0` means never, and the default is 300 seconds.
 - `[editor].vim_mode_enabled` stores the default for newly opened editor sessions, disabled by default. F8 changes only the current editor session.
-- `[editor].explorer_open_extensions` controls the suffixes handed to the built-in editor; custom lists and empty lists take precedence.
+- `[editor].explorer_open_extensions` controls the suffixes handed to the built-in editor. Defaults include `.docx` and `.xlsx` for read-only previews. Saved lists take precedence.
 - `animation_timings` stores separate acceleration, constant-speed, and deceleration durations for page/dialog/menu animations, each from 1 to 2000ms.
 - Default page/dialog/menu phases are `[40, 80, 40]`, `[45, 90, 45]`, and `[30, 60, 30]` milliseconds. Existing explicit values and animation speed remain effective; reduced motion bypasses transitions.
 - The default border is Glacier Night `#29434E`, and the accent is `#63D3E5`. Missing preferences use current defaults and explicit colors remain supported.

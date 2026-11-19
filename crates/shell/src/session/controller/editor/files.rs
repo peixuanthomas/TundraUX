@@ -753,7 +753,9 @@ impl ShellSession {
         if self.route_window_launch(WindowLaunch::EditorPath(path.as_os_str().to_owned())) {
             return true;
         }
-        if Self::is_system_config_path(&path) {
+        if Self::is_system_config_path(&path)
+            && app::editor::OfficeFormat::from_path(&path).is_none()
+        {
             self.begin_config_editor(path, None, None, None, "system".into());
             return self.config_editor_active();
         }
@@ -838,7 +840,7 @@ impl ShellSession {
         self.pages.explorer.editor_picker_save_submitted = false;
         let Some(suggested_name) = suggested_name else {
             self.pages.explorer.explorer_purpose = ExplorerPurpose::EditorOpen;
-            self.notify_status(i18n::msg!("shell-choose-a-markdown-or-text-document"));
+            self.notify_status(i18n::msg!("shell-choose-an-editor-document"));
             return;
         };
         let mut input = ui::components::TextInput::new("explorer.save.filename")
@@ -1011,6 +1013,13 @@ impl ShellSession {
         _platform: &dyn Platform,
         picker: Option<PageInstanceId>,
     ) -> bool {
+        if self
+            .app
+            .editor_state()
+            .is_some_and(EditorState::is_read_only)
+        {
+            return false;
+        }
         if self.config_editor_active()
             && self.pages.editor.editor_config.path.as_ref() == Some(&path)
         {
@@ -1101,7 +1110,7 @@ impl ShellSession {
             self.pages.explorer.explorer_overlay_mode = None;
             self.pages.common.focused_component = ShellComponent::Explorer;
             self.notify_status(i18n::LocalizedText::from(i18n::msg!(
-                "shell-choose-a-markdown-or-text-document"
+                "shell-choose-an-editor-document"
             )));
             self.apply_explorer_command(ExplorerCommand::Refresh, platform);
             self.refresh_hit_map();

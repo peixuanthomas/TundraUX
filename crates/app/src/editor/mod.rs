@@ -1,7 +1,7 @@
 //! Domain model for Tundra's single-document terminal editor.
 //!
 //! The built-in editor edits the canonical document as plain text. Markdown
-//! files use the same text buffer as every other supported file.
+//! files use the text buffer. Office previews use the rich Markdown model.
 
 mod background;
 pub mod c_syntax;
@@ -15,8 +15,10 @@ pub mod search;
 pub mod soft_wrap;
 pub mod syntax;
 
+mod office_preview;
 mod source_buffer;
 mod source_changes;
+pub use office_preview::OfficeFormat;
 pub use source_changes::SourceLineChange;
 
 mod document;
@@ -1208,10 +1210,12 @@ pub struct EditorController;
 
 fn import_rich_document(document: &EditorDocument) -> RichDocument {
     let source = document.source();
-    MarkdownCodec::import_with_metadata(
+    // Opening in Rich mode does not need a source caret map.
+    MarkdownCodec::import_with_position_map(
         &source,
         document.metadata.utf8_bom,
         rich_line_ending(document.metadata.preferred_line_ending),
+        false,
     )
     .map(|import| import.document)
     .unwrap_or_else(|_| {

@@ -15,6 +15,9 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn toggle_editor_vim(&mut self) {
+        if !self.editor_vim_available() {
+            return;
+        }
         if self.editor_vim_terminal.is_some() {
             self.editor_vim_toggle_requested = true;
         } else {
@@ -28,9 +31,18 @@ impl ShellSession {
         true
     }
 
+    pub(in crate::session) fn editor_vim_available(&self) -> bool {
+        self.app.editor_state().is_none_or(|editor| {
+            editor.access() != app::editor::EditorAccess::ReadOnly
+                || editor.document.kind != app::editor::DocumentKind::Markdown
+        })
+    }
+
     pub(in crate::session) fn editor_vim_enabled(&self) -> bool {
-        self.editor_vim_enabled
-            .unwrap_or(self.app.storage_config().editor.vim_mode_enabled)
+        self.editor_vim_available()
+            && self
+                .editor_vim_enabled
+                .unwrap_or(self.app.storage_config().editor.vim_mode_enabled)
     }
 
     pub(super) fn handle_editor_vim_key(

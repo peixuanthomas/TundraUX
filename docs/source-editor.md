@@ -4,6 +4,8 @@ The built-in editor handles multiple documents, syntax highlighting, search and 
 
 To open your first file, use Editor from Launcher and choose **File → Open**, or open a supported file from Explorer. **File → Save** writes the current document. If it has no path, the save picker asks for a directory and filename. Browsing and picker controls are in [File Explorer and saving](user-guide.md#browse-and-edit-files).
 
+Word (`.docx`) and Excel (`.xlsx`) files open as read-only, rendered Markdown. The preview shows Word headings, paragraphs and tables, and groups Excel cell values under their worksheet names. Use **File → Open** from Editor or **Open in Editor** from Explorer.
+
 ## Standard editor
 
 The interface follows [Microsoft Edit](https://github.com/microsoft/edit/tree/cb6de0a8966aecd01d19a3541dab1829d0e679ca/crates/edit/src/bin/edit), with File, Edit, View, and Help menus. Find and Replace bars sit above the document; language, line endings, encoding, indentation, line/column position, and document switching controls sit at the bottom.
