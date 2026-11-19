@@ -73,7 +73,7 @@ Reports are saved as matching JSON and text files. Operation journals reside in:
 <data>/watchdog/operations/<app-id>/
 ```
 
-Active run markers reside in `<data>/watchdog/runs/`, allowing the next startup to record abnormal exits that were not observed.
+Active run markers reside in `<data>/watchdog/runs/`. A clean shutdown removes the marker. A fatal desktop panic saves its incident ID in the marker, so the next desktop startup can find the original report. A dead process with an unmarked cause gets an unclean-exit report containing its last heartbeat. Startup consumes the marker once. The CLI checks its own markers and leaves desktop reports for the desktop.
 
 Incident context uses minimal structured metadata, without passwords, tokens, clipboard contents, pasted content, or raw user input. Centralized redaction and size limits are also applied before persistence.
 

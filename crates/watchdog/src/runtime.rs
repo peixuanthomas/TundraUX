@@ -64,6 +64,7 @@ pub(crate) struct Shared {
     runtime_log_start_error: Option<String>,
     command_tx: mpsc::Sender<WriterCommand>,
     incident_rx: Mutex<mpsc::Receiver<IncidentReceipt>>,
+    previous_exit: Mutex<Option<PreviousSessionExit>>,
     apps: Mutex<HashMap<AppId, AppDescriptor>>,
     cleanups: Mutex<Vec<EmergencyCleanup>>,
     breadcrumbs: Mutex<VecDeque<Breadcrumb>>,
@@ -116,9 +117,20 @@ pub struct CaughtPanic {
     finalized: bool,
 }
 
+#[derive(Debug)]
+pub struct PreviousSessionExit {
+    pub run_id: String,
+    pub crashed: bool,
+    pub report_path: Option<std::path::PathBuf>,
+    last_heartbeat: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct StaleRunMarker {
     schema_version: u32,
+    #[serde(default)]
+    process_name: String,
+    fatal_incident: Option<String>,
     run_id: String,
     process_id: u32,
     started_at_utc: String,
@@ -201,6 +213,7 @@ impl WatchdogRuntime {
             runtime_log_start_error,
             command_tx,
             incident_rx: Mutex::new(incident_rx),
+            previous_exit: Mutex::new(None),
             apps: Mutex::new(HashMap::new()),
             cleanups: Mutex::new(Vec::new()),
             breadcrumbs: Mutex::new(VecDeque::with_capacity(config.breadcrumb_capacity)),
@@ -577,9 +590,39 @@ impl ProcessWatchdog {
         report_catalog::list_incident_reports(&self.shared.config)
     }
 
+    pub fn take_previous_session_exit(&self) -> Option<PreviousSessionExit> {
+        self.shared
+            .previous_exit
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+    }
+
+    pub fn mark_session_crash(&self, incident_id: &str) {
+        let _ = self
+            .shared
+            .command_tx
+            .send(WriterCommand::SessionCrash(incident_id.to_owned()));
+    }
+
     pub fn report_stale_runs(
         &self,
         is_process_alive: impl Fn(u32) -> bool,
+    ) -> Result<usize, WatchdogError> {
+        self.scan_stale_runs(is_process_alive, true)
+    }
+
+    pub fn report_own_stale_runs(
+        &self,
+        is_process_alive: impl Fn(u32) -> bool,
+    ) -> Result<usize, WatchdogError> {
+        self.scan_stale_runs(is_process_alive, false)
+    }
+
+    fn scan_stale_runs(
+        &self,
+        is_process_alive: impl Fn(u32) -> bool,
+        include_other_processes: bool,
     ) -> Result<usize, WatchdogError> {
         if !self.shared.config.track_unclean_exit {
             return Ok(0);
@@ -607,6 +650,7 @@ impl ProcessWatchdog {
             }
             let bytes = match fs::read(&path) {
                 Ok(bytes) => bytes,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => {
                     self.report_corrupt_marker(&path, &error.to_string())?;
                     reported = reported.saturating_add(1);
@@ -634,54 +678,97 @@ impl ProcessWatchdog {
                     continue;
                 }
             };
-            if marker.run_id == self.shared.run_id {
+            if marker.run_id == self.shared.run_id
+                || (!include_other_processes
+                    && marker.process_name != self.shared.config.process_name)
+            {
                 continue;
             }
             if marker.process_id != std::process::id() && is_process_alive(marker.process_id) {
                 continue;
             }
 
-            let context =
-                ExecutionContext::process(format!("unclean-{}", marker.run_id), self.clone());
-            let mut incident = self.incident_record(
-                &context,
-                IncidentKind::UncleanExit,
-                IncidentSeverity::Critical,
-                None,
-                Some(ErrorDetails {
-                os_error_code: None,
-                    message: format!(
-                        "previous run {} ended without a clean watchdog shutdown",
-                        marker.run_id
-                    ),
-                    source_chain: vec![
-                        format!("started at {}", marker.started_at_utc),
-                        format!("last heartbeat at {}", marker.last_heartbeat_utc),
-                        "the in-process watchdog cannot determine whether the cause was abort, forced termination, power loss, or a fatal native fault"
-                            .to_string(),
-                    ],
-                    backtrace: "unavailable for an unclean process exit".to_string(),
-                }),
-            );
-            incident.runtime = marker.snapshot;
-            incident.recovery = RecoveryOutcome::Unrecoverable(
-                "the previous process had already terminated; only its last heartbeat could be recovered"
-                    .to_string(),
-            );
-            self.persist_incident_and_wait(incident)?;
+            let crash_id = marker.fatal_incident.as_deref().filter(|id| {
+                id.strip_prefix(&marker.run_id)
+                    .and_then(|s| s.strip_prefix('-'))
+                    .is_some_and(|s| s.parse::<u64>().is_ok())
+            });
+            let report_path = if let Some(id) = crash_id {
+                self.list_incident_reports()
+                    .reports
+                    .into_iter()
+                    .find(|report| report.incident_id == id && report.kind == IncidentKind::Panic)
+                    .map(|report| report.text_report_path.unwrap_or(report.json_report_path))
+            } else {
+                let receipt = self.record_previous_unclean_exit(&marker)?;
+                receipt.text_report_path.or(receipt.json_report_path)
+            };
             self.shared
                 .confirmed_stale_runs
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .insert(marker.run_id);
-            durable::remove_file(&path).map_err(|source| WatchdogError::Io {
-                operation: "remove reported stale run marker",
-                path,
-                source,
-            })?;
+                .insert(marker.run_id.clone());
+            match durable::remove_file(&path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(source) => {
+                    return Err(WatchdogError::Io {
+                        operation: "remove reported stale run marker",
+                        path,
+                        source,
+                    });
+                }
+            }
+            if marker.process_name == self.shared.config.process_name {
+                let mut previous = self
+                    .shared
+                    .previous_exit
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                if previous
+                    .as_ref()
+                    .is_none_or(|old| old.last_heartbeat < marker.last_heartbeat_utc)
+                {
+                    *previous = Some(PreviousSessionExit {
+                        run_id: marker.run_id,
+                        crashed: crash_id.is_some(),
+                        report_path,
+                        last_heartbeat: marker.last_heartbeat_utc,
+                    });
+                }
+            }
             reported = reported.saturating_add(1);
         }
         Ok(reported)
+    }
+
+    fn record_previous_unclean_exit(
+        &self,
+        marker: &StaleRunMarker,
+    ) -> Result<IncidentReceipt, WatchdogError> {
+        let context = ExecutionContext::process(format!("unclean-{}", marker.run_id), self.clone());
+        let incident_error = ErrorDetails {
+            os_error_code: None,
+            message: format!("previous run {} ended without a clean watchdog shutdown", marker.run_id),
+            source_chain: vec![
+                format!("started at {}", marker.started_at_utc),
+                format!("last heartbeat at {}", marker.last_heartbeat_utc),
+                "the in-process watchdog cannot determine whether the cause was abort, forced termination, power loss, or a fatal native fault".to_string(),
+            ],
+            backtrace: "unavailable for an unclean process exit".to_string(),
+        };
+        let mut incident = self.incident_record(
+            &context,
+            IncidentKind::UncleanExit,
+            IncidentSeverity::Critical,
+            None,
+            Some(incident_error),
+        );
+        incident.runtime = marker.snapshot.clone();
+        incident.recovery = RecoveryOutcome::Unrecoverable(
+            "the previous process had already terminated; only its last heartbeat could be recovered".to_string(),
+        );
+        self.persist_incident_and_wait(incident)
     }
 
     fn persist_incident_and_wait(
@@ -1382,6 +1469,14 @@ impl CaughtPanic {
             .as_ref()
             .map(|panic| panic.payload.as_str())
             .unwrap_or("panic payload was unavailable")
+    }
+
+    pub fn finalize_session_crash(
+        self,
+        recovery: RecoveryOutcome,
+    ) -> Result<IncidentReceipt, WatchdogError> {
+        self.process.mark_session_crash(self.incident_id());
+        self.finalize(recovery)
     }
 
     pub fn finalize(mut self, recovery: RecoveryOutcome) -> Result<IncidentReceipt, WatchdogError> {

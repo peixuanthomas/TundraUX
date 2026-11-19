@@ -56,6 +56,8 @@ Results use protocol version 1 JSON. Multiple sessions require `--session`; snap
 
 ## Watchdog recovery
 
+Standalone CLI startup checks exit markers from previous CLI runs. The desktop reads its own marker when it starts, including when a CLI command ran between desktop sessions.
+
 Watchdog commands retain public JSON protocol version 1 independently of private managed-worker IPC versions.
 
 `tundra-cli watchdog list` shows runs and workers owned by the current OS user. Use a run ID and an application session number from that list to force kill one window, or use `--shell` to end the entire run. These commands contact the watchdog directly and work when the Shell interface stops responding. See [watchdog commands](docs/commands.md#watchdog) for arguments and result states.

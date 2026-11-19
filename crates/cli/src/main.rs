@@ -295,7 +295,7 @@ fn start_watchdog(
         runtime_log::record(event);
     }
     let process = process.install_global()?;
-    let _ = process.report_stale_runs(|pid| platform.is_process_alive(pid).unwrap_or(true));
+    let _ = process.report_own_stale_runs(|pid| platform.is_process_alive(pid).unwrap_or(true));
     Ok((runtime, process))
 }
 

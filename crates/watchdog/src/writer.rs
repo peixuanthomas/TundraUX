@@ -30,6 +30,7 @@ pub(crate) enum WriterCommand {
         fallback: IncidentRecord,
         response: mpsc::Sender<Result<IncidentReceipt, String>>,
     },
+    SessionCrash(String),
     Heartbeat(RuntimeSnapshot),
     Shutdown(mpsc::Sender<Result<(), String>>),
 }
@@ -49,6 +50,8 @@ struct RunMarker<'a> {
     started_at_utc: String,
     last_heartbeat_utc: String,
     snapshot: &'a RuntimeSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fatal_incident: Option<&'a str>,
 }
 
 pub(crate) fn writer_loop(
@@ -62,9 +65,17 @@ pub(crate) fn writer_loop(
     let marker_path = run_marker_path(&config, &run_id);
     let started_at = Utc::now().to_rfc3339();
     let mut snapshot = RuntimeSnapshot::default();
+    let mut fatal_incident = None;
     let startup_result = if config.track_unclean_exit {
-        write_marker(&config, &marker_path, &run_id, &started_at, &snapshot)
-            .map_err(|error| error.to_string())
+        write_marker(
+            &config,
+            &marker_path,
+            &run_id,
+            &started_at,
+            &snapshot,
+            fatal_incident.as_deref(),
+        )
+        .map_err(|error| error.to_string())
     } else {
         Ok(())
     };
@@ -77,6 +88,20 @@ pub(crate) fn writer_loop(
             return;
         }
     }
+    let update_marker = |snapshot: &RuntimeSnapshot, incident: Option<&str>| {
+        if config.track_unclean_exit
+            && let Err(error) = write_marker(
+                &config,
+                &marker_path,
+                &run_id,
+                &started_at,
+                snapshot,
+                incident,
+            )
+        {
+            append_emergency(&config, &format!("run marker update failed: {error}"));
+        }
+    };
     let mut incidents = HashMap::<String, IncidentRecord>::new();
 
     while let Ok(command) = command_rx.recv() {
@@ -139,17 +164,16 @@ pub(crate) fn writer_loop(
                 };
                 let _ = response.send(result);
             }
+            WriterCommand::SessionCrash(id) => {
+                fatal_incident = Some(id);
+                update_marker(&snapshot, fatal_incident.as_deref());
+            }
             WriterCommand::Heartbeat(next) => {
                 snapshot = sanitize::snapshot(next);
-                if config.track_unclean_exit
-                    && let Err(error) =
-                        write_marker(&config, &marker_path, &run_id, &started_at, &snapshot)
-                {
-                    append_emergency(&config, &format!("run marker heartbeat failed: {error}"));
-                }
+                update_marker(&snapshot, fatal_incident.as_deref());
             }
             WriterCommand::Shutdown(response) => {
-                let result = if config.track_unclean_exit {
+                let result = if config.track_unclean_exit && fatal_incident.is_none() {
                     durable::remove_file(&marker_path).map_err(|error| error.to_string())
                 } else {
                     Ok(())
@@ -447,6 +471,7 @@ fn write_marker(
     run_id: &str,
     started_at: &str,
     snapshot: &RuntimeSnapshot,
+    fatal_incident: Option<&str>,
 ) -> Result<(), WatchdogError> {
     let marker = RunMarker {
         schema_version: 1,
@@ -457,6 +482,7 @@ fn write_marker(
         started_at_utc: started_at.to_string(),
         last_heartbeat_utc: Utc::now().to_rfc3339(),
         snapshot,
+        fatal_incident,
     };
     let bytes = serde_json::to_vec_pretty(&marker)?;
     atomic_write(path, &bytes)
