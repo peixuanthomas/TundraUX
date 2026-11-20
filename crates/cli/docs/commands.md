@@ -101,7 +101,7 @@ echo "$PROJECT_MODE"
 
 The Windows equivalents are `set PROJECT_MODE=dev` and `cd /d "C:\path with spaces"`. UX commands do not clear this state, and the Tundra main process and system environment configuration remain unchanged.
 
-Linux/macOS select a valid Shell on first execution, and subsequent commands retain the session state; Windows uses cmd.exe. Unexported local variables, functions, aliases, and Shell options are not preserved across commands. Use `. script` or `call script.cmd` when a script needs to change the current environment.
+Select a shell for new built-in sessions under **Settings → Applications → Command Line**. The default is the user's shell on Linux, `/bin/sh` on macOS, and `cmd.exe` on Windows. In PowerShell, use `$env:PROJECT_MODE = 'dev'` to update the session environment and `Set-Location` to change the directory. Unexported local variables, functions, aliases, and shell options are not preserved across commands.
 
 Each embedded Command Line page has its own child terminal and directory. The prompt shows the current absolute path, and command-completion markers remain in scrollback. A normal `exit` closes the current page; the Back button only cleans up the current instance.
 

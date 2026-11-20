@@ -5,15 +5,17 @@ pub enum SettingsApplication {
     #[default]
     FileExplorer,
     Editor,
+    CommandLine,
 }
 
 impl SettingsApplication {
-    pub const ALL: [Self; 2] = [Self::FileExplorer, Self::Editor];
+    pub const ALL: [Self; 3] = [Self::FileExplorer, Self::Editor, Self::CommandLine];
 
     pub fn label(self) -> String {
         match self {
             Self::FileExplorer => i18n::tr!("ui-settings-file-explorer"),
             Self::Editor => i18n::tr!("ui-settings-editor"),
+            Self::CommandLine => i18n::tr!("shell-command-line"),
         }
     }
 }

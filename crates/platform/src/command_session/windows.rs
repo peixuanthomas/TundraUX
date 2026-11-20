@@ -11,9 +11,16 @@ const DIRECTORY: &str = "__TUNDRA_CAPTURE_CWD";
 const COMPLETE: &str = "__TUNDRA_CAPTURE_COMPLETE";
 const STATUS: &str = "__TUNDRA_CAPTURE_STATUS";
 const INTERNAL_NAMES: [&str; 6] = [CAPTURE, CMD, ENVIRONMENT, DIRECTORY, COMPLETE, STATUS];
+const POWERSHELL_IO: &str = "__TUNDRA_POWERSHELL_IO";
 
 impl SystemCommandSession {
     pub(super) fn run_windows(&mut self, command: &str) -> io::Result<SystemCommandResult> {
+        if matches!(
+            self.interpreter,
+            SystemCommandShell::WindowsPowerShell | SystemCommandShell::Pwsh
+        ) {
+            return self.run_powershell(command);
+        }
         let files = tempfile::tempdir()?;
         let script = files.path().join("capture.cmd");
         let environment = files.path().join("environment");
@@ -22,7 +29,7 @@ impl SystemCommandSession {
         fs::write(&script, CAPTURE_SCRIPT)?;
         // Resolve the interpreter independently of the session's PATH,
         // ComSpec and SystemRoot, which commands may edit or remove.
-        let interpreter = native_cmd()?;
+        let interpreter = self.shell_program()?.to_path_buf();
         let status = Command::new(&interpreter)
             .args(["/D", "/S", "/C"])
             // Keep command-prompt syntax (e.g. FOR %i), not batch syntax.
@@ -44,6 +51,52 @@ impl SystemCommandSession {
             }
             parse_snapshot(&fs::read(environment)?, &fs::read(directory)?)
         })();
+        Ok(self.finish_windows_command(status, snapshot, &INTERNAL_NAMES))
+    }
+
+    fn run_powershell(&mut self, command: &str) -> io::Result<SystemCommandResult> {
+        let mut child = Command::new(self.shell_program()?);
+        let files = tempfile::tempdir()?;
+        fs::write(files.path().join("input"), command)?;
+        let status = child
+            .args(["-NoLogo", "-NoProfile", "-Command", POWERSHELL_COMMAND])
+            .current_dir(&self.directory)
+            .env_clear()
+            .envs(&self.environment)
+            .env(POWERSHELL_IO, files.path())
+            .status_managed()?;
+        let snapshot = (|| {
+            #[derive(serde::Deserialize)]
+            struct Snapshot {
+                environment: BTreeMap<String, String>,
+                directory: PathBuf,
+            }
+            let file = fs::File::open(files.path().join("state.json"))?;
+            let snapshot: Snapshot = serde_json::from_reader(file).map_err(io::Error::other)?;
+            if !snapshot.directory.is_absolute() {
+                return Err(io::Error::other("incomplete command state"));
+            }
+            let environment = snapshot
+                .environment
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect();
+            Ok((environment, snapshot.directory))
+        })();
+        Ok(self.finish_windows_command(status, snapshot, &[POWERSHELL_IO]))
+    }
+
+    fn finish_windows_command(
+        &mut self,
+        status: std::process::ExitStatus,
+        snapshot: io::Result<(BTreeMap<OsString, OsString>, PathBuf)>,
+        internal_names: &[&str],
+    ) -> SystemCommandResult {
+        let is_internal = |name: &OsStr| {
+            internal_names
+                .iter()
+                .any(|internal| name.eq_ignore_ascii_case(internal))
+        };
         let state_error = match snapshot {
             Ok((mut environment, directory)) => {
                 environment.retain(|name, _| !is_internal(name));
@@ -60,10 +113,10 @@ impl SystemCommandSession {
             }
             Err(error) => Some(error),
         };
-        Ok(SystemCommandResult {
+        SystemCommandResult {
             exit_code: status.code().unwrap_or(1),
             state_error,
-        })
+        }
     }
 }
 
@@ -77,7 +130,32 @@ const CAPTURE_SCRIPT: &str = "@set \"__TUNDRA_CAPTURE_STATUS=%errorlevel%\"\r\n\
 @echo complete>\"%__TUNDRA_CAPTURE_COMPLETE%\"\r\n\
 @exit /b %__TUNDRA_CAPTURE_STATUS%\r\n";
 
-fn native_cmd() -> io::Result<PathBuf> {
+// Read the input separately so native argument quoting leaves it untouched.
+const POWERSHELL_COMMAND: &str = r#"
+$__tundra_io = $env:__TUNDRA_POWERSHELL_IO
+Remove-Item -LiteralPath 'Env:__TUNDRA_POWERSHELL_IO'
+$__tundra_input = [IO.File]::ReadAllText([IO.Path]::Combine($__tundra_io, 'input'))
+$__tundra_status = 0
+try {
+    # Read $? before the invocation itself replaces the command's status.
+    $__tundra_capture = [Environment]::NewLine * 2 +
+        '$__tundra_status = if ($?) { 0 } elseif ($LASTEXITCODE) { $LASTEXITCODE } else { 1 }'
+    . ([ScriptBlock]::Create($__tundra_input + $__tundra_capture))
+} catch {
+    Microsoft.PowerShell.Utility\Write-Error -ErrorRecord $_ -ErrorAction Continue
+    $__tundra_status = 1
+} finally {
+    $__tundra_state = @{
+        directory = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+        environment = [Environment]::GetEnvironmentVariables()
+    }
+    $__tundra_json = Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject $__tundra_state -Compress
+    [IO.File]::WriteAllText([IO.Path]::Combine($__tundra_io, 'state.json'), $__tundra_json)
+}
+exit $__tundra_status
+"#;
+
+pub(super) fn native_system_directory() -> io::Result<PathBuf> {
     let mut buffer = [0u16; 32768];
     // SAFETY: buffer is writable and its size is passed accurately.
     let length = unsafe {
@@ -92,13 +170,7 @@ fn native_cmd() -> io::Result<PathBuf> {
     if length >= buffer.len() {
         return Err(io::Error::other("system directory path is too long"));
     }
-    Ok(PathBuf::from(OsString::from_wide(&buffer[..length])).join("cmd.exe"))
-}
-
-fn is_internal(name: &std::ffi::OsStr) -> bool {
-    INTERNAL_NAMES
-        .iter()
-        .any(|internal| name.eq_ignore_ascii_case(internal))
+    Ok(PathBuf::from(OsString::from_wide(&buffer[..length])))
 }
 
 fn parse_snapshot(

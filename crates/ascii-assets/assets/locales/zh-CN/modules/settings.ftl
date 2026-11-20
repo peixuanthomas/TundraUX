@@ -4,6 +4,17 @@ settings-storage-unavailable = 存储不可用
 settings-unavailable = 设置不可用
 settings-ready = 就绪
 settings-title = 设置
+settings-command-line-system-commands = 系统命令
+settings-command-line-shell = 命令解释器
+settings-command-line-shell-help = 对新开的命令行会话生效。请先安装所选的命令解释器。
+settings-command-line-shell-default = 默认
+settings-command-line-shell-cmd = 命令提示符 (CMD)
+settings-command-line-shell-powershell = Windows PowerShell
+settings-command-line-shell-pwsh = PowerShell 7
+settings-command-line-shell-sh = POSIX sh
+settings-command-line-shell-bash = Bash
+settings-command-line-shell-zsh = Zsh
+settings-command-line-shell-fish = Fish
 settings-error = 错误：{ $reason }
 settings-status-error = 设置错误：{ $reason }
 settings-update-failed = 更新失败：{ $reason }
@@ -304,6 +315,7 @@ settings-field-name =
         [TopBarTime] { settings-top-bar-show-time }
         [TopBarEsc] { settings-top-bar-show-esc }
         [TopBarTasks] { settings-top-bar-show-tasks }
+        [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
@@ -320,6 +332,7 @@ settings-category-name =
         [Applications] { ui-settings-applications }
         [FileExplorer] { ui-settings-file-explorer }
         [Editor] { ui-settings-editor }
+        [CommandLine] { shell-command-line }
         [Update] { ui-settings-update }
        *[other] { $category }
     }

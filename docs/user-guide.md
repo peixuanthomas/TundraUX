@@ -54,6 +54,8 @@ Open **Launcher** to browse all apps available on your platform and add your own
 
 In **Command Line**, type a normal command such as `pwd` (Unix) or `cd` (Windows) to use the OS command interpreter. Prefix a TundraUX command with a slash, for example `/help` or `/doctor`; from an external terminal, use `tundra-cli help` or `tundra-cli doctor` without the slash. The built-in session keeps its working directory and exported environment. At the end of the input, **Right** cycles completion candidates and **Tab** accepts the gray suggestion. Type `exit` to close that session normally.
 
+To choose which shell runs system commands, open **Settings → Applications → Command Line → Shell**. Windows offers CMD, Windows PowerShell, and PowerShell 7 (`pwsh.exe`). macOS and Linux offer sh, Bash, Zsh, and Fish. Start a new Command Line session to apply the change. PowerShell 7 and Fish must be available on PATH when TundraUX starts.
+
 See the [CLI command reference](../crates/cli/docs/commands.md) and [external UI control](../crates/cli/docs/ui-control.md). External input is off by default; turn it on in **Settings → System → External CLI control**.
 
 ## Manage the system and view its status

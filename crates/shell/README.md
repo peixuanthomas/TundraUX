@@ -121,6 +121,8 @@ The old Ctrl+B prefix is removed. The ordinary editor canvas, native Vim, and em
 
 Selection dialogs share a top search field, case-insensitive filtering, stable option identities, and an empty-result state. This includes window/app selection, all Settings pickers, dashboard component and size pickers, and form choices. Right-click and More action menus retain their compact layout.
 
+**Settings → Applications → Command Line** selects the system command interpreter for newly opened Command Line sessions. Each session reads the choice at launch and continues to offer Tundra commands such as `/help`.
+
 Esc first dismisses an active dialog or menu. On an ordinary application page, it moves the window to the background. Vim and embedded terminal input handle their own Esc. The global Back control can return from a subpage.
 
 Closing a window prompts for unsaved changes or running tasks. If cleanup still runs after two seconds, the Shell offers **Keep waiting** and **Force kill**. A force kill goes directly to the watchdog.

@@ -4,8 +4,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use platform::mock::{MockCall, MockPlatform};
 use platform::{
-    AppPaths, PlatformCapabilities, PlatformKind, UserDirs, build_windows_app_paths,
-    cleanup_temp_path,
+    AppPaths, PlatformCapabilities, PlatformKind, SystemCommandShell, UserDirs,
+    build_windows_app_paths, cleanup_temp_path,
 };
 use ratatui::layout::Rect;
 use shell::{
@@ -599,6 +599,7 @@ fn application_list_switches_with_pointer_without_changing_saved_settings() {
     };
     for application in [
         SettingsApplication::Editor,
+        SettingsApplication::CommandLine,
         SettingsApplication::FileExplorer,
     ] {
         let model = state.to_settings_view_model().unwrap();
@@ -630,6 +631,7 @@ fn application_list_switches_with_pointer_without_changing_saved_settings() {
             match application {
                 SettingsApplication::FileExplorer => SettingsField::ShowHidden,
                 SettingsApplication::Editor => SettingsField::ExplorerOpenExtensions,
+                SettingsApplication::CommandLine => SettingsField::CommandLineShell,
             }
         );
         assert_eq!(manager.load_config().unwrap(), original);
@@ -912,6 +914,54 @@ fn auto_admin_picker_requires_confirmation_with_mouse_or_touch() {
             }
         }
     }
+}
+
+#[test]
+fn command_line_shell_picker_filters_saves_and_restores_defaults() {
+    let fixture = FixtureRoot::new("command-line-shell");
+    let platform = mock_platform(fixture.path()).with_kind(platform::native_platform().kind());
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
+    open_settings_from_home(&mut state, &platform);
+    select_category(&mut state, &platform, SettingsCategory::Applications);
+    for key in ["Down", "Down", "Right"] {
+        press(&mut state, &platform, key);
+    }
+    let model = state.to_settings_view_model().unwrap();
+    assert_eq!(model.selected_application, SettingsApplication::CommandLine);
+    assert_eq!(model.selected_field, SettingsField::CommandLineShell);
+    press(&mut state, &platform, "Enter");
+    let picker = state.to_settings_view_model().unwrap().picker.unwrap();
+    assert_eq!(picker.kind, SettingsPickerKind::CommandLineShell);
+    assert!(picker.searchable);
+    assert_eq!(picker.selected_index, 0);
+    assert_eq!(picker.options.len(), SystemCommandShell::choices().len());
+
+    let selected = *SystemCommandShell::choices().last().unwrap();
+    for character in selected.program().unwrap().chars() {
+        press(&mut state, &platform, &character.to_string());
+    }
+    let picker = state.to_settings_view_model().unwrap().picker.unwrap();
+    assert_eq!(picker.options.len(), 1);
+    assert_eq!(
+        manager.load_config().unwrap().command_line.shell,
+        SystemCommandShell::Default
+    );
+    press(&mut state, &platform, "Enter");
+    assert_eq!(manager.load_config().unwrap().command_line.shell, selected);
+    press(&mut state, &platform, "Enter");
+    let picker = state.to_settings_view_model().unwrap().picker.unwrap();
+    assert_eq!(
+        picker.selected_index,
+        SystemCommandShell::choices().len() - 1
+    );
+    for key in ["Esc", "Down", "Enter", "r"] {
+        press(&mut state, &platform, key);
+    }
+    assert_eq!(
+        manager.load_config().unwrap().command_line.shell,
+        SystemCommandShell::Default
+    );
 }
 
 #[test]

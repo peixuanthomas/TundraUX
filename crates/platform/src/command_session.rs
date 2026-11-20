@@ -15,6 +15,58 @@ use std::{
 #[cfg(windows)]
 mod windows;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SystemCommandShell {
+    #[default]
+    Default,
+    Cmd,
+    #[serde(rename = "powershell")]
+    WindowsPowerShell,
+    Pwsh,
+    Sh,
+    Bash,
+    Zsh,
+    Fish,
+}
+
+impl SystemCommandShell {
+    pub fn choices() -> &'static [Self] {
+        #[cfg(windows)]
+        return &[
+            Self::Default,
+            Self::Cmd,
+            Self::WindowsPowerShell,
+            Self::Pwsh,
+        ];
+        #[cfg(unix)]
+        return &[Self::Default, Self::Sh, Self::Bash, Self::Zsh, Self::Fish];
+        #[cfg(not(any(unix, windows)))]
+        return &[Self::Default];
+    }
+
+    pub fn for_current_platform(self) -> Self {
+        if Self::choices().contains(&self) {
+            self
+        } else {
+            Self::Default
+        }
+    }
+
+    pub fn program(self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::Cmd => Some("cmd.exe"),
+            Self::WindowsPowerShell => Some("powershell.exe"),
+            Self::Pwsh => Some("pwsh.exe"),
+            Self::Sh => Some("sh"),
+            Self::Bash => Some("bash"),
+            Self::Zsh => Some("zsh"),
+            Self::Fish => Some("fish"),
+        }
+    }
+}
+
 pub struct SystemCommandResult {
     pub exit_code: i32,
     /// The command ran, but its final state could not be recovered. The last
@@ -25,10 +77,10 @@ pub struct SystemCommandResult {
 pub struct SystemCommandSession {
     environment: BTreeMap<OsString, OsString>,
     directory: PathBuf,
+    interpreter: SystemCommandShell,
+    program: Option<PathBuf>,
     #[cfg(unix)]
     initialized: bool,
-    #[cfg(target_os = "linux")]
-    shell: Option<PathBuf>,
 }
 
 /// An owned snapshot of command lookup settings, without the rest of the
@@ -61,13 +113,17 @@ fn is_executable_file(path: &Path) -> bool {
 
 impl SystemCommandSession {
     pub fn new() -> io::Result<Self> {
+        Self::with_shell(SystemCommandShell::Default)
+    }
+
+    pub fn with_shell(interpreter: SystemCommandShell) -> io::Result<Self> {
         Ok(Self {
             environment: std::env::vars_os().collect(),
             directory: std::env::current_dir()?,
+            interpreter: interpreter.for_current_platform(),
+            program: None,
             #[cfg(unix)]
             initialized: false,
-            #[cfg(target_os = "linux")]
-            shell: None,
         })
     }
 
@@ -94,6 +150,53 @@ impl SystemCommandSession {
             #[cfg(windows)]
             extensions: self.environment_value("PATHEXT").map(OsStr::to_os_string),
         }
+    }
+
+    #[cfg(any(unix, windows))]
+    fn shell_program(&mut self) -> io::Result<&Path> {
+        if self.program.is_none() {
+            // Resolve on first use and keep the same executable when PATH changes.
+            let program = match self.interpreter {
+                #[cfg(windows)]
+                SystemCommandShell::Default | SystemCommandShell::Cmd => {
+                    windows::native_system_directory()?.join("cmd.exe")
+                }
+                #[cfg(windows)]
+                SystemCommandShell::WindowsPowerShell => windows::native_system_directory()?
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+                #[cfg(target_os = "linux")]
+                SystemCommandShell::Default => {
+                    select_linux_shell(self.environment.get(OsStr::new("SHELL")), || {
+                        crate::linux::identity::LinuxUserContext::current()
+                            .ok()
+                            .map(|user| user.shell)
+                    })
+                }
+                #[cfg(all(unix, not(target_os = "linux")))]
+                SystemCommandShell::Default => PathBuf::from("/bin/sh"),
+                interpreter => {
+                    let program = interpreter.program().unwrap();
+                    let directories =
+                        std::env::split_paths(self.environment_value("PATH").unwrap_or_default());
+                    #[cfg(unix)]
+                    let directories = directories.chain(["/bin", "/usr/bin"].map(PathBuf::from));
+                    directories
+                        .filter(|directory| directory.is_absolute())
+                        .map(|directory| directory.join(program))
+                        .find(|candidate| is_executable_file(candidate))
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::NotFound,
+                                i18n::tr!("shell-command-line-shell-missing", program = program),
+                            )
+                        })?
+                }
+            };
+            self.program = Some(program);
+        }
+        Ok(self.program.as_deref().unwrap())
     }
 }
 
@@ -303,6 +406,9 @@ impl SystemCommandSession {
         use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
         use std::os::unix::process::CommandExt;
 
+        let shell = self.shell_program()?;
+        let fish = shell.file_name() == Some(OsStr::new("fish"));
+        let mut child = Command::new(shell);
         // Anonymous, private files avoid publishing environment values in
         // terminal output or leaving named state files behind. High source
         // descriptors prevent collisions while installing descriptors 8/9.
@@ -318,20 +424,6 @@ impl SystemCommandSession {
         };
         let environment_fd = duplicate(&environment)?;
         let directory_fd = duplicate(&directory)?;
-        // Resolve only when executing, never on the prompt/input path. Keep
-        // the interpreter for this session even if a command changes SHELL.
-        #[cfg(target_os = "linux")]
-        let shell = self.shell.get_or_insert_with(|| {
-            select_linux_shell(self.environment.get(OsStr::new("SHELL")), || {
-                crate::linux::identity::LinuxUserContext::current()
-                    .ok()
-                    .map(|user| user.shell)
-            })
-        });
-        #[cfg(not(target_os = "linux"))]
-        let shell = Path::new("/bin/sh");
-        let fish = shell.file_name() == Some(OsStr::new("fish"));
-        let mut child = Command::new(&shell);
         // Load login defaults once, rather than resetting PATH after every
         // command. The input is a separate argument, not interpolated into
         // the snapshot protocol. EXIT also captures state after `exit N`.

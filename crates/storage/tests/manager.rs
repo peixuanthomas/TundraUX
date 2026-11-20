@@ -155,6 +155,18 @@ fn missing_top_bar_preferences_use_current_defaults() {
 }
 
 #[test]
+fn command_line_shell_defaults_for_existing_configurations() {
+    let legacy = format!("schema_version = {SCHEMA_VERSION}\n");
+    for document in [legacy.clone(), format!("{legacy}\n[command_line]\n")] {
+        let config: StorageConfig = toml::from_str(&document).unwrap();
+        assert_eq!(
+            config.command_line.shell,
+            platform::SystemCommandShell::Default
+        );
+    }
+}
+
+#[test]
 fn toml_and_json_documents_round_trip() {
     let base = unique_temp_root("round-trip");
     let opened = StorageManager::open(app_paths(&base)).expect("storage should open");
@@ -217,6 +229,9 @@ fn toml_and_json_documents_round_trip() {
             cursor_acceleration_ramp_ms: 2_500,
             cursor_horizontal_max_step: 10,
             cursor_vertical_max_step: 4,
+        },
+        command_line: storage::CommandLineConfig {
+            shell: platform::SystemCommandShell::Pwsh,
         },
         launcher: LauncherConfig {
             entries: vec![LauncherEntryRecord {

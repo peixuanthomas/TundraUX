@@ -11,6 +11,7 @@ pub(in crate::session) mod tasks;
 mod view;
 use crate::session::*;
 use devices::*;
+use platform::SystemCommandShell;
 pub(in crate::session) const SETTINGS_RESTORE_NOTIFICATION_KEY: &str = "settings.restore-defaults";
 pub(in crate::session) const SETTINGS_WEATHER_LOCATION_NOTIFICATION_KEY: &str =
     "settings.weather-location";
@@ -759,6 +760,9 @@ impl ShellSession {
             ui::SettingsField::TopBarStatusAlignment => {
                 self.open_settings_picker(ui::SettingsPickerKind::TopBarStatusAlignment)
             }
+            ui::SettingsField::CommandLineShell => {
+                self.open_settings_picker(ui::SettingsPickerKind::CommandLineShell)
+            }
             ui::SettingsField::RefreshSystemTime => self.refresh_system_time_settings(),
             ui::SettingsField::AnimationAdvanced => {
                 self.open_settings_animation();
@@ -1236,6 +1240,7 @@ impl ShellSession {
             ui::SettingsCategory::Applications => match application {
                 ui::SettingsApplication::FileExplorer => config.explorer = defaults.explorer,
                 ui::SettingsApplication::Editor => config.editor = defaults.editor,
+                ui::SettingsApplication::CommandLine => config.command_line = defaults.command_line,
             },
             ui::SettingsCategory::Appearance => unreachable!(),
             ui::SettingsCategory::Update

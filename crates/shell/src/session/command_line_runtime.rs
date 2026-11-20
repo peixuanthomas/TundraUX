@@ -1,6 +1,6 @@
 //! Connects the Command Line page to the independent terminal runtime.
 use crate::{InputEvent, InputKey, PageInstanceId};
-use platform::Platform;
+use platform::{Platform, SystemCommandShell};
 use ratatui::layout::Rect;
 use std::collections::HashMap;
 use std::io;
@@ -87,6 +87,7 @@ impl CommandLineHost {
         platform: &dyn Platform,
         username: &str,
         accent: ratatui::style::Color,
+        shell: SystemCommandShell,
         directory: Option<&Path>,
         external: Option<&ExternalTerminalLaunch>,
         history: Option<platform::task_history::TaskRecorder>,
@@ -113,6 +114,10 @@ impl CommandLineHost {
                 config.args = vec!["repl".into(), "--embedded".into()];
                 config.env = vec![
                     ("TUNDRA_COMMAND_LINE_USERNAME".into(), username.into()),
+                    (
+                        "TUNDRA_COMMAND_LINE_SHELL".into(),
+                        shell.program().unwrap_or_default().into(),
+                    ),
                     (
                         "TUNDRA_COMMAND_LINE_ACCENT".into(),
                         terminal_runtime::ansi_foreground(accent).into(),
@@ -833,6 +838,7 @@ impl CommandLineHosts {
                     platform,
                     state.current_home_username().unwrap_or("tundra"),
                     accent,
+                    state.app.storage_config().command_line.shell,
                     state.command_line_start_directory_for(id),
                     external.as_ref(),
                     history,

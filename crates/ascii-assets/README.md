@@ -47,9 +47,9 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `ui-explorer.ftl` | Open and Save document picker titles, filename field, and actions |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |
-| `shell-command-line.ftl` | Command Line startup hint, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
+| `shell-command-line.ftl` | Command Line startup hint, missing interpreter message, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |
-| `settings.ftl` | Top bar contents and alignment, animation phase fields, validation, reset, save, and cancel actions |
+| `settings.ftl` | Top bar contents and alignment, Command Line shell choices, animation phase fields, validation, reset, save, and cancel actions |
 | `settings.ftl`, `ui-settings.ftl` | Update mode, build selection, Git tree, update notes, and confirmation |
 | `ui-style-preview.ftl`, `ui-test.ftl` | Neutral compact Tea preview, one-character task feedback, and primary and danger sample-action labels |
 | `workspace.ftl` | Three-button window controls, incremental split menus, app/window search and grouping, minimum dimensions, close prompts, and watchdog CLI messages |

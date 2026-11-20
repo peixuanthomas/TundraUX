@@ -22,16 +22,17 @@ pub use animation::{AnimationTimingsConfig, MAX_ANIMATION_PHASE_MS, MIN_ANIMATIO
 pub use clock_document::{ClockDocument, ClockEntryRecord, ClockProfile};
 pub use config_document::{
     ANIMATION_SPEED_STEP_PERCENT, AccentColor, AppearanceConfig, AutoAdminPolicy, AutomationConfig,
-    BorderColor, BorderColorParseError, BorderShape, DEFAULT_ANIMATION_SPEED_PERCENT,
-    DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS, DEFAULT_SCREEN_TIMEOUT_SECONDS, EditorConfig,
-    ExplorerConfig, ExplorerDateZone, ExplorerSizeFormat, ExplorerSortDirection, ExplorerSortField,
-    IconDisplayMode, LauncherConfig, LauncherCustomCommand, LauncherEntryRecord,
-    LauncherExecutableKind, LauncherTerminalSettings, LinuxUpdateMode, MAX_ANIMATION_SPEED_PERCENT,
-    MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN, MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS,
-    MIN_ANIMATION_SPEED_PERCENT, MotionPreference, RuntimeLogsConfig,
-    SYSTEM_STATUS_MAX_AVAILABLE_GIB, SYSTEM_STATUS_MAX_PERCENTAGE, SYSTEM_STATUS_MIN_AVAILABLE_GIB,
-    SYSTEM_STATUS_MIN_PERCENTAGE, StatusTextAlignment, StorageConfig, SystemStatusConfig,
-    TimeSyncConfig, TimeSyncSource, TopBarConfig, normalize_editor_explorer_open_extension,
+    BorderColor, BorderColorParseError, BorderShape, CommandLineConfig,
+    DEFAULT_ANIMATION_SPEED_PERCENT, DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS,
+    DEFAULT_SCREEN_TIMEOUT_SECONDS, EditorConfig, ExplorerConfig, ExplorerDateZone,
+    ExplorerSizeFormat, ExplorerSortDirection, ExplorerSortField, IconDisplayMode, LauncherConfig,
+    LauncherCustomCommand, LauncherEntryRecord, LauncherExecutableKind, LauncherTerminalSettings,
+    LinuxUpdateMode, MAX_ANIMATION_SPEED_PERCENT, MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN,
+    MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS, MIN_ANIMATION_SPEED_PERCENT, MotionPreference,
+    RuntimeLogsConfig, SYSTEM_STATUS_MAX_AVAILABLE_GIB, SYSTEM_STATUS_MAX_PERCENTAGE,
+    SYSTEM_STATUS_MIN_AVAILABLE_GIB, SYSTEM_STATUS_MIN_PERCENTAGE, StatusTextAlignment,
+    StorageConfig, SystemStatusConfig, TimeSyncConfig, TimeSyncSource, TopBarConfig,
+    normalize_editor_explorer_open_extension,
 };
 pub use descriptors::{
     CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, StorageDescriptor, VERSIONED_JSON_DESCRIPTORS,

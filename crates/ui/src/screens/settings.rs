@@ -95,6 +95,7 @@ pub enum SettingsFocus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingsField {
     ApplicationList,
+    CommandLineShell,
     AutoAdmin,
     AutomationEnabled,
     ScreenTimeout,
@@ -278,6 +279,7 @@ pub enum SettingsPickerKind {
     AutoAdmin,
     ScreenTimeout,
     TopBarStatusAlignment,
+    CommandLineShell,
     Theme,
     DefaultThemeIcons,
     Language,

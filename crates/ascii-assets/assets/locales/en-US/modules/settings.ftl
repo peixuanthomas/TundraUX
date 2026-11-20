@@ -4,6 +4,17 @@ settings-storage-unavailable = Storage unavailable
 settings-unavailable = Settings unavailable
 settings-ready = Ready
 settings-title = Settings
+settings-command-line-system-commands = System commands
+settings-command-line-shell = Shell
+settings-command-line-shell-help = Applies to new Command Line sessions. The selected shell must be installed.
+settings-command-line-shell-default = Default
+settings-command-line-shell-cmd = Command Prompt (CMD)
+settings-command-line-shell-powershell = Windows PowerShell
+settings-command-line-shell-pwsh = PowerShell 7
+settings-command-line-shell-sh = POSIX sh
+settings-command-line-shell-bash = Bash
+settings-command-line-shell-zsh = Zsh
+settings-command-line-shell-fish = Fish
 settings-error = Error: { $reason }
 settings-status-error = Settings error: { $reason }
 settings-update-failed = Update failed: { $reason }
@@ -304,6 +315,7 @@ settings-field-name =
         [TopBarTime] { settings-top-bar-show-time }
         [TopBarEsc] { settings-top-bar-show-esc }
         [TopBarTasks] { settings-top-bar-show-tasks }
+        [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
@@ -320,6 +332,7 @@ settings-category-name =
         [Applications] { ui-settings-applications }
         [FileExplorer] { ui-settings-file-explorer }
         [Editor] { ui-settings-editor }
+        [CommandLine] { shell-command-line }
         [Update] { ui-settings-update }
        *[other] { $category }
     }

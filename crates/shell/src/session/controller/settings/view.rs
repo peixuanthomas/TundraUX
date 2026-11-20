@@ -871,6 +871,28 @@ pub(in crate::session) fn settings_cards(
                 Card::new(i18n::tr!("settings-reset"), vec![reset(global_enabled)]),
             ]
         }
+        ui::SettingsCategory::Applications
+            if state.application == ui::SettingsApplication::CommandLine =>
+        {
+            vec![
+                Card::new(
+                    i18n::tr!("settings-command-line-system-commands"),
+                    vec![
+                        Item::new(
+                            Field::CommandLineShell,
+                            i18n::tr!("settings-command-line-shell"),
+                            command_line_shell_label(
+                                config.command_line.shell.for_current_platform(),
+                            ),
+                            i18n::tr!("settings-command-line-shell-help"),
+                            Kind::Picker,
+                        )
+                        .enabled(global_enabled),
+                    ],
+                ),
+                Card::new(i18n::tr!("settings-reset"), vec![reset(global_enabled)]),
+            ]
+        }
         ui::SettingsCategory::Applications => vec![
             Card::new(
                 i18n::tr!("settings-explorer-opening"),
@@ -984,6 +1006,15 @@ pub(in crate::session) fn settings_picker_options(
                 ui::SettingsPickerOptionViewModel::new(status_alignment_label(alignment), "")
             })
             .collect(),
+        ui::SettingsPickerKind::CommandLineShell => SystemCommandShell::choices()
+            .iter()
+            .map(|&shell| {
+                ui::SettingsPickerOptionViewModel::new(
+                    command_line_shell_label(shell),
+                    shell.program().unwrap_or_default(),
+                )
+            })
+            .collect(),
         ui::SettingsPickerKind::SystemTimeServers => picker
             .options
             .iter()
@@ -1074,6 +1105,7 @@ pub(in crate::session) fn picker_title(kind: ui::SettingsPickerKind) -> String {
         ui::SettingsPickerKind::TopBarStatusAlignment => {
             i18n::tr!("settings-top-bar-status-alignment")
         }
+        ui::SettingsPickerKind::CommandLineShell => i18n::tr!("settings-command-line-shell"),
         ui::SettingsPickerKind::SystemTimeServers => i18n::tr!("system-settings-edit-servers"),
         ui::SettingsPickerKind::Theme => i18n::tr!("settings-choose-theme"),
         ui::SettingsPickerKind::DefaultThemeIcons => i18n::tr!("settings-default-theme"),
@@ -1091,6 +1123,7 @@ pub(in crate::session) fn picker_label(kind: ui::SettingsPickerKind) -> String {
         ui::SettingsPickerKind::TopBarStatusAlignment => {
             i18n::tr!("settings-top-bar-status-alignment")
         }
+        ui::SettingsPickerKind::CommandLineShell => i18n::tr!("settings-command-line-shell"),
         ui::SettingsPickerKind::SystemTimeServers => i18n::tr!("system-settings-servers"),
         ui::SettingsPickerKind::Theme => i18n::tr!("settings-theme"),
         ui::SettingsPickerKind::DefaultThemeIcons => i18n::tr!("settings-default-icon-mode"),
@@ -1139,6 +1172,21 @@ pub(in crate::session) fn time_sync_source_label(source: storage::TimeSyncSource
     match source {
         storage::TimeSyncSource::NetworkServer => i18n::tr!("settings-network-server"),
         storage::TimeSyncSource::OperatingSystem => i18n::tr!("settings-operating-system"),
+    }
+}
+
+fn command_line_shell_label(shell: SystemCommandShell) -> String {
+    match shell {
+        SystemCommandShell::Default => i18n::tr!("settings-command-line-shell-default"),
+        SystemCommandShell::Cmd => i18n::tr!("settings-command-line-shell-cmd"),
+        SystemCommandShell::WindowsPowerShell => {
+            i18n::tr!("settings-command-line-shell-powershell")
+        }
+        SystemCommandShell::Pwsh => i18n::tr!("settings-command-line-shell-pwsh"),
+        SystemCommandShell::Sh => i18n::tr!("settings-command-line-shell-sh"),
+        SystemCommandShell::Bash => i18n::tr!("settings-command-line-shell-bash"),
+        SystemCommandShell::Zsh => i18n::tr!("settings-command-line-shell-zsh"),
+        SystemCommandShell::Fish => i18n::tr!("settings-command-line-shell-fish"),
     }
 }
 

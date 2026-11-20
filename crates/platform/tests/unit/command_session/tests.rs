@@ -292,6 +292,32 @@ fn unix_commands_retain_exports_directory_and_unsets_without_changing_the_host()
 
 #[cfg(unix)]
 #[test]
+fn explicit_bash_runs_even_when_the_login_shell_is_sh_and_path_changes() {
+    let mut session = SystemCommandSession::with_shell(SystemCommandShell::Bash).unwrap();
+    session.environment.insert("SHELL".into(), "/bin/sh".into());
+    let folder = tempfile::tempdir().unwrap();
+    session
+        .environment
+        .insert("DESTINATION".into(), folder.path().as_os_str().into());
+    run(
+        &mut session,
+        "test -n \"$BASH_VERSION\" && ! shopt -qo posix && cd \"$DESTINATION\" && export SAVED=yes && unset PATH",
+        0,
+    );
+    assert_eq!(
+        session.directory,
+        std::fs::canonicalize(folder.path()).unwrap()
+    );
+    run(
+        &mut session,
+        "test \"$SAVED\" = yes && ! shopt -qo posix",
+        0,
+    );
+    assert!(!session.environment.contains_key(OsStr::new("PATH")));
+}
+
+#[cfg(unix)]
+#[test]
 fn unix_exit_and_missing_snapshots_preserve_the_last_complete_state() {
     let mut session = SystemCommandSession::new().unwrap();
     run(&mut session, "export SAVED=before; exit 7", 7);
@@ -373,6 +399,41 @@ fn windows_commands_retain_set_directory_and_unsets() {
     );
     run(&mut session, "for %i in (one two) do @echo %i", 0);
     assert_eq!(std::env::current_dir().unwrap(), host_directory);
+}
+
+#[cfg(windows)]
+#[test]
+fn powershell_commands_retain_filesystem_location_and_environment() {
+    for shell in [
+        SystemCommandShell::WindowsPowerShell,
+        SystemCommandShell::Pwsh,
+    ] {
+        let mut session = SystemCommandSession::with_shell(shell).unwrap();
+        if shell == SystemCommandShell::Pwsh && session.shell_program().is_err() {
+            continue;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("folder with spaces 中文 ! & %");
+        std::fs::create_dir(&folder).unwrap();
+        session
+            .environment
+            .insert("DESTINATION".into(), folder.as_os_str().into());
+        run(
+            &mut session,
+            "Set-Location -LiteralPath $env:DESTINATION; $env:RETAINED = '中文!=value'",
+            0,
+        );
+        assert_eq!(session.directory, folder);
+        run(
+            &mut session,
+            "if ($env:RETAINED -ne '中文!=value') { exit 9 }",
+            0,
+        );
+        run(&mut session, "cmd.exe /d /c exit 7", 7);
+        run(&mut session, "Write-Error 'test command error'", 1);
+        run(&mut session, "$env:RETAINED = $null; exit 8", 8);
+        run(&mut session, "if (Test-Path Env:RETAINED) { exit 9 }", 0);
+    }
 }
 
 #[cfg(windows)]

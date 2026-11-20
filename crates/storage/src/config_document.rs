@@ -73,6 +73,8 @@ pub struct StorageConfig {
     #[serde(default)]
     pub editor: EditorConfig,
     #[serde(default)]
+    pub command_line: CommandLineConfig,
+    #[serde(default)]
     pub launcher: LauncherConfig,
     #[serde(default)]
     pub system_status: SystemStatusConfig,
@@ -119,11 +121,18 @@ impl Default for StorageConfig {
             appearance: AppearanceConfig::default(),
             explorer: ExplorerConfig::default(),
             editor: EditorConfig::default(),
+            command_line: CommandLineConfig::default(),
             launcher: LauncherConfig::default(),
             system_status: SystemStatusConfig::default(),
             runtime_logs: RuntimeLogsConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct CommandLineConfig {
+    pub shell: platform::SystemCommandShell,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

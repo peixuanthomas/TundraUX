@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use platform::SystemCommandSession;
+use platform::{SystemCommandSession, SystemCommandShell};
 use rustyline::error::ReadlineError;
 use rustyline::history::MemHistory;
 use rustyline::{
@@ -166,6 +166,7 @@ pub const EMBEDDED_RESET_EXIT_CODE: i32 = 75;
 /// Private environment contract with the Shell's embedded Command Line host.
 const COMMAND_LINE_USERNAME_ENV: &str = "TUNDRA_COMMAND_LINE_USERNAME";
 const COMMAND_LINE_STARTUP_HINT_ENV: &str = "TUNDRA_COMMAND_LINE_STARTUP_HINT";
+const COMMAND_LINE_SHELL_ENV: &str = "TUNDRA_COMMAND_LINE_SHELL";
 
 /// Runs an interactive Tundra command loop. The callback is deliberately the
 /// normal CLI dispatcher, so REPL input cannot drift from the regular CLI
@@ -218,6 +219,19 @@ where
         );
     }
     editor.set_helper(Some(helper));
+    let shell = if embedded {
+        std::env::var(COMMAND_LINE_SHELL_ENV)
+            .ok()
+            .and_then(|program| {
+                SystemCommandShell::choices()
+                    .iter()
+                    .copied()
+                    .find(|shell| shell.program() == Some(program.as_str()))
+            })
+            .unwrap_or_default()
+    } else {
+        SystemCommandShell::Default
+    };
     let mut system_session = None;
     if embedded {
         let hint = std::env::var(COMMAND_LINE_STARTUP_HINT_ENV)
@@ -291,7 +305,7 @@ where
         let _ = editor.add_history_entry(line);
 
         let Some(ux_command) = ux_command_input(line) else {
-            let code = run_system_command(&mut system_session, line, embedded);
+            let code = run_system_command(&mut system_session, shell, line, embedded);
             if code != 0 && !is_system_help(line) && is_likely_ux_command(line) {
                 eprintln!(
                     "This looks like a UX command. Prefix it with '/': /{}",
@@ -499,6 +513,7 @@ fn is_reset_confirmation(answer: &str) -> bool {
 /// system command's status. The REPL intentionally remains open afterwards.
 fn run_system_command(
     session: &mut Option<SystemCommandSession>,
+    shell: SystemCommandShell,
     command: &str,
     embedded: bool,
 ) -> i32 {
@@ -509,7 +524,7 @@ fn run_system_command(
 
     let result = (|| {
         if session.is_none() {
-            *session = Some(SystemCommandSession::new()?);
+            *session = Some(SystemCommandSession::with_shell(shell)?);
         }
         session
             .as_mut()

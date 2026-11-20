@@ -24,6 +24,8 @@ Hosts can install one process-local `task_events` notifier. Result channels noti
 
 Explorer moves, renames, and undo share `file_operations`: Linux uses `renameat2(RENAME_NOREPLACE)`, macOS uses `renamex_np(RENAME_EXCL)`, and Windows uses `MoveFileExW` without replacement. An existing destination preserves both files. File identities serialize over authenticated session IPC so the shared undo service can validate the same object and parent directories across app processes.
 
+System command sessions use a fixed interpreter after its first execution. Windows supports CMD, Windows PowerShell, and PowerShell 7. Unix supports the platform default, sh, Bash, Zsh, and Fish. The session reads the working directory and exported environment after each command.
+
 ## Management interfaces
 
 `ManagementQuery`, `ManagementSnapshot`, `ManagementAction`, and `ManagementCommand` describe queries, page data, available operations, and execution requests. Action IDs, field IDs, and target identities remain stable; display text uses the caller's language.

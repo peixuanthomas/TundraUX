@@ -58,6 +58,10 @@ impl ShellSession {
                 .iter()
                 .position(|alignment| *alignment == config.top_bar.status_alignment)
                 .unwrap(),
+            ui::SettingsPickerKind::CommandLineShell => SystemCommandShell::choices()
+                .iter()
+                .position(|shell| *shell == config.command_line.shell.for_current_platform())
+                .unwrap(),
             ui::SettingsPickerKind::SystemTimeServers => 0,
             ui::SettingsPickerKind::Theme => 0,
             ui::SettingsPickerKind::DefaultThemeIcons => {
@@ -269,7 +273,8 @@ impl ShellSession {
         match picker.kind {
             ui::SettingsPickerKind::AutoAdmin
             | ui::SettingsPickerKind::ScreenTimeout
-            | ui::SettingsPickerKind::TopBarStatusAlignment => {
+            | ui::SettingsPickerKind::TopBarStatusAlignment
+            | ui::SettingsPickerKind::CommandLineShell => {
                 let storage = self.storage_manager.clone().unwrap();
                 let mut config = match storage.load_config() {
                     Ok(config) => config,
@@ -294,6 +299,10 @@ impl ShellSession {
                     ui::SettingsPickerKind::TopBarStatusAlignment => {
                         config.top_bar.status_alignment = TOP_BAR_ALIGNMENTS[index];
                         ui::SettingsField::TopBarStatusAlignment
+                    }
+                    ui::SettingsPickerKind::CommandLineShell => {
+                        config.command_line.shell = SystemCommandShell::choices()[index];
+                        ui::SettingsField::CommandLineShell
                     }
                     _ => unreachable!(),
                 };
