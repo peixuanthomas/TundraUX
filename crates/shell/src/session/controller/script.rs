@@ -153,11 +153,11 @@ impl ShellSession {
 
     pub(in crate::session) fn script_main_area(&self) -> Rect {
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        self.input_keyboard_content_layout(
-            ui::ShellFrameLayout::new(bounds, None, &ui::RenderContext::default())
-                .with_help_button(self.help_button_available())
-                .with_tasks_button(self.tasks_button_label().as_deref()),
-        )
+        self.input_keyboard_content_layout(self.shell_frame_layout(
+            bounds,
+            None,
+            &ui::RenderContext::default(),
+        ))
         .main
     }
 

@@ -1935,7 +1935,7 @@ impl ShellSession {
         };
         ui::ShellChromeViewModel {
             back_button_hovered: self.hovered_component == Some(ShellComponent::BackButton),
-            help_available: self.help_button_available(),
+            help_available: self.help_button_visible(),
             tasks_label: self.tasks_button_label(),
             tasks_button_focused: self.pages.common.focused_component
                 == ShellComponent::TasksButton,

@@ -715,6 +715,50 @@ pub(in crate::session) fn settings_cards(
                     .enabled(global_enabled),
                 ],
             ),
+            Card::new(i18n::tr!("settings-top-bar"), {
+                let top_bar = config.top_bar;
+                let checkbox = |field, label, checked| {
+                    Item::new(
+                        field,
+                        label,
+                        if checked { "[x]" } else { "[ ]" },
+                        "",
+                        Kind::Toggle,
+                    )
+                    .checked(checked)
+                    .enabled(global_enabled)
+                };
+                vec![
+                    Item::new(
+                        Field::TopBarStatusAlignment,
+                        i18n::tr!("settings-top-bar-status-alignment"),
+                        status_alignment_label(top_bar.status_alignment),
+                        "",
+                        Kind::Picker,
+                    )
+                    .enabled(global_enabled),
+                    checkbox(
+                        Field::TopBarHelp,
+                        i18n::tr!("settings-top-bar-show-help"),
+                        top_bar.show_help,
+                    ),
+                    checkbox(
+                        Field::TopBarTime,
+                        i18n::tr!("settings-top-bar-show-time"),
+                        top_bar.show_time,
+                    ),
+                    checkbox(
+                        Field::TopBarEsc,
+                        i18n::tr!("settings-top-bar-show-esc"),
+                        top_bar.show_esc,
+                    ),
+                    checkbox(
+                        Field::TopBarTasks,
+                        i18n::tr!("settings-top-bar-show-tasks"),
+                        top_bar.show_tasks,
+                    ),
+                ]
+            }),
             Card::new(i18n::tr!("settings-reset"), vec![reset(global_enabled)]),
         ],
         ui::SettingsCategory::Applications
@@ -934,6 +978,12 @@ pub(in crate::session) fn settings_picker_options(
                 ui::SettingsPickerOptionViewModel::new(label, "")
             })
             .collect(),
+        ui::SettingsPickerKind::TopBarStatusAlignment => TOP_BAR_ALIGNMENTS
+            .into_iter()
+            .map(|alignment| {
+                ui::SettingsPickerOptionViewModel::new(status_alignment_label(alignment), "")
+            })
+            .collect(),
         ui::SettingsPickerKind::SystemTimeServers => picker
             .options
             .iter()
@@ -1021,6 +1071,9 @@ pub(in crate::session) fn picker_title(kind: ui::SettingsPickerKind) -> String {
     match kind {
         ui::SettingsPickerKind::AutoAdmin => i18n::tr!("aa-policy"),
         ui::SettingsPickerKind::ScreenTimeout => i18n::tr!("settings-screen-timeout"),
+        ui::SettingsPickerKind::TopBarStatusAlignment => {
+            i18n::tr!("settings-top-bar-status-alignment")
+        }
         ui::SettingsPickerKind::SystemTimeServers => i18n::tr!("system-settings-edit-servers"),
         ui::SettingsPickerKind::Theme => i18n::tr!("settings-choose-theme"),
         ui::SettingsPickerKind::DefaultThemeIcons => i18n::tr!("settings-default-theme"),
@@ -1035,6 +1088,9 @@ pub(in crate::session) fn picker_label(kind: ui::SettingsPickerKind) -> String {
     match kind {
         ui::SettingsPickerKind::AutoAdmin => i18n::tr!("aa-policy"),
         ui::SettingsPickerKind::ScreenTimeout => i18n::tr!("settings-screen-timeout"),
+        ui::SettingsPickerKind::TopBarStatusAlignment => {
+            i18n::tr!("settings-top-bar-status-alignment")
+        }
         ui::SettingsPickerKind::SystemTimeServers => i18n::tr!("system-settings-servers"),
         ui::SettingsPickerKind::Theme => i18n::tr!("settings-theme"),
         ui::SettingsPickerKind::DefaultThemeIcons => i18n::tr!("settings-default-icon-mode"),
@@ -1083,6 +1139,14 @@ pub(in crate::session) fn time_sync_source_label(source: storage::TimeSyncSource
     match source {
         storage::TimeSyncSource::NetworkServer => i18n::tr!("settings-network-server"),
         storage::TimeSyncSource::OperatingSystem => i18n::tr!("settings-operating-system"),
+    }
+}
+
+fn status_alignment_label(alignment: storage::StatusTextAlignment) -> String {
+    match alignment {
+        storage::StatusTextAlignment::Left => i18n::tr!("settings-top-bar-align-left"),
+        storage::StatusTextAlignment::Center => i18n::tr!("settings-top-bar-align-center"),
+        storage::StatusTextAlignment::Right => i18n::tr!("settings-top-bar-align-right"),
     }
 }
 

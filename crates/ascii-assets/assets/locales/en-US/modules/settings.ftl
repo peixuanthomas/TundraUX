@@ -299,6 +299,11 @@ settings-field-name =
         [SystemLowPercentage] { settings-low-percentage }
         [SystemCriticalAvailable] { settings-critical-available }
         [SystemCriticalPercentage] { settings-critical-percentage }
+        [TopBarStatusAlignment] { settings-top-bar-status-alignment }
+        [TopBarHelp] { settings-top-bar-show-help }
+        [TopBarTime] { settings-top-bar-show-time }
+        [TopBarEsc] { settings-top-bar-show-esc }
+        [TopBarTasks] { settings-top-bar-show-tasks }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
@@ -466,3 +471,12 @@ settings-screen-timeout-minutes =
        *[other] { $value } minutes
     }
 settings-screen-timeout-help = Show weather after inactivity. Press a key or tap to resume without signing in again.
+settings-top-bar = Top bar contents
+settings-top-bar-status-alignment = Status text alignment
+settings-top-bar-align-left = Left
+settings-top-bar-align-center = Center
+settings-top-bar-align-right = Right
+settings-top-bar-show-help = Show Help button
+settings-top-bar-show-time = Show time
+settings-top-bar-show-esc = Show Esc button
+settings-top-bar-show-tasks = Show Tasks button

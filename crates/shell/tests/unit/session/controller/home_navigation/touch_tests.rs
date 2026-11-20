@@ -23,6 +23,15 @@ fn state(size: (u16, u16)) -> ShellSession {
     state
 }
 
+fn state_with_tasks_button(size: (u16, u16)) -> ShellSession {
+    let mut state = state(size);
+    let mut config = state.app.storage_config().clone();
+    config.top_bar.show_tasks = true;
+    state.replace_storage_config(config);
+    state.refresh_hit_map();
+    state
+}
+
 fn main_area(state: &ShellSession) -> Rect {
     let ui::ShellLayout::Full { main, .. } = state.shell_layout_for(Rect::new(
         0,
@@ -432,7 +441,7 @@ fn launcher_open_button_waits_for_release_and_drag_cancels_activation() {
 #[test]
 fn global_tasks_entry_toggles_tasks_and_restores_the_original_page() {
     for size in [(108, 20), (140, 40)] {
-        let mut state = state(size);
+        let mut state = state_with_tasks_button(size);
         state.open_settings();
         let original_page = state.active_page_id();
         let original_stack = state.screen_stack().to_vec();
@@ -466,7 +475,7 @@ fn global_tasks_entry_toggles_tasks_and_restores_the_original_page() {
 
 #[test]
 fn global_tasks_entry_closes_tasks_opened_from_home() {
-    let mut state = state((108, 20));
+    let mut state = state_with_tasks_button((108, 20));
     let home = state.active_page_id();
     let index = state
         .user_home_entries()
@@ -489,7 +498,7 @@ fn global_tasks_entry_closes_tasks_opened_from_home() {
 fn global_tasks_entry_keeps_its_label_during_queries_operations_and_approval() {
     let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
     for (language, label) in [("en-US", "Tasks"), ("zh-CN", "任务")] {
-        let mut state = state((108, 20));
+        let mut state = state_with_tasks_button((108, 20));
         state.language = Arc::new(
             i18n::LanguageSnapshot::load(&assets, language, 1)
                 .unwrap()

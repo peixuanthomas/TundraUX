@@ -25,10 +25,7 @@ impl ShellSession {
         };
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
         let layout =
-            ui::ShellFrameLayout::new(bounds, self.status_time_button_label().as_deref(), &context)
-                .with_back_shortcut(self.shell_back_shortcut())
-                .with_help_button(self.help_button_available())
-                .with_tasks_button(self.tasks_button_label().as_deref());
+            self.shell_frame_layout(bounds, self.status_time_button_label().as_deref(), &context);
         self.refresh_hit_map_with_frame_layout(motion, self.input_keyboard_content_layout(layout));
     }
 
@@ -36,16 +33,11 @@ impl ShellSession {
         self.frame_layout
             .filter(|layout| layout.bounds == bounds)
             .unwrap_or_else(|| {
-                self.input_keyboard_content_layout(
-                    ui::ShellFrameLayout::new(
-                        bounds,
-                        self.status_time_button_label().as_deref(),
-                        &ui::RenderContext::default(),
-                    )
-                    .with_back_shortcut(self.shell_back_shortcut())
-                    .with_help_button(self.help_button_available())
-                    .with_tasks_button(self.tasks_button_label().as_deref()),
-                )
+                self.input_keyboard_content_layout(self.shell_frame_layout(
+                    bounds,
+                    self.status_time_button_label().as_deref(),
+                    &ui::RenderContext::default(),
+                ))
             })
             .shell
     }
@@ -230,7 +222,14 @@ impl ShellSession {
                 ];
             }
             if self.is_strict_guest() {
-                return vec![ShellComponent::ClockButton];
+                return vec![if self
+                    .frame_layout
+                    .is_some_and(|layout| layout.time_button.is_some())
+                {
+                    ShellComponent::ClockButton
+                } else {
+                    ShellComponent::Clock
+                }];
             }
             let mut order = vec![ShellComponent::ClockNewButton];
             if !self.ordered_clock_entry_ids_at(Instant::now()).is_empty() {
@@ -251,16 +250,16 @@ impl ShellSession {
         if !self.user_home_entries().is_empty() {
             order.push(ShellComponent::HomeEdit);
         }
-        order.push(ShellComponent::ClockButton);
-        if self.tasks_button_label().is_some() {
-            order.push(ShellComponent::TasksButton);
-        }
-        if self
-            .frame_layout
-            .and_then(|layout| layout.help_button)
-            .is_some()
-        {
-            order.push(ShellComponent::HelpButton);
+        if let Some(layout) = self.frame_layout {
+            order.extend(
+                [
+                    (layout.time_button, ShellComponent::ClockButton),
+                    (layout.tasks_button, ShellComponent::TasksButton),
+                    (layout.help_button, ShellComponent::HelpButton),
+                ]
+                .into_iter()
+                .filter_map(|(area, component)| area.map(|_| component)),
+            );
         }
         order.extend([ShellComponent::StatusBar, ShellComponent::TopBar]);
         order

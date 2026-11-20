@@ -15,7 +15,7 @@ fn compose(
 ) -> ShellFrameLayout {
     let context = content.render_context(context);
     let layout = ShellFrameLayout::new(area, chrome.status.time_button_label.as_deref(), &context)
-        .with_back_shortcut(chrome.back_shortcut);
+        .with_back_shortcut(Some(chrome.back_shortcut));
     components::Surface::new().render_frame(frame, area, &context);
     if layout.is_compact() && !content.renders_in_compact() {
         render_compact_home(frame, layout.main, chrome, &context.compatibility_theme());

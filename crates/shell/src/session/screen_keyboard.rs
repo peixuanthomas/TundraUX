@@ -178,9 +178,8 @@ impl ShellSession {
 
     pub(super) fn auto_admin_available_area(&self) -> Rect {
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        let mut main = ui::ShellFrameLayout::new(bounds, None, &ui::RenderContext::default())
-            .with_help_button(self.help_button_available())
-            .with_tasks_button(self.tasks_button_label().as_deref())
+        let mut main = self
+            .shell_frame_layout(bounds, None, &ui::RenderContext::default())
             .main;
         if self.auto_admin_visible() {
             let bottom = self.input_keyboard_layout().keyboard.y.min(
@@ -195,11 +194,11 @@ impl ShellSession {
 
     pub(super) fn command_line_input_area(&self) -> Option<Rect> {
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        let layout = self.input_keyboard_content_layout(
-            ui::ShellFrameLayout::new(bounds, None, &ui::RenderContext::default())
-                .with_help_button(self.help_button_available())
-                .with_tasks_button(self.tasks_button_label().as_deref()),
-        );
+        let layout = self.input_keyboard_content_layout(self.shell_frame_layout(
+            bounds,
+            None,
+            &ui::RenderContext::default(),
+        ));
         ui::command_line_terminal_area_in(&layout)
     }
 
@@ -253,16 +252,14 @@ impl ShellSession {
             {
                 return Some(area);
             }
-            return ui::ShellFrameLayout::new(
-                bounds,
-                self.status_time_button_label().as_deref(),
-                &ui::RenderContext::default(),
-            )
-            .with_back_shortcut(self.shell_back_shortcut())
-            .with_help_button(self.help_button_available())
-            .with_tasks_button(self.tasks_button_label().as_deref())
-            .with_keyboard_launcher(true)
-            .keyboard_launcher;
+            return self
+                .shell_frame_layout(
+                    bounds,
+                    self.status_time_button_label().as_deref(),
+                    &ui::RenderContext::default(),
+                )
+                .with_keyboard_launcher(true)
+                .keyboard_launcher;
         }
         Some(ui::screen_keyboard_launcher_area(
             self.input_keyboard_bounds(visibility),

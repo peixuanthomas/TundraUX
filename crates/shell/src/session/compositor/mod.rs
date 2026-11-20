@@ -215,14 +215,11 @@ impl ScreenCompositor {
             }
             _ => self.progress.update(None, None, context.motion),
         };
-        let layout = ui::ShellFrameLayout::new(
+        let layout = state.shell_frame_layout(
             Rect::new(0, 0, state.terminal_size().0, state.terminal_size().1),
             chrome.status.time_button_label.as_deref(),
             &context,
-        )
-        .with_back_shortcut(chrome.back_shortcut)
-        .with_help_button(state.help_button_available())
-        .with_tasks_button(state.tasks_button_label().as_deref());
+        );
         let layout = state.input_keyboard_content_layout(layout);
         if state.graphical_icons_enabled()
             && !layout.is_compact()
@@ -343,14 +340,11 @@ impl ScreenCompositor {
             }
         }
         chrome.terminal_size = (bounds.width, bounds.height);
-        let layout = ui::ShellFrameLayout::new(
+        let layout = state.shell_frame_layout(
             bounds,
             chrome.status.time_button_label.as_deref(),
             &frame_context,
-        )
-        .with_back_shortcut(chrome.back_shortcut)
-        .with_help_button(state.help_button_available())
-        .with_tasks_button(chrome.tasks_label.as_deref());
+        );
         let workspace_keyboard = !launcher_visible
             && workspace
                 .as_ref()
@@ -892,14 +886,11 @@ impl ScreenCompositor {
         };
         self.synchronize_appearance(state, &context);
         let chrome = state.to_shell_chrome_view_model();
-        let layout = ui::ShellFrameLayout::new(
+        let layout = state.shell_frame_layout(
             Rect::new(0, 0, state.terminal_size().0, state.terminal_size().1),
             chrome.status.time_button_label.as_deref(),
             &context,
-        )
-        .with_back_shortcut(chrome.back_shortcut)
-        .with_help_button(state.help_button_available())
-        .with_tasks_button(state.tasks_button_label().as_deref());
+        );
         self.motion.update_layout(
             state,
             &state.input_keyboard_content_layout(layout),

@@ -54,6 +54,10 @@ impl ShellSession {
                 .iter()
                 .position(|seconds| *seconds == config.screen_timeout_seconds)
                 .unwrap_or(4),
+            ui::SettingsPickerKind::TopBarStatusAlignment => TOP_BAR_ALIGNMENTS
+                .iter()
+                .position(|alignment| *alignment == config.top_bar.status_alignment)
+                .unwrap(),
             ui::SettingsPickerKind::SystemTimeServers => 0,
             ui::SettingsPickerKind::Theme => 0,
             ui::SettingsPickerKind::DefaultThemeIcons => {
@@ -263,7 +267,9 @@ impl ShellSession {
             return;
         }
         match picker.kind {
-            ui::SettingsPickerKind::AutoAdmin | ui::SettingsPickerKind::ScreenTimeout => {
+            ui::SettingsPickerKind::AutoAdmin
+            | ui::SettingsPickerKind::ScreenTimeout
+            | ui::SettingsPickerKind::TopBarStatusAlignment => {
                 let storage = self.storage_manager.clone().unwrap();
                 let mut config = match storage.load_config() {
                     Ok(config) => config,
@@ -275,14 +281,21 @@ impl ShellSession {
                         return;
                     }
                 };
-                let field = if picker.kind == ui::SettingsPickerKind::AutoAdmin {
-                    config.auto_admin =
-                        AUTO_ADMIN_POLICIES[option.source_index.unwrap_or(picker.selected_index)];
-                    ui::SettingsField::AutoAdmin
-                } else {
-                    config.screen_timeout_seconds = SCREEN_TIMEOUT_OPTIONS
-                        [option.source_index.unwrap_or(picker.selected_index)];
-                    ui::SettingsField::ScreenTimeout
+                let index = option.source_index.unwrap_or(picker.selected_index);
+                let field = match picker.kind {
+                    ui::SettingsPickerKind::AutoAdmin => {
+                        config.auto_admin = AUTO_ADMIN_POLICIES[index];
+                        ui::SettingsField::AutoAdmin
+                    }
+                    ui::SettingsPickerKind::ScreenTimeout => {
+                        config.screen_timeout_seconds = SCREEN_TIMEOUT_OPTIONS[index];
+                        ui::SettingsField::ScreenTimeout
+                    }
+                    ui::SettingsPickerKind::TopBarStatusAlignment => {
+                        config.top_bar.status_alignment = TOP_BAR_ALIGNMENTS[index];
+                        ui::SettingsField::TopBarStatusAlignment
+                    }
+                    _ => unreachable!(),
                 };
                 if self.save_settings_global_config(config, field) {
                     self.pages.settings.settings_state.as_mut().unwrap().picker = None;

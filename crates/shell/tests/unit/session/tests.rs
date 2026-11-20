@@ -3206,7 +3206,7 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
         state.status_time_button_label().as_deref(),
         &ui::RenderContext::default(),
     )
-    .with_back_shortcut(state.shell_back_shortcut())
+    .with_back_shortcut(Some(state.shell_back_shortcut()))
     .with_help_button(state.help_button_available())
     .with_tasks_button(state.tasks_button_label().as_deref());
     let settled = state.input_keyboard_content_layout(settled);

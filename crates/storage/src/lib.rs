@@ -30,8 +30,8 @@ pub use config_document::{
     MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN, MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS,
     MIN_ANIMATION_SPEED_PERCENT, MotionPreference, RuntimeLogsConfig,
     SYSTEM_STATUS_MAX_AVAILABLE_GIB, SYSTEM_STATUS_MAX_PERCENTAGE, SYSTEM_STATUS_MIN_AVAILABLE_GIB,
-    SYSTEM_STATUS_MIN_PERCENTAGE, StorageConfig, SystemStatusConfig, TimeSyncConfig,
-    TimeSyncSource, normalize_editor_explorer_open_extension,
+    SYSTEM_STATUS_MIN_PERCENTAGE, StatusTextAlignment, StorageConfig, SystemStatusConfig,
+    TimeSyncConfig, TimeSyncSource, TopBarConfig, normalize_editor_explorer_open_extension,
 };
 pub use descriptors::{
     CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, StorageDescriptor, VERSIONED_JSON_DESCRIPTORS,

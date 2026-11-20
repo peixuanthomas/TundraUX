@@ -68,7 +68,11 @@ fn status_message_uses_shared_hover_pressed_and_keyboard_colors() {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        let label = &buffer[(message.x, message.y)];
+        let label = message
+            .positions()
+            .map(|position| &buffer[position])
+            .find(|cell| cell.symbol() == "C")
+            .unwrap();
         assert_eq!(label.fg, expected);
         assert_eq!(label.modifier.contains(Modifier::UNDERLINED), focused);
         if hovered {
@@ -101,7 +105,7 @@ fn clock_sits_between_help_and_back_and_help_hides_in_compact() {
     use ratatui::layout::Rect;
     let context = RenderContext::default();
     let layout = ShellFrameLayout::new(Rect::new(0, 0, 80, 24), Some("12:00"), &context)
-        .with_back_shortcut("Esc")
+        .with_back_shortcut(Some("Esc"))
         .with_help_button(true);
     let back = layout.back_button.unwrap();
     let help = layout.help_button.unwrap();

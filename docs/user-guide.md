@@ -60,14 +60,15 @@ See the [CLI command reference](../crates/cli/docs/commands.md) and [external UI
 
 On Linux, start from [Home's system management pages](../crates/platform/docs/linux-management.md) for services, processes, packages, network, disks, users, firewall, SSH, backups, and scheduled tasks. **Packages** uses [Homebrew](../crates/platform/docs/homebrew.md) on macOS and [WinGet](../crates/platform/docs/windows-packages.md) on Windows. A visible entry can still depend on a native tool or service; check its details or run `tundra-cli doctor` if it is unavailable.
 
-For a system change, review the targets and choose the action. AutoAdmin shows approval, interactive prompts, and progress for supported operations. System authorization can still be required after you approve the task. Open **Tasks** in the header to return to pending input or inspect task output. If the outcome is unknown after a disconnect, refresh the real system state before you retry. See [AutoAdmin](../crates/auto-admin/docs/workflow.md) and [task history](../crates/platform/docs/task-history.md).
+For a system change, review the targets and choose the action. AutoAdmin shows approval, interactive prompts, and progress for supported operations. System authorization can still be required after you approve the task. Open **Tasks** from Launcher to return to pending input or inspect task output. If the outcome is unknown after a disconnect, refresh the real system state before you retry. See [AutoAdmin](../crates/auto-admin/docs/workflow.md) and [task history](../crates/platform/docs/task-history.md).
 
 **System Status** shows processor, memory, storage, and network metrics. Press **E** to edit the widget layout and **Ctrl+S** to save it. Use **Diagnostics** to check prerequisites and **Logs** to inspect runtime events, incidents, or available system logs. The [log guide](../crates/runtime-log/docs/logs.md) covers filters, following, and export.
 
 ## Use Clock, weather, and appearance settings
 
-- **Clock:** Select the clock in the header. **N** opens the creation dialog for an alarm or countdown; **M** manages the selected entry. Clock windows share your items. On Linux, the clock follows the OS time and timezone.
+- **Clock:** Select the clock in the header or open **Clock** from Launcher. **N** opens the creation dialog for an alarm or countdown and **M** manages the selected entry. Clock windows share your items. On Linux, the clock follows the OS time and timezone.
 - **Weather:** The workspace shows weather after the configured period of inactivity. Settings controls the screen timeout and weather location. Press a key or tap to return to your open windows without signing in again.
+- **Top bar:** Open **Settings → System → Top bar contents** to align the status text or show and hide Help, time, Esc, and Tasks. By default, the status is centered and Help, time, and Esc are visible. Press **F1** or **Esc** to use their keyboard actions when their buttons are hidden.
 - **Appearance and input:** Change language, theme, icon mode, or motion in Settings. ASCII icons work in terminals without image support. Use the header's keyboard button for supported text fields and embedded terminals.
 
 ## Update or troubleshoot

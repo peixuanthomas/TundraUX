@@ -1637,15 +1637,11 @@ impl ShellSession {
 
     pub(in crate::session) fn management_main(&self) -> Rect {
         let bounds = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        self.input_keyboard_content_layout(
-            ui::ShellFrameLayout::new(
-                bounds,
-                self.status_time_button_label().as_deref(),
-                &ui::RenderContext::default(),
-            )
-            .with_help_button(self.help_button_available())
-            .with_tasks_button(self.tasks_button_label().as_deref()),
-        )
+        self.input_keyboard_content_layout(self.shell_frame_layout(
+            bounds,
+            self.status_time_button_label().as_deref(),
+            &ui::RenderContext::default(),
+        ))
         .main
     }
     pub(in crate::session) fn resize_management_terminal(&mut self) {

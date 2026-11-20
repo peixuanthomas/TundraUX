@@ -130,6 +130,31 @@ fn editor_suffixes_preserve_explicit_lists() {
 }
 
 #[test]
+fn missing_top_bar_preferences_use_current_defaults() {
+    let legacy = format!("schema_version = {SCHEMA_VERSION}\n");
+    let config: StorageConfig = toml::from_str(&legacy).unwrap();
+    assert_eq!(
+        config.top_bar,
+        storage::TopBarConfig {
+            status_alignment: storage::StatusTextAlignment::Center,
+            show_help: true,
+            show_time: true,
+            show_esc: true,
+            show_tasks: false,
+        }
+    );
+    let partial: StorageConfig =
+        toml::from_str(&format!("{legacy}\n[top_bar]\nshow_time = false")).unwrap();
+    assert_eq!(
+        partial.top_bar,
+        storage::TopBarConfig {
+            show_time: false,
+            ..config.top_bar
+        }
+    );
+}
+
+#[test]
 fn toml_and_json_documents_round_trip() {
     let base = unique_temp_root("round-trip");
     let opened = StorageManager::open(app_paths(&base)).expect("storage should open");
@@ -142,6 +167,13 @@ fn toml_and_json_documents_round_trip() {
         session_authorization_revision: None,
         schema_version: SCHEMA_VERSION,
         screen_timeout_seconds: 120,
+        top_bar: storage::TopBarConfig {
+            status_alignment: storage::StatusTextAlignment::Right,
+            show_help: false,
+            show_time: false,
+            show_esc: false,
+            show_tasks: true,
+        },
         automation: storage::AutomationConfig { enabled: true },
         linux_update_mode: storage::LinuxUpdateMode::Beta,
         auto_admin: storage::AutoAdminPolicy::Manual,

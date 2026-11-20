@@ -57,7 +57,7 @@ fn render(
         model.status.time_button_label.as_deref(),
         context,
     )
-    .with_back_shortcut(model.back_shortcut);
+    .with_back_shortcut(Some(model.back_shortcut));
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
@@ -553,7 +553,11 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
                 .map(|point| terminal.backend().buffer()[point].symbol())
                 .collect();
             let expected = model.status.full_message();
-            assert!(status.starts_with(expected.chars().next().unwrap()));
+            assert!(
+                status
+                    .trim_start()
+                    .starts_with(expected.chars().next().unwrap())
+            );
             assert_eq!(status.replace(' ', ""), expected.replace(' ', ""));
             assert!(row(&terminal, 0).starts_with("TundraUX"));
             assert!(row(&terminal, 0).contains("09:30"));

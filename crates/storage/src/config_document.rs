@@ -45,6 +45,8 @@ pub struct StorageConfig {
     #[serde(default = "default_screen_timeout_seconds")]
     pub screen_timeout_seconds: u64,
     #[serde(default)]
+    pub top_bar: TopBarConfig,
+    #[serde(default)]
     pub automation: AutomationConfig,
     #[serde(default)]
     pub auto_admin: AutoAdminPolicy,
@@ -104,6 +106,7 @@ impl Default for StorageConfig {
             session_authorization_revision: None,
             schema_version: SCHEMA_VERSION,
             screen_timeout_seconds: DEFAULT_SCREEN_TIMEOUT_SECONDS,
+            top_bar: TopBarConfig::default(),
             automation: AutomationConfig::default(),
             linux_update_mode: LinuxUpdateMode::default(),
             auto_admin: AutoAdminPolicy::default(),
@@ -121,6 +124,36 @@ impl Default for StorageConfig {
             runtime_logs: RuntimeLogsConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct TopBarConfig {
+    pub status_alignment: StatusTextAlignment,
+    pub show_help: bool,
+    pub show_time: bool,
+    pub show_esc: bool,
+    pub show_tasks: bool,
+}
+
+impl Default for TopBarConfig {
+    fn default() -> Self {
+        Self {
+            status_alignment: StatusTextAlignment::Center,
+            show_help: true,
+            show_time: true,
+            show_esc: true,
+            show_tasks: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StatusTextAlignment {
+    Left,
+    Center,
+    Right,
 }
 
 pub const SYSTEM_STATUS_MIN_AVAILABLE_GIB: u16 = 1;

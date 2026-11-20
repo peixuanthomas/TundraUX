@@ -34,10 +34,13 @@ impl ShellSession {
             return (target, ShellCommand::RecordInput);
         }
         if self.is_strict_guest() {
-            let target = RoutedTarget::Component(ShellComponent::ClockButton);
             return match &key.key {
                 InputKey::Escape => (RoutedTarget::Global, ShellCommand::CloseClock),
-                InputKey::Enter | InputKey::Char(' ') => (target, ShellCommand::CloseClock),
+                InputKey::Enter | InputKey::Char(' ')
+                    if self.pages.common.focused_component == ShellComponent::ClockButton =>
+                {
+                    (target, ShellCommand::CloseClock)
+                }
                 _ => (target, ShellCommand::CaptureOverlayInput),
             };
         }

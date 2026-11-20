@@ -17,6 +17,11 @@ pub(in crate::session) const SETTINGS_WEATHER_LOCATION_NOTIFICATION_KEY: &str =
 pub(in crate::session) const WEATHER_LOCATION_MAX_LEN: usize = 120;
 pub(in crate::session) const EDITOR_EXTENSIONS_INPUT_MAX_LEN: usize = 1_024;
 const SCREEN_TIMEOUT_OPTIONS: &[u64] = &[0, 30, 60, 120, 300, 600, 1800];
+const TOP_BAR_ALIGNMENTS: [storage::StatusTextAlignment; 3] = [
+    storage::StatusTextAlignment::Left,
+    storage::StatusTextAlignment::Center,
+    storage::StatusTextAlignment::Right,
+];
 const AUTO_ADMIN_POLICIES: [storage::AutoAdminPolicy; 3] = [
     storage::AutoAdminPolicy::Deny,
     storage::AutoAdminPolicy::Manual,
@@ -50,6 +55,11 @@ pub(in crate::session) const SYSTEM_SETTINGS_FIELDS: &[ui::SettingsField] = &[
     ui::SettingsField::SystemLowPercentage,
     ui::SettingsField::SystemCriticalAvailable,
     ui::SettingsField::SystemCriticalPercentage,
+    ui::SettingsField::TopBarStatusAlignment,
+    ui::SettingsField::TopBarHelp,
+    ui::SettingsField::TopBarTime,
+    ui::SettingsField::TopBarEsc,
+    ui::SettingsField::TopBarTasks,
     ui::SettingsField::RestoreDefaults,
 ];
 pub(in crate::session) const UPDATE_SETTINGS_FIELDS: &[ui::SettingsField] = &[
@@ -746,6 +756,9 @@ impl ShellSession {
             ui::SettingsField::ScreenTimeout => {
                 self.open_settings_picker(ui::SettingsPickerKind::ScreenTimeout)
             }
+            ui::SettingsField::TopBarStatusAlignment => {
+                self.open_settings_picker(ui::SettingsPickerKind::TopBarStatusAlignment)
+            }
             ui::SettingsField::RefreshSystemTime => self.refresh_system_time_settings(),
             ui::SettingsField::AnimationAdvanced => {
                 self.open_settings_animation();
@@ -850,6 +863,12 @@ impl ShellSession {
         match field {
             ui::SettingsField::AutomationEnabled => {
                 config.automation.enabled = !config.automation.enabled;
+            }
+            ui::SettingsField::TopBarHelp => config.top_bar.show_help = !config.top_bar.show_help,
+            ui::SettingsField::TopBarTime => config.top_bar.show_time = !config.top_bar.show_time,
+            ui::SettingsField::TopBarEsc => config.top_bar.show_esc = !config.top_bar.show_esc,
+            ui::SettingsField::TopBarTasks => {
+                config.top_bar.show_tasks = !config.top_bar.show_tasks
             }
             ui::SettingsField::ShowHidden => {
                 config.explorer.show_hidden = !config.explorer.show_hidden
@@ -1209,6 +1228,7 @@ impl ShellSession {
             }
             ui::SettingsCategory::System => {
                 config.screen_timeout_seconds = defaults.screen_timeout_seconds;
+                config.top_bar = defaults.top_bar;
                 config.system_status = defaults.system_status;
                 config.auto_admin = defaults.auto_admin;
                 config.automation = defaults.automation;

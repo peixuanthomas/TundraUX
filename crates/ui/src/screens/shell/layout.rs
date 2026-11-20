@@ -1,4 +1,4 @@
-use ratatui::layout::Rect;
+use ratatui::layout::{HorizontalAlignment, Rect};
 
 use crate::components::terminal_width;
 
@@ -96,6 +96,7 @@ pub struct ShellFrameLayout {
     pub help_button: Option<Rect>,
     pub tasks_button: Option<Rect>,
     pub status_message: Option<Rect>,
+    pub status_alignment: HorizontalAlignment,
     pub workspace_taskbar: Option<Rect>,
     pub time_button: Option<Rect>,
     pub keyboard_launcher: Option<Rect>,
@@ -124,6 +125,7 @@ impl ShellFrameLayout {
             help_button: None,
             tasks_button: None,
             status_message: None,
+            status_alignment: HorizontalAlignment::Center,
             workspace_taskbar: None,
             time_button: None,
             keyboard_launcher: None,
@@ -136,7 +138,7 @@ impl ShellFrameLayout {
                 }),
             keyboard_width: 0,
         }
-        .with_back_shortcut("Esc")
+        .with_back_shortcut(Some("Esc"))
     }
 
     pub fn is_compact(self) -> bool {
@@ -194,13 +196,15 @@ impl ShellFrameLayout {
         self
     }
 
-    /// Size the button from the same shortcut that the compositor paints.
-    pub fn with_back_shortcut(mut self, shortcut: &str) -> Self {
-        self.back_button = (!self.bounds.is_empty()).then(|| {
-            let width =
-                usize_to_u16(terminal_width(shortcut).saturating_add(4)).min(self.bounds.width);
-            Rect::new(self.bounds.right() - width, self.bounds.y, width, 1)
-        });
+    /// Size the button from its displayed shortcut, or release its space when hidden.
+    pub fn with_back_shortcut(mut self, shortcut: Option<&str>) -> Self {
+        self.back_button = shortcut
+            .filter(|_| !self.bounds.is_empty())
+            .map(|shortcut| {
+                let width =
+                    usize_to_u16(terminal_width(shortcut).saturating_add(4)).min(self.bounds.width);
+                Rect::new(self.bounds.right() - width, self.bounds.y, width, 1)
+            });
         self.layout_header();
         self
     }

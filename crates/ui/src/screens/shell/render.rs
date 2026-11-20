@@ -226,7 +226,7 @@ pub fn render_shell_chrome_with_status_focus(
         message_theme.foreground = style.fg.unwrap_or(theme.foreground);
         let mut button = Button::new("shell.status", truncate_status_text(&text, message.width))
             .with_bracketed_label(false)
-            .with_label_alignment(HorizontalAlignment::Left);
+            .with_label_alignment(layout.status_alignment);
         button.set_focused(status_focused);
         button.render_borderless_frame(frame, message, &message_theme);
     }

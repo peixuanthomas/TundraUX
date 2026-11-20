@@ -71,7 +71,7 @@ Unix input messages are assembled by the local Crossterm patch. A standalone Esc
 
 `tasks.rs` registers the page or session a task belongs to, its request ID, generation, and cancellation action. Results from old Shell sessions, closed pages, and superseded requests do not update new pages. watchdog handles execution and failure isolation; Shell handles ownership and presentation.
 
-The title-bar Tasks button is available in the active workspace session. Its label stays the same while tasks run or await approval. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
+Open Tasks from Launcher or enable the optional title-bar button in **Settings → System → Top bar contents**. The button's label stays the same while tasks run or await approval. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
 
 Before exit, save editor recovery records, stop tasks for the current session, and revoke authorization. Task summaries and output persist across program restarts; scheduled tasks run independently through system services.
 

@@ -915,6 +915,91 @@ fn auto_admin_picker_requires_confirmation_with_mouse_or_touch() {
 }
 
 #[test]
+fn top_bar_settings_save_alignment_and_apply_checkbox_visibility() {
+    let fixture = FixtureRoot::new("top-bar-settings");
+    let platform = mock_platform(fixture.path()).with_kind(PlatformKind::Macos);
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "AdminUser");
+    open_settings_from_home(&mut state, &platform);
+    select_category(&mut state, &platform, SettingsCategory::System);
+    select_field(&mut state, &platform, SettingsField::TopBarStatusAlignment);
+
+    let mut expected = storage::TopBarConfig::default();
+    for (key, alignment) in [
+        ("Home", storage::StatusTextAlignment::Left),
+        ("End", storage::StatusTextAlignment::Right),
+        ("Up", storage::StatusTextAlignment::Center),
+    ] {
+        press(&mut state, &platform, "Enter");
+        press(&mut state, &platform, key);
+        assert_eq!(manager.load_config().unwrap().top_bar, expected);
+        press(&mut state, &platform, "Enter");
+        expected.status_alignment = alignment;
+        assert_eq!(manager.load_config().unwrap().top_bar, expected);
+        assert!(state.to_settings_view_model().unwrap().picker.is_none());
+    }
+
+    for (field, component, preference) in [
+        (
+            SettingsField::TopBarHelp,
+            shell::ShellComponent::HelpButton,
+            &mut expected.show_help,
+        ),
+        (
+            SettingsField::TopBarTime,
+            shell::ShellComponent::ClockButton,
+            &mut expected.show_time,
+        ),
+        (
+            SettingsField::TopBarEsc,
+            shell::ShellComponent::BackButton,
+            &mut expected.show_esc,
+        ),
+        (
+            SettingsField::TopBarTasks,
+            shell::ShellComponent::TasksButton,
+            &mut expected.show_tasks,
+        ),
+    ] {
+        select_field(&mut state, &platform, field);
+        let model = state.to_settings_view_model().unwrap();
+        let item = model
+            .cards
+            .iter()
+            .flat_map(|card| &card.items)
+            .find(|item| item.field == field)
+            .unwrap();
+        assert_eq!(item.checked, Some(*preference));
+        press(&mut state, &platform, " ");
+        *preference = !*preference;
+        assert_eq!(
+            state
+                .hit_map()
+                .regions()
+                .iter()
+                .any(|region| region.component == component),
+            *preference,
+        );
+    }
+    assert_eq!(manager.load_config().unwrap().top_bar, expected);
+    let reopened = start_as_system_user(&platform, "AdminUser");
+    let chrome = reopened.to_shell_chrome_view_model();
+    assert!(chrome.tasks_label.is_some());
+    assert!(chrome.status.time_button_label.is_none());
+    assert!(!chrome.help_available);
+    press(&mut state, &platform, "Esc");
+    assert_eq!(state.active_screen(), ShellScreen::Home);
+    press(&mut state, &platform, "F1");
+    assert!(
+        state
+            .hit_map()
+            .regions()
+            .iter()
+            .any(|region| region.component == shell::ShellComponent::HelpDialog)
+    );
+}
+
+#[test]
 fn screen_timeout_saves_all_choices_and_wakes_without_logging_out() {
     let fixture = FixtureRoot::new("screen-timeout");
     let platform = mock_platform(fixture.path());

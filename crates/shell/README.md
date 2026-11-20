@@ -89,7 +89,7 @@ After an AppHost welcomes the Shell, its current viewport and initialization joi
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-The header shows the focused app's status beside the title. Click the status to open the notification panel. It shows the full status followed by this session’s warning, error, and critical reports, newest first. Each card names its source and can be dismissed individually. Hidden and closed windows keep their history on the desktop. After an abnormal desktop exit, the panel offers that session’s report to users with diagnostics access. The screen keyboard, Tasks, Help, clock, and Esc controls sit on the right when available. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state. First-time setup can finish with the default appearance using F9.
+The header shows the focused app's status beside the title. Click the status to open the notification panel. It shows the full status followed by this session’s warning, error, and critical reports, newest first. Each card names its source and can be dismissed individually. Hidden and closed windows keep their history on the desktop. After an abnormal desktop exit, the panel offers that session’s report to users with diagnostics access. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, clock, Esc, and Tasks. The default centers the status and shows Help, clock, and Esc. First-time setup can finish with the default appearance using F9.
 
 ## Windows
 

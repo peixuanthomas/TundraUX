@@ -1,4 +1,5 @@
 use super::*;
+use ratatui::layout::HorizontalAlignment;
 
 impl ShellSession {
     pub fn active_screen(&self) -> ShellScreen {
@@ -21,11 +22,37 @@ impl ShellSession {
         self.content_screen() != ShellScreen::CommandLine
     }
 
+    pub(in crate::session) fn help_button_visible(&self) -> bool {
+        self.app.storage_config().top_bar.show_help && self.help_button_available()
+    }
+
     pub(in crate::session) fn tasks_button_label(&self) -> Option<String> {
-        if self.app.auth_session().is_none() || self.is_strict_guest() {
+        if !self.app.storage_config().top_bar.show_tasks
+            || self.app.auth_session().is_none()
+            || self.is_strict_guest()
+        {
             return None;
         }
         Some(i18n::tr!("ui-shell-tasks-button"))
+    }
+
+    pub(in crate::session) fn shell_frame_layout(
+        &self,
+        bounds: Rect,
+        time_label: Option<&str>,
+        context: &ui::RenderContext,
+    ) -> ui::ShellFrameLayout {
+        let top_bar = self.app.storage_config().top_bar;
+        let mut layout = ui::ShellFrameLayout::new(bounds, time_label, context)
+            .with_back_shortcut(top_bar.show_esc.then(|| self.shell_back_shortcut()))
+            .with_help_button(self.help_button_visible())
+            .with_tasks_button(self.tasks_button_label().as_deref());
+        layout.status_alignment = match top_bar.status_alignment {
+            storage::StatusTextAlignment::Left => HorizontalAlignment::Left,
+            storage::StatusTextAlignment::Center => HorizontalAlignment::Center,
+            storage::StatusTextAlignment::Right => HorizontalAlignment::Right,
+        };
+        layout
     }
 
     pub fn home_mode(&self) -> ShellHomeMode {

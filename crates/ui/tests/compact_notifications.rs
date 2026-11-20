@@ -146,7 +146,10 @@ fn minimum_full_chrome_keeps_alert_in_the_header_with_title_and_controls() {
         .positions()
         .map(|point| terminal.backend().buffer()[point].symbol())
         .collect();
-    assert!(status.starts_with("[ERROR] Compact alert"), "{status}");
+    assert!(
+        status.trim_start().starts_with("[ERROR] Compact alert"),
+        "{status}"
+    );
     assert!(!status.contains("Compact toast"));
     assert_eq!(layout.main, Rect::new(0, 1, 108, 18));
 }

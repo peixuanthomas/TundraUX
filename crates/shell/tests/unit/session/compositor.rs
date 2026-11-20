@@ -1366,6 +1366,81 @@ fn compositor_resize_uses_actual_frame_geometry_for_chrome_and_hit_map() {
 }
 
 #[test]
+fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
+    let mut state = session();
+    let mut compositor = ScreenCompositor {
+        capture_enabled: true,
+        ..Default::default()
+    };
+    let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    state.notify_status("就绪");
+    let prepared = home_frame(&state, 0, true);
+    draw(&mut compositor, &mut terminal, &mut state, &prepared);
+    let default = state.frame_layout.unwrap();
+    assert!(default.help_button.is_some());
+    assert!(default.time_button.is_some());
+    assert!(default.back_button.is_some());
+    assert!(default.tasks_button.is_none());
+
+    let mut config = state.app.storage_config().clone();
+    config.top_bar.show_time = false;
+    config.top_bar.show_help = false;
+    config.top_bar.show_esc = false;
+    for alignment in [
+        storage::StatusTextAlignment::Left,
+        storage::StatusTextAlignment::Center,
+        storage::StatusTextAlignment::Right,
+    ] {
+        config.top_bar.status_alignment = alignment;
+        state.replace_storage_config(config.clone());
+        let prepared = home_frame(&state, 0, true);
+        draw(&mut compositor, &mut terminal, &mut state, &prepared);
+        let layout = state.frame_layout.unwrap();
+        let area = layout.status_message.unwrap();
+        assert_eq!(area.x, layout.title.right() + 1);
+        assert_eq!(area.right(), layout.bounds.right());
+        assert!(area.width > default.status_message.unwrap().width);
+        assert_eq!(text(terminal.backend().buffer(), layout.title), "TundraUX");
+        let remaining = area.width - 4;
+        let offset = match alignment {
+            storage::StatusTextAlignment::Left => 0,
+            storage::StatusTextAlignment::Center => remaining / 2,
+            storage::StatusTextAlignment::Right => remaining,
+        };
+        assert_eq!(
+            terminal.backend().buffer()[(area.x + offset, area.y)].symbol(),
+            "就"
+        );
+        assert_eq!(
+            state.hit_map().target_at((area.right() - 1, area.y)),
+            Some(ShellComponent::StatusBar)
+        );
+        let snapshot = compositor.snapshot.as_ref().unwrap();
+        for id in [
+            "shell.help",
+            "shell.status.time",
+            "shell.back",
+            "shell.tasks",
+        ] {
+            assert!(
+                !snapshot
+                    .nodes
+                    .iter()
+                    .any(|node| node.id == format!("chrome/{id}")),
+                "{id}"
+            );
+        }
+        for component in [
+            ShellComponent::ClockButton,
+            ShellComponent::HelpButton,
+            ShellComponent::TasksButton,
+        ] {
+            assert!(!state.focus_order().contains(&component));
+        }
+    }
+}
+
+#[test]
 fn global_notification_is_the_only_shell_modal_visual() {
     let mut state = session();
     let mut compositor = ScreenCompositor::default();

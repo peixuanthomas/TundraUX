@@ -299,6 +299,11 @@ settings-field-name =
         [SystemLowPercentage] { settings-low-percentage }
         [SystemCriticalAvailable] { settings-critical-available }
         [SystemCriticalPercentage] { settings-critical-percentage }
+        [TopBarStatusAlignment] { settings-top-bar-status-alignment }
+        [TopBarHelp] { settings-top-bar-show-help }
+        [TopBarTime] { settings-top-bar-show-time }
+        [TopBarEsc] { settings-top-bar-show-esc }
+        [TopBarTasks] { settings-top-bar-show-tasks }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
@@ -462,3 +467,12 @@ settings-screen-timeout-never = 永不
 settings-screen-timeout-seconds = { $value } 秒
 settings-screen-timeout-minutes = { $value } 分钟
 settings-screen-timeout-help = 无操作后显示天气。按键或点按返回原页面，已登录时无需密码。
+settings-top-bar = 顶部栏显示内容
+settings-top-bar-status-alignment = 状态栏文本对齐
+settings-top-bar-align-left = 左对齐
+settings-top-bar-align-center = 居中
+settings-top-bar-align-right = 右对齐
+settings-top-bar-show-help = 显示帮助按钮
+settings-top-bar-show-time = 显示时间
+settings-top-bar-show-esc = 显示 Esc 按钮
+settings-top-bar-show-tasks = 显示任务按钮

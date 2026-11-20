@@ -104,7 +104,7 @@ management-column-available-bytes = Available bytes
 management-column-available-inodes = Available inodes
 management-form-hint = Ctrl+Enter Confirm · Esc Cancel · Enter Choices/next field · PgUp/PgDn Explanation · Ctrl+U Clear input
 management-choice-hint = ↑↓ / Home / End Select · Enter Apply · Esc Return
-management-background-question = { $application } is waiting for input. Use Tasks in the title bar to return to the application. Unconfirmed network changes revert after 120 seconds.
+management-background-question = { $application } is waiting for input. Open Tasks from Launcher to return to the application. Unconfirmed network changes revert after 120 seconds.
 management-config-needs-answer = Package installation is waiting for a configuration choice and cannot be forcibly cancelled. Keep the current file or use the package version.
 management-connection-lost = Task connection lost. Reconnect to check the result.
 

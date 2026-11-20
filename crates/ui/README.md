@@ -38,7 +38,7 @@ The notification panel sits under the header. Its full status and single column 
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The header starts with the title and a left-aligned status message in the remaining space. The controls align to the right in the order of screen keyboard, Tasks, Help, clock, and Back. After first-time setup, the Tasks button opens the task list and keeps the same label as tasks change state.
+The title stays at the left of the header. The status message uses the space left by the visible controls and can be left-aligned, centered, or right-aligned. The screen keyboard, Tasks, Help, clock, and Back controls appear in that order when visible. The default centers the status and shows Help, clock, and Back. The optional Tasks button keeps the same label as tasks change state.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 

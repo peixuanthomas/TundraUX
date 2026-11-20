@@ -143,7 +143,7 @@ fn localized_status_stays_above_the_command_line_viewport() {
             chrome.status.time_button_label.as_deref(),
             &context,
         )
-        .with_back_shortcut(chrome.back_shortcut);
+        .with_back_shortcut(Some(chrome.back_shortcut));
         assert_eq!(
             ui::command_line_terminal_area_in(&layout),
             Some(Rect::new(0, 1, 108, 18))

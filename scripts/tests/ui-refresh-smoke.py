@@ -98,7 +98,8 @@ def run_case(binary, language, color, motion, sizes, samples):
             return any(item["id"].startswith("modal/") for item in frame["nodes"])
 
         def assert_header(frame, keyboard_id=None):
-            ids = ["chrome/shell.status", "chrome/shell.tasks", "chrome/shell.help",
+            assert not any(item["id"] == "chrome/shell.tasks" for item in frame["nodes"])
+            ids = ["chrome/shell.status", "chrome/shell.help",
                    "chrome/shell.status.time", "chrome/shell.back"]
             if keyboard_id is not None:
                 ids.insert(1, keyboard_id)

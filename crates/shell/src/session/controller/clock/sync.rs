@@ -149,7 +149,9 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn status_time_button_label(&self) -> Option<String> {
-        clock_button_active_for_screen(self.content_screen()).then(|| self.current_time_label())
+        (self.app.storage_config().top_bar.show_time
+            && clock_button_active_for_screen(self.content_screen()))
+        .then(|| self.current_time_label())
     }
 
     pub(in crate::session) fn time_button_selected(&self) -> bool {
