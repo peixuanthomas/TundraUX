@@ -1367,6 +1367,7 @@ fn notification_dialog_layout(state: &ShellSession, area: Rect) -> ui::Notificat
         .expect("active notification view model");
     match ui::notification_layout(area, &model) {
         NotificationLayout::Dialog(layout) => layout,
+        NotificationLayout::Panel(_) => panic!("expected a notification dialog"),
         NotificationLayout::TooSmall {
             required_width,
             required_height,
