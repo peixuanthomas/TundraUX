@@ -227,7 +227,7 @@ fn taskbar_keeps_minimized_windows_reachable_and_leaves_neighboring_status_cells
         .unwrap();
     assert_eq!(
         terminal.backend().buffer()[(close_area.right() - 1, close_area.y)].symbol(),
-        "−"
+        "×"
     );
     let minimized = snapshot
         .nodes

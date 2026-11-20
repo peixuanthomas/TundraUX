@@ -190,7 +190,7 @@ pub fn render_workspace_taskbar(
             continue;
         };
         let mut button = if matches!(action, Close(_)) {
-            Button::new(action.id(), if area.width > 1 { " −" } else { "−" })
+            Button::new(action.id(), if area.width > 1 { " ×" } else { "×" })
                 .with_capture_name(i18n::tr!(
                     "ui-workspace-close-window",
                     window = one_line(&item.title)

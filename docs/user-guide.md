@@ -27,7 +27,7 @@ From Home, use the arrow keys and **Enter** or **Space**, or click a tile. Home 
 | --- | --- |
 | Read help or a status message | Select **Help** or press **F1**. Click the status text beside the title for the full message and recent warnings. Use **×** on a card or **Clear all**. Press **Esc** to return. |
 | Go back or dismiss an overlay | Use the header's **Back** control for a local subpage. **Esc** dismisses the active dialog or menu first, and minimizes an ordinary app window when no overlay handles it. Vim and child terminals handle their own **Esc**. |
-| Minimize, restore, or close | Use the window frame's **Minimize** or **Close** button. In the bottom window bar, click a title to focus or restore it, or click its minus button to close it normally. |
+| Minimize, restore, or close | Use the window frame's **Minimize** or **Close** button. In the bottom window bar, click a title to focus or restore it, or click its **×** button to close it normally. |
 | Split the workspace | Choose **Split → Left/right** or **Top/bottom**, then pick an app or a minimized window. Cancel the chooser to undo that split. Repeat where space permits, up to four panes. |
 | Make a pane full screen | Choose **Split → Full screen**. Other panes minimize and remain available in the window bar. |
 | Open another instance | Use **New session** when available in the entry or window menu. Opening an existing app normally restores its current window. |

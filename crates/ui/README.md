@@ -42,7 +42,7 @@ The header starts with the title and a left-aligned status message in the remain
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
-The window bar uses the full bottom row. Each entry has separate title and minus targets for restoring and closing the window. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
+The window bar uses the full bottom row. Click an entry's title to restore its window or its × button to close it. Right-click opens the window menu. Arrows scroll the bar when its titles cannot all fit.
 
 `WorkspaceTree` stores incremental splits, allowing each axis once per path and at most four panes in a 2×2 grid. T layouts preserve the untouched pane. Size-driven hiding projects this topology without discarding it; growing the terminal restores the hidden panes. At the 108×20 minimum, a single app has 106×16 content cells. Complete frames and one-cell gaps require 217×20 for left/right, 108×39 for top/bottom, and 217×39 for four panes.
 

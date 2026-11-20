@@ -452,7 +452,7 @@ fn exited_window_frame_and_taskbar_hits_do_not_survive_until_redraw() {
 }
 
 #[test]
-fn taskbar_minus_closes_its_window_on_release() {
+fn taskbar_cross_closes_its_window_on_release() {
     let mut workspace = Workspace::new(None, false);
     let mut state = shell_state();
     let foreground = SessionId(1);
