@@ -234,12 +234,6 @@ impl LanguageSnapshot {
     ) -> Result<Self, LanguageError> {
         let code = canonical_language_code(code)?;
         let embedded = embedded_sources();
-        parse_manifest(
-            EMBEDDED_MANIFEST,
-            DEFAULT_LANGUAGE,
-            Path::new("<embedded>/manifest.toml"),
-        )?;
-        resource::validate(&embedded, None, true)?;
         let english = repair_locale(
             root,
             DEFAULT_LANGUAGE,
@@ -596,6 +590,16 @@ fn repair_locale(
         );
     }
     let (mut sources, errors) = resource::read_sources_tolerant(&directory);
+    // The build validates both bundled packs. Compare names and contents so edits, additions,
+    // and missing files still go through the normal repair path on every reload.
+    if errors.is_empty()
+        && sources.len() == embedded.len()
+        && sources.iter().zip(embedded).all(|(source, default)| {
+            source.path == directory.join(&default.path) && source.text == default.text
+        })
+    {
+        return sources;
+    }
     diagnostics.extend(errors.into_iter().map(|error| RepairDiagnostic {
         kind: RepairKind::InvalidResource,
         path: error.path.unwrap_or_else(|| directory.clone()),
