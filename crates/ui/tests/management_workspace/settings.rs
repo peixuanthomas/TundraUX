@@ -1,14 +1,11 @@
-#[path = "support/composition.rs"]
-mod composition;
-use composition as ui;
-mod support;
+use crate::composition as ui;
 
+use crate::support::terminal_output;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::CellWidth;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
-use support::terminal_output;
 use ui::{
     HomeDisplayMode, NotificationTone, SettingsCardViewModel, SettingsCategory,
     SettingsColorEditorViewModel, SettingsControlKind, SettingsField,
@@ -370,6 +367,70 @@ fn settings_scrollbar_only_appears_when_content_overflows() {
         buffer[(rendered_track.x, rendered_track.y)].fg,
         last_cell.fg
     );
+}
+
+#[test]
+fn system_and_update_settings_keep_errors_in_the_footer() {
+    let context = ui::RenderContext::default();
+    for category in [SettingsCategory::System, SettingsCategory::Update] {
+        let mut model = SettingsViewModel {
+            selected_category: category,
+            selected_field: SettingsField::SystemLowPercentage,
+            cards: vec![SettingsCardViewModel::new(
+                "Limits",
+                vec![SettingsItemViewModel::new(
+                    SettingsField::SystemLowPercentage,
+                    "Warning",
+                    "15%",
+                    "Critical must be below warning. Keep at least 5 percent free for system operation.",
+                    SettingsControlKind::ReadOnly,
+                )],
+            )],
+            status: "Backend error: permission denied while reading configuration".into(),
+            ..sample_model()
+        };
+        for (width, height, needs_scroll) in [
+            (60, 5, true),
+            (60, 7, false),
+            (60, 15, false),
+            (108, 18, false),
+            (120, 34, false),
+            (180, 48, false),
+        ] {
+            let area = Rect::new(0, 0, width, height);
+            model.scroll_offset = 0;
+            let layout = settings_layout(area, &model);
+            assert_eq!(layout.scrollbar.is_some(), needs_scroll);
+            assert_eq!(layout.max_scroll_offset > 0, needs_scroll);
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            let mut details = String::new();
+            for offset in 0..=layout.max_scroll_offset {
+                model.scroll_offset = offset;
+                let layout = settings_layout(area, &model);
+                terminal
+                    .draw(|frame| ui::render_settings_content(frame, &layout, &model, &context))
+                    .unwrap();
+                let buffer = terminal.backend().buffer();
+                let text = |area: Rect| {
+                    area.positions()
+                        .map(|point| buffer[point].symbol())
+                        .collect::<String>()
+                };
+                details.push_str(&text(layout.detail));
+                let output = text(layout.workspace.content);
+                assert!(
+                    output.contains("Backend error: permission denied"),
+                    "{output}"
+                );
+                assert!(
+                    !output.contains("Critical must be below warning"),
+                    "{output}"
+                );
+            }
+            assert!(details.contains("Warning"), "{details}");
+            assert!(details.contains("15%"), "{details}");
+        }
+    }
 }
 
 #[test]

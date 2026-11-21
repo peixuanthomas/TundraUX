@@ -6,8 +6,7 @@ use ratatui::{
     widgets::Widget,
 };
 use std::time::Duration;
-use ui::MouseEvent;
-use ui::components::{Button, ComponentEvent, InputEvent, Key, MouseButton, RainbowText};
+use ui::components::RainbowText;
 
 fn render(text: impl Into<Text<'static>>, elapsed: Duration) -> Buffer {
     let area = Rect::new(0, 0, 20, 3);
@@ -40,37 +39,4 @@ fn rainbow_preserves_wide_characters_combining_marks_and_existing_styles() {
     }
     let narrow = render("abZ", Duration::ZERO);
     assert_eq!(buffer[(2, 0)].fg, narrow[(2, 0)].fg);
-}
-
-#[test]
-fn disabling_a_rainbow_button_still_cancels_pointer_and_keyboard_activation() {
-    let area = Rect::new(0, 0, 16, 3);
-    let mut button = Button::new("rainbow", "Rainbow").with_rainbow_label(Duration::from_secs(1));
-    button.handle_event(
-        InputEvent::mouse(MouseEvent::down(2, 1, MouseButton::Left)),
-        area,
-    );
-    button.set_disabled(true);
-    for event in [
-        InputEvent::key(Key::Enter),
-        InputEvent::key(Key::Space),
-        InputEvent::mouse(MouseEvent::up(2, 1, MouseButton::Left)),
-        InputEvent::mouse(MouseEvent::click(2, 1, MouseButton::Left)),
-        InputEvent::mouse(MouseEvent::down(2, 1, MouseButton::Left)),
-    ] {
-        assert_eq!(button.handle_event(event, area), ComponentEvent::None);
-        assert!(!button.state.active && !button.state.hovered);
-    }
-    button.set_disabled(false);
-    assert_eq!(
-        button.handle_event(
-            InputEvent::mouse(MouseEvent::up(2, 1, MouseButton::Left)),
-            area
-        ),
-        ComponentEvent::None
-    );
-    assert_eq!(
-        button.handle_event(InputEvent::key(Key::Enter), area),
-        ComponentEvent::Activated("rainbow".into())
-    );
 }

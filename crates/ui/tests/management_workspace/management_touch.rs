@@ -420,6 +420,87 @@ fn package_table_long_values_keep_both_version_columns_visible_and_full_details(
 }
 
 #[test]
+fn process_columns_fit_and_share_their_header_hit_regions() {
+    let context = RenderContext::default();
+    for columns in [
+        [
+            "Name", "PID", "CPU %", "Memory", "PPID", "UID", "State", "Nice",
+        ],
+        [
+            "名称", "PID", "CPU %", "内存", "PPID", "UID", "状态", "Nice",
+        ],
+    ] {
+        let model = ManagementViewModel {
+            columns: columns.map(String::from).to_vec(),
+            column_width_limits: vec![20, 8, 8, 12],
+            rows: vec![vec![
+                "database-worker-with-a-long-name".into(),
+                "4194304".into(),
+                "1200.5".into(),
+                "12345.6 MiB".into(),
+                "1".into(),
+                "1000".into(),
+                "S".into(),
+                "0".into(),
+            ]],
+            ..Default::default()
+        };
+        for width in [108, 116, 140] {
+            let bounds = Rect::new(0, 0, width, 41);
+            let main = ShellFrameLayout::new(bounds, None, &context).main;
+            let layout = management_layout(main, &model);
+            let regions = management_button_regions(main, &model);
+            for index in 0..4 {
+                let (_, header) = layout
+                    .headers
+                    .iter()
+                    .find(|(column, _)| *column == index)
+                    .unwrap();
+                assert_eq!(usize::from(header.width), layout.column_widths[index]);
+                assert!(regions.iter().any(|region| region.area == *header));
+            }
+            let mut terminal = Terminal::new(TestBackend::new(width, 41)).unwrap();
+            terminal
+                .draw(|frame| render_management_content(frame, main, &model, &context))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let output: String = (layout.list_rows.x..layout.list_rows.right())
+                .map(|x| buffer[(x, layout.list_rows.y)].symbol())
+                .collect();
+            for text in ["database-worker", "4194304", "1200.5", "12345.6 MiB"] {
+                assert!(output.contains(text), "{width}: missing {text}: {output}");
+            }
+        }
+    }
+}
+
+#[test]
+fn management_details_wrap_words_and_keep_wide_text_within_the_viewport() {
+    use unicode_width::UnicodeWidthStr;
+
+    let graphemes = management_wrapped_lines("a 👩‍💻 e\u{301} b", 3);
+    assert!(graphemes.iter().any(|line| line.contains("👩‍💻")));
+    assert!(graphemes.iter().any(|line| line.contains("e\u{301}")));
+    assert_eq!(
+        management_wrapped_lines("alpha beta gamma", 10),
+        ["alpha beta", "gamma"]
+    );
+    assert_eq!(
+        management_wrapped_lines("short words\n  indented", 10),
+        ["short", "words", "  indented"]
+    );
+    for width in [8, 12, 24] {
+        let text = "Backend unavailable: permission denied. 中文说明无法访问 example.service";
+        let lines = management_wrapped_lines(text, width);
+        assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
+        assert_eq!(
+            lines.join("").split_whitespace().collect::<String>(),
+            text.split_whitespace().collect::<String>()
+        );
+    }
+}
+
+#[test]
 fn management_search_cursor_is_visible_for_empty_chinese_and_long_input() {
     use unicode_width::UnicodeWidthStr;
     for width in [5, 12, 20, 50, 108, 116] {

@@ -177,7 +177,23 @@ fn event_list_uses_shared_scrolling_geometry_and_exposes_correlation() {
         logs_hit_test(main, &model, (bar.track.x, bar.track.y)),
         Some(LogsHitTarget::Scrollbar)
     );
-    let output = terminal_output(&render(120, 32, &model, &TundraTheme::default_dark()));
+    let terminal = render(120, 32, &model, &TundraTheme::default_dark());
+    let buffer = terminal.backend().buffer();
+    let row_text: String = row
+        .area
+        .positions()
+        .map(|point| buffer[point].symbol())
+        .collect();
+    let detail: String = layout
+        .detail_text
+        .positions()
+        .map(|point| buffer[point].symbol())
+        .collect();
+    let event = &model.events[model.selected_event];
+    assert!(row_text.contains(&event.time_label), "{row_text}");
+    assert!(!row_text.contains("2026-09-11"), "{row_text}");
+    assert!(detail.contains(&event.timestamp), "{detail}");
+    let output = terminal_output(&terminal);
     for expected in [
         "UX log",
         "Linux log",

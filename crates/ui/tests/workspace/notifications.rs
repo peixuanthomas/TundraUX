@@ -39,9 +39,14 @@ fn draw(area: Rect, model: &NotificationViewModel, theme: &TundraTheme) -> Termi
 fn text(terminal: &Terminal<TestBackend>, area: Rect) -> String {
     let buffer = terminal.backend().buffer();
     (area.y..area.bottom())
-        .flat_map(|y| (area.x..area.right()).map(move |x| buffer[(x, y)].symbol()))
-        .collect::<String>()
-        .replace(' ', "")
+        .map(|y| {
+            (area.x..area.right())
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .replace(' ', "")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 fn assert_actions_accessible(layout: &NotificationDialogLayout) {
     assert!(!layout.actions.is_empty());
@@ -60,36 +65,94 @@ fn assert_actions_accessible(layout: &NotificationDialogLayout) {
 }
 
 #[test]
-fn long_chinese_repair_summary_scrolls_at_50_by_12_with_fixed_actions() {
+fn long_messages_scroll_at_50_by_12_with_fixed_actions() {
     let area = Rect::new(0, 0, 50, 12);
-    let mut model = long_notification();
-    let first = layout(area, &model);
-    assert_eq!(model.scroll_offset, 0);
-    assert_eq!(first.scroll_offset, 0);
-    assert!(first.max_scroll_offset > 30);
-    assert!(first.scrollbar.is_some());
-    assert_actions_accessible(&first);
-    for theme in [
-        TundraTheme::default_dark(),
-        TundraTheme::default_dark().with_border_shape(ui::BorderShape::Square),
+    let error = NotificationViewModel::new(
+        "backend-error",
+        NotificationLevel::Modal,
+        NotificationTone::Error,
+        "Cannot read",
+        concat!(
+            "Reading system settings.\n",
+            "The backend rejected this operation because permission to read the configuration is unavailable.\n",
+            "The requested service remains active.\n",
+            "No files have been changed.\n",
+            "You can retry later.\n",
+            "Close this window to return to Settings.\n",
+            "Last line: files were untouched.",
+        ),
+        vec![NotificationActionViewModel::new("close", "Close").with_shortcut("Esc")],
+    );
+    let theme = TundraTheme::default_dark();
+    let square = theme.clone().with_border_shape(ui::BorderShape::Square);
+    for (mut model, start, end, complete_words) in [
+        (
+            long_notification(),
+            "修复文件00",
+            "最后一行：所有修复结果已列出",
+            &[][..],
+        ),
+        (
+            error,
+            "Readingsystemsettings",
+            "fileswereuntouched",
+            &[
+                "operation",
+                "because",
+                "permission",
+                "configuration",
+                "unavailable",
+            ][..],
+        ),
     ] {
+        let first = layout(area, &model);
+        assert_eq!(first.scroll_offset, 0);
+        assert!(first.max_scroll_offset > 0);
+        assert!(first.scrollbar.is_some());
+        assert_actions_accessible(&first);
+        let assert_action_labels =
+            |terminal: &Terminal<TestBackend>, layout: &NotificationDialogLayout| {
+                for action in &layout.actions {
+                    assert!(
+                        text(terminal, action.area).contains(&model.actions[action.index].label)
+                    );
+                }
+            };
+        for theme in [&theme, &square] {
+            let terminal = draw(area, &model, theme);
+            let output = text(&terminal, first.message);
+            assert!(output.contains(start), "{output}");
+            assert!(!output.contains(end), "{output}");
+            assert_action_labels(&terminal, &first);
+        }
+        if !complete_words.is_empty() {
+            let mut rendered = String::new();
+            for offset in 0..=first.max_scroll_offset {
+                model.scroll_offset = offset;
+                let current = layout(area, &model);
+                let terminal = draw(area, &model, &theme);
+                rendered.push_str(&text(&terminal, current.message));
+                rendered.push('\n');
+            }
+            for &word in complete_words {
+                assert!(
+                    rendered.contains(word),
+                    "missing complete word {word}: {rendered}"
+                );
+            }
+        }
+        model.scroll_offset = usize::MAX;
+        let last = layout(area, &model);
+        assert_eq!(last.scroll_offset, last.max_scroll_offset);
+        assert_eq!(last.actions, first.actions);
+        assert_eq!(last.dialog, first.dialog);
+        assert_actions_accessible(&last);
         let terminal = draw(area, &model, &theme);
-        assert!(text(&terminal, first.message).contains("修复文件00"));
-        assert!(!text(&terminal, first.message).contains("最后一行"));
-        assert!(text(&terminal, first.actions[0].area).contains("自动修复并重启"));
-        assert!(text(&terminal, first.actions[1].area).contains("退出"));
+        let output = text(&terminal, last.message);
+        assert!(output.contains(end), "{output}");
+        assert!(!output.contains(start), "{output}");
+        assert_action_labels(&terminal, &last);
     }
-    model.scroll_offset = usize::MAX;
-    let last = layout(area, &model);
-    assert_eq!(last.scroll_offset, last.max_scroll_offset);
-    assert_eq!(last.actions, first.actions);
-    assert_eq!(last.dialog, first.dialog);
-    assert_actions_accessible(&last);
-    let terminal = draw(area, &model, &TundraTheme::default_dark());
-    assert!(text(&terminal, last.message).contains("最后一行：所有修复结果已列出"));
-    assert!(!text(&terminal, last.message).contains("修复文件00"));
-    assert!(text(&terminal, last.actions[0].area).contains("自动修复并重启"));
-    assert!(model.actions[0].selected);
 }
 
 #[test]

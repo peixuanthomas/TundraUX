@@ -882,7 +882,7 @@ fn disabling_a_pressed_button_cancels_activation_until_reenabled() {
         InputEvent::mouse(MouseEvent::down(2, 1, MouseButton::Left)),
     ] {
         assert_eq!(button.handle_event(event, area), ComponentEvent::None);
-        assert!(!button.state.active);
+        assert!(!button.state.active && !button.state.hovered);
     }
     button.set_disabled(false);
     assert_eq!(

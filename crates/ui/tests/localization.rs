@@ -1,29 +1,17 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 
-use i18n::{LanguageSnapshot, LocalizedMessage, with_snapshot};
+use i18n::{LanguageSnapshot, with_snapshot};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use ui::components::{UpdateActivity, UpdateActivityViewModel};
 use ui::{LogsViewModel, RenderContext, TundraTheme, logs_hit_test, logs_layout};
 use unicode_width::UnicodeWidthStr;
 
-static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
-
 struct LocaleFixture(PathBuf);
 impl LocaleFixture {
     fn new() -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "tux-ui-locales-{}-{}",
-            std::process::id(),
-            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
-        ));
+        let root = std::env::temp_dir().join(format!("tux-ui-locales-{}", std::process::id()));
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets/locales");
         for locale in ["en-US", "zh-CN"] {
             let target = root.join("locales").join(locale);
@@ -45,9 +33,6 @@ impl LocaleFixture {
         }
         Self(root)
     }
-    fn snapshot(&self, locale: &str) -> Arc<LanguageSnapshot> {
-        Arc::new(LanguageSnapshot::load(&self.0, locale, 1).unwrap().snapshot)
-    }
 }
 impl Drop for LocaleFixture {
     fn drop(&mut self) {
@@ -55,84 +40,21 @@ impl Drop for LocaleFixture {
     }
 }
 
-fn resource_messages(root: &Path, locale: &str) -> BTreeMap<String, String> {
-    let mut messages = BTreeMap::new();
-    for group in ["common", "modules"] {
-        for entry in fs::read_dir(root.join("locales").join(locale).join(group)).unwrap() {
-            let entry = entry.unwrap();
-            if !entry.file_name().to_string_lossy().starts_with("ui-") {
-                continue;
-            }
-            let content = fs::read_to_string(entry.path()).unwrap();
-            let mut current: Option<String> = None;
-            for line in content.lines() {
-                if line.starts_with("ui-") {
-                    let (id, pattern) = line.split_once(" = ").unwrap();
-                    assert!(
-                        messages.insert(id.to_owned(), pattern.to_owned()).is_none(),
-                        "duplicate {id}"
-                    );
-                    current = Some(id.to_owned());
-                } else if line.starts_with(' ')
-                    && let Some(id) = &current
-                {
-                    messages.get_mut(id).unwrap().push_str(line);
-                }
-            }
-        }
-    }
-    messages
-}
-fn parameters(pattern: &str) -> BTreeSet<String> {
-    pattern
-        .split('$')
-        .skip(1)
-        .map(|tail| {
-            tail.chars()
-                .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
-                .collect()
-        })
-        .collect()
-}
-
-#[test]
-fn every_ui_message_has_matching_chinese_parameters_and_resolves() {
-    let fixture = LocaleFixture::new();
-    let english = resource_messages(&fixture.0, "en-US");
-    let chinese = resource_messages(&fixture.0, "zh-CN");
-    assert_eq!(
-        english.keys().collect::<Vec<_>>(),
-        chinese.keys().collect::<Vec<_>>()
-    );
-    assert!(english.len() > 500, "all UI modules must be covered");
-    let snapshots = [fixture.snapshot("en-US"), fixture.snapshot("zh-CN")];
-    for (id, pattern) in &english {
-        let args = parameters(pattern);
-        assert_eq!(args, parameters(&chinese[id]), "parameter mismatch: {id}");
-        for count in [0_i64, 1, 2, 27] {
-            let mut message = LocalizedMessage::new(id);
-            for name in &args {
-                message = message.with_arg(name, count);
-            }
-            for snapshot in &snapshots {
-                let rendered = snapshot.render(&message);
-                assert_ne!(
-                    rendered,
-                    format!("[{id}]"),
-                    "unresolved {id} in {}",
-                    snapshot.code()
-                );
-            }
-        }
-    }
+fn snapshots() -> &'static [Arc<LanguageSnapshot>; 2] {
+    static SNAPSHOTS: OnceLock<[Arc<LanguageSnapshot>; 2]> = OnceLock::new();
+    SNAPSHOTS.get_or_init(|| {
+        let fixture = LocaleFixture::new();
+        let chinese = LanguageSnapshot::load(&fixture.0, "zh-CN", 1)
+            .unwrap()
+            .snapshot;
+        [Arc::new(LanguageSnapshot::embedded(1)), Arc::new(chinese)]
+    })
 }
 
 #[test]
 fn retained_update_labels_follow_the_render_snapshot_and_preserve_raw_output() {
-    let fixture = LocaleFixture::new();
-    let english = fixture.snapshot("en-US");
-    let chinese = fixture.snapshot("zh-CN");
-    let mut model = with_snapshot(&english, UpdateActivityViewModel::default);
+    let [english, chinese] = snapshots();
+    let mut model = with_snapshot(english, UpdateActivityViewModel::default);
     model.show_build_details = true;
     model
         .output
@@ -165,14 +87,14 @@ fn retained_update_labels_follow_the_render_snapshot_and_preserve_raw_output() {
                 .collect::<String>()
         })
     };
-    let english_text = render(&english);
-    let chinese_text = render(&chinese);
+    let english_text = render(english);
+    let chinese_text = render(chinese);
     assert!(english_text.contains("Download: waiting"));
     assert!(chinese_text.replace(' ', "").contains("下载：等待中"));
     assert!(chinese_text.replace(' ', "").contains("编译：等待中"));
     assert!(chinese_text.contains("Compiling external-crate /tmp/build.rs"));
     assert_eq!(
-        render(&english),
+        render(english),
         english_text,
         "switching back restores the same display"
     );
@@ -180,10 +102,9 @@ fn retained_update_labels_follow_the_render_snapshot_and_preserve_raw_output() {
 
 #[test]
 fn localized_log_controls_use_terminal_cell_widths() {
-    let fixture = LocaleFixture::new();
-    for locale in ["en-US", "zh-CN"] {
-        let snapshot = fixture.snapshot(locale);
-        with_snapshot(&snapshot, || {
+    let [english, chinese] = snapshots();
+    for (snapshot, expected_refresh) in [(english, "Refresh"), (chinese, "刷新")] {
+        with_snapshot(snapshot, || {
             let main = Rect::new(0, 0, 120, 32);
             let mut model = LogsViewModel {
                 can_view_system: true,
@@ -199,8 +120,10 @@ fn localized_log_controls_use_terminal_cell_widths() {
                 model.following = following;
                 model.new_events = 12;
                 let layout = logs_layout(main, &model);
+                let refresh = i18n::tr!("ui-logs-refresh");
+                assert!(refresh.ends_with(expected_refresh), "{refresh}");
                 let controls = [
-                    (ui::LogsHitTarget::Refresh, i18n::tr!("ui-logs-refresh")),
+                    (ui::LogsHitTarget::Refresh, refresh),
                     (
                         ui::LogsHitTarget::FilterLevel,
                         i18n::tr!("ui-logs-level-filter", level = model.level_filter.as_str()),

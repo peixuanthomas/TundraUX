@@ -473,33 +473,34 @@ fn nav_rail_render_and_hit_rows_agree_with_or_without_title() {
 }
 
 #[test]
-fn data_table_padding_uses_terminal_cell_width_for_cjk_and_emoji() {
-    let area = Rect::new(0, 0, 12, 4);
-    let table = DataTable::new("table", ["甲", "B"], [["中", "🙂"]]);
-    let mut buffer = Buffer::empty(area);
-    table.render(area, &mut buffer, &RenderContext::default());
-    assert_eq!(buffer[(7, 1)].symbol(), "🙂");
-}
-
-#[test]
 fn data_table_clips_and_pads_graphemes_with_explicit_and_fallback_widths() {
-    for (width, widths, expected) in [
-        (12, None, "A   e\u{301}   en  "),
-        (9, Some(vec![3, 4, 2]), "A  e\u{301}   en"),
-        (8, Some(vec![0, 2]), "  en    "),
-        (1, None, " "),
+    let wide_cells = &["中", "🙂"][..];
+    let clipped_cells = &["A中B", "e\u{301}🙂z", "end"][..];
+    for (width, widths, show_header, cells, expected) in [
+        (12, None, true, wide_cells, "中     🙂   "),
+        (12, None, false, clipped_cells, "A   e\u{301}   en  "),
+        (
+            9,
+            Some(vec![3, 4, 2]),
+            false,
+            clipped_cells,
+            "A  e\u{301}   en",
+        ),
+        (8, Some(vec![0, 2]), false, clipped_cells, "  en    "),
+        (1, None, false, clipped_cells, " "),
     ] {
-        let area = Rect::new(0, 0, width, 1);
-        let mut table = DataTable::new("table", ["A", "B", "C"], [["A中B", "e\u{301}🙂z", "end"]])
-            .bordered(false)
-            .show_header(false);
+        let row = u16::from(show_header);
+        let area = Rect::new(0, 0, width, row + 1);
+        let headers = ["甲", "B", "C"].into_iter().take(cells.len());
+        let mut table =
+            DataTable::new("table", headers, [cells.iter().copied()]).show_header(show_header);
         table.column_widths = widths;
         let mut actual = Buffer::empty(area);
         table.render(area, &mut actual, &RenderContext::default());
         let expected = Buffer::with_lines([expected]);
         for x in 0..width {
             assert_eq!(
-                actual[(x, 0)].symbol(),
+                actual[(x, row)].symbol(),
                 expected[(x, 0)].symbol(),
                 "column {x}"
             );

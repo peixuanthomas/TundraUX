@@ -1,6 +1,4 @@
-#[path = "support/composition.rs"]
-mod composition;
-use composition as ui;
+use crate::composition as ui;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;

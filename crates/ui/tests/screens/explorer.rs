@@ -1,12 +1,9 @@
-#[path = "support/composition.rs"]
-mod composition;
-use composition as ui;
-mod support;
+use crate::composition as ui;
 
+use crate::support::terminal_output;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
-use support::terminal_output;
 use ui::{
     ExplorerBreadcrumbViewModel, ExplorerContextMenuItemViewModel, ExplorerContextMenuViewModel,
     ExplorerEntryViewModel, ExplorerHitTarget, ExplorerNameDialogKind, ExplorerNameDialogViewModel,
