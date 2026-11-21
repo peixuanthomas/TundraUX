@@ -70,8 +70,13 @@ Network configuration and loading SSH settings use independent recovery tasks an
 
 ```sh
 cargo test --locked -p platform management::packages --lib
+cargo test --locked -p platform --features native-tests --lib management::packages
 cargo test --locked -p platform management::packages::query::tests::live_apt_installed_search_updates_and_details --lib -- --ignored
 cargo test --locked -p platform management::packages::pacman::tests::live_pacman_installed_search_updates_and_details --lib -- --ignored
 ```
 
-The ignored APT/pacman cases query the local database without writing. Real package writes, Wi-Fi, mounts, and authorization flows are verified in recoverable isolated environments or on test hosts.
+The APT and pacman query cases read the local database. The package runner's PTY fixtures need `/bin/sh` and `/usr/bin/timeout`.
+
+On a Debian-based Linux test host with a PTY, run `cargo test --locked -p platform --lib apt_dpkg_tests -- --ignored`. The confirmation and progress test uses `apt-get`, `dpkg`, `env`, and `timeout` from `/usr/bin` with a temporary package database. It reads the host's `/var/lib/dpkg/status` to verify it stays unchanged.
+
+Real package writes, Wi-Fi, mounts, and authorization flows are verified in recoverable isolated environments or on test hosts.

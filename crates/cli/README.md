@@ -30,7 +30,7 @@ Tab accepts the gray inline completion on Windows and Unix. Right cycles through
 | [`arguments`](src/arguments.rs), [`help_text`](src/help_text.rs) | Parse user arguments into `CliCommand` and configuration fields; render topic help and syntax errors. |
 | [`runner`](src/runner.rs) | Loads the appropriate environment and dispatches parsed commands; applies the output and exit-code contract. |
 | [`repl`](src/repl.rs), [`repl/completion`](src/repl/completion.rs) | Read interactive lines, distinguish leading-slash commands from native commands, manage history/completion, and notify the embedded host of command completion or special exit actions. Native session state lives in `platform`. |
-| [`management_client`](src/management_client.rs) | Reuses platform's typed management connection for native operations. |
+| [`management_client`](src/management_client.rs), [`management_client/linux`](src/management_client/linux.rs) | Handle management help and dispatch, and run Linux operations through platform's typed management connection. |
 | [`commands/`](src/commands/) | Implement the command families below. |
 | [`build.rs`](build.rs) | Copies the canonical asset tree to the build output for CLI diagnostics and previews. |
 
@@ -78,6 +78,8 @@ Watchdog commands retain public JSON protocol version 1 independently of private
 cargo build --locked -p shell -p cli
 cargo test --locked -p cli
 ```
+
+Add `--features native-tests` on a test host with local IPC and PTY support to run the terminal flows, connection tests, and timed log-follow test. The Linux password prompt test in `management_commands` requires a non-root test user.
 
 Shell's built-in Command Line uses `tundra-cli` from the same directory, so rebuild both Shell and CLI after updates. Real Linux PTY validation of UI control uses `python3 scripts/tests/shell-control.py target/debug/tundra-shell`.
 

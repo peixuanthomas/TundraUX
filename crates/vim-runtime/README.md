@@ -45,10 +45,10 @@ Vim sends its final buffer state and closes the bridge before exiting.
 After building full Vim, run the real-runtime regressions:
 
 ```sh
-TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --test real_vim -- --ignored --nocapture
-cargo test --locked -p vim-runtime --test terminal_cache
+TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --features native-tests --test real_vim -- --ignored --nocapture
+cargo test --locked -p vim-runtime --features native-tests --test terminal_cache
 ```
 
-Tests require a real PTY and a local loopback connection. They cover probe replies, buffer import, cross-buffer undo, controlled saving, `:wq`, forced discard, read-only protection, and static frames, output, resizing, and post-exit refreshes.
+Tests require a real PTY and a local loopback connection. They cover probe replies, buffer import, cross-buffer undo, controlled saving, `:wq`, forced discard, read-only protection, and static frames, output, resizing, and post-exit refreshes. The Linux terminal cache test uses a `/bin/sh` fixture.
 
 See [Bundled Vim](../../docs/packaging/vim.md) for building and packaging, and [Editor and script workspace](../../docs/source-editor.md#real-vim-mode) for user operations.

@@ -119,8 +119,9 @@ Request and response types are defined by `shell-control`; connections are provi
 
 ```sh
 cargo test --locked -p cli --test ui_commands --test command_info
+cargo test --locked -p cli --features native-tests --test ui_commands
 cargo test --locked -p cli --lib ui_commands_complete
 python3 scripts/tests/shell-control.py target/debug/tundra-shell
 ```
 
-Automated tests use temporary session directories and mock Shells to cover connections, JSON, session selection, input sent only once, waiting, and timeouts. Linux PTY tests validate real screens and input.
+Default tests cover argument validation, help, and JSON errors. Native tests use local IPC, temporary directories, and mock Shells to check session selection, input sent only once, waiting, and timeouts. Linux PTY tests validate real screens and input.

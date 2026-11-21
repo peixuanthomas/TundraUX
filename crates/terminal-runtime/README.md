@@ -56,8 +56,9 @@ Ctrl+C, Esc, and Ctrl+Shift+X are passed to the child CLI; after confirmation, t
 
 ```sh
 cargo test --locked -p terminal-runtime
+cargo test --locked -p terminal-runtime --features native-tests
 ```
 
-Input-encoding and protocol unit tests are in `tests/unit/input.rs`, `tests/unit/pty.rs`, and `tests/unit/terminal_keyboard_pty.rs`. Host-mode restoration and key-combination behavior also require validation with a real Unix PTY or Windows ConPTY.
+Input encoding and protocol parsing use in-memory tests by default. Enable `native-tests` on a host with a working Unix PTY or Windows ConPTY to exercise real child I/O, process cleanup, and terminal keyboard reporting.
 
 Related documentation: [Shell sessions](../shell/docs/session.md), [Command Line](../cli/docs/commands.md), [Local crossterm patch](../../third_party/crossterm/TUNDRA_PATCH.md), [Local WezTerm patch](../../third_party/wezterm-term/TUNDRA_PATCH.md).

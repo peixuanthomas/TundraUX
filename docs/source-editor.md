@@ -102,6 +102,11 @@ cargo test --locked -p app -p ui -p shell --test editor --test editor_advanced
 cargo test --locked -p shell --lib controller::management::config_editor::tests
 cargo build --locked -p shell -p cli
 python3 scripts/build-vim.py --output target/debug/vim
-TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --test real_vim -- --ignored
+TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --features native-tests --test real_vim -- --ignored
+```
+
+On Linux, check the complete editor workflow through the desktop PTY.
+
+```sh
 python3 scripts/tests/editor-vim-smoke.py target/debug/tundra-shell target/debug/vim/vim
 ```

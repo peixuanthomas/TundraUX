@@ -37,7 +37,8 @@ bashdb does not provide a complete list of executable lines, so a breakpoint is 
 
 ```sh
 cargo test --locked -p script-runtime
+cargo test --locked -p script-runtime --features native-tests --test real_bash
 python3 crates/script-runtime/tests/native_bridge.py
 ```
 
-Real tests cover interpreter arguments and input, exit codes, function breakpoints, variables, arrays, `source` files, expressions, parallel sessions, and child-process cleanup. See [Script workspace](../../docs/source-editor.md#linux-script-workspace) for interface operations.
+The Rust integration tests require a Linux PTY, `/bin/dash`, and Bash 5.2 or newer at `/bin/bash`. They cover interpreter arguments and input, exit codes, function breakpoints, variables, arrays, `source` files, expressions, parallel sessions, and child-process cleanup. See [Script workspace](../../docs/source-editor.md#linux-script-workspace) for interface operations.

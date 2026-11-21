@@ -56,6 +56,8 @@ During snapshot construction, identical Fluent text is parsed once and shared th
 
 ## Loading and validation
 
+The build validates both bundled language packs. On startup and reload, the loader reads each pack from disk and compares its file names and bytes with the bundled copy. An exact match can skip the repair pass. Missing, extra, edited, or unreadable files take the full validation and repair path.
+
 Strict loading checks manifests, Fluent syntax, duplicate IDs, references and cycles, functions, and English argument contracts. `NUMBER` is supported. Missing translations are recorded in loading diagnostics and fall back to English.
 
 Startup loading can skip damaged translation files and continue with built-in English and Chinese resources. Existing snapshots remain unchanged when disk files change; after a successful reload, the caller publishes a new snapshot.
@@ -80,3 +82,4 @@ python3 scripts/check-localization.py
 ```
 
 Tests cover catalogs, repair, argument contracts, plural fallback, snapshot lifetimes, thread isolation, and serialization.
+Rendering and scope tests reuse immutable snapshots across related assertions. Disk-backed tests exercise recovery, invalid resources, and preservation of custom translations.

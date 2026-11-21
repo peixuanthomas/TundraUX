@@ -1,6 +1,14 @@
 # Testing guide
 
-Run all commands from the repository root. Automated tests cover core workflows, data safety, and permission boundaries. Real terminals, touchscreens, system authorization, and device writes need separate acceptance checks on the target platform.
+Run commands from the repository root. Use a feature's test target while editing, then run the default workspace suite before sharing the change.
+
+| When | Command | Coverage |
+| --- | --- | --- |
+| Editing one workflow | `cargo test --locked -p ui --test components form_dialog::` | The form dialog module in one test executable. Other examples appear below. |
+| Routine workspace check | `cargo test --workspace --locked` | Unit and integration tests for workflows, data safety and permission decisions. Uses fixtures for external services and authorization. |
+| Testing native integration | `cargo test --locked -p shell --features native-tests` | Adds Shell's real local connections, services worker and child-terminal tests on the current OS. The CLI, platform, terminal-runtime, script-runtime, vim-runtime and watchdog crates also define this feature. |
+
+Choose the native crate that changed. Local sockets or named pipes, PTYs and child-process supervision must be available. The Linux Bash suite needs Bash 5.2 or newer. Tests for root, real package managers, a bundled Vim, or private systemd remain individually selectable with the commands for those fixtures. On macOS the workspace tests use fixtures for permission decisions and omit the native system Trash round trip.
 
 | Change | Checks to start with |
 | --- | --- |
@@ -79,10 +87,10 @@ Network and Packages open the shared Management page; Logs opens its own page. M
 
 The resize workflow first checks the imported document in Vim's native viewport, its Insert indicator, Esc, undo, and return to the standard editor without saving. Permission drafts check Space toggling, Enter advancing to the next field, and cancellation without applying filesystem changes.
 
-The native Trash round-trip test creates only temporary items:
+On Linux and Windows the native Trash round-trip test creates temporary items:
 
 ```sh
-cargo test --locked -p platform --test native_trash_smoke -- --ignored --nocapture
+cargo test --locked -p platform --features native-tests --test native_trash_smoke -- --ignored --nocapture
 ```
 
 Isolated service and scheduled-task tests use private systemd, D-Bus, mount, PID, network, and cgroup environments:
@@ -102,7 +110,7 @@ Package queries use fixed fixtures and read-only smoke tests. Do not run destruc
 
 ## Compact UI and motion acceptance
 
-Run the semantic matrix after building Shell and CLI:
+Run the semantic matrix on Linux after building Shell and CLI.
 
 ```sh
 python3 scripts/tests/ui-refresh-smoke.py target/debug/tundra-shell
@@ -160,7 +168,12 @@ Ordinary workspace tests skip ignored cases that need a complete Vim. After buil
 ```sh
 cargo build --locked -p shell -p cli
 python3 scripts/build-vim.py --output target/debug/vim
-TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --test real_vim -- --ignored --nocapture
+TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --features native-tests --test real_vim -- --ignored --nocapture
+```
+
+On Linux, run the desktop PTY check with the same Vim binary.
+
+```sh
 python3 scripts/tests/editor-vim-smoke.py target/debug/tundra-shell target/debug/vim/vim
 ```
 
@@ -172,11 +185,11 @@ On Windows, use `python scripts/build-vim.py --output target/debug/vim` and set 
 $env:TUNDRA_TEST_VIM = (Resolve-Path target/debug/vim/vim.exe).Path
 ```
 
-`editor-vim-smoke.py` uses Unix PTYs; Windows ConPTY regressions run through the corresponding Rust tests and CI. `TUNDRA_TEST_VIM` is for Rust regressions, `TUNDRA_VIM` overrides Shell's Vim path, and `TUNDRA_VIM_CLEAN=1` isolates user configuration.
+Windows ConPTY checks run through the native Rust tests. `TUNDRA_TEST_VIM` selects Vim for the Rust tests, `TUNDRA_VIM` selects Vim for Shell, and `TUNDRA_VIM_CLEAN=1` isolates user configuration.
 
 ## Child terminals, scripts, and Launcher
 
-Real PTY checks for external TUIs:
+Run the external TUI checks on a Linux PTY.
 
 ```sh
 python3 scripts/tests/embedded-tui-smoke.py target/debug/tundra-shell --nvim /absolute/path/to/nvim --yazi /absolute/path/to/yazi
@@ -188,7 +201,7 @@ Linux script workspace:
 
 ```sh
 cargo test --locked -p app --test script
-cargo test --locked -p script-runtime
+cargo test --locked -p script-runtime --features native-tests --test real_bash
 cargo test --locked -p ui --test script
 cargo test --locked -p shell --lib controller::script::tests
 python3 scripts/tests/editor-script-smoke.py target/debug/tundra-shell
@@ -200,7 +213,7 @@ Add `--skip-vim` to the smoke script when only script execution and debugging ne
 TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p shell --lib vim_host::script_tests -- --ignored
 ```
 
-Launcher organize mode:
+Run the Launcher workflow on Linux.
 
 ```sh
 cargo test --locked -p shell --lib controller::launcher::settings::tests
@@ -214,13 +227,14 @@ python3 scripts/tests/launcher-organize-smoke.py target/debug/tundra-shell
 crates/<crate>/src/                 Implementation, test module declarations, and necessary test hooks
 crates/<crate>/tests/unit/          Unit tests, fixtures, and helpers for private implementation
 crates/<crate>/tests/*.rs           Integration tests through public APIs
+crates/<crate>/tests/<suite>/main.rs Related integration modules compiled as one test executable
 crates/<crate>/tests/support/       Shared integration-test helpers
 scripts/tests/                     Packaging, authorization, PTY, and system-service tests
 ```
 
 Implementation modules include unit tests with `#[cfg(test)]` and `#[path = ".../tests/unit/..."] mod tests;`, preserving private-module scope. Do not give `tests/unit/` a separate `main.rs`, to avoid duplicate discovery by Cargo.
 
-New tests should prioritize core workflows, data safety, authorization boundaries, error recovery, and user-visible regressions. Shared controls test common states and colors; page tests check hit detection, modal interception, password masking, wide characters, and resizing. When deleting cases, also remove unused fixtures and test entry points.
+Keep a test with the feature whose behavior it protects. When a fix exercises an existing workflow, extend that workflow with the input that exposed it. A separate case is appropriate when it protects a different boundary, such as failed saves, denied permissions or recovery after interruption. Remove obsolete reproduction steps and fixtures when their replacement covers the behavior users rely on.
 
 See [large-file editor support](editor-scalability.md) for reproduction steps and measurement definitions. The [recorded Linux validation](#recorded-linux-validation-2026-11-1617) below and its linked performance report describe past runs separately from current checks.
 

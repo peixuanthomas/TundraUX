@@ -54,7 +54,7 @@ Interactive saves deliver completion to the original session, page, and draft. P
 
 ## Redraw and background work
 
-Background controllers report whether they consumed content, layout, notification, or task changes. The Shell and AppHost merge those results into redraw requests without cloning the whole session or comparing hit maps. Input requests an immediate frame; unchanged polls keep the existing frame and controls. Shell's header clock and visible Clock pages keep their one-second timer, while notifications, keyboard feedback, recovery, and live queries retain their own deadlines. Hidden or undersized AppHosts continue tasks and child-terminal polling but skip rendering. Active background work and native child adapters retain a 16ms fallback alongside result notifications for completion and process-state checks; idle hosts do not use that timer. System metric snapshots redraw System Status and actual alert changes; unrelated static pages retain their existing frames.
+Background controllers report whether they consumed content, layout, notification, or task changes. The Shell and AppHost merge those results into redraw requests without cloning the whole session or comparing hit maps. Input requests an immediate frame; unchanged polls keep the existing frame and controls. Shell checks the header clock once per second while it is visible and requests a frame when the displayed date or minute changes. Visible Clock pages redraw each second. Alarms, notifications, keyboard feedback, recovery, and live queries run on their own schedule. Hidden or undersized AppHosts continue tasks and child-terminal polling but skip rendering. Active background work and native child adapters retain a 16ms fallback alongside result notifications for completion and process-state checks; idle hosts do not use that timer. System metric snapshots redraw System Status and actual alert changes; unrelated static pages retain their existing frames.
 
 Scheduled-task preview debounce deadlines run only on the time step while no preview request is active. Returning to an earlier step keeps the draft without leaving an expired timer in the event loop.
 
@@ -206,23 +206,34 @@ Set `TUNDRA_PERF_TRACE=/absolute/path/trace.jsonl` for optional per-frame and pe
 
 ## Build and validation
 
+Session workflow tests are grouped by feature under [`tests/unit/session/workflows/`](tests/unit/session/workflows/). To run only the clock workflows, use `cargo test --locked -p shell --lib session::tests::clock::`.
+
 The theme reload test supplies terminal image support explicitly. Package keyboard tests check the focus order for the available actions on each platform.
 
 ```sh
 cargo build --locked -p shell -p cli
 cargo test --locked -p shell
+cargo test --locked -p shell --features native-tests
 ```
 
-Shell's built-in command line uses `tundra-cli` from the same directory, so build both packages after updates. Real-terminal regressions:
+Enable `native-tests` on a host that permits real PTYs or ConPTYs and local sockets. This includes managed-service IPC, external UI control, and embedded terminal checks.
+
+Shell's built-in command line uses `tundra-cli` from the same directory, so build both packages after updates. The Linux real-terminal checks use both binaries.
 
 ```sh
 python3 scripts/tests/shell-control.py target/debug/tundra-shell
-python3 scripts/tests/shell-watchdog.py target/debug/tundra-shell
 python3 scripts/tests/workspace-clipboard.py target/debug/tundra-shell --output /tmp/tundra-clipboard
 python3 scripts/linux-shell-smoke.py target/debug/tundra-shell
 ```
 
+The guardian smoke test uses a temporary home and runtime directory on Unix.
+
+```sh
+python3 scripts/tests/shell-watchdog.py target/debug/tundra-shell
+```
+
 Automation tests use short Unix socket paths. File-operation fixtures resolve the system temporary directory before exercising save, undo, and recovery.
+Editor and Explorer tests seed temporary user profiles and exercise their workflows through `ShellSession`. First-run setup is covered by the account workflow tests.
 
 ## Related documentation
 

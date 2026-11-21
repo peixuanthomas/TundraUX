@@ -94,6 +94,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `DataTable` provides a separate header band, full-row selection and pointer feedback, sorting, and column-width calculation.
 - `SidebarWorkspaceLayout` provides a padded navigation surface, list, and detail columns, switching to top navigation and a vertical layout in narrow windows.
 - `ManagementWorkspace` organizes search, details, action bars, and expert areas that stay expanded when the selected object changes.
+- The management details scrollbar uses the wrapped line count for both the scroll range and offset clamping.
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
 - Home exposes an Edit icons / Done action, an edit-mode summary, and insertion indicators. Home and Launcher share grid insertion geometry, including row gaps, empty tail slots, and scrollbar exclusion.
 - `ManagementViewModel::selected_rows` represents all selected rows; `selected` represents the current position.
@@ -179,9 +180,11 @@ Password regions are consistently masked in both controls and full-screen text; 
 ```sh
 cargo test --locked -p ui
 cargo test --locked -p ui --test automation
+cargo test --locked -p ui --test components form_dialog::
+cargo test --locked -p ui --test workspace workspace_layout::
 tundra-cli debug ui-test
 ```
 
-Shared-control tests cover button states, forms, modal interception, password masking, wide characters, and resizing. Page hit testing and complete workflows are covered by Shell tests and real-terminal acceptance checks.
+The `components`, `input`, `management_workspace`, `motion`, `screens`, and `workspace` targets group related integration tests. Filter by module name to run a particular workflow. Automation, Editor, file permissions, localization, Logs, and Script each have a dedicated target. Shell tests and real-terminal acceptance checks also cover page hit testing and complete workflows.
 
 Related documentation: [Debug previews](../shell/docs/previews.md), [Shell sessions](../shell/docs/session.md), [UI requirements](../../docs/UI-requirements.md).

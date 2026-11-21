@@ -95,8 +95,11 @@ On Unix a managed PTY starts in a separate terminal session. Its initial entry p
 
 ```sh
 cargo test --locked -p platform
-cargo test --locked -p platform --test shell_control
+cargo test --locked -p platform --features native-tests --test shell_control
+cargo test --locked -p platform --features native-tests --lib
 ```
+
+`native-tests` enables cases that use local sockets or named pipes, real PTYs, live host metrics, and native Linux logs. The explicit system Trash round-trip checks are available on Linux and Windows.
 
 Run Linux management tests on Linux or WSL. Use the corresponding isolated environment or test host for real authorization, service writes, wireless devices, mounts, and physical-disk operations; see each topic's document for specific entry points.
 The private D-Bus account test covers administrator visibility of root, service, local, and directory accounts. The watchdog connection test models the server poll between discovering the endpoint and connecting a client.
