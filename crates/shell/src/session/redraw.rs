@@ -47,9 +47,17 @@ pub(super) struct RedrawScheduler {
     next_motion_frame: Option<Duration>,
     next_continuous_frame: Option<Duration>,
     next_state_clock: Option<Duration>,
+    header_clock: Option<HeaderClockSample>,
     urgent_redraw: bool,
     needs_redraw: bool,
     reduced_motion: bool,
+}
+
+#[derive(Debug)]
+struct HeaderClockSample {
+    date: chrono::NaiveDate,
+    minute: u32,
+    next_sample_at: Duration,
 }
 
 impl RedrawScheduler {
@@ -61,6 +69,7 @@ impl RedrawScheduler {
             next_motion_frame: None,
             next_continuous_frame: None,
             next_state_clock: None,
+            header_clock: None,
             needs_redraw: true,
             urgent_redraw: true,
             reduced_motion,
@@ -82,6 +91,40 @@ impl RedrawScheduler {
                     .saturating_add(STATE_CLOCK_INTERVAL.as_secs()),
             ));
         }
+    }
+
+    pub(super) fn observe_header_clock(
+        &mut self,
+        now: Instant,
+        visible: bool,
+        sample: impl FnOnce() -> time::ClockDisplay,
+    ) {
+        if !visible {
+            self.header_clock = None;
+            return;
+        }
+        let now = self.elapsed(now);
+        if self
+            .header_clock
+            .as_ref()
+            .is_some_and(|last| now < last.next_sample_at)
+        {
+            return;
+        }
+        let display = sample();
+        let minute = display.time.num_seconds_from_midnight() / 60;
+        if self
+            .header_clock
+            .as_ref()
+            .is_none_or(|last| last.date != display.date || last.minute != minute)
+        {
+            self.request_redraw();
+        }
+        self.header_clock = Some(HeaderClockSample {
+            date: display.date,
+            minute,
+            next_sample_at: now.saturating_add(STATE_CLOCK_INTERVAL),
+        });
     }
 
     pub(super) fn request_redraw(&mut self) {
@@ -206,10 +249,16 @@ impl RedrawScheduler {
         if self.urgent_redraw || (self.needs_redraw && self.next_frame().is_none()) {
             return Duration::ZERO;
         }
-        let deadline = [self.next_frame(), self.next_state_clock]
-            .into_iter()
-            .flatten()
-            .min();
+        let deadline = [
+            self.next_frame(),
+            self.next_state_clock,
+            self.header_clock
+                .as_ref()
+                .map(|sample| sample.next_sample_at),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         deadline.map_or(maximum, |deadline| {
             maximum.min(deadline.saturating_sub(now))
         })

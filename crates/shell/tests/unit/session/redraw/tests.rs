@@ -38,6 +38,51 @@ fn initial_idle_and_state_clock_are_event_driven() {
 }
 
 #[test]
+fn header_clock_redraws_at_minute_changes_and_stops_sampling_when_hidden() {
+    let origin = Instant::now();
+    let mut scheduler = RedrawScheduler::new(origin, id("home", "one", None), false);
+    let date = chrono::NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+    let display = |date: chrono::NaiveDate, seconds: u32| time::ClockDisplay {
+        date,
+        time: chrono::NaiveTime::from_num_seconds_from_midnight_opt(seconds, 0).unwrap(),
+        warning: None,
+    };
+    scheduler.observe_header_clock(origin, true, || display(date, 30));
+    scheduler.did_draw(origin);
+    assert_eq!(
+        scheduler.poll_timeout(origin, Duration::MAX),
+        Duration::from_secs(1)
+    );
+    scheduler.observe_header_clock(origin + Duration::from_millis(500), true, || {
+        panic!("early wake should not read the clock")
+    });
+
+    let mut redraw_seconds = Vec::new();
+    for second in 1..=60 {
+        let now = origin + Duration::from_secs(second);
+        scheduler.observe_header_clock(now, true, || display(date, 30 + second as u32));
+        if scheduler.is_due(now) {
+            redraw_seconds.push(second);
+            scheduler.did_draw(now);
+        }
+    }
+    assert_eq!(redraw_seconds, [30]);
+
+    let now = origin + Duration::from_secs(61);
+    let next_date = date.succ_opt().unwrap();
+    scheduler.observe_header_clock(now, true, || display(next_date, 90));
+    assert!(scheduler.is_due(now));
+    scheduler.did_draw(now);
+
+    scheduler.observe_header_clock(now, false, || panic!("hidden clock should not be read"));
+    assert_eq!(scheduler.poll_timeout(now, Duration::MAX), Duration::MAX);
+    assert!(!scheduler.is_due(now + Duration::from_secs(60)));
+
+    scheduler.observe_header_clock(now, true, || display(next_date, 90));
+    assert!(scheduler.is_due(now));
+}
+
+#[test]
 fn all_shell_identity_changes_redraw_immediately_without_transitions() {
     let origin = Instant::now();
     for changed in [

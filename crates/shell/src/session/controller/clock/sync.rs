@@ -148,10 +148,14 @@ impl ShellSession {
         self.refresh_hit_map();
     }
 
+    pub(in crate::session) fn status_time_button_visible(&self) -> bool {
+        self.app.storage_config().top_bar.show_time
+            && clock_button_active_for_screen(self.content_screen())
+    }
+
     pub(in crate::session) fn status_time_button_label(&self) -> Option<String> {
-        (self.app.storage_config().top_bar.show_time
-            && clock_button_active_for_screen(self.content_screen()))
-        .then(|| self.current_time_label())
+        self.status_time_button_visible()
+            .then(|| self.current_time_label())
     }
 
     pub(in crate::session) fn time_button_selected(&self) -> bool {

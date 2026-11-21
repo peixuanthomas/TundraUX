@@ -966,7 +966,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         RedrawIdentity::from_session(&state),
         reduced_motion_enabled(&state),
     );
-    redraw.set_state_clock(runtime_origin, true);
     let mut compositor = ScreenCompositor::default();
     compositor.set_terminal_image_picker(terminal_graphics_probe.picker().cloned());
     let mut screen_saver_display = None;
@@ -1182,6 +1181,28 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 RedrawIdentity::from_session(&state),
                 reduced_motion_enabled(&state),
             );
+            let desktop_visible = !state.screen_saver_active()
+                && (workspace.is_some()
+                    || terminal_size_requirement
+                        .validate(state.terminal_size())
+                        .is_ok());
+            let clock_page_visible = desktop_visible
+                && state.content_screen() == ShellScreen::Clock
+                && workspace
+                    .as_ref()
+                    .is_none_or(|windows| !windows.hides_home());
+            redraw.set_state_clock(frame_now, clock_page_visible);
+            let (width, height) = state.terminal_size();
+            let header_clock_visible = desktop_visible
+                && !clock_page_visible
+                && state.status_time_button_visible()
+                && matches!(
+                    ui::compute_shell_layout(Rect::new(0, 0, width, height)),
+                    ui::ShellLayout::Full { .. }
+                );
+            redraw.observe_header_clock(frame_now, header_clock_visible, || {
+                state.app.current_clock_display()
+            });
             if if state.screen_saver_active() {
                 frame_now >= next_weather_frame
             } else {
