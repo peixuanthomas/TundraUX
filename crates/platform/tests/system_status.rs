@@ -6,6 +6,10 @@ use platform::{
 };
 
 #[test]
+#[cfg_attr(
+    not(feature = "native-tests"),
+    ignore = "samples the host's live system metrics"
+)]
 fn native_monitor_establishes_network_rate_baseline_and_bounds_rankings() {
     let mut monitor = NativeSystemMonitor::new().unwrap();
     let first = monitor.sample_fast().unwrap();

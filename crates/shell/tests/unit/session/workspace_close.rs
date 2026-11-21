@@ -71,6 +71,7 @@ pub(super) fn connected_window(
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn welcome_sends_latest_initialization_without_another_workspace_poll() {
     let mut state = shell_state();
     let mut workspace = Workspace::new(None, false);
@@ -740,6 +741,7 @@ fn split_chooser_cancellation_and_resize_restore_only_the_pending_region() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
     let mut state = shell_state();
     let id = SessionId(1);
@@ -796,6 +798,7 @@ fn frozen_native_terminal_keeps_f1_and_ctrl_w_without_arming_the_prefix() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn saturated_window_cancels_pointer_capture_and_keeps_global_shortcuts() {
     use crate::process_host::transport::{MAX_MESSAGES, RESERVED_MESSAGES};
     let mut state = shell_state();
@@ -1025,6 +1028,7 @@ fn notification_panel_collects_hidden_windows_and_keeps_reports_after_close() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn notification_panel_drains_the_last_report_when_the_window_exit_arrives_first() {
     let mut state = shell_state();
     let mut workspace = Workspace::new(None, false);

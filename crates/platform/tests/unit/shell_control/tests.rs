@@ -9,6 +9,7 @@ fn socket_tempdir() -> tempfile::TempDir {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn expired_idle_connection_is_closed_without_waiting_for_input() {
     let root = socket_tempdir();
     let mut server = Server::start(&root.path().join("control")).unwrap();
@@ -21,6 +22,7 @@ fn expired_idle_connection_is_closed_without_waiting_for_input() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn watchdog_discovers_a_separate_endpoint_and_expires_idle_clients_quickly() {
     let root = socket_tempdir();
     let directory = root.path().join("watchdog-discovery");
@@ -54,6 +56,7 @@ fn watchdog_discovers_a_separate_endpoint_and_expires_idle_clients_quickly() {
 
 #[cfg(windows)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires Windows named pipes")]
 fn windows_registry_and_pipe_grant_only_current_user_and_deny_network() {
     use interprocess::os::windows::security_descriptor::AsSecurityDescriptor;
     use std::os::windows::io::{AsHandle, AsRawHandle};

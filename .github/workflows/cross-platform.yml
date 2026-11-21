@@ -77,7 +77,7 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             vim_binary="${vim_binary}.exe"
           fi
-          TUNDRA_TEST_VIM="$vim_binary" cargo test --locked -p vim-runtime -- --include-ignored
+          TUNDRA_TEST_VIM="$vim_binary" cargo test --locked -p vim-runtime --features native-tests -- --include-ignored
       - name: Test document and Explorer file safety
         shell: bash
         run: |
@@ -100,12 +100,12 @@ jobs:
       - name: Test system metrics
         shell: bash
         run: |
-          cargo test --locked -p platform --test linux_logs
+          cargo test --locked -p platform --features native-tests --test linux_logs
           cargo test --locked -p runtime-log
           cargo test --locked -p app runtime_logs
-          cargo test --locked -p cli --test logs
+          cargo test --locked -p cli --features native-tests --test logs
           cargo test --locked -p ui --test logs
-          cargo test --locked -p platform --test system_status
+          cargo test --locked -p platform --features native-tests --test system_status
           cargo test --locked -p system-services --no-default-features
           cargo test --locked -p system-services --features runtime
       - name: Check Weathr dependency boundary

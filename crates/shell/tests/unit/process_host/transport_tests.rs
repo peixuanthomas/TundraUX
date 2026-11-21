@@ -185,6 +185,7 @@ fn a_full_input_queue_keeps_fifo_space_for_pointer_cancel_and_close() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Unix socket")]
 fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {
     use platform::shell_control::AsyncLocalListener;
     let path = std::env::temp_dir().join(format!(

@@ -5,6 +5,17 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+native-tests = []
+
+[[test]]
+name = "real_vim"
+required-features = ["native-tests"]
+
+[[test]]
+name = "terminal_cache"
+required-features = ["native-tests"]
+
 [dependencies]
 terminal-runtime = { path = "../terminal-runtime" }
 watchdog = { path = "../watchdog" }

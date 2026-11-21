@@ -12,6 +12,25 @@ path = "src/lib.rs"
 name = "tundra-cli"
 path = "src/main.rs"
 
+[features]
+native-tests = []
+
+[[test]]
+name = "embedded_children_linux"
+required-features = ["native-tests"]
+
+[[test]]
+name = "rainbow_text_pty"
+required-features = ["native-tests"]
+
+[[test]]
+name = "repl_cursor"
+required-features = ["native-tests"]
+
+[[test]]
+name = "screen_keyboard_pty"
+required-features = ["native-tests"]
+
 [dependencies]
 shell-control = { path = "../shell-control" }
 workspace-protocol = { path = "../workspace-protocol" }

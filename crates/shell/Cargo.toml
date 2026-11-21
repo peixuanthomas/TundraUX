@@ -12,6 +12,13 @@ path = "src/lib.rs"
 name = "tundra-shell"
 path = "src/main.rs"
 
+[features]
+native-tests = []
+
+[[test]]
+name = "workspace_services"
+required-features = ["native-tests"]
+
 [dependencies]
 shell-control = { path = "../shell-control" }
 workspace-protocol = { path = "../workspace-protocol" }

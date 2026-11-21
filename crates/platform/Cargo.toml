@@ -8,6 +8,17 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
+[features]
+native-tests = []
+
+[[test]]
+name = "native_trash_smoke"
+required-features = ["native-tests"]
+
+[[test]]
+name = "shell_control"
+required-features = ["native-tests"]
+
 [dependencies]
 interprocess = { version = "2.4.6", features = ["tokio"] }
 tokio = { version = "1", features = ["net", "io-util"] }

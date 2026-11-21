@@ -2,11 +2,12 @@ use super::*;
 use portable_pty::{PtySize, native_pty_system};
 
 #[test]
+#[ignore = "subprocess fixture used by the native PTY launch test"]
 fn supervised_pty_shim_process() {
     if std::env::var_os("TUNDRA_TEST_PTY_SHIM").is_none() {
         return;
     }
-    let args = std::env::args_os().skip(4);
+    let args = std::env::args_os().skip(5);
     let error = match run_shim(args) {
         Err(error) => error,
         Ok(never) => match never {},
@@ -16,6 +17,10 @@ fn supervised_pty_shim_process() {
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "native-tests"),
+    ignore = "requires a Unix PTY and local socket connections"
+)]
 fn program_waits_for_release_and_receives_original_launch_environment() {
     let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
     for release in [false, true] {
@@ -40,6 +45,7 @@ fn program_waits_for_release_and_receives_original_launch_environment() {
             [
                 "--exact",
                 "pty_exec::tests::supervised_pty_shim_process",
+                "--ignored",
                 "--",
             ]
             .map(OsString::from),

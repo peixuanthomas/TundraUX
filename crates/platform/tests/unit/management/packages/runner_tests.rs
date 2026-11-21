@@ -41,14 +41,20 @@ impl OperationInteraction for Interaction {
 mod apt_dpkg_tests;
 
 fn fixture(script: &str) -> PackageCommand {
+    let program = PathBuf::from("/usr/bin/timeout");
+    assert!(
+        program.is_file(),
+        "package PTY tests require /usr/bin/timeout"
+    );
     PackageCommand {
-        program: PathBuf::from("/usr/bin/timeout"),
+        program,
         args: vec!["8".into(), "/bin/sh".into(), "-c".into(), script.into()],
         non_interactive: false,
     }
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Linux PTY")]
 fn real_pty_answers_yn_conffile_and_unrecognized_questions_after_reconnect() {
     let mut io = Interaction {
         answers: VecDeque::from([
@@ -68,6 +74,7 @@ fn real_pty_answers_yn_conffile_and_unrecognized_questions_after_reconnect() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Linux PTY")]
 fn real_pty_no_rejects_the_actual_plan() {
     let mut io = Interaction {
         answers: VecDeque::from([("[y/N]", b"n\r".to_vec())]),
@@ -81,6 +88,7 @@ fn real_pty_no_rejects_the_actual_plan() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Linux PTY")]
 fn real_pty_reports_exit_code_and_partial_failure() {
     let mut io = Interaction::default();
     let error = execute(
@@ -105,6 +113,7 @@ fn input_does_not_interrupt_suspend_or_eof_active_package_writes() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Linux PTY")]
 fn real_pty_pacman_provider_and_transaction_prompts_remain_native() {
     let mut io = Interaction {
         answers: VecDeque::from([
@@ -136,6 +145,7 @@ fn real_pty_pacman_provider_and_transaction_prompts_remain_native() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a Linux PTY")]
 fn real_pty_pacman_decline_does_not_apply_the_plan() {
     let mut io = Interaction {
         answers: VecDeque::from([("Proceed with removal? [Y/n]", b"n\r".to_vec())]),

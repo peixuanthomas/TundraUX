@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install -y libncurses-dev
           python3 scripts/build-vim.py --output target/debug/vim
       - name: Test real Vim runtime
-        run: TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime -- --include-ignored
+        run: TUNDRA_TEST_VIM="$PWD/target/debug/vim/vim" cargo test --locked -p vim-runtime --features native-tests -- --include-ignored
       - name: Test Explorer file safety
         run: |
           cargo test --locked -p app --lib explorer::tasks::
@@ -35,7 +35,8 @@ jobs:
           cargo test --locked -p ui --test editor
       - name: Test ordinary-user identity and platform boundaries
         run: |
-          cargo test --locked -p platform --lib
+          cargo test --locked -p platform --features native-tests --lib
+          cargo test --locked -p platform --lib apt_dpkg_tests -- --ignored
           cargo test --locked -p platform --lib account_service_reads_and_writes -- --ignored
           cargo test --locked -p platform --lib logind_signals_and_shutdown -- --ignored
           cargo test --locked -p platform --test explorer_platform
@@ -53,12 +54,12 @@ jobs:
           cargo test --locked -p app --lib ubuntu_builds_real_deb -- --ignored
       - name: Test system metrics
         run: |
-          cargo test --locked -p platform --test linux_logs
+          cargo test --locked -p platform --features native-tests --test linux_logs
           cargo test --locked -p runtime-log
           cargo test --locked -p app runtime_logs
-          cargo test --locked -p cli --test logs
+          cargo test --locked -p cli --features native-tests --test logs
           cargo test --locked -p ui --test logs
-          cargo test --locked -p platform --test system_status
+          cargo test --locked -p platform --features native-tests --test system_status
           cargo test --locked -p system-services --no-default-features
           cargo test --locked -p system-services --features runtime
 
@@ -75,7 +76,7 @@ jobs:
           useradd --create-home tundra-ci
           chown -R tundra-ci:tundra-ci "$GITHUB_WORKSPACE"
           runuser -u tundra-ci -- cargo test --locked -p platform --lib source_packages
-          runuser -u tundra-ci -- cargo test --locked -p platform management::packages --lib
+          runuser -u tundra-ci -- cargo test --locked -p platform --features native-tests management::packages --lib
           runuser -u tundra-ci -- cargo test --locked -p platform management::packages::pacman::tests::live_pacman_installed_search_updates_and_details --lib -- --ignored
           runuser -u tundra-ci -- cargo test --locked -p app --lib update::package
           runuser -u tundra-ci -- cargo test --locked -p app --lib arch_builds_real_pacman_package -- --ignored
@@ -100,7 +101,7 @@ jobs:
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo build --workspace --locked
       - name: Test ordinary-user identity and platform boundaries
         run: |
-          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --lib
+          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --features native-tests --lib
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --lib account_service_reads_and_writes -- --ignored
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --lib logind_signals_and_shutdown -- --ignored
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --test explorer_platform
@@ -108,11 +109,11 @@ jobs:
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p shell --test settings linux_personal_settings_work_without_system_account_service
       - name: Test system metrics
         run: |
-          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --test linux_logs
+          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --features native-tests --test linux_logs
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p runtime-log
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p app runtime_logs
-          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p cli --test logs
+          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p cli --features native-tests --test logs
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p ui --test logs
-          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --test system_status
+          runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p platform --features native-tests --test system_status
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p system-services --no-default-features
           runuser -u tundra-ci -- /home/tundra-ci/.cargo/bin/cargo test --locked -p system-services --features runtime

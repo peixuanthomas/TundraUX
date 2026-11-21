@@ -31,6 +31,7 @@ fn non_linux_query_is_explicitly_unsupported() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "queries native Linux logs")]
 fn native_query_is_bounded_and_does_not_fabricate_ux_context() {
     let started = std::time::Instant::now();
     let result = platform::query_linux_logs(

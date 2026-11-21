@@ -57,6 +57,7 @@ fn kill_requires_an_explicit_run_and_one_managed_target() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn watchdog_connects_without_ui_control_and_distinguishes_requested_and_confirmed_exit() {
     let mut fixture = Fixture::new();
     assert_eq!(

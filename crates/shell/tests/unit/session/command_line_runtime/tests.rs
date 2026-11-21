@@ -6,6 +6,7 @@ use std::time::Duration;
 static NEXT_PTY_READER_TASK_ID: AtomicU64 = AtomicU64::new(1);
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn embedded_panic_exit_enters_fullscreen_panic_without_login_or_dialog() {
     use watchdog::{
         AppCriticality, AppDescriptor, AppId, BoundaryKind, BoundarySpec, WatchdogConfig,
@@ -268,6 +269,7 @@ fn failed_and_exited_terminals_ignore_escape_and_old_emergency_shortcut() {
 /// interactive and bounded so it verifies the two directions separately.
 #[cfg(windows)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn windows_conpty_receives_initial_and_typed_output() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
@@ -394,6 +396,7 @@ fn assert_snapshot_contains(
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn physical_escape_ctrl_shift_x_and_f1_reach_the_real_child_terminal() {
     let fixture = PtyFixture::new("physical-key-bytes");
     #[cfg(windows)]
@@ -475,6 +478,7 @@ fn physical_escape_ctrl_shift_x_and_f1_reach_the_real_child_terminal() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn terminal_close_also_stops_descendants_that_create_their_own_session() {
     let fixture = PtyFixture::new("descendant-session");
     let mut host = fixture.shell();
@@ -510,6 +514,7 @@ fn terminal_close_also_stops_descendants_that_create_their_own_session() {
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
     let fixture = PtyFixture::new("close-confirmation");
     let platform = platform::native_platform();
@@ -626,6 +631,7 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn covered_terminal_output_input_and_completion_are_bound_to_page_ids() {
     let fixture = PtyFixture::new("page-instances");
     let platform = platform::native_platform();
@@ -751,6 +757,7 @@ fn snapshot_text(snapshot: &ui::CommandLineTerminalSnapshot) -> String {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn command_line_app_host_launches_a_live_pty_at_the_minimum_window_size() {
     use crate::session::window_launch::{WindowApplication, WindowOwner};
     use std::time::Instant;
@@ -829,6 +836,7 @@ fn command_line_app_host_launches_a_live_pty_at_the_minimum_window_size() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn live_keyboard_types_into_child_pty_and_resize_reaches_the_child() {
     let fixture = PtyFixture::new("live-keyboard");
     let mut host = fixture.shell();
@@ -1058,4 +1066,5 @@ fn wait_until_stopped(pid: u32) {
 }
 
 #[path = "external_tui.rs"]
+#[cfg(feature = "native-tests")]
 mod external_tui;

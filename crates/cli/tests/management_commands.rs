@@ -237,11 +237,16 @@ mod linux {
         );
     }
     #[test]
+    #[cfg_attr(
+        not(feature = "native-tests"),
+        ignore = "requires a Linux PTY and a non-root test user"
+    )]
     fn native_terminal_hides_password_and_cancel_does_not_create_account() {
-        if unsafe { libc::getuid() } == 0 {
-            // Root startup is independently tested; this test exercises the normal terminal.
-            return;
-        }
+        assert_ne!(
+            unsafe { libc::getuid() },
+            0,
+            "requires a non-root test user"
+        );
         use portable_pty::{CommandBuilder, PtySize, native_pty_system};
         use std::{
             io::{Read, Write},

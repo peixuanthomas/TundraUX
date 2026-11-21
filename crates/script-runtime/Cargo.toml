@@ -5,6 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+native-tests = []
+
+[[test]]
+name = "real_bash"
+required-features = ["native-tests"]
+
 [dependencies]
 app = { path = "../app" }
 i18n = { path = "../i18n" }

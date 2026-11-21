@@ -415,6 +415,7 @@ struct MockServer {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn an_input_that_closes_the_session_can_succeed_without_a_snapshot() {
     let fixture = Fixture::new();
     let _server = MockServer::start(&fixture.directory, |_, _, _| Some(Response::closed()));
@@ -480,6 +481,7 @@ fn snapshot(info: &SessionInfo, number: u64) -> Snapshot {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn sessions_selection_and_input_use_real_transport_without_storage() {
     let fixture = Fixture::new();
     assert_eq!(
@@ -526,6 +528,7 @@ fn sessions_selection_and_input_use_real_transport_without_storage() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn waits_for_actionable_target_by_reading_only_snapshots() {
     let fixture = Fixture::new();
     let server = MockServer::start(&fixture.directory, |info, _, count| {
@@ -565,6 +568,7 @@ fn waits_for_actionable_target_by_reading_only_snapshots() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn stale_snapshot_and_input_timeout_are_not_retried() {
     let fixture = Fixture::new();
     let server = MockServer::start(&fixture.directory, |_, request, _| {
@@ -593,6 +597,7 @@ fn stale_snapshot_and_input_timeout_are_not_retried() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn wait_times_out_and_rejects_mismatched_protocol_responses() {
     let fixture = Fixture::new();
     let server = MockServer::start(&fixture.directory, |info, request, _| {
@@ -655,6 +660,7 @@ fn binary_ui_argument_errors_skip_startup_and_redact_text() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local IPC")]
 fn binary_stdin_preserves_text_and_sends_it_only_once() {
     use std::io::Write;
     use std::process::{Command, Stdio};

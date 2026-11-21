@@ -239,6 +239,7 @@ impl Drop for TempDirectory {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn local_request_waits_for_a_rendered_frame_and_rejects_stale_actions() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -304,6 +305,7 @@ fn local_request_waits_for_a_rendered_frame_and_rejects_stale_actions() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn overdue_scroll_steps_share_a_frame_without_dispatching_future_steps() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -365,6 +367,7 @@ fn overdue_scroll_steps_share_a_frame_without_dispatching_future_steps() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn overdue_click_and_drag_events_keep_separate_frame_boundaries() {
     for action in [
         Action::Click {
@@ -418,6 +421,7 @@ fn overdue_click_and_drag_events_keep_separate_frame_boundaries() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn disconnect_does_not_drop_other_requests_received_in_the_same_poll() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -452,6 +456,7 @@ fn disconnect_does_not_drop_other_requests_received_in_the_same_poll() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn disabling_control_finishes_the_request_before_disconnect() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -495,6 +500,7 @@ fn automation_commit(revision: u64, enabled: bool) -> workspace_protocol::Automa
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn persisted_disable_closes_before_success_and_an_old_cache_cannot_reopen_it() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -546,6 +552,7 @@ fn persisted_disable_closes_before_success_and_an_old_cache_cannot_reopen_it() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn old_revisions_and_old_sessions_cannot_disable_current_control() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -569,6 +576,7 @@ fn old_revisions_and_old_sessions_cannot_disable_current_control() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn a_late_older_authorization_cannot_replace_the_pending_disable_before_synchronization() {
     use super::super::{ShellHomeMode, ShellLaunchConfig, ShellSession};
     let directory = TempDirectory::new();
@@ -607,6 +615,7 @@ fn a_late_older_authorization_cannot_replace_the_pending_disable_before_synchron
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn a_newer_same_session_receipt_is_authoritative_while_the_cache_is_behind() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -651,6 +660,7 @@ fn a_newer_same_session_receipt_is_authoritative_while_the_cache_is_behind() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn failure_feedback_keeps_control_available_and_cancellation_cannot_be_completed_twice() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -717,6 +727,7 @@ fn exchange_request(control: &mut ControlRuntime, request: Request) -> (Response
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn physical_operations_require_a_new_read_even_without_a_snapshot_argument() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -773,6 +784,7 @@ fn physical_operations_require_a_new_read_even_without_a_snapshot_argument() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn automatic_frames_and_pointer_motion_keep_previously_read_snapshots_usable() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());
@@ -812,6 +824,7 @@ fn automatic_frames_and_pointer_motion_keep_previously_read_snapshots_usable() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn weather_pages_ignore_user_changes_and_allow_wake_with_an_old_snapshot() {
     for page in ["screen_saver"] {
         let directory = TempDirectory::new();
@@ -836,6 +849,7 @@ fn weather_pages_ignore_user_changes_and_allow_wake_with_an_old_snapshot() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn physical_input_cancels_the_rest_of_an_external_drag() {
     let directory = TempDirectory::new();
     let mut control = ControlRuntime::new(directory.0.clone());

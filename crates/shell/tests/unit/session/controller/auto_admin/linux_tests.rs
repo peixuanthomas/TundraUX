@@ -13,6 +13,7 @@ fn terminal_text(job: &AutoAdminJob) -> String {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a real Unix PTY")]
 fn aa_stop_and_confirmed_kill_reach_a_real_stubborn_pty_process() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),
@@ -126,6 +127,7 @@ fn linux_authorization_requires_explicit_approval_instead_of_default_enter() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a real Unix PTY")]
 fn foreground_auth_pty_accepts_password_and_yn_and_closes_only_after_completion() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),

@@ -44,6 +44,10 @@ fn parses_journal_follow_filters_and_selected_log_files() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    not(feature = "native-tests"),
+    ignore = "runs the real CLI through timed file changes and SIGINT"
+)]
 fn real_cli_follow_observes_append_rotation_truncation_and_sigint() {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};

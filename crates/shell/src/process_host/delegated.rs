@@ -244,6 +244,6 @@ fn valid_resource(resource: ProcessResource) -> bool {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native-tests"))]
 #[path = "../../tests/unit/process_host/delegated_tests.rs"]
 mod tests;

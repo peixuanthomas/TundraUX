@@ -74,6 +74,7 @@ fn until(
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn shell_busy_loop_is_force_stopped_and_reaped_within_five_seconds() {
     let mut supervisor = Supervisor::new(RUN);
     let shell = id(WorkerRole::Shell);
@@ -111,6 +112,7 @@ fn shell_busy_loop_is_force_stopped_and_reaped_within_five_seconds() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn a_job_control_stop_is_not_a_child_exit() {
     let mut supervisor = Supervisor::new(RUN);
     let shell = id(WorkerRole::Shell);
@@ -130,6 +132,7 @@ fn a_job_control_stop_is_not_a_child_exit() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn application_lockup_is_reported_and_only_explicit_kill_stops_it() {
     let mut supervisor = Supervisor::new(RUN);
     let app = app(1);
@@ -167,6 +170,7 @@ fn application_lockup_is_reported_and_only_explicit_kill_stops_it() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn a_close_timeout_only_notifies_until_the_shell_exits() {
     let mut supervisor = Supervisor::new(RUN);
     let shell = id(WorkerRole::Shell);
@@ -212,6 +216,7 @@ fn a_close_timeout_only_notifies_until_the_shell_exits() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn shell_exit_gives_a_healthy_worker_at_most_two_seconds_to_close() {
     let mut supervisor = Supervisor::new(RUN);
     let shell = id(WorkerRole::Shell);
@@ -245,6 +250,7 @@ fn shell_exit_gives_a_healthy_worker_at_most_two_seconds_to_close() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires OS process signals")]
 fn force_kill_cleans_registered_detached_groups_without_killing_other_workers() {
     let mut supervisor = Supervisor::new(RUN);
     let target = app(1);

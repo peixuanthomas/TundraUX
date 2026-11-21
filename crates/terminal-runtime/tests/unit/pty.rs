@@ -102,6 +102,7 @@ fn recorded_output_survives_beyond_the_terminal_scrollback_without_osc_controls(
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn pty_minimum_size_updates_without_visible_output_and_clears_on_exit() {
     use std::time::Instant;
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
@@ -227,6 +228,7 @@ fn clearing_a_resized_row_does_not_leave_half_a_wide_character_or_stop_the_reade
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn pty_rejects_invalid_start_directories_before_running_the_child() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
@@ -352,6 +354,7 @@ fn pty_rejects_invalid_start_directories_before_running_the_child() {
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn pty_process_runs_inside_platform_containment() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
@@ -471,6 +474,7 @@ fn pty_process_runs_inside_platform_containment() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn pty_cleanup_is_repeatable_for_running_and_exited_children() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
@@ -551,6 +555,7 @@ fn pty_cleanup_is_repeatable_for_running_and_exited_children() {
 
 #[cfg(any(windows, unix))]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn watchdog_shutdown_stops_terminal_even_if_the_view_still_owns_it() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
     let root = std::env::temp_dir().join(format!(
@@ -603,6 +608,7 @@ fn watchdog_shutdown_stops_terminal_even_if_the_view_still_owns_it() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn retained_output_scrolls_and_resizes_after_the_process_and_watchdog_close() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 
@@ -830,6 +836,7 @@ fn direct_ui_snapshot_preserves_cells_modes_and_scrolled_viewports() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn child_input_modes_receive_keys_paste_and_content_relative_mouse_reports() {
     use watchdog::{AppCriticality, AppDescriptor, AppId, WatchdogConfig, WatchdogRuntime};
 

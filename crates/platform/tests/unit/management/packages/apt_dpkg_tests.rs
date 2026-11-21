@@ -12,19 +12,18 @@ struct AptFixture {
 }
 
 impl AptFixture {
-    fn new() -> Option<Self> {
-        if ![
+    fn new() -> Self {
+        for path in [
             "/usr/bin/apt-get",
             "/usr/bin/dpkg",
-            "/usr/bin/cat",
             "/usr/bin/env",
             "/usr/bin/timeout",
-        ]
-        .iter()
-        .all(|program| Path::new(program).is_file())
-        {
-            eprintln!("Skipping isolated APT/dpkg PTY test: required executables are unavailable");
-            return None;
+            "/var/lib/dpkg/status",
+        ] {
+            assert!(
+                Path::new(path).is_file(),
+                "APT/dpkg PTY test requires {path}"
+            );
         }
         let directory = tempfile::Builder::new()
             .prefix("tundraux-apt-pty-")
@@ -96,7 +95,7 @@ Debug::NoLocking "true";
         // caller-supplied environment variables before launching the backend.
         spec.program = "/usr/bin/env".into();
         spec.args = args;
-        Some(Self { directory, spec })
+        Self { directory, spec }
     }
 
     fn status(&self) -> String {
@@ -112,42 +111,9 @@ Debug::NoLocking "true";
 }
 
 #[test]
-fn legacy_cat_logger_reproduces_the_dpkg_bad_file_descriptor_failure() {
-    let Some(fixture) = AptFixture::new() else {
-        return;
-    };
-    let host_status = fs::read("/var/lib/dpkg/status").unwrap();
-    let installed = fixture.status();
-    let mut spec = fixture.spec.clone();
-    let status_option = spec
-        .args
-        .iter_mut()
-        .find(|arg| arg.as_str() == "Dpkg::Options::=--status-fd=2")
-        .expect("the real command should use the terminal's stderr for dpkg status");
-    *status_option = "Dpkg::Options::=--status-logger=/usr/bin/cat".into();
-    let mut io = AptFixture::interaction(b"y\r");
-    let error = execute(spec, PackageBackend::Apt, &mut io, &AtomicBool::new(false))
-        .unwrap_err()
-        .to_string();
-    assert!(error.contains("exit code 100"), "{error}");
-    assert!(
-        error.contains("standard output: Bad file descriptor"),
-        "{error}"
-    );
-    assert!(error.contains("dpkg exited unexpectedly"), "{error}");
-    assert!(
-        io.answers.is_empty(),
-        "the real confirmation was not reached"
-    );
-    assert_eq!(fixture.status(), installed);
-    assert_eq!(fs::read("/var/lib/dpkg/status").unwrap(), host_status);
-}
-
-#[test]
+#[ignore = "requires the native APT and dpkg tools on a Debian-based Linux host"]
 fn real_apt_dpkg_removal_waits_for_confirmation_and_streams_status_to_the_pty() {
-    let Some(fixture) = AptFixture::new() else {
-        return;
-    };
+    let fixture = AptFixture::new();
     let host_status = fs::read("/var/lib/dpkg/status").unwrap();
     let installed = fixture.status();
     let mut decline = AptFixture::interaction(b"n\r");

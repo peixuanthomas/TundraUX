@@ -353,6 +353,7 @@ fn panes_update_independently_and_keep_content_through_fullscreen_and_restore() 
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]
 fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_controls() {
     let (mut workspace, id) = workspace(120, 36);
     let (connected, _peer, _listener) = connected_window(Size::new(106, 16));

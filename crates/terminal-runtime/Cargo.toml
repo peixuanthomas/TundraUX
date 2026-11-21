@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+native-tests = []
+
 [dependencies]
 crossterm.workspace = true
 ratatui.workspace = true

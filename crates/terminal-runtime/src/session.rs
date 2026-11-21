@@ -447,6 +447,6 @@ pub fn restore_terminal_best_effort() {
     );
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, unix, feature = "native-tests"))]
 #[path = "../tests/unit/terminal_keyboard_pty.rs"]
 mod terminal_keyboard_pty_tests;
