@@ -1,126 +1,88 @@
 use super::*;
 
 #[test]
-fn launcher_uses_cached_ascii_assets_after_the_runtime_directory_is_deleted() {
-    fn copy_directory(source: &std::path::Path, destination: &std::path::Path) {
-        std::fs::create_dir_all(destination).expect("create temporary asset directory");
-        for entry in std::fs::read_dir(source).expect("read source asset directory") {
-            let entry = entry.expect("read source asset entry");
-            let target = destination.join(entry.file_name());
-            if entry.file_type().expect("read asset entry type").is_dir() {
-                copy_directory(&entry.path(), &target);
-            } else {
-                std::fs::copy(entry.path(), target).expect("copy source asset file");
-            }
-        }
-    }
+fn launcher_keeps_cached_icons_until_explicit_theme_refresh() {
+    use std::fs;
 
-    let root = std::env::temp_dir().join(format!(
-        "tundra-shell-deleted-assets-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let parent = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "tundra-shell-launcher-assets-{}-{unique}",
+        std::process::id()
     ));
-    let canonical = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    copy_directory(&canonical, &root);
-    let app_icons = root.join("themes/default/app_icons.toml");
-    let source = std::fs::read_to_string(&app_icons).expect("read Launcher icons");
-    let customized = source.replacen("' ______ '", "'CACHE!!!'", 1);
-    assert_ne!(customized, source, "Launcher icon fixture should change");
-    std::fs::write(&app_icons, customized).expect("write cached Launcher icon fixture");
-    let assets = ui::RuntimeAsciiAssets::from_store(
-        ui::AsciiAssetStore::load_with_root(&root, ui::DEFAULT_THEME_ID)
-            .expect("temporary ASCII assets should load"),
-    );
-    std::fs::remove_dir_all(&root).expect("simulate deleting the runtime asset directory");
-
-    let startup = ShellStartupState::clean(
-        PlatformKind::Windows,
-        PlatformCapabilities::native_supported(),
-    );
-    let mut state = ShellSession::new_with_startup_and_assets(
-        ShellLaunchConfig::default(),
-        (120, 40),
-        startup,
-        assets,
-    );
-    set_test_auth_role(&mut state, UserRole::Admin);
-
-    let launcher = state.to_launcher_view_model();
-    let icon = launcher
-        .item_icon(&launcher.items[0])
-        .expect("cached Command Line ASCII icon");
-
-    assert!(icon.lines().iter().any(|line| line.contains("CACHE!!!")));
-    assert!(
-        launcher
-            .item_graphic_bytes(&launcher.items[0])
-            .is_some_and(|bytes| bytes.starts_with(b"\x89PNG\r\n\x1a\n")),
-        "the deleted runtime directory must not invalidate the cached PNG"
-    );
-}
-
-#[test]
-fn explicit_theme_refresh_reloads_assets_from_disk() {
-    let root = std::env::temp_dir().join(format!(
-        "tundra-shell-asset-refresh-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
+    fs::create_dir(&parent).expect("create Launcher asset fixture");
+    let fixture = SystemStatusTempGuard(parent);
+    let root = fixture.0.join("assets");
+    let parked = fixture.0.join("offline-assets");
     ui::restore_default_theme(&root).expect("create complete default theme fixture");
     let app_icons = root.join("themes/default/app_icons.toml");
-    let source = std::fs::read_to_string(&app_icons).expect("read Launcher icons");
+    let source = fs::read_to_string(&app_icons).expect("read Launcher icons");
     let first = source.replacen("' ______ '", "'CACHE001'", 1);
     assert_ne!(first, source);
-    std::fs::write(&app_icons, &first).expect("write initial cached Launcher icon");
+    fs::write(&app_icons, &first).expect("write initial cached Launcher icon");
 
     let assets = ui::RuntimeAsciiAssets::load_with_root(&root, ui::DEFAULT_THEME_ID)
         .expect("load initial asset cache");
+    fs::rename(&root, &parked).expect("make the runtime asset directory unavailable");
     let startup = ShellStartupState::clean(
         PlatformKind::Windows,
         PlatformCapabilities::native_supported(),
     );
-    let mut state = ShellSession::new_with_startup_and_assets(
+    let mut state = ShellSession::new_with_runtime_services(
         ShellLaunchConfig::default(),
         (120, 40),
         startup,
         assets,
+        ShellRuntimeServices {
+            language: None,
+            terminal_image_support: true,
+            explorer: None,
+            diagnostics: None,
+            editor: ShellEditorTaskRuntime::unavailable(),
+            settings: ShellSettingsTaskRuntime::unavailable(),
+            window_owner: Default::default(),
+            inherited_auth: None,
+            session_snapshot: None,
+        },
+        None,
     );
     set_test_auth_role(&mut state, UserRole::Admin);
 
-    let second = first.replacen("CACHE001", "CACHE002", 1);
-    std::fs::write(&app_icons, second).expect("change Launcher icon after startup");
-
-    let cached = state.to_launcher_view_model();
-    assert!(
-        cached
-            .item_icon(&cached.items[0])
-            .expect("cached Launcher icon")
-            .lines()
+    let assert_icon = |state: &ShellSession, expected: &str| {
+        let launcher = state.to_launcher_view_model();
+        let item = launcher
+            .items
             .iter()
-            .any(|line| line.contains("CACHE001"))
+            .find(|item| item.id == app::COMMAND_LINE_APPLICATION.id)
+            .expect("Command Line Launcher entry");
+        let icon = launcher.item_icon(item).expect("Command Line ASCII icon");
+        assert!(icon.lines().iter().any(|line| line == expected), "{icon:?}");
+        assert!(
+            launcher
+                .item_graphic_bytes(item)
+                .is_some_and(|bytes| bytes.starts_with(b"\x89PNG\r\n\x1a\n")),
+            "Command Line PNG should be available"
+        );
+    };
+    assert!(
+        !app_icons.exists(),
+        "theme files should still be unavailable"
     );
+    assert_icon(&state, "CACHE001");
+
+    // Startup can recreate locales at the original root while the theme is absent.
+    fs::create_dir_all(&root).expect("restore the runtime root");
+    fs::rename(parked.join("themes"), root.join("themes")).expect("return the theme files");
+    let second = first.replacen("CACHE001", "CACHE002", 1);
+    fs::write(&app_icons, second).expect("change Launcher icon after startup");
+    assert_icon(&state, "CACHE001");
 
     state
         .refresh_asset_cache_for_theme(ui::DEFAULT_THEME_ID)
         .expect("explicit cache refresh");
-    let refreshed = state.to_launcher_view_model();
-    assert!(
-        refreshed
-            .item_icon(&refreshed.items[0])
-            .expect("refreshed Launcher icon")
-            .lines()
-            .iter()
-            .any(|line| line.contains("CACHE002"))
-    );
-
-    std::fs::remove_dir_all(root).expect("clean asset refresh fixture");
+    assert_icon(&state, "CACHE002");
 }
 
 #[test]

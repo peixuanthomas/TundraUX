@@ -208,7 +208,7 @@ Set `TUNDRA_PERF_TRACE=/absolute/path/trace.jsonl` for optional per-frame and pe
 
 Session workflow tests are grouped by feature under [`tests/unit/session/workflows/`](tests/unit/session/workflows/). To run only the clock workflows, use `cargo test --locked -p shell --lib session::tests::clock::`.
 
-The theme reload test supplies terminal image support explicitly. Package keyboard tests check the focus order for the available actions on each platform.
+The Launcher cache test checks text and PNG icons with the theme directory unavailable, then verifies that a disk edit takes effect after an explicit refresh. Package keyboard tests check the focus order for the available actions on each platform.
 
 ```sh
 cargo build --locked -p shell -p cli
