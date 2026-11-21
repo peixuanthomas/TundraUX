@@ -422,6 +422,10 @@ fn watchdog_spawn_fixture(command: &mut Command) -> bool {
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "native-tests"),
+    ignore = "requires native process registration"
+)]
 fn supported_commands_wait_for_the_guardian_registration_before_exec() {
     let mut supervisor = Supervisor::new(RUN);
     let target = app(1);

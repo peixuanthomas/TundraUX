@@ -3,7 +3,7 @@ use serde_json::json;
 use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, TryLockError};
 use std::thread;
 use std::time::Duration;
 
@@ -515,48 +515,87 @@ fn explicit_operation_id_never_overwrites_a_pending_journal() {
 
 #[test]
 fn recovery_scans_are_serialized_with_live_journal_mutations() {
+    fn wait_until(expected: &str, ready: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !ready() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for {expected}"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     let (runtime, process, root) = test_runtime("journal-recovery-race");
     let app = test_app(&process);
     let kind = OperationKind::new("filesystem.v1").unwrap();
+    let mut guard = app
+        .begin_operation(OperationDescriptor::new(
+            kind.clone(),
+            "copy file",
+            json!({}),
+        ))
+        .unwrap();
+    guard
+        .checkpoint(OperationCheckpoint::new("copying", json!({"bytes": 1})))
+        .unwrap();
+    let journal = root
+        .join("data/watchdog/operations/test.app")
+        .join(format!("{}.json", guard.operation_id()));
+    let read_record = || {
+        fs::read(&journal).map(|bytes| serde_json::from_slice::<OperationRecord>(&bytes).unwrap())
+    };
+    assert_eq!(read_record().unwrap().checkpoint.phase, "copying");
+
+    // Hold the active entry so commit pauses after persisting its record and before removing it.
+    let active_operations = process.shared.active_operations.lock().unwrap();
+    let writer = thread::spawn(move || guard.commit("complete"));
+    wait_until("the committed journal", || {
+        read_record().is_ok_and(|record| record.status == OperationStatus::Committed)
+    });
+    assert!(matches!(
+        process.shared.recovery_gate.try_lock(),
+        Err(TryLockError::WouldBlock)
+    ));
+
     let recovered = Arc::new(AtomicUsize::new(0));
-    let barrier = Arc::new(Barrier::new(2));
     let scanner_app = app.clone();
     let scanner_kind = kind.clone();
     let scanner_recovered = Arc::clone(&recovered);
-    let scanner_barrier = Arc::clone(&barrier);
     let scanner = thread::spawn(move || {
-        scanner_barrier.wait();
-        for _ in 0..200 {
-            scanner_app
-                .register_recovery_handler(
-                    scanner_kind.clone(),
-                    Arc::new(CountingRecovery(Arc::clone(&scanner_recovered))),
-                )
-                .unwrap();
-            thread::yield_now();
-        }
+        scanner_app
+            .register_recovery_handler(scanner_kind, Arc::new(CountingRecovery(scanner_recovered)))
     });
+    let registration = (app.descriptor.id.clone(), kind.clone());
+    wait_until("recovery handler registration", || {
+        process
+            .shared
+            .recovery_handlers
+            .lock()
+            .unwrap()
+            .contains_key(&registration)
+    });
+    assert!(!scanner.is_finished());
+    drop(active_operations);
 
-    barrier.wait();
-    for index in 0..200 {
-        let mut guard = app
-            .begin_operation(OperationDescriptor::new(
-                kind.clone(),
-                format!("copy file {index}"),
-                json!({ "index": index }),
-            ))
-            .unwrap();
-        guard
-            .checkpoint(OperationCheckpoint::new(
-                "copying",
-                json!({ "index": index }),
-            ))
-            .unwrap();
-        guard.commit("complete").unwrap();
-        thread::yield_now();
-    }
-    scanner.join().unwrap();
+    wait_until("the commit and recovery scan to finish", || {
+        writer.is_finished() && scanner.is_finished()
+    });
+    writer.join().unwrap().unwrap();
+    scanner.join().unwrap().unwrap();
     assert_eq!(recovered.load(Ordering::SeqCst), 0);
+    assert!(!journal.exists());
+
+    let interrupted = app
+        .begin_operation(OperationDescriptor::new(
+            kind.clone(),
+            "interrupted copy",
+            json!({}),
+        ))
+        .unwrap();
+    drop(interrupted);
+    assert!(app.reconcile_checkpointed(&kind).is_recovered());
+    assert_eq!(recovered.load(Ordering::SeqCst), 1);
     cleanup(runtime, &root);
 }
 
@@ -642,9 +681,9 @@ async fn cancelled_async_task_is_not_reported_as_a_panic() {
         .unwrap();
     handle.cancel();
     assert_eq!(handle.join().await.unwrap(), None);
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    assert!(runtime.try_recv_incident().is_none());
-    cleanup(runtime, &root);
+    runtime.shutdown().unwrap();
+    assert!(process.try_recv_incident().is_none());
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[cfg(feature = "tokio")]
@@ -927,6 +966,7 @@ fn previous_session_crash_is_consumed_by_the_next_desktop_and_opens_its_own_repo
 }
 
 #[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires process termination")]
 fn previous_session_after_forced_process_exit_contains_that_runs_heartbeat() {
     let (runtime, process, root) = test_runtime("force-exit");
     let config = process.shared.config.clone();

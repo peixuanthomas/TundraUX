@@ -86,4 +86,7 @@ See [Runtime, recovery, and reports](docs/runtime.md) for detailed rules.
 ```sh
 cargo test --locked -p watchdog
 cargo test --locked -p watchdog --features tokio
+cargo test --locked -p watchdog --features native-tests
 ```
+
+The journal tests use temporary files and synchronize an in-progress commit with a recovery scan. Enable `native-tests` to check forced process exit and, on Unix, the guardian's process registration, signals, and timeouts.
