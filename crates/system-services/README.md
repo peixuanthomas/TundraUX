@@ -40,3 +40,5 @@ cargo test --locked -p system-services --no-default-features
 cargo test --locked -p system-services --features runtime
 bash scripts/check-weathr-dependency-boundary.sh
 ```
+
+Runtime tests isolate weather caches and watchdog files in a temporary directory per test and clean them up after the background workers stop.

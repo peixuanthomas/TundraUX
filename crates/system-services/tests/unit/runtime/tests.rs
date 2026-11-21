@@ -5,7 +5,7 @@ use super::weather::normalize_met_office_code;
 use super::*;
 use async_trait::async_trait;
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn mock_platform() -> platform::mock::MockPlatform {
@@ -512,11 +512,12 @@ fn sample() -> WeatherData {
         attribution: String::new(),
     }
 }
-fn watchdog() -> (watchdog::WatchdogRuntime, AppWatchdog) {
+fn watchdog(root: &Path) -> (watchdog::WatchdogRuntime, AppWatchdog) {
+    let directory = root.join("watchdog");
     let config = watchdog::WatchdogConfig::new(
-        std::env::temp_dir().join("ss-reports"),
-        std::env::temp_dir().join("ss-fallback"),
-        std::env::temp_dir().join("ss-data"),
+        directory.join("reports"),
+        directory.join("fallback"),
+        directory.join("data"),
         "ss-test",
         "1",
     )
@@ -532,11 +533,11 @@ fn watchdog() -> (watchdog::WatchdogRuntime, AppWatchdog) {
         .unwrap();
     (runtime, app)
 }
-fn config() -> SystemServicesConfig {
+fn config(root: &Path) -> SystemServicesConfig {
     SystemServicesConfig {
         time_sync_mode: TimeSyncMode::OperatingSystem,
         weather_refresh_interval: Duration::from_secs(3600),
-        cache_dir: Some(tempfile::tempdir().unwrap().keep()),
+        cache_dir: Some(root.join("cache")),
         ..SystemServicesConfig::default()
     }
 }
@@ -546,7 +547,8 @@ fn network_time_failure_publishes_degraded_state_and_shutdown_completes() {
     let (result_tx, result_rx) = std_mpsc::channel();
     std::thread::spawn(move || {
         let result = (|| -> Result<(), String> {
-            let mut runtime_config = config();
+            let root = tempfile::tempdir().unwrap();
+            let mut runtime_config = config(root.path());
             runtime_config.time_sync_mode = TimeSyncMode::Network;
             runtime_config.time_server_url = Some("not a valid URL".to_string());
             runtime_config.request_timeout = Duration::from_millis(100);
@@ -555,7 +557,7 @@ fn network_time_failure_publishes_degraded_state_and_shutdown_completes() {
                 outcomes: Mutex::new(vec![Err("weather unavailable".to_string())]),
                 calls: AtomicUsize::new(0),
             });
-            let (_watchdog_runtime, app_watchdog) = watchdog();
+            let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
             let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
                 runtime_config,
                 app_watchdog,
@@ -641,7 +643,9 @@ fn network_status_call_count(platform: &platform::mock::MockPlatform) -> usize {
         .count()
 }
 
-fn start_with_zero_status_intervals() -> (
+fn start_with_zero_status_intervals(
+    root: &Path,
+) -> (
     watchdog::WatchdogRuntime,
     SystemServicesHandle,
     watch::Receiver<SystemSnapshot>,
@@ -652,13 +656,13 @@ fn start_with_zero_status_intervals() -> (
         outcomes: Mutex::new(vec![Ok(sample()), Ok(sample())]),
         calls: AtomicUsize::new(0),
     });
-    let mut config = config();
+    let mut config = config(root);
     config.timezone_location = Some(config.fallback_location.clone());
     config.system_status_background_refresh_interval = Duration::ZERO;
     config.system_status_active_refresh_interval = Duration::ZERO;
     config.system_status_active_slow_refresh_interval = Duration::ZERO;
     let platform_trait: Arc<dyn platform::Platform> = platform.clone();
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root);
     let (handle, receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         config,
         app_watchdog,
@@ -670,7 +674,9 @@ fn start_with_zero_status_intervals() -> (
 
 #[test]
 fn zero_status_intervals_keep_commands_responsive() {
-    let (_watchdog_runtime, handle, mut receiver, platform) = start_with_zero_status_intervals();
+    let root = tempfile::tempdir().unwrap();
+    let (_watchdog_runtime, handle, mut receiver, platform) =
+        start_with_zero_status_intervals(root.path());
     wait_until(&mut receiver, |snapshot| {
         matches!(snapshot.storage, StorageState::Ready(_))
     });
@@ -681,7 +687,7 @@ fn zero_status_intervals_keep_commands_responsive() {
         status_call_count(&platform) > storage_calls
     });
     let after_refresh = status_call_count(&platform);
-    let mut changed = config();
+    let mut changed = config(&root.path().join("reconfigured"));
     changed.timezone_location = Some(changed.fallback_location.clone());
     changed.system_status_background_refresh_interval = Duration::ZERO;
     changed.system_status_active_refresh_interval = Duration::ZERO;
@@ -703,10 +709,11 @@ fn zero_status_intervals_keep_commands_responsive() {
 
 #[test]
 fn zero_status_intervals_are_bounded_in_background_and_active_modes() {
+    let root = tempfile::tempdir().unwrap();
     for active in [false, true] {
         let platform = mock_platform();
         let (sender, _receiver) = metrics_channel();
-        let mut config = config();
+        let mut config = config(root.path());
         config.system_status_background_refresh_interval = Duration::ZERO;
         config.system_status_active_refresh_interval = Duration::ZERO;
         config.system_status_active_slow_refresh_interval = Duration::ZERO;
@@ -749,18 +756,19 @@ fn zero_status_intervals_are_bounded_in_background_and_active_modes() {
 
 #[test]
 fn injected_platform_refreshes_immediately_manually_and_at_active_interval() {
+    let root = tempfile::tempdir().unwrap();
     let platform = Arc::new(mock_platform());
     let provider = Arc::new(FakeProvider {
         outcomes: Mutex::new(vec![Ok(sample())]),
         calls: AtomicUsize::new(0),
     });
-    let mut config = config();
+    let mut config = config(root.path());
     config.timezone_location = Some(config.fallback_location.clone());
     config.system_status_background_refresh_interval = Duration::from_secs(60);
     config.system_status_active_refresh_interval = Duration::from_millis(30);
     config.system_status_active_slow_refresh_interval = Duration::from_millis(30);
     let platform_trait: Arc<dyn platform::Platform> = platform.clone();
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         config,
         app_watchdog,
@@ -791,6 +799,7 @@ fn injected_platform_refreshes_immediately_manually_and_at_active_interval() {
 
 #[tokio::test]
 async fn active_metrics_progress_while_weather_provider_is_pending() {
+    let root = tempfile::tempdir().unwrap();
     let platform = Arc::new(mock_platform());
     let fast_calls = Arc::new(AtomicUsize::new(0));
     let slow_calls = Arc::new(AtomicUsize::new(0));
@@ -804,14 +813,14 @@ async fn active_metrics_progress_while_weather_provider_is_pending() {
         started: started_tx,
         calls: provider_calls.clone(),
     });
-    let mut runtime_config = config();
+    let mut runtime_config = config(root.path());
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
     runtime_config.request_timeout = Duration::from_secs(5);
     runtime_config.system_status_background_refresh_interval = Duration::from_secs(60);
     runtime_config.system_status_active_refresh_interval = Duration::from_millis(20);
     runtime_config.system_status_active_slow_refresh_interval = Duration::from_millis(40);
     let platform_trait: Arc<dyn platform::Platform> = platform.clone();
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config.clone(),
         app_watchdog,
@@ -868,12 +877,13 @@ async fn active_metrics_progress_while_weather_provider_is_pending() {
 
 #[test]
 fn time_validation_preempts_pending_weather_and_refresh_resumes() {
-    let mut runtime_config = config();
+    let root = tempfile::tempdir().unwrap();
+    let mut runtime_config = config(root.path());
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
     runtime_config.request_timeout = Duration::from_secs(60);
     let (started_tx, started_rx) = std_mpsc::channel();
     let provider_calls = Arc::new(AtomicUsize::new(0));
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, mut snapshots) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config.clone(),
         app_watchdog,
@@ -913,11 +923,12 @@ fn time_validation_preempts_pending_weather_and_refresh_resumes() {
 
 #[test]
 fn time_validation_keeps_candidate_errors_while_weather_is_pending() {
-    let mut runtime_config = config();
+    let root = tempfile::tempdir().unwrap();
+    let mut runtime_config = config(root.path());
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
     runtime_config.request_timeout = Duration::from_secs(60);
     let (started_tx, started_rx) = std_mpsc::channel();
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, _) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config.clone(),
         app_watchdog,
@@ -951,6 +962,7 @@ fn time_validation_keeps_candidate_errors_while_weather_is_pending() {
 
 #[tokio::test]
 async fn ready_stale_unavailable_and_manual_refresh_are_published() {
+    let root = tempfile::tempdir().unwrap();
     let provider = Arc::new(FakeProvider {
         outcomes: Mutex::new(vec![
             Ok(sample()),
@@ -960,9 +972,9 @@ async fn ready_stale_unavailable_and_manual_refresh_are_published() {
         calls: AtomicUsize::new(0),
     });
     let platform: Arc<dyn platform::Platform> = Arc::new(mock_platform());
-    let mut runtime_config = config();
+    let mut runtime_config = config(root.path());
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config,
         app_watchdog,
@@ -984,9 +996,10 @@ async fn ready_stale_unavailable_and_manual_refresh_are_published() {
         calls: AtomicUsize::new(0),
     });
     let platform: Arc<dyn platform::Platform> = Arc::new(mock_platform());
-    let mut runtime_config = config();
+    let unavailable_root = root.path().join("unavailable");
+    let mut runtime_config = config(&unavailable_root);
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(&unavailable_root);
     let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config,
         app_watchdog,
@@ -1001,14 +1014,15 @@ async fn ready_stale_unavailable_and_manual_refresh_are_published() {
 }
 #[tokio::test]
 async fn reconfiguration_and_shutdown_are_controllable() {
+    let root = tempfile::tempdir().unwrap();
     let provider = Arc::new(FakeProvider {
         outcomes: Mutex::new(vec![Ok(sample()), Ok(sample())]),
         calls: AtomicUsize::new(0),
     });
     let platform: Arc<dyn platform::Platform> = Arc::new(mock_platform());
-    let mut runtime_config = config();
+    let mut runtime_config = config(root.path());
     runtime_config.timezone_location = Some(runtime_config.fallback_location.clone());
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, mut receiver) = SystemServicesRuntime::start_with_platform_and_provider(
         runtime_config,
         app_watchdog,
@@ -1019,7 +1033,7 @@ async fn reconfiguration_and_shutdown_are_controllable() {
         matches!(snapshot.weather, WeatherState::Ready(_))
     })
     .await;
-    let mut changed = config();
+    let mut changed = config(&root.path().join("reconfigured"));
     changed.timezone_id = "Asia/Shanghai".to_string();
     changed.timezone_location = Some(changed.fallback_location.clone());
     handle.reconfigure(changed).unwrap();
@@ -1116,6 +1130,7 @@ fn met_office_codes_use_the_provider_specific_normalizer() {
 
 #[tokio::test]
 async fn weather_location_prioritizes_text_then_timezone_before_system_detection() {
+    let root = tempfile::tempdir().unwrap();
     let configured = GeoLocation {
         latitude: 1.0,
         longitude: 2.0,
@@ -1130,7 +1145,7 @@ async fn weather_location_prioritizes_text_then_timezone_before_system_detection
         outcomes: Mutex::new(vec![]),
         calls: AtomicUsize::new(0),
     };
-    let mut text_config = config();
+    let mut text_config = config(root.path());
     text_config.weather_location = Some("configured city".into());
     text_config.timezone_location = Some(timezone.clone());
     save_location_cache(&text_config, "configured city", &configured).unwrap();
@@ -1141,7 +1156,7 @@ async fn weather_location_prioritizes_text_then_timezone_before_system_detection
     );
     assert_eq!(detector.calls.load(Ordering::SeqCst), 0);
 
-    let mut timezone_config = config();
+    let mut timezone_config = config(&root.path().join("timezone"));
     timezone_config.timezone_location = Some(timezone.clone());
     assert_eq!(
         resolve_location(&timezone_config, true, &mut system_location, &detector).await,
@@ -1152,6 +1167,7 @@ async fn weather_location_prioritizes_text_then_timezone_before_system_detection
 
 #[tokio::test]
 async fn weather_location_uses_successful_system_detection() {
+    let root = tempfile::tempdir().unwrap();
     let detected = GeoLocation {
         latitude: 51.5072,
         longitude: -0.1276,
@@ -1163,7 +1179,7 @@ async fn weather_location_uses_successful_system_detection() {
     };
     let mut system_location = None;
     assert_eq!(
-        resolve_location(&config(), true, &mut system_location, &detector).await,
+        resolve_location(&config(root.path()), true, &mut system_location, &detector).await,
         detected
     );
     assert_eq!(detector.calls.load(Ordering::SeqCst), 1);
@@ -1171,7 +1187,8 @@ async fn weather_location_uses_successful_system_detection() {
 
 #[tokio::test]
 async fn weather_location_uses_default_after_system_detection_fails() {
-    let mut config = config();
+    let root = tempfile::tempdir().unwrap();
+    let mut config = config(root.path());
     config.fallback_location = GeoLocation {
         latitude: 31.2304,
         longitude: 121.4737,
@@ -1191,7 +1208,8 @@ async fn weather_location_uses_default_after_system_detection_fails() {
 
 #[tokio::test]
 async fn system_location_detection_obeys_the_request_timeout() {
-    let mut config = config();
+    let root = tempfile::tempdir().unwrap();
+    let mut config = config(root.path());
     config.request_timeout = Duration::from_millis(10);
     let mut system_location = None;
     let started = Instant::now();
@@ -1238,6 +1256,8 @@ fn operating_system_time_ignores_old_anchor() {
 
 #[test]
 fn monotonic_anchor_advances_and_error_remains_degraded() {
+    let root = tempfile::tempdir().unwrap();
+    let config = config(root.path());
     let instant = Instant::now();
     let utc = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
         .unwrap()
@@ -1253,7 +1273,7 @@ fn monotonic_anchor_advances_and_error_remains_degraded() {
         utc + Duration::from_secs(7)
     );
     let state = current_time_state(
-        &config(),
+        &config,
         Some(&anchor),
         Some("offline"),
         instant + Duration::from_secs(7),
@@ -1262,7 +1282,7 @@ fn monotonic_anchor_advances_and_error_remains_degraded() {
         matches!(state, TimeState::Degraded { last_sync: Some(value), ref error, .. } if value == utc && error == "offline")
     );
     let next = current_time_state(
-        &config(),
+        &config,
         Some(&anchor),
         Some("offline"),
         instant + Duration::from_secs(8),
@@ -1289,10 +1309,11 @@ impl WeatherProvider for PendingProvider {
 
 #[test]
 fn shutdown_and_reconfigure_cancel_pending_provider_wait() {
-    let mut initial = config();
+    let root = tempfile::tempdir().unwrap();
+    let mut initial = config(root.path());
     initial.timezone_location = Some(initial.fallback_location.clone());
     let (entered_tx, entered_rx) = std_mpsc::channel();
-    let (_watchdog_runtime, app_watchdog) = watchdog();
+    let (_watchdog_runtime, app_watchdog) = watchdog(root.path());
     let (handle, _) = SystemServicesRuntime::start_with_platform_and_provider(
         initial.clone(),
         app_watchdog,
@@ -1314,8 +1335,9 @@ fn shutdown_and_reconfigure_cancel_pending_provider_wait() {
 
 #[test]
 fn watchdog_shutdown_cancels_services_while_handle_remains_alive() {
-    let (runtime, app) = watchdog();
-    let mut initial = config();
+    let root = tempfile::tempdir().unwrap();
+    let (runtime, app) = watchdog(root.path());
+    let mut initial = config(root.path());
     initial.timezone_location = Some(initial.fallback_location.clone());
     let (entered_tx, entered_rx) = std_mpsc::channel();
     let (handle, _) = SystemServicesRuntime::start_with_platform_and_provider(
