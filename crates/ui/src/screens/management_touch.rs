@@ -1034,24 +1034,24 @@ fn management_content_layout(
         ) {
             scrollbars.push(bar);
         }
-    } else if let Some(bar) = management_scrollbar(
-        ManagementScrollTarget::Details,
-        Rect::new(
-            details_text.right(),
-            details_text.y,
-            u16::from(!details_text.is_empty()),
-            details_text.height,
-        ),
-        management_wrapped_lines(&model.details, details_canvas.width).len(),
-        usize::from(details_text.height),
-        usize::from(model.details_scroll).min(
-            management_wrapped_lines(&model.details, details_canvas.width)
-                .len()
-                .saturating_sub(usize::from(details_canvas.height)),
-        ),
-        false,
-    ) {
-        scrollbars.push(bar);
+    } else {
+        let line_count = management_wrapped_lines(&model.details, details_canvas.width).len();
+        if let Some(bar) = management_scrollbar(
+            ManagementScrollTarget::Details,
+            Rect::new(
+                details_text.right(),
+                details_text.y,
+                u16::from(!details_text.is_empty()),
+                details_text.height,
+            ),
+            line_count,
+            usize::from(details_text.height),
+            usize::from(model.details_scroll)
+                .min(line_count.saturating_sub(usize::from(details_canvas.height))),
+            false,
+        ) {
+            scrollbars.push(bar);
+        }
     }
     if model.terminal {
         if let Some(snapshot) = &model.terminal_snapshot {
