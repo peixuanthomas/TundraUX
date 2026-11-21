@@ -20,6 +20,8 @@ Each warning, error, or critical alert gets a report ID and keeps its original l
 | [`update/`](src/update/) | Orchestrates update checks, preparation, replacement, and rollback. `git` reads remote history; `http` fetches update data; `release` handles Linux artifacts; `toolchain` checks source-build prerequisites; `vim` validates or installs the engine; `cancellation` cleans up or preserves transactions safely. |
 | [`build.rs`](build.rs), [`build_support`](build_support.rs) | Compile the LSH language definitions and supply version, commit, and dirty-state metadata for update checks. |
 
+Build identity follows the Git checkout and its index, including linked worktrees and packed refs. A nonempty `TUNDRAUX_BUILD_COMMIT` is the sole input for the release identity. Source archives default to `unknown`.
+
 Callers modify state through `AppCommand` and read a consistent view through `AppSnapshot`. `clock_snapshot()` samples only time when no page snapshot is needed; `storage_config_revision()` lets hosts observe effective configuration changes without copying the configuration. `AppAction` only expresses requests to redraw, exit, reboot, or power off; Shell performs terminal restoration and process operations.
 
 ## Main state and workflows
