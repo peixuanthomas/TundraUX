@@ -94,7 +94,7 @@ mod screen_saver;
 pub(crate) mod services_client;
 mod spring_progress;
 #[cfg(test)]
-#[path = "../../tests/unit/session/tests.rs"]
+#[path = "../../tests/unit/session/workflows/mod.rs"]
 mod tests;
 mod ui_state;
 
