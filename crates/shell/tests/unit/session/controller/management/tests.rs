@@ -3371,7 +3371,7 @@ fn all_package_subviews_keep_navigation_after_empty_or_failed_queries() {
         assert!(
             session
                 .to_management_view_model()
-                .title
+                .heading
                 .contains(&management_label(&format!("scope-{scope}"), scope))
         );
         session.handle_management_key(&KeyInput::new(InputKey::F(7)));

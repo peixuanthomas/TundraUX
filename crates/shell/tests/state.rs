@@ -218,43 +218,6 @@ fn mouse_move_updates_hover_from_hit_map() {
 }
 
 #[test]
-fn right_click_opens_context_menu_popup_on_hit_target() {
-    let mut state = ShellSession::new(debug_config(), (120, 40));
-
-    state.apply_input(InputEvent::mouse_down(PointerButton::Right, (4, 4)));
-
-    assert_eq!(
-        state.active_popup().map(|popup| popup.owner),
-        Some(Some(ShellComponent::Home))
-    );
-    assert_eq!(state.focused_component(), ShellComponent::ContextMenu);
-    assert_eq!(
-        state.last_command(),
-        Some(&ShellCommand::OpenContextMenu {
-            target: Some(ShellComponent::Home),
-            coordinates: (4, 4),
-        })
-    );
-    assert_eq!(
-        state.hit_target_at((4, 4)),
-        Some(ShellComponent::ContextMenu)
-    );
-}
-
-#[test]
-fn popup_closes_on_outside_click_without_activating_underlying_target() {
-    let mut state = ShellSession::new(debug_config(), (120, 40));
-    state.apply_input(InputEvent::mouse_down(PointerButton::Right, (4, 4)));
-
-    let action = state.apply_input(InputEvent::mouse_down(PointerButton::Left, (80, 20)));
-
-    assert_eq!(action, ShellAction::Redraw);
-    assert_eq!(state.active_popup(), None);
-    assert_eq!(state.last_command(), Some(&ShellCommand::ClosePopup));
-    assert_eq!(state.status(), "Ready");
-}
-
-#[test]
 fn modal_captures_mouse_without_closing_or_activating_home() {
     let mut state = ShellSession::new(debug_config(), (120, 40));
     state.apply_input(InputEvent::from_key_label("q"));

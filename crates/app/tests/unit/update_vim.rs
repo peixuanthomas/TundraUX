@@ -422,24 +422,6 @@ fn vim_recovery_handles_a_publish_before_its_journal_write() {
     }
 }
 
-#[cfg(any(windows, target_os = "linux"))]
-#[test]
-fn old_update_protocol_is_rejected_without_changing_the_installation() {
-    let (root, path, manifest) = transaction_fixture("old-update-protocol");
-    let mut old = serde_json::to_value(&manifest).unwrap();
-    old["protocol"] = 2.into();
-    old.as_object_mut().unwrap().remove("vim");
-    fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
-    assert!(
-        load_manifest(&path)
-            .unwrap_err()
-            .to_string()
-            .contains("unsupported update protocol")
-    );
-    assert_old_install_preserved(&manifest);
-    fs::remove_dir_all(root).unwrap();
-}
-
 #[test]
 fn current_update_protocol_rejects_a_missing_vim_transaction() {
     let root = update_test_root("vim-required-journal");

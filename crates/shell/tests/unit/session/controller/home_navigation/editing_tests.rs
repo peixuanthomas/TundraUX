@@ -223,8 +223,27 @@ fn removing_a_home_shortcut_keeps_the_app_in_launcher_and_saves_the_choice() {
         .unwrap()
         .area;
     let point = (area.x + 1, area.y + area.height / 2);
-    state.apply_input(InputEvent::mouse_down(PointerButton::Right, point));
-    state.apply_input(InputEvent::mouse_up(PointerButton::Right, point));
+    let open_menu = |state: &mut ShellSession| {
+        state.apply_input(InputEvent::mouse_down(PointerButton::Right, point));
+        state.apply_input(InputEvent::mouse_up(PointerButton::Right, point));
+    };
+    open_menu(state);
+    let (_, menu_area) = state.home_context_menu(main_area(state)).unwrap();
+    let outside = state
+        .home_content_layout()
+        .unwrap()
+        .items
+        .iter()
+        .map(|item| (item.area.x + 1, item.area.y + item.area.height / 2))
+        .find(|position| !menu_area.contains((*position).into()))
+        .unwrap();
+    let before = order(state);
+    click(state, outside);
+    assert!(state.active_popup().is_none());
+    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert_eq!(order(state), before);
+
+    open_menu(state);
     let bounds = Rect::new(0, 0, 120, 40);
     let (menu, menu_area) = state.home_context_menu(main_area(state)).unwrap();
     let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();

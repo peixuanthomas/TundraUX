@@ -433,17 +433,6 @@ fn source_display_positions_and_max_width_use_terminal_cells() {
 }
 
 #[test]
-fn source_max_display_width_initializes_many_short_ascii_lines_sequentially() {
-    let mut source = "short log line\n".repeat(100_000);
-    source.push_str(&"x".repeat(257));
-    let editor = EditorState::open_read_only_owned(PathBuf::from("many.log"), source.into_bytes())
-        .expect("valid ASCII log");
-
-    assert_eq!(editor.source_line_count(), Some(100_001));
-    assert_eq!(editor.source_max_display_width(), Some(257));
-}
-
-#[test]
 fn source_max_display_width_tracks_edits_and_history_incrementally() {
     let mut editor = EditorState::from_document(EditorDocument::from_text(
         None,

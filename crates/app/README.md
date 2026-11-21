@@ -74,4 +74,4 @@ Runtime logs merge failure reports that the user is authorized to access at the 
 cargo test --locked -p app
 ```
 
-Use the named integration tests `editor`, `explorer`, `launcher`, and `script` for those workflows. Update and Vim installation tests run offline and cover validation, cancellation, file safety, and rollback. Run workspace tests when changing cross-crate commands or shared types.
+Use the named integration tests `editor`, `explorer`, `launcher`, and `script` for those workflows. Update tests reject legacy journals and check that a current journal records the Vim transaction. Update and Vim installation tests run offline with fixtures for validation, cancellation, file safety, and rollback. Run workspace tests when changing cross-crate commands or shared types.

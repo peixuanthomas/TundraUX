@@ -533,7 +533,6 @@ impl TransactionOperations for FakeTransactionOperations {
     }
 }
 
-#[cfg(any(windows, target_os = "linux"))]
 fn transaction_fixture(name: &str) -> (PathBuf, PathBuf, TransactionManifest) {
     let root = update_test_root(name);
     let install = root.join("install");
@@ -578,7 +577,6 @@ fn transaction_fixture(name: &str) -> (PathBuf, PathBuf, TransactionManifest) {
     (root, manifest_path, manifest)
 }
 
-#[cfg(any(windows, target_os = "linux"))]
 fn assert_old_install_preserved(manifest: &TransactionManifest) {
     assert_eq!(
         fs::read(manifest.install_dir.join(SHELL_FILE)).unwrap(),
@@ -746,29 +744,25 @@ fn update_transaction_succeeds_without_an_assets_directory() {
 }
 
 #[test]
-fn update_rejects_old_transactions_before_replacing_programs() {
-    let root = update_test_root("old-protocol");
-    let install = root.join("install");
-    let transaction_dir = install.join(".tundra-update/tx");
-    fs::create_dir_all(&transaction_dir).unwrap();
-    let path = transaction_dir.join("transaction.json");
-    let manifest = TransactionManifest {
-        protocol: 1,
-        target_sha: "abc".into(),
-        install_dir: install,
-        transaction_dir,
-        state: TransactionState::Prepared,
-        cli_replaced: false,
-        shell_replaced: false,
-        vim: None,
-    };
-    write_manifest(&path, &manifest).unwrap();
-    assert!(
-        load_manifest(&path)
-            .unwrap_err()
-            .to_string()
-            .contains("unsupported update protocol 1")
-    );
+fn update_rejects_old_transactions_without_changing_the_installation() {
+    let (root, path, manifest) = transaction_fixture("old-protocol");
+    let mut old = serde_json::to_value(&manifest).unwrap();
+    old["vim"] = serde_json::Value::Null;
+    for protocol in [1, 2] {
+        old["protocol"] = protocol.into();
+        if protocol == 2 {
+            old.as_object_mut().unwrap().remove("vim");
+        }
+        fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+        let error = load_manifest(&path).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("unsupported update protocol {protocol}")),
+            "{error}"
+        );
+        assert_old_install_preserved(&manifest);
+    }
     fs::remove_dir_all(root).unwrap();
 }
 

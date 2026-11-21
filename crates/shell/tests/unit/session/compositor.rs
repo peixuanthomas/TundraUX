@@ -686,7 +686,37 @@ fn floating_toast_blocks_covered_buttons_until_its_exit_finishes() {
     };
     let initial = frame(&state, 0);
     draw(&mut compositor, &mut terminal, &mut state, &initial);
-    let id = "page/launcher.toolbar.Refresh";
+    let mut shown = frame(&state, 10);
+    shown.chrome.status.toast = Some("Saved changes\nSecond line\nThird line".into());
+    compositor.synchronize_toast(&shown.chrome, shown.context.motion);
+    let toast_area = compositor
+        .toast
+        .as_ref()
+        .unwrap()
+        .layout(state.frame_layout.unwrap().main);
+    let button = compositor
+        .snapshot
+        .as_ref()
+        .unwrap()
+        .nodes
+        .iter()
+        .find(|node| {
+            node.actionable
+                && node.id.starts_with("page/launcher.item.")
+                && toast_area.contains(
+                    (
+                        node.rect.x + node.rect.width / 2,
+                        node.rect.y + node.rect.height / 2,
+                    )
+                        .into(),
+                )
+        })
+        .expect("the toast must overlap the center of a visible launcher card");
+    let id = button.id.clone();
+    let point = (
+        button.rect.x + button.rect.width / 2,
+        button.rect.y + button.rect.height / 2,
+    );
     let control = |compositor: &ScreenCompositor| {
         compositor
             .snapshot
@@ -698,22 +728,17 @@ fn floating_toast_blocks_covered_buttons_until_its_exit_finishes() {
             .unwrap()
             .clone()
     };
-    let refresh = control(&compositor);
-    let point = (
-        refresh.rect.x + refresh.rect.width / 2,
-        refresh.rect.y + refresh.rect.height / 2,
-    );
     let now = Instant::now();
     let down = || InputEvent::mouse_down(PointerButton::Left, point);
     let up = || InputEvent::mouse_up(PointerButton::Left, point);
-    assert!(refresh.actionable);
     let focus = state.focused_component();
-    compositor.prepare_input(&mut state, down(), &platform, now);
+    let press = compositor
+        .prepare_input(&mut state, down(), &platform, now)
+        .unwrap();
+    let routed = state.route_input_at(press, now);
+    state.apply_routed_event(routed, &platform, now);
     assert!(state.interaction.button_capture.is_some());
 
-    let mut shown = frame(&state, 10);
-    shown.chrome.status.toast = Some("Saved changes".into());
-    compositor.synchronize_toast(&shown.chrome, shown.context.motion);
     draw(&mut compositor, &mut terminal, &mut state, &shown);
     assert!(compositor.toast_area.unwrap().contains(point.into()));
     assert!(!control(&compositor).actionable);
@@ -762,13 +787,17 @@ fn floating_toast_blocks_covered_buttons_until_its_exit_finishes() {
     );
     assert!(state.interaction.button_capture.is_none());
 
-    compositor.prepare_input(&mut state, down(), &platform, now);
+    let press = compositor
+        .prepare_input(&mut state, down(), &platform, now)
+        .unwrap();
+    let routed = state.route_input_at(press, now);
+    state.apply_routed_event(routed, &platform, now);
     let click = compositor
         .prepare_input(&mut state, up(), &platform, now)
         .unwrap();
     assert!(matches!(
         state.route_input_at(click, now).command,
-        ShellCommand::LauncherPointer(target, _) if target == point
+        ShellCommand::LauncherActivate
     ));
 }
 
@@ -1736,34 +1765,6 @@ fn clock_create_cancel_closes_on_release_with_or_without_hover() {
         state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
         assert!(state.pages.clock.clock_create_state.is_none());
     }
-}
-
-#[test]
-fn launcher_card_single_click_waits_for_release() {
-    let mut state = session();
-    state.enter_screen(ShellScreen::Launcher);
-    state.refresh_hit_map();
-    let mut compositor = ScreenCompositor::default();
-    let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
-    let mut prepared = home_frame(&state, 0, true);
-    prepared.page = ScreenViewModel::Launcher(Box::new(state.to_launcher_view_model()));
-    draw(&mut compositor, &mut terminal, &mut state, &prepared);
-    let id = format!("launcher.item.{}", app::EDITOR_APPLICATION.id);
-    let area = state
-        .button_regions
-        .iter()
-        .find(|r| r.id.as_str() == id)
-        .unwrap()
-        .area;
-    let point = (area.x + 1, area.y + 1);
-    let now = Instant::now();
-    state.apply_input_at(InputEvent::mouse_down(PointerButton::Left, point), now);
-    assert_eq!(state.active_screen(), ShellScreen::Launcher);
-    state.apply_input_at(
-        InputEvent::mouse_up(PointerButton::Left, point),
-        now + Duration::from_millis(30),
-    );
-    assert_eq!(state.active_screen(), ShellScreen::Editor);
 }
 
 #[test]

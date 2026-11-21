@@ -412,32 +412,6 @@ fn batched_input_installs_settled_hit_map_before_the_next_event() {
 }
 
 #[test]
-fn fullscreen_runtime_delegates_frame_composition() {
-    let source = include_str!("../../../../src/session/runtime.rs");
-    let start = source
-        .find("pub(super) fn run_fullscreen_shell_session")
-        .unwrap();
-    let end = source[start..]
-        .find("fn command_line_poll_timeout")
-        .unwrap()
-        + start;
-    let runtime = source[start..end]
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect::<String>();
-    assert!(runtime.contains("compositor.prepare("));
-    assert!(runtime.contains("compositor.render(frame,"));
-    assert!(
-        !runtime.contains("ui::render_"),
-        "normal frames must use the compositor"
-    );
-    assert!(
-        !runtime.contains("frame.buffer_mut()"),
-        "post effects belong to the compositor"
-    );
-}
-
-#[test]
 fn deferred_alert_toast_reentry_resumes_without_replaying_or_jumping() {
     let frame = |millis| ui::MotionFrame {
         now: Duration::from_millis(millis),

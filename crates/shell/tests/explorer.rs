@@ -833,34 +833,6 @@ fn mouse_double_click_on_first_rendered_row_does_not_open_second_entry() {
 }
 
 #[test]
-fn right_click_selects_explorer_entry_and_opens_context_menu() {
-    let fixture = FixtureRoot::new("right-click");
-    let platform = mock_platform(fixture.path());
-    initialize_system_profile(&platform);
-    fs::write(fixture.path().join("Documents").join("alpha.txt"), "alpha").expect("alpha");
-    let mut state = system_home(&platform);
-    open_home_entry(&mut state, &platform, "explorer");
-    let first_entry = first_entry_coordinates(&state);
-
-    state.apply_input_with_platform(
-        InputEvent::mouse_down(PointerButton::Right, first_entry),
-        &platform,
-    );
-
-    assert_eq!(
-        state.active_popup().map(|popup| popup.owner),
-        Some(Some(ShellComponent::Explorer))
-    );
-    assert_eq!(
-        state
-            .to_explorer_view_model()
-            .selected_entry()
-            .map(|entry| entry.name.as_str()),
-        Some("alpha.txt")
-    );
-}
-
-#[test]
 fn mouse_modifiers_select_ranges_and_toggle_files_without_opening_them() {
     let fixture = FixtureRoot::new("mouse-multiselect");
     let platform = mock_platform(fixture.path());
@@ -935,8 +907,8 @@ fn mouse_modifiers_select_ranges_and_toggle_files_without_opening_them() {
 }
 
 #[test]
-fn context_menu_outside_click_closes_without_changing_selection_or_opening_file() {
-    let fixture = FixtureRoot::new("context-outside");
+fn context_menu_can_be_dismissed_without_changing_selection_or_operated_by_keyboard() {
+    let fixture = FixtureRoot::new("context-menu-interaction");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
     fs::write(fixture.path().join("Documents/alpha.txt"), "test").unwrap();
@@ -947,17 +919,25 @@ fn context_menu_outside_click_closes_without_changing_selection_or_opening_file(
         InputEvent::mouse_down(PointerButton::Right, entry),
         &platform,
     );
+    assert_eq!(
+        state.active_popup().map(|popup| popup.owner),
+        Some(Some(ShellComponent::Explorer))
+    );
+    let model = state.to_explorer_view_model();
+    assert_eq!(
+        model.selected_entry().map(|entry| entry.name.as_str()),
+        Some("alpha.txt")
+    );
     let ui::ShellLayout::Full { main, .. } = ui::compute_shell_layout(Rect::new(0, 0, 120, 40))
     else {
         panic!("full layout");
     };
-    let layout = ui::explorer_layout(main, &state.to_explorer_view_model());
+    let layout = ui::explorer_layout(main, &model);
     let overlay = layout.overlay.unwrap().area;
     let blank = main
         .positions()
         .find(|p| !overlay.contains(*p) && p.y > entry.1 + 1)
         .unwrap();
-    let before = state.to_explorer_view_model().selected_count;
     state.apply_input_with_platform(
         InputEvent::mouse_down(PointerButton::Left, (blank.x, blank.y)),
         &platform,
@@ -969,8 +949,20 @@ fn context_menu_outside_click_closes_without_changing_selection_or_opening_file(
     assert!(state.active_popup().is_none());
     assert!(state.to_explorer_view_model().overlay.is_none());
     assert_eq!(state.focused_component(), ShellComponent::Explorer);
-    assert_eq!(state.to_explorer_view_model().selected_count, before);
+    assert_eq!(
+        state.to_explorer_view_model().selected_count,
+        model.selected_count
+    );
     assert_eq!(state.active_screen(), ShellScreen::Explorer);
+
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Right, entry),
+        &platform,
+    );
+    state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
+    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
+    assert!(state.active_popup().is_none());
+    assert!(state.to_explorer_view_model().entry_presentations[0].cut);
 }
 
 #[test]
@@ -1068,27 +1060,6 @@ fn explorer_scrollbar_thumb_drags_to_the_end_without_starting_a_file_drag() {
     assert_eq!(ui::explorer_layout(main, &model).visible_start, 0);
     assert!(model.operation.is_none());
     assert!(model.error.is_none());
-}
-
-#[test]
-fn context_menu_supports_arrow_and_enter_keyboard_activation() {
-    let fixture = FixtureRoot::new("context-keyboard");
-    let platform = mock_platform(fixture.path());
-    initialize_system_profile(&platform);
-    fs::write(fixture.path().join("Documents").join("alpha.txt"), "alpha").expect("alpha");
-    let mut state = system_home(&platform);
-    open_home_entry(&mut state, &platform, "explorer");
-    let first_entry = first_entry_coordinates(&state);
-    state.apply_input_with_platform(
-        InputEvent::mouse_down(PointerButton::Right, first_entry),
-        &platform,
-    );
-
-    state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
-
-    assert!(state.active_popup().is_none());
-    assert!(state.to_explorer_view_model().entry_presentations[0].cut);
 }
 
 #[test]
@@ -1497,43 +1468,7 @@ fn failed_system_trash_delete_reports_a_stable_operation_error() {
 }
 
 #[test]
-fn explorer_error_details_remain_in_status_after_selection_changes() {
-    let fixture = FixtureRoot::new("error-status-details");
-    let platform = mock_platform(fixture.path());
-    initialize_system_profile(&platform);
-    let mut state = system_home(&platform);
-    open_home_entry(&mut state, &platform, "explorer");
-    for key in ["v"] {
-        state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
-    }
-    let error = state.to_explorer_view_model().error.unwrap();
-    assert!(error.contains("clipboard is empty"));
-    assert!(
-        state
-            .to_shell_chrome_view_model()
-            .status
-            .full_message()
-            .contains(&error)
-    );
-
-    for input in [
-        InputEvent::Tick,
-        InputEvent::from_key_label("Down"),
-        InputEvent::Tick,
-    ] {
-        state.apply_input_with_platform(input, &platform);
-        let status = state.to_shell_chrome_view_model().status.full_message();
-        assert!(status.contains(&error), "error was replaced by {status:?}");
-    }
-
-    state.apply_input_with_platform(InputEvent::from_key_label("h"), &platform);
-    let recovered = state.to_shell_chrome_view_model().status;
-    assert!(recovered.error.is_none());
-    assert!(!recovered.full_message().contains(&error));
-}
-
-#[test]
-fn explorer_alert_resolves_after_success_and_close_without_clearing_unrelated_alert() {
+fn explorer_alert_survives_selection_and_resolves_on_success_or_close() {
     let fixture = FixtureRoot::new("alert-lifecycle");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
@@ -1561,11 +1496,24 @@ fn explorer_alert_resolves_after_success_and_close_without_clearing_unrelated_al
             .is_some_and(|message| message.contains("clipboard is empty"))
     );
     assert_eq!(failed.status.alert_tone, NotificationTone::Error);
+    let error = state.to_explorer_view_model().error.unwrap();
+    assert!(error.contains("clipboard is empty"));
+    assert!(failed.status.full_message().contains(&error));
+    for input in [
+        InputEvent::Tick,
+        InputEvent::from_key_label("Down"),
+        InputEvent::Tick,
+    ] {
+        state.apply_input_with_platform(input, &platform);
+        let status = state.to_shell_chrome_view_model().status.full_message();
+        assert!(status.contains(&error), "error was replaced by {status:?}");
+    }
 
     state.apply_input_with_platform(InputEvent::from_key_label("h"), &platform);
     let recovered = state.to_shell_chrome_view_model();
     assert_eq!(recovered.status.error.as_deref(), Some("Unrelated warning"));
     assert_eq!(recovered.status.alert_tone, NotificationTone::Warning);
+    assert!(!recovered.status.full_message().contains(&error));
 
     state.apply_input_with_platform(InputEvent::from_key_label("v"), &platform);
     assert!(
@@ -1585,10 +1533,14 @@ fn explorer_alert_resolves_after_success_and_close_without_clearing_unrelated_al
 }
 
 fn initialize_system_profile(platform: &MockPlatform) {
-    let startup = prepare_shell_startup(platform).expect("startup");
-    let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    state.apply_input_with_platform(InputEvent::from_key_label("F9"), platform);
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    let username = platform.current_username().expect("fixture username");
+    StorageManager::open_from_platform(platform)
+        .expect("fixture storage")
+        .manager
+        .update_profile(&username, |profile| {
+            profile.appearance.icon_display_mode = storage::IconDisplayMode::Ascii;
+        })
+        .expect("fixture profile");
 }
 
 fn system_home(platform: &MockPlatform) -> ShellSession {
@@ -1761,42 +1713,15 @@ fn batch_copy_cut_paste_and_delete_use_the_selected_files() {
 }
 
 #[test]
-fn explorer_address_shortcut_selects_the_path_for_direct_paste() {
-    let fixture = FixtureRoot::new("address-replace");
-    let platform = mock_platform(fixture.path());
-    initialize_system_profile(&platform);
-    let target = fixture.path().join("Documents/目标目录");
-    fs::create_dir_all(&target).unwrap();
-    let mut state = system_home(&platform);
-    open_home_entry(&mut state, &platform, "explorer");
-    state.apply_input_with_platform(ctrl_key('l'), &platform);
-    assert_eq!(
-        state.to_explorer_view_model().address_selection_anchor,
-        Some(0)
-    );
-    state.apply_input_with_platform(
-        InputEvent::Paste(target.to_string_lossy().into_owned()),
-        &platform,
-    );
-    assert_eq!(
-        state.to_explorer_view_model().address_value,
-        target.to_string_lossy()
-    );
-    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
-    assert_eq!(
-        PathBuf::from(state.to_explorer_view_model().current_path),
-        target
-    );
-}
-
-#[test]
-fn explorer_address_edit_appends_mixed_separators_and_navigates() {
-    let fixture = FixtureRoot::new("address-append");
+fn explorer_address_edit_accepts_mixed_separators_and_replacement_paths() {
+    let fixture = FixtureRoot::new("address-navigation");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
     let documents = fixture.path().join("Documents");
     let target = documents.join("子目录/child");
+    let replacement = documents.join("目标目录");
     fs::create_dir_all(&target).unwrap();
+    fs::create_dir_all(&replacement).unwrap();
     let mut state = system_home(&platform);
     open_home_entry(&mut state, &platform, "explorer");
 
@@ -1843,6 +1768,25 @@ fn explorer_address_edit_appends_mixed_separators_and_navigates() {
     assert_eq!(
         PathBuf::from(state.to_explorer_view_model().current_path),
         target
+    );
+
+    state.apply_input_with_platform(ctrl_key('l'), &platform);
+    assert_eq!(
+        state.to_explorer_view_model().address_selection_anchor,
+        Some(0)
+    );
+    state.apply_input_with_platform(
+        InputEvent::Paste(replacement.to_string_lossy().into_owned()),
+        &platform,
+    );
+    assert_eq!(
+        state.to_explorer_view_model().address_value,
+        replacement.to_string_lossy()
+    );
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    assert_eq!(
+        PathBuf::from(state.to_explorer_view_model().current_path),
+        replacement
     );
 }
 

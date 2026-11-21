@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use platform::mock::{MockCall, MockPlatform};
 use platform::{
-    AppPaths, PlatformCapabilities, PlatformKind, UserDirs, build_windows_app_paths,
+    AppPaths, Platform, PlatformCapabilities, PlatformKind, UserDirs, build_windows_app_paths,
     cleanup_temp_path,
 };
 use ratatui::layout::Rect;
@@ -92,7 +92,7 @@ fn vim_toggle_stays_in_the_current_editor_and_waits_for_the_engine() {
 }
 
 #[test]
-fn completed_save_updates_the_status_and_the_original_explorer_metadata() {
+fn editing_and_saving_plain_text_updates_the_original_explorer_metadata() {
     let fixture = FixtureRoot::new("save-refreshes-explorer");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
@@ -100,7 +100,13 @@ fn completed_save_updates_the_status_and_the_original_explorer_metadata() {
     fs::write(&path, "old").unwrap();
     let mut state = system_home(&platform);
     open_only_document_in_editor(&mut state, &platform);
+    let opened = state.to_editor_view_model();
+    assert!(!opened.read_only);
+    assert!(!opened.reload_available);
     type_text(&mut state, &platform, "saved prefix ");
+    let edited = state.to_editor_view_model();
+    assert_eq!(edited.source_lines, ["saved prefix old"]);
+    assert!(edited.dirty);
     state.apply_input_with_platform(ctrl('s'), &platform);
     wait_for_editor_background_tasks(&mut state, &platform);
 
@@ -129,8 +135,22 @@ fn new_documents_keep_their_own_text_undo_and_close_confirmations() {
     let first = state.active_page_id();
     type_text(&mut state, &platform, "first draft");
     state.apply_input_with_platform(ctrl('n'), &platform);
-    assert_ne!(state.active_page_id(), first);
+    let second = state.active_page_id();
+    assert_ne!(second, first);
     type_text(&mut state, &platform, "second draft");
+    state.apply_input_with_platform(
+        InputEvent::Key(KeyInput::with_phase(
+            InputKey::Char('w'),
+            InputModifiers {
+                control: true,
+                ..InputModifiers::none()
+            },
+            InputPhase::Repeat,
+        )),
+        &platform,
+    );
+    assert_eq!(state.active_page_id(), second);
+    assert!(state.to_notification_view_model().is_none());
     state.apply_input_with_platform(ctrl('w'), &platform);
     assert!(state.to_notification_view_model().is_some());
     state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
@@ -832,28 +852,6 @@ fn escape_closes_an_open_menu_before_closing_the_document() {
     assert_eq!(state.active_screen(), ShellScreen::Launcher);
 }
 #[test]
-fn repeated_command_shortcut_does_not_trigger_a_one_shot_action() {
-    let fixture = FixtureRoot::new("repeat-shortcut");
-    let platform = mock_platform(fixture.path());
-    let mut state = new_user_home_state(&platform);
-    open_editor_from_home(&mut state, &platform);
-
-    state.apply_input_with_platform(
-        InputEvent::Key(KeyInput::with_phase(
-            InputKey::Char('w'),
-            InputModifiers {
-                control: true,
-                ..InputModifiers::none()
-            },
-            InputPhase::Repeat,
-        )),
-        &platform,
-    );
-
-    assert_eq!(state.active_screen(), ShellScreen::Editor);
-}
-
-#[test]
 fn held_direction_keys_accelerate_non_linearly_with_slower_vertical_shift_selection() {
     let fixture = FixtureRoot::new("cursor-acceleration");
     let platform = mock_platform(fixture.path());
@@ -1525,20 +1523,16 @@ fn save_locks_editor_input_until_the_background_write_finishes() {
 
 #[test]
 fn log_name_variants_open_read_only_at_the_document_bottom() {
-    for (case, file_name) in [
-        ("readonly-log", "service.log"),
-        ("readonly-uppercase-log", "service.LOG"),
-        ("readonly-rotated-log", "service.log.1"),
-    ] {
-        let fixture = FixtureRoot::new(case);
-        let platform = mock_platform(fixture.path());
-        initialize_system_profile(&platform);
-        let contents = (0..100)
-            .map(|line| format!("line {line}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs::write(fixture.path().join("Documents").join(file_name), contents).expect("seed log");
-        let mut state = system_home(&platform);
+    let fixture = FixtureRoot::new("readonly-log-variants");
+    let platform = mock_platform(fixture.path());
+    let mut state = new_user_home_state(&platform);
+    let contents = (0..100)
+        .map(|line| format!("line {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for file_name in ["service.log", "service.LOG", "service.log.1"] {
+        let path = fixture.path().join("Documents").join(file_name);
+        fs::write(&path, &contents).expect("seed log");
 
         open_only_document_in_editor(&mut state, &platform);
 
@@ -1567,6 +1561,12 @@ fn log_name_variants_open_read_only_at_the_document_bottom() {
             Some("line 99")
         );
         assert!(!unchanged.dirty);
+
+        state.apply_input_with_platform(ctrl('w'), &platform);
+        assert_eq!(state.active_screen(), ShellScreen::Explorer);
+        state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+        assert_eq!(state.active_screen(), ShellScreen::Home);
+        fs::remove_file(path).unwrap();
     }
 }
 
@@ -1610,29 +1610,6 @@ fn log_snapshot_changes_only_after_r_reload() {
     assert!(reloaded.reload_available);
     assert!(reloaded.source_lines.join("\n").ends_with("third"));
     assert_eq!(reloaded.cursor.map(|cursor| cursor.line), Some(2));
-}
-
-#[test]
-fn non_log_text_document_remains_editable() {
-    let fixture = FixtureRoot::new("editable-text");
-    let platform = mock_platform(fixture.path());
-    initialize_system_profile(&platform);
-    fs::write(
-        fixture.path().join("Documents").join("notes.txt"),
-        "editable",
-    )
-    .expect("seed text document");
-    let mut state = system_home(&platform);
-    open_only_document_in_editor(&mut state, &platform);
-
-    let opened = state.to_editor_view_model();
-    assert!(!opened.read_only);
-    assert!(!opened.reload_available);
-    type_text(&mut state, &platform, "x");
-
-    let edited = state.to_editor_view_model();
-    assert_eq!(edited.source_lines.join("\n"), "xeditable");
-    assert!(edited.dirty);
 }
 
 #[test]
@@ -2573,10 +2550,14 @@ fn mock_platform(base: &Path) -> MockPlatform {
 }
 
 fn initialize_system_profile(platform: &MockPlatform) {
-    let startup = prepare_shell_startup(platform).expect("startup");
-    let mut state = ShellSession::new_with_startup(default_config(), (120, 40), startup);
-    state.apply_input_with_platform(InputEvent::from_key_label("F9"), platform);
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    let username = platform.current_username().expect("fixture username");
+    storage::StorageManager::open_from_platform(platform)
+        .expect("fixture storage")
+        .manager
+        .update_profile(&username, |profile| {
+            profile.appearance.icon_display_mode = storage::IconDisplayMode::Ascii;
+        })
+        .expect("fixture profile");
 }
 
 fn system_home(platform: &MockPlatform) -> ShellSession {
@@ -2670,6 +2651,27 @@ fn ordinary_editor_context_menu_preserves_selection_and_reuses_clipboard_actions
     type_text(&mut state, &platform, "copy this 中文");
     state.apply_input_with_platform(ctrl('a'), &platform);
     let selected = state.to_editor_view_model().selection;
+    let anchor = editor_canvas_point(&state);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Right, anchor),
+        &platform,
+    );
+    let layout = current_editor_layout(&state);
+    let outside = (layout.canvas.x, layout.canvas.y);
+    assert!(!layout.menu_popup.unwrap().contains(outside.into()));
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Left, outside),
+        &platform,
+    );
+    state.apply_input_with_platform(
+        InputEvent::mouse_up(PointerButton::Left, outside),
+        &platform,
+    );
+    let dismissed = state.to_editor_view_model();
+    assert!(dismissed.open_menu.is_none());
+    assert_eq!(dismissed.selection, selected);
+    assert_eq!(dismissed.source_lines, ["copy this 中文"]);
+
     for action in [
         ui::EditorMenuAction::Copy,
         ui::EditorMenuAction::Cut,
@@ -2754,37 +2756,4 @@ fn readonly_editor_context_menu_allows_copy_and_keyboard_escape_restores_documen
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     assert!(state.to_editor_view_model().open_menu.is_none());
     assert_eq!(state.to_editor_view_model().source_lines, vec!["read only"]);
-}
-
-#[test]
-fn editor_context_outside_click_only_closes_menu_and_keeps_selection() {
-    let fixture = FixtureRoot::new("editor-context-outside");
-    let platform = mock_platform(fixture.path());
-    let mut state = new_user_home_state(&platform);
-    open_editor_from_home(&mut state, &platform);
-    type_text(&mut state, &platform, "keep selection");
-    state.apply_input_with_platform(ctrl('a'), &platform);
-    let selected = state.to_editor_view_model().selection;
-    let anchor = editor_canvas_point(&state);
-    state.apply_input_with_platform(
-        InputEvent::mouse_down(PointerButton::Right, anchor),
-        &platform,
-    );
-    let layout = current_editor_layout(&state);
-    let outside = (layout.canvas.x, layout.canvas.y);
-    assert!(!layout.menu_popup.unwrap().contains(outside.into()));
-    state.apply_input_with_platform(
-        InputEvent::mouse_down(PointerButton::Left, outside),
-        &platform,
-    );
-    state.apply_input_with_platform(
-        InputEvent::mouse_up(PointerButton::Left, outside),
-        &platform,
-    );
-    assert!(state.to_editor_view_model().open_menu.is_none());
-    assert_eq!(state.to_editor_view_model().selection, selected);
-    assert_eq!(
-        state.to_editor_view_model().source_lines,
-        vec!["keep selection"]
-    );
 }

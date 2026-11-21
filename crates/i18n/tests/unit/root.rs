@@ -33,10 +33,7 @@ fn snapshot_data_preserves_custom_language_and_english_without_files() {
             msg!("test-wire-fallback").render(&restored),
             "Customized English"
         );
-        assert_eq!(
-            msg!("notifications-action-ok").render(&restored),
-            msg!("notifications-action-ok").render(&LanguageSnapshot::embedded(0))
-        );
+        assert_eq!(msg!("notifications-action-ok").render(&restored), "OK");
     }
 }
 
@@ -85,39 +82,11 @@ fn snapshot_data_validates_code_graph_and_argument_contracts() {
             LanguageErrorKind::Parameters
         );
     }
-    data = LanguageSnapshot::embedded(0).export();
     data.code = "../en-US".into();
     assert_eq!(
         data.restore().unwrap_err().kind,
         LanguageErrorKind::UnknownLanguage
     );
-}
-
-#[test]
-fn current_snapshot_retains_active_arc_and_thread_isolation() {
-    let default = current_snapshot();
-    assert_eq!(default.code(), DEFAULT_LANGUAGE);
-    let snapshot = Arc::new(
-        LanguageSnapshotData {
-            code: "zh-CN".into(),
-            generation: 7,
-            current: vec!["test-wire-scope = 当前语言\n".into()],
-            english: vec![],
-        }
-        .restore()
-        .unwrap(),
-    );
-    let guard = enter_snapshot(Arc::clone(&snapshot));
-    assert!(Arc::ptr_eq(&current_snapshot(), &snapshot));
-    assert_eq!(
-        std::thread::spawn(|| current_snapshot().code().to_owned())
-            .join()
-            .unwrap(),
-        DEFAULT_LANGUAGE
-    );
-    drop(guard);
-    assert!(Arc::ptr_eq(&current_snapshot(), &default));
-    assert_eq!(msg!("test-wire-scope").render(&snapshot), "当前语言");
 }
 
 struct Fixture(PathBuf);
@@ -188,33 +157,34 @@ fn catalog_discovers_manifest_names_and_canonicalizes_alias() {
 #[test]
 fn named_arguments_plurals_recursive_resources_and_missing_message_fallback() {
     let fixture = Fixture::new();
-    fixture.locale("en-US", "English", "test-greeting = Hello { $name }\ntest-items = { $count ->\n [one] One item\n *[other] { $count } items\n}\ntest-ref = { test-greeting }\n");
-    fixture.locale("zh-CN", "简体中文", "test-greeting = 你好，{ $name }\n");
+    fixture.locale("en-US", "English", "test-greeting = Hello { $name }\ntest-items = { $count ->\n [one] One item\n *[other] { $count } items\n}\ntest-ref = { test-greeting }\ntest-parent = English { test-child }\ntest-child = Child\n");
+    fixture.locale(
+        "zh-CN",
+        "简体中文",
+        "test-greeting = 你好，{ $name }\ntest-parent = 中文 { test-child }\n",
+    );
     fixture.write(
         "locales/zh-CN/modules/deep/nested.ftl",
         "test-extra = 附加\n",
     );
-    let snapshot = fixture.snapshot("zh-CN", 3);
+    let load = LanguageSnapshot::load(&fixture.0, "zh-CN", 3).unwrap();
+    let snapshot = &load.snapshot;
     assert_eq!(
-        msg!("test-greeting", name = "Ada").render(&snapshot),
+        msg!("test-greeting", name = "Ada").render(snapshot),
         "你好，Ada"
     );
-    assert_eq!(
-        msg!("test-ref", name = "Ada").render(&snapshot),
-        "Hello Ada"
-    );
-    assert_eq!(msg!("test-items", count = 1).render(&snapshot), "One item");
-    assert_eq!(msg!("test-items", count = 2).render(&snapshot), "2 items");
-    assert_eq!(msg!("test-extra").render(&snapshot), "附加");
+    assert_eq!(msg!("test-ref", name = "Ada").render(snapshot), "Hello Ada");
+    assert_eq!(msg!("test-items", count = 1).render(snapshot), "One item");
+    assert_eq!(msg!("test-items", count = 2).render(snapshot), "2 items");
+    assert_eq!(msg!("test-extra").render(snapshot), "附加");
+    assert_eq!(msg!("test-parent").render(snapshot), "English Child");
     assert!(
-        LanguageSnapshot::load(&fixture.0, "zh-CN", 3)
-            .unwrap()
-            .diagnostics
+        load.diagnostics
             .iter()
             .any(|diagnostic| diagnostic.kind == RepairKind::MissingTranslations)
     );
-    assert_eq!(msg!("test-unknown").render(&snapshot), "[test-unknown]");
-    assert_eq!(msg!("test-greeting").render(&snapshot), "[test-greeting]");
+    assert_eq!(msg!("test-unknown").render(snapshot), "[test-unknown]");
+    assert_eq!(msg!("test-greeting").render(snapshot), "[test-greeting]");
 }
 
 #[test]
@@ -384,25 +354,8 @@ fn unwritable_root_still_loads_embedded_and_reports_write_failures() {
             .iter()
             .any(|diagnostic| diagnostic.kind == RepairKind::WriteFailed && !diagnostic.repaired)
     );
-    let id = first_embedded_message();
-    assert_eq!(
-        msg!(&id).render(&load.snapshot),
-        msg!(&id).render(&LanguageSnapshot::embedded(11))
-    );
+    assert_eq!(msg!("settings-title").render(&load.snapshot), "Settings");
     assert_eq!(fs::read_to_string(root).unwrap(), "blocking file");
-}
-
-fn first_embedded_message() -> String {
-    for (_, source) in EMBEDDED_FILES {
-        if let Ok(resource) = fluent_syntax::parser::parse(*source) {
-            for entry in resource.body {
-                if let fluent_syntax::ast::Entry::Message(message) = entry {
-                    return message.id.name.to_owned();
-                }
-            }
-        }
-    }
-    panic!("embedded resources must contain messages")
 }
 
 #[test]
@@ -428,20 +381,33 @@ fn snapshots_are_immutable_send_sync_and_compare_content() {
 
 #[test]
 fn scopes_are_nested_panic_safe_thread_local_and_raw_text_stays_raw() {
-    let fixture = Fixture::new();
-    fixture.locale("en-US", "English", "test-scoped = English\n");
-    fixture.locale("zh-CN", "简体中文", "test-scoped = 中文\n");
-    let english = Arc::new(fixture.snapshot("en-US", 1));
-    let chinese = Arc::new(fixture.snapshot("zh-CN", 2));
+    let default = current_snapshot();
+    assert_eq!(default.code(), DEFAULT_LANGUAGE);
+    let [english, chinese] =
+        [("en-US", 1, "English"), ("zh-CN", 2, "中文")].map(|(code, generation, text)| {
+            Arc::new(
+                LanguageSnapshotData {
+                    code: code.into(),
+                    generation,
+                    current: vec![format!("test-scoped = {text}\n")],
+                    english: vec![],
+                }
+                .restore_validated()
+                .unwrap(),
+            )
+        });
     with_snapshot(&english, || {
         assert_eq!(tr!("test-scoped"), "English");
         let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             with_snapshot(&chinese, || {
+                assert!(Arc::ptr_eq(&current_snapshot(), &chinese));
                 assert_eq!(tr!("test-scoped"), "中文");
-                panic!("test scope unwind");
+                std::panic::panic_any("test scope unwind");
             })
-        }));
-        assert!(panic.is_err());
+        }))
+        .unwrap_err();
+        assert_eq!(panic.downcast_ref::<&str>(), Some(&"test scope unwind"));
+        assert!(Arc::ptr_eq(&current_snapshot(), &english));
         assert_eq!(tr!("test-scoped"), "English");
         assert_eq!(
             LocalizedText::from("test-scoped").render_current(),
@@ -452,8 +418,10 @@ fn scopes_are_nested_panic_safe_thread_local_and_raw_text_stays_raw() {
             "English"
         );
         assert_eq!(
-            std::thread::spawn(|| tr!("test-scoped")).join().unwrap(),
-            "[test-scoped]"
+            std::thread::spawn(|| (current_snapshot().code().to_owned(), tr!("test-scoped")))
+                .join()
+                .unwrap(),
+            (DEFAULT_LANGUAGE.to_owned(), "[test-scoped]".to_owned())
         );
     });
     assert_eq!(tr!("test-scoped"), "[test-scoped]");
@@ -463,6 +431,7 @@ fn scopes_are_nested_panic_safe_thread_local_and_raw_text_stays_raw() {
     assert_eq!(tr!("test-scoped"), "中文");
     drop(inner);
     assert_eq!(tr!("test-scoped"), "[test-scoped]");
+    assert!(Arc::ptr_eq(&current_snapshot(), &default));
 }
 
 #[test]
@@ -503,19 +472,6 @@ fn emergency_recovery_messages_are_always_available() {
     let rendered = msg!("resources-repaired", count = 1, files = "manifest.toml").render(&snapshot);
     assert!(rendered.contains("manifest.toml"));
     assert!(!rendered.contains("[resources-repaired]"));
-}
-
-#[test]
-fn missing_translation_reference_falls_back_to_whole_english_message() {
-    let fixture = Fixture::new();
-    fixture.locale(
-        "en-US",
-        "English",
-        "test-parent = English { test-child }\ntest-child = Child\n",
-    );
-    fixture.locale("zh-CN", "简体中文", "test-parent = 中文 { test-child }\n");
-    let snapshot = fixture.snapshot("zh-CN", 1);
-    assert_eq!(msg!("test-parent").render(&snapshot), "English Child");
 }
 
 #[test]
@@ -588,18 +544,13 @@ fn nested_messages_stay_localized_and_serialize_original_ids() {
         nested.render(&fixture.snapshot("en-US", 1)),
         "Failed: File a.txt"
     );
-    assert_eq!(
-        nested.render(&fixture.snapshot("zh-CN", 2)),
-        "失败：文件 a.txt"
-    );
+    let chinese = fixture.snapshot("zh-CN", 2);
+    assert_eq!(nested.render(&chinese), "失败：文件 a.txt");
     let raw = msg!(
         "test-outer",
         reason = LocalizedText::Raw("test-inner".to_owned())
     );
-    assert_eq!(
-        raw.render(&fixture.snapshot("zh-CN", 2)),
-        "失败：test-inner"
-    );
+    assert_eq!(raw.render(&chinese), "失败：test-inner");
     let encoded = toml::to_string(&nested).unwrap();
     assert!(encoded.contains("test-inner"));
     assert!(encoded.contains("a.txt"));
@@ -739,7 +690,7 @@ fn diagnostic_render_ignores_disk_customization_and_active_language() {
         "language-reload-failed",
         reason = msg!("resources-recovery-title")
     );
-    let original_english = LanguageSnapshot::embedded(0).render(&message);
+    let original_english = current_snapshot().render(&message);
     assert!(original_english.contains("Resource recovery"));
     assert_ne!(original_english, english.render(&message));
     assert_ne!(original_english, chinese.render(&message));

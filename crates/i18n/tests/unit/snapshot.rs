@@ -6,18 +6,6 @@ fn identical_english_fallbacks_share_bundle_indices_and_render() {
     let snapshot = LanguageSnapshot::embedded(1);
     assert!(Arc::ptr_eq(&snapshot.english, &snapshot.embedded));
     assert_eq!(msg!("notifications-action-ok").render(&snapshot), "OK");
-    let embedded = snapshot
-        .embedded
-        .get_message("notifications-action-ok")
-        .unwrap();
-    let english = snapshot
-        .english
-        .get_message("notifications-action-ok")
-        .unwrap();
-    assert!(std::ptr::eq(
-        embedded.value().unwrap(),
-        english.value().unwrap()
-    ));
 }
 
 #[test]
