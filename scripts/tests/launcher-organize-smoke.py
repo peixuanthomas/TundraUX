@@ -19,6 +19,8 @@ import time
 
 
 def main():
+    if sys.platform != "linux":
+        raise SystemExit("This Launcher test requires Linux.")
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else "target/debug/tundra-shell").resolve()
     cli = binary.with_name("tundra-cli")
     with tempfile.TemporaryDirectory(prefix="tundra-ui-control-") as temporary:

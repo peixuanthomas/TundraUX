@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check compact UI geometry and measure real PTY search-input echoes.
+"""Check compact UI geometry and measure search-input echoes in a Linux PTY.
 
 All application data is temporary. Timings include PTY input, application work,
 and observable output; they do not measure the internal draw duration.
@@ -255,6 +255,8 @@ def main():
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if sys.platform != "linux":
+        parser.error("This UI refresh test requires Linux.")
     assert 1 <= args.samples <= 64, "samples must be between 1 and 64"
     binary = args.binary.resolve()
     assert binary.is_file() and binary.with_name("tundra-cli").is_file()

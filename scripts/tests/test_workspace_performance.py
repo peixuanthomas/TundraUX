@@ -515,9 +515,17 @@ class ReportConditionTests(unittest.TestCase):
                 args[4]({"kind": "launch", "application": "Launcher",
                          "mode": "first_open_in_shell", "latency_ms": 1})
 
+            read_text = Path.read_text
+
+            def fixture_text(path, *args, **kwargs):
+                if path == Path("/proc/loadavg"):
+                    return "0.00 0.00 0.00 1/1 1"
+                return read_text(path, *args, **kwargs)
+
             with patch.object(performance.sys, "argv", argv), \
                     patch.object(performance.sys, "stdout", io.StringIO()), \
                     patch.object(performance.platform, "platform", return_value="test"), \
+                    patch.object(Path, "read_text", fixture_text), \
                     patch.object(performance.subprocess, "run", return_value=SimpleNamespace(stdout="")), \
                     patch.object(performance.subprocess, "Popen") as process, \
                     patch.object(performance, "launches", side_effect=launch):

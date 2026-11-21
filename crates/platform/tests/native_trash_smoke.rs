@@ -1,4 +1,4 @@
-#![cfg(any(windows, target_os = "macos", target_os = "linux"))]
+#![cfg(any(windows, target_os = "linux"))]
 
 use std::fs;
 use std::path::Path;
@@ -46,7 +46,7 @@ fn unique_temp_path(kind: &str, extension: &str) -> std::path::PathBuf {
     #[cfg(target_os = "linux")]
     let fixture_root =
         std::path::PathBuf::from(std::env::var_os("HOME").expect("Linux HOME for Trash smoke"));
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
     let fixture_root = std::env::temp_dir();
     fixture_root.join(format!(
         ".tundra-platform-trash-smoke-{kind}-{}-{nonce}.{extension}",
@@ -65,7 +65,7 @@ fn round_trip(source: &Path) {
         );
         canonical
     };
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     let source_for_trash = source.to_path_buf();
 
     platform

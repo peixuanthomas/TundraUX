@@ -20,6 +20,8 @@ spec.loader.exec_module(smoke)
 
 
 def main():
+    if sys.platform != "linux":
+        raise SystemExit("This Vim UI test requires Linux.")
     os.environ["TUNDRA_ASCII_ASSETS_DIR"] = str(Path(__file__).resolve().parents[2] / "crates/ascii-assets/assets")
     binary = Path(sys.argv[1]).resolve()
     cli = binary.with_name("tundra-cli")

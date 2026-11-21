@@ -157,10 +157,12 @@ def run(shell, cli, env, *, force):
 def main():
     shell = Path(sys.argv[1] if len(sys.argv) > 1 else "target/debug/tundra-shell").resolve()
     cli = shell.with_name("tundra-cli")
-    with tempfile.TemporaryDirectory(prefix="tux-watchdog-") as folder:
+    with tempfile.TemporaryDirectory(prefix="tux-watchdog-", dir=Path("/tmp").resolve()) as folder:
         root = Path(folder).resolve()
         (root / ".Trash").mkdir()
-        env = dict(os.environ, HOME=str(root), TERM="xterm-256color")
+        temp = root / "tmp"
+        temp.mkdir(mode=0o700)
+        env = dict(os.environ, HOME=str(root), TMPDIR=str(temp), TERM="xterm-256color")
         for variable in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"):
             path = root / variable.lower()
             path.mkdir(mode=0o700)

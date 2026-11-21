@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify Copy/Cut completion before an immediate paste in another real AppHost."""
+"""Verify Copy/Cut completion before an immediate paste in another AppHost on Linux."""
 from __future__ import annotations
 
 import argparse
@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--diagnostic-hold-seconds", type=float, default=0)
     args = parser.parse_args()
+    if sys.platform != "linux":
+        parser.error("This workspace clipboard test requires Linux.")
     args.output.mkdir(parents=True, exist_ok=True)
     session = performance.Session(args.binary.resolve(), args.output, "clipboard", 217, 39)
 

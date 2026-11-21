@@ -41,7 +41,8 @@ for output_line in {1..80}; do printf 'OUTPUT_LINE:%s\\n' "$output_line"; done; 
 
 
 def main():
-    assert os.name == "posix", "This test requires a Unix PTY"
+    if sys.platform != "linux":
+        raise SystemExit("This script workspace test requires Linux.")
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else "target/debug/tundra-shell").resolve()
     cli = binary.with_name("tundra-cli")
     assert binary.is_file() and cli.is_file(), (binary, cli)

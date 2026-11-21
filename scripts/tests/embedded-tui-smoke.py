@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise Neovim, Yazi and Launcher terminals through an isolated real PTY.
+"""Exercise Neovim, Yazi and Launcher terminals through an isolated Linux PTY.
 
 Build Shell and CLI together before running. Requires Python 3.11+, Neovim and
 Yazi; pass --nvim/--yazi when the tools are outside PATH. A bare PTY exercises
@@ -61,7 +61,8 @@ def main():
     parser.add_argument("--nvim", default=os.environ.get("TUNDRA_TEST_NVIM"))
     parser.add_argument("--yazi", default=os.environ.get("TUNDRA_TEST_YAZI"))
     args = parser.parse_args()
-    assert sys.platform == "linux", "This smoke requires a Linux PTY"
+    if sys.platform != "linux":
+        parser.error("This embedded terminal test requires Linux.")
     assert os.geteuid() != 0, "Run this smoke as a normal Linux user"
     binary = executable(args.shell, "tundra-shell")
     cli = binary.with_name("tundra-cli")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the real Vim editor through the Shell on a Unix PTY.
+"""Exercise the real Vim editor through the Shell on a Linux PTY.
 
 Usage: python3 scripts/tests/editor-vim-smoke.py [tundra-shell] [vim]
 Build the matching tundra-cli next to Shell for viewport snapshots.
@@ -202,7 +202,8 @@ def main():
     parser.add_argument("shell", nargs="?", default="target/debug/tundra-shell")
     parser.add_argument("vim", nargs="?")
     args = parser.parse_args()
-    assert os.name == "posix", "This test requires a Unix PTY"
+    if sys.platform != "linux":
+        parser.error("This Shell and Vim test requires Linux.")
     binary = Path(args.shell).resolve()
     assert binary.is_file() and os.access(binary, os.X_OK), binary
     with tempfile.TemporaryDirectory(prefix="tundra-editor-vim-") as temporary:

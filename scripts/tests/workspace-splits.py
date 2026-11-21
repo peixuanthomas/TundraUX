@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise incremental splits and app selection in an isolated real PTY."""
+"""Exercise incremental splits and app selection in an isolated Linux PTY."""
 import fcntl
 import importlib.util
 import json
@@ -23,6 +23,8 @@ spec.loader.exec_module(smoke)
 
 
 def main():
+    if sys.platform != "linux":
+        raise SystemExit("This workspace split test requires Linux.")
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else "target/debug/tundra-shell").resolve()
     cli = binary.with_name("tundra-cli")
     with tempfile.TemporaryDirectory(prefix="tundra-splits-") as temporary:

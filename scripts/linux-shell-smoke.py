@@ -1201,6 +1201,8 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
 
 
 def main() -> int:
+    if sys.platform != "linux":
+        raise SystemExit("This Shell smoke test requires Linux.")
     binary = Path(sys.argv[1] if len(sys.argv) == 2 else "target/debug/tundra-shell")
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise SystemExit(f"shell binary is not executable: {binary}")

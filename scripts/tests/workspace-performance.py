@@ -1066,4 +1066,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.platform != "linux":
+        raise SystemExit("The live workspace performance benchmark requires Linux.")
     main()
