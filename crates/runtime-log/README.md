@@ -9,7 +9,7 @@
 | [`lib.rs`](src/lib.rs) | Exposes event recording and the process-local logger used by hosts and libraries. |
 | [`model`](src/model.rs) | Defines event context, stable levels and phases, query filters, and status types. |
 | [`writer`](src/writer.rs) | Receives events through a bounded queue, deduplicates and flushes them, and manages file rotation, retention, and capacity. |
-| [`reader`](src/reader.rs) | Reads a bounded amount of data, filters rows, and prepares output for queries, following, and export. |
+| [`reader`](src/reader.rs) | Reads a bounded amount of data, keeps the newest matching events up to the query limit, and prepares output for following and export. |
 | [`privacy`](src/privacy.rs) | Applies redaction, strips control sequences, and limits persisted text. |
 | [`clear`](src/clear.rs) | Previews and clears managed log files using the supported cleanup modes. |
 

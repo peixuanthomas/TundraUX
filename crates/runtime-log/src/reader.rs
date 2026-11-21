@@ -3,10 +3,44 @@ use crate::{
     sanitize_text,
 };
 use std::{
+    cmp::{Ordering, Reverse},
+    collections::BinaryHeap,
     fs::{self, OpenOptions},
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
 };
+
+struct RankedEvent {
+    event: RuntimeLogEvent,
+    // Equal keys replace the lowest slot first and keep slot order in the result.
+    slot: usize,
+}
+
+impl Ord for RankedEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        compare_events(&self.event, &other.event).then_with(|| self.slot.cmp(&other.slot))
+    }
+}
+
+impl PartialOrd for RankedEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for RankedEvent {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for RankedEvent {}
+
+fn compare_events(left: &RuntimeLogEvent, right: &RuntimeLogEvent) -> Ordering {
+    left.timestamp
+        .cmp(&right.timestamp)
+        .then_with(|| left.event_id.cmp(&right.event_id))
+}
 
 fn notice(result: &mut LogQueryResult, message: String) {
     result.state = LogSourceState::Partial;
@@ -86,10 +120,10 @@ pub fn query_logs_cancellable(
         notice(&mut result, "Result limit capped at 10000 records".into());
         result.truncated = true;
     }
+    let mut events = BinaryHeap::<Reverse<RankedEvent>>::new();
     let mut scanned_bytes = 0_u64;
     for entry in entries {
         if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-            result.events.clear();
             result.state = LogSourceState::Cancelled;
             return result;
         }
@@ -135,7 +169,6 @@ pub fn query_logs_cancellable(
         let mut oversized = false;
         loop {
             if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-                result.events.clear();
                 result.state = LogSourceState::Cancelled;
                 return result;
             }
@@ -159,7 +192,7 @@ pub fn query_logs_cancellable(
             if scanned_bytes > 512 * 1024 * 1024 {
                 result.truncated = true;
                 notice(&mut result, "Query scan capped at 512 MiB".into());
-                return sorted(result);
+                return finish_query(result, events);
             }
             if line.len() + consumed <= crate::privacy::MAX_RECORD_BYTES {
                 line.extend_from_slice(&available[..consumed]);
@@ -183,21 +216,17 @@ pub fn query_logs_cancellable(
                         }
                         if matches(&event, query) {
                             sanitize_event(&mut event);
-                            result.events.push(event);
-                            if result.events.len() > limit {
-                                let oldest = result
-                                    .events
-                                    .iter()
-                                    .enumerate()
-                                    .min_by(|(_, a), (_, b)| {
-                                        a.timestamp
-                                            .cmp(&b.timestamp)
-                                            .then_with(|| a.event_id.cmp(&b.event_id))
-                                    })
-                                    .map(|(i, _)| i)
-                                    .unwrap_or(0);
-                                result.events.swap_remove(oldest);
+                            if events.len() < limit {
+                                events.push(Reverse(RankedEvent {
+                                    event,
+                                    slot: events.len(),
+                                }));
+                            } else {
                                 result.truncated = true;
+                                let mut oldest = events.peek_mut().unwrap();
+                                if compare_events(&event, &oldest.0.event).is_ge() {
+                                    oldest.0.event = event;
+                                }
                             }
                         }
                     }
@@ -215,14 +244,21 @@ pub fn query_logs_cancellable(
             oversized = false;
         }
     }
-    sorted(result)
+    finish_query(result, events)
 }
-fn sorted(mut result: LogQueryResult) -> LogQueryResult {
-    result.events.sort_by(|a, b| {
-        b.timestamp
-            .cmp(&a.timestamp)
-            .then_with(|| b.event_id.cmp(&a.event_id))
+
+fn finish_query(
+    mut result: LogQueryResult,
+    events: BinaryHeap<Reverse<RankedEvent>>,
+) -> LogQueryResult {
+    let mut events = events.into_vec();
+    events.sort_unstable_by(|Reverse(left), Reverse(right)| {
+        compare_events(&right.event, &left.event).then_with(|| left.slot.cmp(&right.slot))
     });
+    result.events = events
+        .into_iter()
+        .map(|Reverse(ranked)| ranked.event)
+        .collect();
     result
 }
 /// Export already-authorized query results into a new private directory.

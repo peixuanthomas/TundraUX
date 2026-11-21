@@ -187,6 +187,66 @@ fn latest_query_tolerates_corruption_partial_tail_and_oversize() {
     assert_eq!(result.state, LogSourceState::Partial);
 }
 #[test]
+fn latest_query_keeps_equal_keys_in_result_slot_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut file = fs::File::create(dir.path().join("runtime-order.jsonl")).unwrap();
+    let early = chrono::DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+    let middle = early + chrono::Duration::seconds(1);
+    let late = middle + chrono::Duration::seconds(1);
+    for (timestamp, id, owner, message) in [
+        (middle, "same", "alice", "first slot"),
+        (late, "z", "alice", "highest ID at latest time"),
+        (early, "z", "alice", "earliest time"),
+        (middle, "same", "alice", "second equal slot"),
+        (late, "a", "alice", "lower ID at latest time"),
+        (middle, "prior", "alice", "lower ID at middle time"),
+        (
+            middle,
+            "same\n",
+            "alice",
+            "first replacement after cleaning",
+        ),
+        (middle, "same\r", "alice", "last replacement after cleaning"),
+        (late, "zz", "bob", "excluded owner"),
+    ] {
+        let mut record = event(owner, LogPhase::Observed, message);
+        record.timestamp = timestamp;
+        record.event_id = id.into();
+        writeln!(file, "{}", serde_json::to_string(&record).unwrap()).unwrap();
+    }
+    drop(file);
+
+    let mut query = LogQuery {
+        owner_id: Some("alice".into()),
+        limit: 4,
+        ..Default::default()
+    };
+    let result = query_logs(dir.path(), &query);
+    assert_eq!(result.state, LogSourceState::Ready);
+    assert!(result.truncated);
+    assert_eq!(
+        result
+            .events
+            .iter()
+            .map(|event| (event.event_id.as_str(), event.message.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("z", "highest ID at latest time"),
+            ("a", "lower ID at latest time"),
+            ("same", "last replacement after cleaning"),
+            ("same", "second equal slot"),
+        ]
+    );
+
+    query.limit = 8;
+    let result = query_logs(dir.path(), &query);
+    assert_eq!(result.events.len(), 8);
+    assert!(!result.truncated);
+
+    query.limit = 0;
+    assert_eq!(query_logs(dir.path(), &query), LogQueryResult::default());
+}
+#[test]
 fn export_is_private_sanitized_and_never_overwrites() {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("export");
