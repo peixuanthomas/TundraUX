@@ -54,7 +54,7 @@ App-host frames carry content in pane-local coordinates. Composition translates 
 
 AppHosts without terminal image support load complete ASCII catalogs and fonts while omitting unused PNG bytes. Hosts with image support retain the full asset set, including when their current appearance uses ASCII icons.
 
-Single-cell controls, file rows, Launcher details, and status markers use Tundra Cell Atlas after the user verifies the font in their terminal. Each symbol has a single printable ASCII fallback. Home and the Launcher's large tiles use the separate application artwork catalog. The busy marker cycles through ten frames every 800 ms and uses a single static glyph when motion is reduced.
+Single-cell controls, file rows, Launcher details, and status markers use Tundra Cell Atlas after the user verifies the font in their terminal. The atlas assigns its symbols to U+10F100–U+10F187 so common Windows symbol fonts can still supply their own icons. Each symbol has a single printable ASCII fallback. Home and the Launcher's large tiles use the separate application artwork catalog. The busy marker cycles through ten frames every 800 ms and uses a single static glyph when motion is reduced.
 
 Shell can compose a retained app frame at a new pane size, clipping from the top left and filling newly exposed space with the canvas color. Images keep the same clipping. Retained controls are non-actionable and the old cursor is hidden. Initial window startup uses a blank canvas for 100ms before showing the localized busy indicator; reduced motion keeps that indicator static.
 

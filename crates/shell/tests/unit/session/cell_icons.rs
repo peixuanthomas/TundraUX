@@ -126,15 +126,17 @@ fn availability_alone_never_confirms_a_font() {
     assert_eq!(check(Available, ascii(), true).existing_mode(), None);
     assert_eq!(check(Installed, ascii(), false).existing_mode(), None);
     assert_eq!(check(Conflict, ascii(), false).existing_mode(), None);
-    let old_selection = Preference::Selected {
-        mode: CellIconMode::Ascii,
-        revision: "old font".into(),
-        availability: FontAvailability::Present,
-    };
-    assert_eq!(
-        check(Available, Some(old_selection), false).existing_mode(),
-        None,
-    );
+    for mode in [CellIconMode::Font, CellIconMode::Ascii] {
+        let previous_atlas = Preference::Selected {
+            mode,
+            revision: "67e0a0b1c1c8da6136f850cc5fc27f9c1c974c66d0b643dcc56f4637cfbb0971".into(),
+            availability: FontAvailability::Present,
+        };
+        assert_eq!(
+            check(Available, Some(previous_atlas), false).existing_mode(),
+            None,
+        );
+    }
     assert_eq!(
         check(Installed, Some(Preference::Suppressed), false).existing_mode(),
         Some(CellIconMode::Ascii),

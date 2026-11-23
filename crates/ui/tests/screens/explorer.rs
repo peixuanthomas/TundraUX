@@ -45,6 +45,36 @@ fn ordinary_explorer_keeps_common_actions_and_rows_without_an_outer_box() {
 }
 
 #[test]
+fn explorer_renders_the_atlas_folder_json_documents_and_trash_in_one_cell() {
+    let mut model = sample_model();
+    model.entries[0].name = "node_modules".into();
+    model.entries[1].name = "package.json".into();
+    model.entry_presentations = vec![
+        ui::ExplorerEntryPresentationViewModel::new("node_modules", "node_modules", "folder", true),
+        ui::ExplorerEntryPresentationViewModel::new("package.json", "package.json", "text", false),
+    ];
+    model.quick_locations = vec![
+        ExplorerQuickLocationViewModel::new("documents", "Documents", "/Documents", "documents"),
+        ExplorerQuickLocationViewModel::new("trash", "Trash", "", "trash"),
+    ];
+    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+    ui::set_cell_icon_mode(ui::CellIconMode::Font);
+    terminal
+        .draw(|frame| ui::render_explorer_content(frame, frame.area(), &model, &Default::default()))
+        .unwrap();
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
+    let screen = terminal_output(&terminal);
+    for label in [
+        "\u{10f100} node_modules",
+        "\u{10f110} package.json",
+        "\u{10f11a} Documents",
+        "\u{10f108} Trash",
+    ] {
+        assert!(screen.contains(label), "{label:?} missing from {screen}");
+    }
+}
+
+#[test]
 fn save_picker_shows_browsable_rows_filename_and_actions_together() {
     for (width, height) in [(140, 40), (108, 20)] {
         let mut model = sample_model();
@@ -959,7 +989,7 @@ fn atlas_toolbar_distinguishes_trash_actions_and_retains_their_hit_targets() {
     terminal
         .draw(|frame| ui::render_explorer_content(frame, area, &model, &Default::default()))
         .unwrap();
-    for (action, symbol) in [(A::Restore, "\u{e124}"), (A::DumpTrash, "\u{e125}")] {
+    for (action, symbol) in [(A::Restore, "\u{10f124}"), (A::DumpTrash, "\u{10f125}")] {
         let target = layout
             .page_actions
             .iter()
@@ -978,11 +1008,11 @@ fn atlas_toolbar_distinguishes_trash_actions_and_retains_their_hit_targets() {
     }
     assert_eq!(
         ui::cell_icon("explorer_toolbar", A::Undo.icon_key()),
-        "\u{e122}"
+        "\u{10f122}"
     );
     assert_eq!(
         ui::cell_icon("explorer_toolbar", A::Delete.icon_key()),
-        "\u{e108}"
+        "\u{10f108}"
     );
     ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
 }

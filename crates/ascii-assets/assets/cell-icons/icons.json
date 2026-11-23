@@ -13,7 +13,7 @@
   },
   "glyphs": {
     "folder": {
-      "codepoint": "U+E100",
+      "codepoint": "U+10F100",
       "label": "文件夹",
       "pixels": [
         ".........",
@@ -38,7 +38,7 @@
       "ascii": "+"
     },
     "folder_open": {
-      "codepoint": "U+E101",
+      "codepoint": "U+10F101",
       "label": "展开目录",
       "pixels": [
         ".........",
@@ -63,7 +63,7 @@
       "ascii": "o"
     },
     "file": {
-      "codepoint": "U+E102",
+      "codepoint": "U+10F102",
       "label": "普通文件",
       "pixels": [
         ".........",
@@ -88,7 +88,7 @@
       "ascii": "F"
     },
     "document": {
-      "codepoint": "U+E103",
+      "codepoint": "U+10F103",
       "label": "文档",
       "pixels": [
         ".........",
@@ -113,7 +113,7 @@
       "ascii": "D"
     },
     "left": {
-      "codepoint": "U+E104",
+      "codepoint": "U+10F104",
       "label": "向左",
       "pixels": [
         ".........",
@@ -138,7 +138,7 @@
       "ascii": "<"
     },
     "right": {
-      "codepoint": "U+E105",
+      "codepoint": "U+10F105",
       "label": "向右",
       "pixels": [
         ".........",
@@ -163,7 +163,7 @@
       "ascii": ">"
     },
     "up": {
-      "codepoint": "U+E106",
+      "codepoint": "U+10F106",
       "label": "向上",
       "pixels": [
         ".........",
@@ -188,7 +188,7 @@
       "ascii": "^"
     },
     "down": {
-      "codepoint": "U+E107",
+      "codepoint": "U+10F107",
       "label": "向下",
       "pixels": [
         ".........",
@@ -213,7 +213,7 @@
       "ascii": "v"
     },
     "trash": {
-      "codepoint": "U+E108",
+      "codepoint": "U+10F108",
       "label": "垃圾桶",
       "pixels": [
         ".........",
@@ -238,7 +238,7 @@
       "ascii": "X"
     },
     "new": {
-      "codepoint": "U+E109",
+      "codepoint": "U+10F109",
       "label": "新建",
       "pixels": [
         ".........",
@@ -263,7 +263,7 @@
       "ascii": "+"
     },
     "search": {
-      "codepoint": "U+E10A",
+      "codepoint": "U+10F10A",
       "label": "查找",
       "pixels": [
         ".........",
@@ -288,7 +288,7 @@
       "ascii": "?"
     },
     "refresh": {
-      "codepoint": "U+E10B",
+      "codepoint": "U+10F10B",
       "label": "刷新",
       "pixels": [
         ".........",
@@ -313,7 +313,7 @@
       "ascii": "@"
     },
     "cut": {
-      "codepoint": "U+E10C",
+      "codepoint": "U+10F10C",
       "label": "剪切",
       "pixels": [
         ".........",
@@ -338,7 +338,7 @@
       "ascii": "x"
     },
     "copy": {
-      "codepoint": "U+E10D",
+      "codepoint": "U+10F10D",
       "label": "复制",
       "pixels": [
         ".........",
@@ -363,7 +363,7 @@
       "ascii": "c"
     },
     "paste": {
-      "codepoint": "U+E10E",
+      "codepoint": "U+10F10E",
       "label": "粘贴",
       "pixels": [
         ".........",
@@ -388,7 +388,7 @@
       "ascii": "v"
     },
     "rename": {
-      "codepoint": "U+E10F",
+      "codepoint": "U+10F10F",
       "label": "重命名",
       "pixels": [
         ".........",
@@ -413,7 +413,7 @@
       "ascii": "r"
     },
     "text": {
-      "codepoint": "U+E110",
+      "codepoint": "U+10F110",
       "label": "纯文本",
       "pixels": [
         ".........",
@@ -438,7 +438,7 @@
       "ascii": "T"
     },
     "code": {
-      "codepoint": "U+E111",
+      "codepoint": "U+10F111",
       "label": "代码",
       "pixels": [
         ".........",
@@ -463,7 +463,7 @@
       "ascii": "#"
     },
     "image": {
-      "codepoint": "U+E112",
+      "codepoint": "U+10F112",
       "label": "图像",
       "pixels": [
         ".........",
@@ -488,7 +488,7 @@
       "ascii": "I"
     },
     "audio": {
-      "codepoint": "U+E113",
+      "codepoint": "U+10F113",
       "label": "音频",
       "pixels": [
         ".........",
@@ -513,7 +513,7 @@
       "ascii": "A"
     },
     "video": {
-      "codepoint": "U+E114",
+      "codepoint": "U+10F114",
       "label": "视频",
       "pixels": [
         ".........",
@@ -538,7 +538,7 @@
       "ascii": "V"
     },
     "archive": {
-      "codepoint": "U+E115",
+      "codepoint": "U+10F115",
       "label": "压缩包",
       "pixels": [
         ".........",
@@ -563,7 +563,7 @@
       "ascii": "Z"
     },
     "executable": {
-      "codepoint": "U+E116",
+      "codepoint": "U+10F116",
       "label": "可执行文件",
       "pixels": [
         ".........",
@@ -588,7 +588,7 @@
       "ascii": "!"
     },
     "link": {
-      "codepoint": "U+E117",
+      "codepoint": "U+10F117",
       "label": "链接",
       "pixels": [
         ".........",
@@ -613,7 +613,7 @@
       "ascii": "@"
     },
     "other": {
-      "codepoint": "U+E118",
+      "codepoint": "U+10F118",
       "label": "其他类型",
       "pixels": [
         ".........",
@@ -638,7 +638,7 @@
       "ascii": "?"
     },
     "desktop": {
-      "codepoint": "U+E119",
+      "codepoint": "U+10F119",
       "label": "桌面",
       "pixels": [
         ".........",
@@ -663,7 +663,7 @@
       "ascii": "_"
     },
     "documents": {
-      "codepoint": "U+E11A",
+      "codepoint": "U+10F11A",
       "label": "文档目录",
       "pixels": [
         ".........",
@@ -688,7 +688,7 @@
       "ascii": "="
     },
     "downloads": {
-      "codepoint": "U+E11B",
+      "codepoint": "U+10F11B",
       "label": "下载目录",
       "pixels": [
         ".........",
@@ -713,7 +713,7 @@
       "ascii": "v"
     },
     "pictures": {
-      "codepoint": "U+E11C",
+      "codepoint": "U+10F11C",
       "label": "图片目录",
       "pixels": [
         ".........",
@@ -738,7 +738,7 @@
       "ascii": "P"
     },
     "music": {
-      "codepoint": "U+E11D",
+      "codepoint": "U+10F11D",
       "label": "音乐目录",
       "pixels": [
         ".........",
@@ -763,7 +763,7 @@
       "ascii": "M"
     },
     "videos": {
-      "codepoint": "U+E11E",
+      "codepoint": "U+10F11E",
       "label": "视频目录",
       "pixels": [
         ".........",
@@ -788,7 +788,7 @@
       "ascii": "V"
     },
     "drive": {
-      "codepoint": "U+E11F",
+      "codepoint": "U+10F11F",
       "label": "驱动器",
       "pixels": [
         ".........",
@@ -813,7 +813,7 @@
       "ascii": "/"
     },
     "open_item": {
-      "codepoint": "U+E120",
+      "codepoint": "U+10F120",
       "label": "打开",
       "pixels": [
         ".........",
@@ -838,7 +838,7 @@
       "ascii": ">"
     },
     "save": {
-      "codepoint": "U+E121",
+      "codepoint": "U+10F121",
       "label": "保存",
       "pixels": [
         ".........",
@@ -863,7 +863,7 @@
       "ascii": "S"
     },
     "undo": {
-      "codepoint": "U+E122",
+      "codepoint": "U+10F122",
       "label": "撤销",
       "pixels": [
         ".........",
@@ -888,7 +888,7 @@
       "ascii": "u"
     },
     "redo": {
-      "codepoint": "U+E123",
+      "codepoint": "U+10F123",
       "label": "重做",
       "pixels": [
         ".........",
@@ -913,7 +913,7 @@
       "ascii": "r"
     },
     "restore_trash": {
-      "codepoint": "U+E124",
+      "codepoint": "U+10F124",
       "label": "还原文件",
       "pixels": [
         ".........",
@@ -938,7 +938,7 @@
       "ascii": "R"
     },
     "empty_trash": {
-      "codepoint": "U+E125",
+      "codepoint": "U+10F125",
       "label": "清空回收站",
       "pixels": [
         ".........",
@@ -963,7 +963,7 @@
       "ascii": "E"
     },
     "select_mode": {
-      "codepoint": "U+E126",
+      "codepoint": "U+10F126",
       "label": "选择模式",
       "pixels": [
         ".........",
@@ -988,7 +988,7 @@
       "ascii": "*"
     },
     "select_all": {
-      "codepoint": "U+E127",
+      "codepoint": "U+10F127",
       "label": "全选",
       "pixels": [
         ".........",
@@ -1013,7 +1013,7 @@
       "ascii": "+"
     },
     "invert": {
-      "codepoint": "U+E128",
+      "codepoint": "U+10F128",
       "label": "反选",
       "pixels": [
         ".........",
@@ -1038,7 +1038,7 @@
       "ascii": "~"
     },
     "more": {
-      "codepoint": "U+E129",
+      "codepoint": "U+10F129",
       "label": "更多",
       "pixels": [
         ".........",
@@ -1063,7 +1063,7 @@
       "ascii": "."
     },
     "options": {
-      "codepoint": "U+E12A",
+      "codepoint": "U+10F12A",
       "label": "选项",
       "pixels": [
         ".........",
@@ -1088,7 +1088,7 @@
       "ascii": "*"
     },
     "sort": {
-      "codepoint": "U+E12B",
+      "codepoint": "U+10F12B",
       "label": "排序",
       "pixels": [
         ".........",
@@ -1113,7 +1113,7 @@
       "ascii": "="
     },
     "sort_asc": {
-      "codepoint": "U+E12C",
+      "codepoint": "U+10F12C",
       "label": "升序",
       "pixels": [
         ".........",
@@ -1138,7 +1138,7 @@
       "ascii": "^"
     },
     "sort_desc": {
-      "codepoint": "U+E12D",
+      "codepoint": "U+10F12D",
       "label": "降序",
       "pixels": [
         ".........",
@@ -1163,7 +1163,7 @@
       "ascii": "v"
     },
     "filter": {
-      "codepoint": "U+E12E",
+      "codepoint": "U+10F12E",
       "label": "筛选",
       "pixels": [
         ".........",
@@ -1188,7 +1188,7 @@
       "ascii": "?"
     },
     "properties": {
-      "codepoint": "U+E12F",
+      "codepoint": "U+10F12F",
       "label": "属性",
       "pixels": [
         ".........",
@@ -1213,7 +1213,7 @@
       "ascii": "i"
     },
     "previous": {
-      "codepoint": "U+E130",
+      "codepoint": "U+10F130",
       "label": "上一项",
       "pixels": [
         ".........",
@@ -1238,7 +1238,7 @@
       "ascii": "<"
     },
     "next": {
-      "codepoint": "U+E131",
+      "codepoint": "U+10F131",
       "label": "下一项",
       "pixels": [
         ".........",
@@ -1263,7 +1263,7 @@
       "ascii": ">"
     },
     "collapsed": {
-      "codepoint": "U+E132",
+      "codepoint": "U+10F132",
       "label": "已收起",
       "pixels": [
         ".........",
@@ -1288,7 +1288,7 @@
       "ascii": ">"
     },
     "expanded": {
-      "codepoint": "U+E133",
+      "codepoint": "U+10F133",
       "label": "已展开",
       "pixels": [
         ".........",
@@ -1313,7 +1313,7 @@
       "ascii": "v"
     },
     "minimize": {
-      "codepoint": "U+E134",
+      "codepoint": "U+10F134",
       "label": "最小化",
       "pixels": [
         ".........",
@@ -1338,7 +1338,7 @@
       "ascii": "-"
     },
     "split_v": {
-      "codepoint": "U+E135",
+      "codepoint": "U+10F135",
       "label": "左右分屏",
       "pixels": [
         ".........",
@@ -1363,7 +1363,7 @@
       "ascii": "|"
     },
     "split_h": {
-      "codepoint": "U+E136",
+      "codepoint": "U+10F136",
       "label": "上下分屏",
       "pixels": [
         ".........",
@@ -1388,7 +1388,7 @@
       "ascii": "="
     },
     "full": {
-      "codepoint": "U+E137",
+      "codepoint": "U+10F137",
       "label": "全屏",
       "pixels": [
         ".........",
@@ -1413,7 +1413,7 @@
       "ascii": "+"
     },
     "restore_window": {
-      "codepoint": "U+E138",
+      "codepoint": "U+10F138",
       "label": "还原窗口",
       "pixels": [
         ".........",
@@ -1438,7 +1438,7 @@
       "ascii": "o"
     },
     "close": {
-      "codepoint": "U+E139",
+      "codepoint": "U+10F139",
       "label": "关闭",
       "pixels": [
         ".........",
@@ -1463,7 +1463,7 @@
       "ascii": "x"
     },
     "grip": {
-      "codepoint": "U+E13A",
+      "codepoint": "U+10F13A",
       "label": "拖动手柄",
       "pixels": [
         ".........",
@@ -1488,7 +1488,7 @@
       "ascii": "#"
     },
     "drop": {
-      "codepoint": "U+E13B",
+      "codepoint": "U+10F13B",
       "label": "插入位置",
       "pixels": [
         "...##....",
@@ -1513,7 +1513,7 @@
       "ascii": "|"
     },
     "current": {
-      "codepoint": "U+E13C",
+      "codepoint": "U+10F13C",
       "label": "当前行",
       "pixels": [
         ".........",
@@ -1538,7 +1538,7 @@
       "ascii": ">"
     },
     "prompt": {
-      "codepoint": "U+E13D",
+      "codepoint": "U+10F13D",
       "label": "输入提示",
       "pixels": [
         ".........",
@@ -1563,7 +1563,7 @@
       "ascii": ">"
     },
     "unchecked": {
-      "codepoint": "U+E13E",
+      "codepoint": "U+10F13E",
       "label": "未勾选",
       "pixels": [
         ".........",
@@ -1588,7 +1588,7 @@
       "ascii": "o"
     },
     "checked": {
-      "codepoint": "U+E13F",
+      "codepoint": "U+10F13F",
       "label": "已勾选",
       "pixels": [
         ".........",
@@ -1613,7 +1613,7 @@
       "ascii": "x"
     },
     "mixed": {
-      "codepoint": "U+E140",
+      "codepoint": "U+10F140",
       "label": "混合状态",
       "pixels": [
         ".........",
@@ -1638,7 +1638,7 @@
       "ascii": "-"
     },
     "radio_off": {
-      "codepoint": "U+E141",
+      "codepoint": "U+10F141",
       "label": "未选圆点",
       "pixels": [
         ".........",
@@ -1663,7 +1663,7 @@
       "ascii": "o"
     },
     "radio_on": {
-      "codepoint": "U+E142",
+      "codepoint": "U+10F142",
       "label": "已选圆点",
       "pixels": [
         ".........",
@@ -1688,7 +1688,7 @@
       "ascii": "*"
     },
     "minus": {
-      "codepoint": "U+E143",
+      "codepoint": "U+10F143",
       "label": "减小",
       "pixels": [
         ".........",
@@ -1713,7 +1713,7 @@
       "ascii": "-"
     },
     "info": {
-      "codepoint": "U+E144",
+      "codepoint": "U+10F144",
       "label": "信息",
       "pixels": [
         ".........",
@@ -1738,7 +1738,7 @@
       "ascii": "i"
     },
     "success": {
-      "codepoint": "U+E145",
+      "codepoint": "U+10F145",
       "label": "成功",
       "pixels": [
         ".........",
@@ -1763,7 +1763,7 @@
       "ascii": "+"
     },
     "warning": {
-      "codepoint": "U+E146",
+      "codepoint": "U+10F146",
       "label": "警告",
       "pixels": [
         ".........",
@@ -1788,7 +1788,7 @@
       "ascii": "!"
     },
     "error": {
-      "codepoint": "U+E147",
+      "codepoint": "U+10F147",
       "label": "错误",
       "pixels": [
         ".........",
@@ -1813,7 +1813,7 @@
       "ascii": "x"
     },
     "critical": {
-      "codepoint": "U+E148",
+      "codepoint": "U+10F148",
       "label": "严重",
       "pixels": [
         ".........",
@@ -1838,7 +1838,7 @@
       "ascii": "!"
     },
     "unsupported": {
-      "codepoint": "U+E149",
+      "codepoint": "U+10F149",
       "label": "不支持",
       "pixels": [
         ".........",
@@ -1863,7 +1863,7 @@
       "ascii": "-"
     },
     "pending": {
-      "codepoint": "U+E14A",
+      "codepoint": "U+10F14A",
       "label": "待执行",
       "pixels": [
         ".........",
@@ -1888,7 +1888,7 @@
       "ascii": "o"
     },
     "bold": {
-      "codepoint": "U+E14B",
+      "codepoint": "U+10F14B",
       "label": "加粗",
       "pixels": [
         ".........",
@@ -1913,7 +1913,7 @@
       "ascii": "B"
     },
     "italic": {
-      "codepoint": "U+E14C",
+      "codepoint": "U+10F14C",
       "label": "斜体",
       "pixels": [
         ".........",
@@ -1938,7 +1938,7 @@
       "ascii": "I"
     },
     "strike": {
-      "codepoint": "U+E14D",
+      "codepoint": "U+10F14D",
       "label": "删除线",
       "pixels": [
         ".........",
@@ -1963,7 +1963,7 @@
       "ascii": "S"
     },
     "paragraph": {
-      "codepoint": "U+E14E",
+      "codepoint": "U+10F14E",
       "label": "正文",
       "pixels": [
         ".........",
@@ -1988,7 +1988,7 @@
       "ascii": "P"
     },
     "h1": {
-      "codepoint": "U+E14F",
+      "codepoint": "U+10F14F",
       "label": "一级标题",
       "pixels": [
         ".........",
@@ -2013,7 +2013,7 @@
       "ascii": "1"
     },
     "h2": {
-      "codepoint": "U+E150",
+      "codepoint": "U+10F150",
       "label": "二级标题",
       "pixels": [
         ".........",
@@ -2038,7 +2038,7 @@
       "ascii": "2"
     },
     "h3": {
-      "codepoint": "U+E151",
+      "codepoint": "U+10F151",
       "label": "三级标题",
       "pixels": [
         ".........",
@@ -2063,7 +2063,7 @@
       "ascii": "3"
     },
     "heading": {
-      "codepoint": "U+E152",
+      "codepoint": "U+10F152",
       "label": "其他标题",
       "pixels": [
         ".........",
@@ -2088,7 +2088,7 @@
       "ascii": "H"
     },
     "bullets": {
-      "codepoint": "U+E153",
+      "codepoint": "U+10F153",
       "label": "项目列表",
       "pixels": [
         ".........",
@@ -2113,7 +2113,7 @@
       "ascii": "*"
     },
     "numbers": {
-      "codepoint": "U+E154",
+      "codepoint": "U+10F154",
       "label": "编号列表",
       "pixels": [
         ".........",
@@ -2138,7 +2138,7 @@
       "ascii": "1"
     },
     "quote": {
-      "codepoint": "U+E155",
+      "codepoint": "U+10F155",
       "label": "引用",
       "pixels": [
         ".........",
@@ -2163,7 +2163,7 @@
       "ascii": ">"
     },
     "table": {
-      "codepoint": "U+E156",
+      "codepoint": "U+10F156",
       "label": "表格",
       "pixels": [
         ".........",
@@ -2188,7 +2188,7 @@
       "ascii": "|"
     },
     "bullet": {
-      "codepoint": "U+E157",
+      "codepoint": "U+10F157",
       "label": "列表圆点",
       "pixels": [
         ".........",
@@ -2213,7 +2213,7 @@
       "ascii": "*"
     },
     "dirty": {
-      "codepoint": "U+E158",
+      "codepoint": "U+10F158",
       "label": "未保存",
       "pixels": [
         ".........",
@@ -2238,7 +2238,7 @@
       "ascii": "*"
     },
     "wrap": {
-      "codepoint": "U+E159",
+      "codepoint": "U+10F159",
       "label": "折行续行",
       "pixels": [
         ".........",
@@ -2263,7 +2263,7 @@
       "ascii": ">"
     },
     "deleted_above": {
-      "codepoint": "U+E15A",
+      "codepoint": "U+10F15A",
       "label": "上方有删除",
       "pixels": [
         ".........",
@@ -2288,7 +2288,7 @@
       "ascii": "^"
     },
     "deleted_below": {
-      "codepoint": "U+E15B",
+      "codepoint": "U+10F15B",
       "label": "下方有删除",
       "pixels": [
         ".........",
@@ -2313,7 +2313,7 @@
       "ascii": "-"
     },
     "deleted_both": {
-      "codepoint": "U+E15C",
+      "codepoint": "U+10F15C",
       "label": "上下有删除",
       "pixels": [
         ".........",
@@ -2338,7 +2338,7 @@
       "ascii": "|"
     },
     "bp_on": {
-      "codepoint": "U+E15D",
+      "codepoint": "U+10F15D",
       "label": "断点已验证",
       "pixels": [
         ".........",
@@ -2363,7 +2363,7 @@
       "ascii": "B"
     },
     "bp_off": {
-      "codepoint": "U+E15E",
+      "codepoint": "U+10F15E",
       "label": "断点已停用",
       "pixels": [
         ".........",
@@ -2388,7 +2388,7 @@
       "ascii": "."
     },
     "bp_pending": {
-      "codepoint": "U+E15F",
+      "codepoint": "U+10F15F",
       "label": "断点待验证",
       "pixels": [
         ".........",
@@ -2413,7 +2413,7 @@
       "ascii": "?"
     },
     "bp_rejected": {
-      "codepoint": "U+E160",
+      "codepoint": "U+10F160",
       "label": "断点被拒绝",
       "pixels": [
         ".........",
@@ -2438,7 +2438,7 @@
       "ascii": "!"
     },
     "exec_line": {
-      "codepoint": "U+E161",
+      "codepoint": "U+10F161",
       "label": "当前执行行",
       "pixels": [
         ".........",
@@ -2463,7 +2463,7 @@
       "ascii": ">"
     },
     "keyboard": {
-      "codepoint": "U+E162",
+      "codepoint": "U+10F162",
       "label": "屏幕键盘",
       "pixels": [
         ".........",
@@ -2488,7 +2488,7 @@
       "ascii": "K"
     },
     "tasks": {
-      "codepoint": "U+E163",
+      "codepoint": "U+10F163",
       "label": "任务面板",
       "pixels": [
         ".........",
@@ -2513,7 +2513,7 @@
       "ascii": "T"
     },
     "help": {
-      "codepoint": "U+E164",
+      "codepoint": "U+10F164",
       "label": "帮助",
       "pixels": [
         ".........",
@@ -2538,7 +2538,7 @@
       "ascii": "?"
     },
     "power": {
-      "codepoint": "U+E165",
+      "codepoint": "U+10F165",
       "label": "电源菜单",
       "pixels": [
         ".........",
@@ -2563,7 +2563,7 @@
       "ascii": "Q"
     },
     "alarm": {
-      "codepoint": "U+E166",
+      "codepoint": "U+10F166",
       "label": "闹钟",
       "pixels": [
         ".........",
@@ -2588,7 +2588,7 @@
       "ascii": "A"
     },
     "timer": {
-      "codepoint": "U+E167",
+      "codepoint": "U+10F167",
       "label": "倒计时",
       "pixels": [
         ".........",
@@ -2613,7 +2613,7 @@
       "ascii": "T"
     },
     "strong": {
-      "codepoint": "U+E168",
+      "codepoint": "U+10F168",
       "label": "强提醒",
       "pixels": [
         ".........",
@@ -2638,7 +2638,7 @@
       "ascii": "!"
     },
     "city": {
-      "codepoint": "U+E169",
+      "codepoint": "U+10F169",
       "label": "所选城市",
       "pixels": [
         ".........",
@@ -2663,7 +2663,7 @@
       "ascii": "@"
     },
     "commit": {
-      "codepoint": "U+E16A",
+      "codepoint": "U+10F16A",
       "label": "提交节点",
       "pixels": [
         "....#....",
@@ -2688,7 +2688,7 @@
       "ascii": "*"
     },
     "busy0": {
-      "codepoint": "U+E16B",
+      "codepoint": "U+10F16B",
       "label": "加载中（第 1 帧）",
       "pixels": [
         ".........",
@@ -2713,7 +2713,7 @@
       "ascii": "|"
     },
     "busy1": {
-      "codepoint": "U+E16C",
+      "codepoint": "U+10F16C",
       "label": "加载中（第 2 帧）",
       "pixels": [
         ".........",
@@ -2738,7 +2738,7 @@
       "ascii": "/"
     },
     "busy2": {
-      "codepoint": "U+E16D",
+      "codepoint": "U+10F16D",
       "label": "加载中（第 3 帧）",
       "pixels": [
         ".........",
@@ -2763,7 +2763,7 @@
       "ascii": "-"
     },
     "busy3": {
-      "codepoint": "U+E16E",
+      "codepoint": "U+10F16E",
       "label": "加载中（第 4 帧）",
       "pixels": [
         ".........",
@@ -2788,7 +2788,7 @@
       "ascii": "\\"
     },
     "busy4": {
-      "codepoint": "U+E16F",
+      "codepoint": "U+10F16F",
       "label": "加载中（第 5 帧）",
       "pixels": [
         ".........",
@@ -2813,7 +2813,7 @@
       "ascii": "|"
     },
     "busy5": {
-      "codepoint": "U+E170",
+      "codepoint": "U+10F170",
       "label": "加载中（第 6 帧）",
       "pixels": [
         ".........",
@@ -2838,7 +2838,7 @@
       "ascii": "/"
     },
     "busy6": {
-      "codepoint": "U+E171",
+      "codepoint": "U+10F171",
       "label": "加载中（第 7 帧）",
       "pixels": [
         ".........",
@@ -2863,7 +2863,7 @@
       "ascii": "-"
     },
     "busy7": {
-      "codepoint": "U+E172",
+      "codepoint": "U+10F172",
       "label": "加载中（第 8 帧）",
       "pixels": [
         ".........",
@@ -2888,7 +2888,7 @@
       "ascii": "\\"
     },
     "busy8": {
-      "codepoint": "U+E173",
+      "codepoint": "U+10F173",
       "label": "加载中（第 9 帧）",
       "pixels": [
         ".........",
@@ -2913,7 +2913,7 @@
       "ascii": "|"
     },
     "busy9": {
-      "codepoint": "U+E174",
+      "codepoint": "U+10F174",
       "label": "加载中（第 10 帧）",
       "pixels": [
         ".........",
@@ -2938,7 +2938,7 @@
       "ascii": "-"
     },
     "app_terminal": {
-      "codepoint": "U+E175",
+      "codepoint": "U+10F175",
       "label": "命令行",
       "pixels": [
         ".........",
@@ -2963,7 +2963,7 @@
       "ascii": ">"
     },
     "app_script": {
-      "codepoint": "U+E176",
+      "codepoint": "U+10F176",
       "label": "脚本编辑器",
       "pixels": [
         ".........",
@@ -2988,7 +2988,7 @@
       "ascii": "#"
     },
     "app_settings": {
-      "codepoint": "U+E177",
+      "codepoint": "U+10F177",
       "label": "设置",
       "pixels": [
         ".........",
@@ -3013,7 +3013,7 @@
       "ascii": "@"
     },
     "app_status": {
-      "codepoint": "U+E178",
+      "codepoint": "U+10F178",
       "label": "系统状态",
       "pixels": [
         ".........",
@@ -3038,7 +3038,7 @@
       "ascii": "i"
     },
     "app_users": {
-      "codepoint": "U+E179",
+      "codepoint": "U+10F179",
       "label": "用户",
       "pixels": [
         ".........",
@@ -3063,7 +3063,7 @@
       "ascii": "U"
     },
     "app_logs": {
-      "codepoint": "U+E17A",
+      "codepoint": "U+10F17A",
       "label": "日志",
       "pixels": [
         ".........",
@@ -3088,7 +3088,7 @@
       "ascii": "L"
     },
     "app_services": {
-      "codepoint": "U+E17B",
+      "codepoint": "U+10F17B",
       "label": "服务",
       "pixels": [
         ".........",
@@ -3113,7 +3113,7 @@
       "ascii": "S"
     },
     "app_processes": {
-      "codepoint": "U+E17C",
+      "codepoint": "U+10F17C",
       "label": "进程",
       "pixels": [
         ".........",
@@ -3138,7 +3138,7 @@
       "ascii": "P"
     },
     "app_packages": {
-      "codepoint": "U+E17D",
+      "codepoint": "U+10F17D",
       "label": "软件包",
       "pixels": [
         ".........",
@@ -3163,7 +3163,7 @@
       "ascii": "+"
     },
     "app_network": {
-      "codepoint": "U+E17E",
+      "codepoint": "U+10F17E",
       "label": "网络",
       "pixels": [
         ".........",
@@ -3188,7 +3188,7 @@
       "ascii": "N"
     },
     "app_disks": {
-      "codepoint": "U+E17F",
+      "codepoint": "U+10F17F",
       "label": "磁盘",
       "pixels": [
         ".........",
@@ -3213,7 +3213,7 @@
       "ascii": "D"
     },
     "app_firewall": {
-      "codepoint": "U+E180",
+      "codepoint": "U+10F180",
       "label": "防火墙",
       "pixels": [
         ".........",
@@ -3238,7 +3238,7 @@
       "ascii": "!"
     },
     "app_ssh": {
-      "codepoint": "U+E181",
+      "codepoint": "U+10F181",
       "label": "SSH",
       "pixels": [
         ".........",
@@ -3263,7 +3263,7 @@
       "ascii": ">"
     },
     "app_backups": {
-      "codepoint": "U+E182",
+      "codepoint": "U+10F182",
       "label": "备份",
       "pixels": [
         ".........",
@@ -3288,7 +3288,7 @@
       "ascii": "B"
     },
     "app_scheduled": {
-      "codepoint": "U+E183",
+      "codepoint": "U+10F183",
       "label": "定时任务",
       "pixels": [
         ".........",
@@ -3313,7 +3313,7 @@
       "ascii": "R"
     },
     "app_external": {
-      "codepoint": "U+E184",
+      "codepoint": "U+10F184",
       "label": "外部程序",
       "pixels": [
         ".........",
@@ -3338,7 +3338,7 @@
       "ascii": "*"
     },
     "app_installer": {
-      "codepoint": "U+E185",
+      "codepoint": "U+10F185",
       "label": "安装程序",
       "pixels": [
         ".........",
@@ -3363,7 +3363,7 @@
       "ascii": "I"
     },
     "app_bundle": {
-      "codepoint": "U+E186",
+      "codepoint": "U+10F186",
       "label": "应用程序包",
       "pixels": [
         ".........",
@@ -3388,7 +3388,7 @@
       "ascii": "C"
     },
     "app_command": {
-      "codepoint": "U+E187",
+      "codepoint": "U+10F187",
       "label": "自定义命令",
       "pixels": [
         ".........",

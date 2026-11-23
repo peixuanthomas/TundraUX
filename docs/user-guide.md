@@ -19,6 +19,8 @@ This guide takes you from first launch to everyday tasks. On pages with contextu
 
 TundraUX installs **Tundra Cell Atlas** for your account after setup or the first time you open the desktop after upgrading. In the icon check, look for a trash can between **A** and **B**. If you see the trash can and the two **B**s line up, select **Looks right**. If you see a box, a different symbol, or uneven spacing, choose **Use ASCII**. The trash can then appears as **X**. You can run the check again under **Settings → Appearance → Terminal icons**.
 
+If folders looked like playback buttons or the trash can looked like a dash in an earlier release, launch the updated TundraUX to upgrade its font. Fully quit and reopen the terminal, then check the trash can again. If you installed the font yourself, replace your copy with the bundled `assets/cell-icons/TundraCellAtlas.ttf` first.
+
 Over SSH, install `assets/cell-icons/TundraCellAtlas.ttf` on the computer running your terminal. Some terminals let you choose **Tundra Cell Atlas** as a fallback font in the terminal profile. Reopen the terminal after changing its font settings. Windows and WSL sessions displayed by a Windows terminal share one installed copy. Resetting data from either one removes the copy installed by TundraUX.
 
 Launch as your normal OS user; TundraUX uses that account for file access and saved preferences. Linux system operations that need more permission ask for authorization separately. To build from source instead of using an archive, follow [Building and running](README-TECHNICAL.md#building-and-running).

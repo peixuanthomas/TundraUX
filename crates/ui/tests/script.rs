@@ -279,7 +279,10 @@ fn rejected_pending_and_verified_breakpoints_have_distinct_markers_and_labels() 
     let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
     for (mode, symbols) in [
         (ui::CellIconMode::Ascii, ["!", "?", "B"]),
-        (ui::CellIconMode::Font, ["\u{e160}", "\u{e15f}", "\u{e15d}"]),
+        (
+            ui::CellIconMode::Font,
+            ["\u{10f160}", "\u{10f15f}", "\u{10f15d}"],
+        ),
     ] {
         ui::set_cell_icon_mode(mode);
         terminal

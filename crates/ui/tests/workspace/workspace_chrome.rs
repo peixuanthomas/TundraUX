@@ -30,7 +30,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             ui::CellIconMode::Font,
             ["最小化", "分屏", "关闭窗口"],
             "还原",
-            ["\u{e134}", "\u{e135}", "\u{e139}"],
+            ["\u{10f134}", "\u{10f135}", "\u{10f139}"],
         ),
     ] {
         ui::set_cell_icon_mode(mode);

@@ -24,6 +24,7 @@ The default manifest contains 24 items: 20 text assets, 3 TOML art sets, and 1 c
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
 - `app_icons.toml` defines ASCII artwork and optional images by built-in application ID. Home and Launcher use the same application catalog.
 - The separate [cell icon pack](assets/cell-icons/icons.json) maps 142 uses to 136 single-cell glyphs in the bundled `TundraCellAtlas.ttf`. Every glyph has a printable ASCII alternative. The build reads the catalog once and compiles the mappings and animation frame order into the binary.
+- Tundra Cell Atlas version 2 uses `U+10F100`–`U+10F187` in Supplementary Private Use Area-B. The earlier `U+E100` block overlaps Segoe UI Symbol on Windows, where those characters draw media and system icons. [Windows symbol mappings](https://learn.microsoft.com/en-us/uwp/api/windows.ui.xaml.controls.symbol)
 - Older themes can still supply their former icon files. The loader combines them in memory by app ID, using explicit Launcher entries when both files define the same app. Older default themes receive missing icons from the bundled theme.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
 
@@ -73,5 +74,7 @@ python scripts/check-embedded-assets.py target/release/tundra-shell.exe target/r
 ```
 
 On Linux/macOS, use program paths without `.exe`. The check script verifies that each default image is embedded exactly once; if a platform does not use images at all, add `--allow-missing` to check only for duplicates.
+
+The cell icon test checks every character mapping and advance width. It compares all 136 TrueType glyph outlines to their 9 × 18 pixel grids in the catalog.
 
 Asset files are in `assets/`; see [Debug interface previews](../shell/docs/previews.md) for interface preview commands.
