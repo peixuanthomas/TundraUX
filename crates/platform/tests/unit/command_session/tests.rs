@@ -170,7 +170,7 @@ fn linux_bash_help_and_state_use_the_selected_shell_for_the_whole_session() {
         .environment
         .insert("SHELL".into(), "/bin/bash".into());
     assert!(
-        session.shell.is_none(),
+        session.program.is_none(),
         "prompt setup must not resolve shells"
     );
     run(
@@ -195,7 +195,7 @@ fn linux_bash_help_and_state_use_the_selected_shell_for_the_whole_session() {
         "[[ -n $BASH_VERSION ]] && help > /dev/null",
         0,
     );
-    assert_eq!(session.shell.as_deref(), Some(Path::new("/bin/bash")));
+    assert_eq!(session.program.as_deref(), Some(Path::new("/bin/bash")));
 }
 
 #[cfg(target_os = "linux")]
