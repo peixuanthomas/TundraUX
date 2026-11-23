@@ -546,9 +546,19 @@ impl Default for ClockCreateState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ClickItem {
+    File(PathBuf),
+    Named(String),
+    Widget(ui::SystemStatusWidgetKind),
+    Cell(CellPosition),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct TimedClick {
+    pub(super) page: PageInstanceId,
     pub(super) target: Option<ShellComponent>,
+    pub(super) item: ClickItem,
     pub(super) coordinates: CellPosition,
     pub(super) at: Instant,
     pub(super) released: bool,

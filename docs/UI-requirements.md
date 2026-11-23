@@ -70,7 +70,7 @@ The shared Button, Theme, and RenderContext own control states. Pages pass focus
 - Show keyboard focus initially. Valid keyboard navigation moves focus immediately; actual mouse movement, taps, drags, or scrolling hide the indicator while keeping logical focus.
 - A stationary pointer must not highlight another button or reclaim emphasis after keyboard input. Repeated reports of the same coordinates do not switch input methods.
 - Activate a button only after pressing and releasing within the same target. Dragging outside, losing focus, resizing, or changing pages cancels the pending action.
-- A double click needs a released first click followed by a second press on the same target and cell within 500ms. Scrolling, dragging, keyboard input, focus loss, and resizing clear that record.
+- A double click needs a released left click followed within 500ms by a second press on the same file, icon, or control. Allow movement of one terminal cell on each axis within that target. A change of page or window, scrolling, dragging, keyboard input, focus loss, and resizing clear the pair.
 - Only the topmost dialog receives hover, press, text, or keyboard input. Covered pages keep their state. Toasts do not take keyboard focus, but their painted area blocks pointer activation of covered controls until the toast disappears.
 - Hide keyboard emphasis on window focus loss while keeping logical focus. Current-page and record-selection emphasis stays independent of the input method.
 - Drawing a native image keeps the terminal cursor hidden at the image position, including during partial redraws.

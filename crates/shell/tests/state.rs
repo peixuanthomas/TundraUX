@@ -235,37 +235,44 @@ fn modal_captures_mouse_without_closing_or_activating_home() {
 }
 
 #[test]
-fn adjacent_cells_in_same_component_are_separate_clicks() {
+fn one_cell_of_diagonal_motion_keeps_a_double_click_on_the_same_tile() {
     let mut state = ShellSession::new(debug_config(), (120, 40));
     let started_at = Instant::now();
+    let point = home_entry_coordinates(&state, 0);
+    let nearby = (point.0 + 1, point.1 + 1);
 
     state.route_input_at(
-        InputEvent::mouse_down(PointerButton::Left, (10, 5)),
+        InputEvent::mouse_down(PointerButton::Left, point),
         started_at,
     );
     state.route_input_at(
-        InputEvent::mouse_up(PointerButton::Left, (10, 5)),
+        InputEvent::mouse_up(PointerButton::Left, point),
         started_at + Duration::from_millis(50),
     );
 
+    state.route_input_at(
+        InputEvent::mouse_moved(nearby),
+        started_at + Duration::from_millis(75),
+    );
     let routed = state.route_input_at(
-        InputEvent::mouse_down(PointerButton::Left, (11, 6)),
+        InputEvent::mouse_down(PointerButton::Left, nearby),
         started_at + Duration::from_millis(100),
     );
 
     assert_eq!(
         routed.command,
-        ShellCommand::ActivateHomeEntryAt((11, 6), ClickKind::Single)
+        ShellCommand::ActivateHomeEntryAt(nearby, ClickKind::Double)
     );
 }
 
 #[test]
 fn double_click_uses_release_time_and_is_cancelled_by_other_input() {
-    let point = (10, 5);
+    let point = home_entry_coordinates(&ShellSession::new(debug_config(), (120, 40)), 0);
     let start = Instant::now();
     for interruption in [
         InputEvent::Tick,
-        InputEvent::mouse_moved((11, 5)),
+        InputEvent::mouse_moved((point.0 + 2, point.1)),
+        InputEvent::mouse_drag(PointerButton::Left, point),
         InputEvent::mouse_scroll(ui::ScrollDirection::Down, point),
         InputEvent::FocusLost,
         InputEvent::Resize {

@@ -1,4 +1,5 @@
 //! Event dispatch, focus, pointer capture and page input.
+mod clicks;
 pub(super) mod command_dispatch;
 pub(super) mod focus_navigation;
 pub(super) mod hit_testing;

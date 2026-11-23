@@ -144,7 +144,7 @@ fn motion_dispatch_consumes_weather_wakeup_and_leaves_entering_surfaces_interact
     active_motion.deferred_close = None;
     active_motion.exiting = false;
     active_motion.outgoing_block_remaining = Duration::from_millis(50);
-    let previous_click = active.last_click;
+    let previous_click = active.last_click.clone();
     let (_, motion_blocked) = dispatch_motion_aware_input(
         &mut active,
         &mut active_motion,

@@ -725,8 +725,10 @@ fn mouse_single_click_selects_and_double_click_opens_file() {
         InputEvent::mouse_up(PointerButton::Left, first_entry),
         &platform,
     );
+    let nearby = (first_entry.0 + 1, first_entry.1);
+    state.apply_input_with_platform(InputEvent::mouse_moved(nearby), &platform);
     state.apply_input_with_platform(
-        InputEvent::mouse_down(PointerButton::Left, first_entry),
+        InputEvent::mouse_down(PointerButton::Left, nearby),
         &platform,
     );
     drive_editor_tasks_until_idle(&mut state, &platform);
@@ -808,10 +810,20 @@ fn mouse_double_click_on_first_rendered_row_does_not_open_second_entry() {
     open_home_entry(&mut state, &platform, "explorer");
     let first_entry = first_entry_coordinates(&state);
 
+    let adjacent = (first_entry.0, first_entry.1 + 1);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Left, adjacent),
+        &platform,
+    );
+    state.apply_input_with_platform(
+        InputEvent::mouse_up(PointerButton::Left, adjacent),
+        &platform,
+    );
     state.apply_input_with_platform(
         InputEvent::mouse_down(PointerButton::Left, first_entry),
         &platform,
     );
+    assert_eq!(state.active_screen(), ShellScreen::Explorer);
     state.apply_input_with_platform(
         InputEvent::mouse_up(PointerButton::Left, first_entry),
         &platform,

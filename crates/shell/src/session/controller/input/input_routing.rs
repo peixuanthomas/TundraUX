@@ -715,44 +715,6 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn register_click(
-        &mut self,
-        target: Option<ShellComponent>,
-        coordinates: CellPosition,
-        button: PointerButton,
-        received_at: Instant,
-    ) -> ClickKind {
-        if button != PointerButton::Left {
-            self.last_click = None;
-            return ClickKind::Single;
-        }
-
-        let is_double_click = self
-            .last_click
-            .map(|last_click| {
-                last_click.released
-                    && last_click.target == target
-                    && last_click.coordinates == coordinates
-                    && received_at
-                        .checked_duration_since(last_click.at)
-                        .map(|elapsed| elapsed <= DOUBLE_CLICK_INTERVAL)
-                        .unwrap_or(false)
-            })
-            .unwrap_or(false);
-
-        if is_double_click {
-            self.last_click = None;
-            ClickKind::Double
-        } else {
-            self.last_click = Some(TimedClick {
-                target,
-                coordinates,
-                at: received_at,
-                released: self.interaction.completed_button_click_at.take() == Some(received_at),
-            });
-            ClickKind::Single
-        }
-    }
 }
 
 // Share the overlay focus bindings so Shift+Tab and both arrow axes behave alike.
