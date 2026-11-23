@@ -112,6 +112,7 @@ struct AppHostSession {
     output: VecDeque<AppToShell>,
     input_fences: InputFences,
     frame_sequence: u64,
+    cell_icon_mode: workspace_protocol::CellIconMode,
 }
 
 impl AppHostSession {
@@ -123,6 +124,7 @@ impl AppHostSession {
         timings: &mut AppStartupTimings,
     ) -> io::Result<Self> {
         platform::task_events::install_notifier(crate::process_host::event_loop::wake);
+        super::cell_icons::set_render_mode(init.cell_icon_mode);
         let launch: WindowLaunch = serde_json::from_value(init.launch)?;
         let application = launch.application();
         let auth: Option<AuthSession> = init.profile.map(serde_json::from_value).transpose()?;
@@ -282,6 +284,7 @@ impl AppHostSession {
             output: VecDeque::new(),
             input_fences: InputFences::default(),
             frame_sequence: 0,
+            cell_icon_mode: init.cell_icon_mode,
         };
         if let Some([width, height]) = init.image_cell_size {
             host.command_lines.set_cell_size(width, height);
@@ -506,6 +509,11 @@ impl AppHostSession {
     fn receive(&mut self, message: ShellToApp) -> io::Result<()> {
         self.status_dirty = true;
         match message {
+            ShellToApp::CellIconMode(mode) if mode != self.cell_icon_mode => {
+                self.cell_icon_mode = mode;
+                super::cell_icons::set_render_mode(mode);
+                self.redraw.request_redraw();
+            }
             ShellToApp::Viewport {
                 layout,
                 size,
@@ -666,6 +674,10 @@ impl AppHostSession {
         }
         if std::mem::take(&mut self.state.window_tasks_requested) {
             self.output.push_back(AppToShell::ToggleTasks);
+        }
+        if std::mem::take(&mut self.state.cell_icon_recheck_requested) {
+            self.output
+                .push_back(AppToShell::ShellAction(HostAction::RecheckCellIcons));
         }
         let config_revision = self.state.app.storage_config_revision();
         if self.last_storage_config_revision != config_revision {
@@ -863,6 +875,7 @@ impl AppHostSession {
                 }
             });
         let mut frame = ui::capture_workspace_frame(self.layout, backend.buffer(), content, cursor);
+        frame.cell_icon_mode = self.cell_icon_mode;
         let mut images = self.compositor.take_workspace_images();
         frame.modal = !self.state.interactive_overlays().is_empty();
         frame.back_action = self.state.back_action();

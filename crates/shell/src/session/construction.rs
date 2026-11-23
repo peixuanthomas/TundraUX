@@ -161,6 +161,8 @@ impl ShellSession {
             window_close_explicit: false,
             window_global_request: None,
             window_language_reloaded: None,
+            cell_icon_recheck_requested: false,
+            cell_icon_choice: None,
             automation_commit: None,
             windows_active: false,
             window_task_ids: HashSet::new(),

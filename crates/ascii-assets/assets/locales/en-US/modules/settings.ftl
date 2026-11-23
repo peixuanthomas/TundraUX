@@ -491,3 +491,6 @@ settings-top-bar-align-right = Right
 settings-top-bar-show-help = Show Help button
 settings-top-bar-show-time = Show time
 settings-top-bar-show-esc = Show Back button
+settings-cell-icons = Terminal icons
+settings-cell-icons-recheck = Recheck
+settings-cell-icons-help = Check how one-cell icons look in this terminal.

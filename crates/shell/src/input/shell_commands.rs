@@ -3,6 +3,13 @@ use crate::{
     ShellComponent, ShellScreen,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellIconChoice {
+    Font,
+    Ascii,
+    Suppress,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellCommand {
     ToggleTasks,
@@ -138,6 +145,7 @@ pub enum ShellCommand {
     SettingsPointer(MouseInput),
     SettingsRestoreDefaultsConfirmed,
     SettingsWeatherLocationConfirmed,
+    SetCellIconChoice(CellIconChoice),
     EditorSaveAndClose,
     EditorDiscardAndClose,
     EditorCancelClose,

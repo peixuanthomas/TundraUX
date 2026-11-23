@@ -576,6 +576,8 @@ pub struct UiSessionState {
     pub(super) window_close_explicit: bool,
     pub(super) window_global_request: Option<ShellCommand>,
     pub(super) window_language_reloaded: Option<String>,
+    pub(super) cell_icon_recheck_requested: bool,
+    pub(super) cell_icon_choice: Option<CellIconChoice>,
     pub(super) automation_commit: Option<workspace_protocol::AutomationCommit>,
     pub(super) windows_active: bool,
     pub(super) window_task_ids: HashSet<String>,

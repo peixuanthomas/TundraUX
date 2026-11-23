@@ -487,3 +487,6 @@ settings-top-bar-align-right = 右对齐
 settings-top-bar-show-help = 显示帮助按钮
 settings-top-bar-show-time = 显示时间
 settings-top-bar-show-esc = 显示返回按钮
+settings-cell-icons = 终端图标
+settings-cell-icons-recheck = 重新检查
+settings-cell-icons-help = 查看单格图标在当前终端的显示效果。

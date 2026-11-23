@@ -451,6 +451,13 @@ pub(in crate::session) fn settings_cards(
                         i18n::tr!("settings-accent-color-help"),
                         Kind::Palette,
                     ),
+                    Item::new(
+                        Field::RecheckCellIcons,
+                        i18n::tr!("settings-cell-icons"),
+                        i18n::tr!("settings-cell-icons-recheck"),
+                        i18n::tr!("settings-cell-icons-help"),
+                        Kind::Action,
+                    ),
                 ],
             ),
             Card::new(

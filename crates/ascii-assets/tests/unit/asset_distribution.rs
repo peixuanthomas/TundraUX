@@ -21,6 +21,14 @@ fn runtime_asset_copy_includes_valid_icon_assets() {
 
     let copied_root =
         copy_canonical_assets_to_profile_dir(&out_dir).expect("copy canonical runtime assets");
+    assert_eq!(
+        fs::read(copied_root.join("cell-icons/TundraCellAtlas.ttf")).unwrap(),
+        crate::CELL_ICON_FONT
+    );
+    assert_eq!(
+        fs::read(copied_root.join("cell-icons/icons.json")).unwrap(),
+        include_bytes!("../../assets/cell-icons/icons.json").as_slice()
+    );
     assert!(
         copied_root
             .join("themes/default/explorer_icons.toml")

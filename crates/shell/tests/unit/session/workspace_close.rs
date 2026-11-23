@@ -17,6 +17,7 @@ pub(super) fn window(minimum: Size) -> Window {
         state: ProcessState::Running,
         queued: VecDeque::new(),
         viewport: None,
+        pending_cell_icon_mode: None,
         close: CloseProgress::Idle,
         picked_file: None,
         force_when_started: false,
@@ -93,6 +94,7 @@ fn welcome_sends_latest_initialization_without_another_workspace_poll() {
         image_cell_size: None,
         text_sizing: false,
         ansi_colors: false,
+        cell_icon_mode: Default::default(),
     });
     let viewport = ShellToApp::Viewport {
         layout: LayoutGeneration(9),

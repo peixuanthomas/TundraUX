@@ -4960,6 +4960,7 @@ dependencies = [
  "script-runtime",
  "serde",
  "serde_json",
+ "sha2",
  "shell-control",
  "shell-words",
  "storage",

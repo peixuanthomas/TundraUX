@@ -5,6 +5,28 @@ use crate::process_host::transport::{
 use std::sync::atomic::{AtomicU64, Ordering};
 
 impl Workspace {
+    pub(in crate::session) fn set_cell_icon_mode(
+        &mut self,
+        mode: workspace_protocol::CellIconMode,
+    ) {
+        if self.cell_icon_mode == mode {
+            return;
+        }
+        self.cell_icon_mode = mode;
+        self.cancel_capture();
+        for window in self.windows.values_mut() {
+            if let Some(init) = &mut window.init {
+                init.cell_icon_mode = mode;
+            } else {
+                window.pending_cell_icon_mode = Some(mode);
+            }
+            window.frame = None;
+            window.presented = None;
+            window.presenting = None;
+            flush_window_requests(window);
+        }
+    }
+
     pub(in crate::session) fn poll(&mut self, state: &mut ShellSession) -> io::Result<bool> {
         let mut redraw = self.placeholder_redraw_due(Instant::now());
         let connection = WorkerConnection::current().expect("managed workspace");
@@ -341,6 +363,7 @@ impl Workspace {
             image_cell_size: self.image_cell_size,
             text_sizing: self.text_sizing,
             ansi_colors: !platform::terminal_supports_true_color(),
+            cell_icon_mode: self.cell_icon_mode,
         };
         let requested = Instant::now();
         WorkerConnection::current()
@@ -375,6 +398,7 @@ impl Workspace {
                 state: ProcessState::Starting,
                 queued: VecDeque::new(),
                 viewport: None,
+                pending_cell_icon_mode: None,
                 close: CloseProgress::Idle,
                 picked_file: None,
                 force_when_started: false,
@@ -609,6 +633,7 @@ impl Workspace {
                     return Ok(false);
                 }
                 if frame.layout != self.generation
+                    || frame.cell_icon_mode != self.cell_icon_mode
                     || !self.layout.panes.iter().any(|pane| {
                         pane.id == id
                             && frame.size == Size::new(pane.content.width, pane.content.height)
@@ -828,6 +853,11 @@ impl Workspace {
                 window.close = CloseProgress::Cleaning(Instant::now());
             }
             AppToShell::ShellAction(HostAction::SettingsChanged) => {}
+            AppToShell::ShellAction(HostAction::RecheckCellIcons) => {
+                if window.launch == WindowLaunch::Settings {
+                    state.cell_icon_recheck_requested = true;
+                }
+            }
             AppToShell::ShellAction(HostAction::DebugPanicRequested) => {
                 super::super::runtime::trigger_command_line_panic();
             }
@@ -987,7 +1017,19 @@ fn flush_window_requests(window: &mut Window) {
     let Some(stream) = &mut window.stream else {
         return;
     };
-    while let Some(message) = window.queued.pop_front() {
+    loop {
+        if !matches!(window.queued.front(), Some(ShellToApp::Init(_)))
+            && let Some(mode) = window.pending_cell_icon_mode
+        {
+            match stream.queue(&ShellToApp::CellIconMode(mode)) {
+                Ok(()) => window.pending_cell_icon_mode = None,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => return,
+                Err(_) => window.pending_cell_icon_mode = None,
+            }
+        }
+        let Some(message) = window.queued.pop_front() else {
+            break;
+        };
         let initializes = matches!(message, ShellToApp::Init(_));
         match stream.try_queue_owned(message) {
             Ok(()) => {

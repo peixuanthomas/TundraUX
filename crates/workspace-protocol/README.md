@@ -53,6 +53,8 @@ Configuration, profile, and authorization writes include the revision the caller
 
 `ReadSessionSnapshot` returns one coherent view of configuration, authorization, profile, clock, file operations, and system status. Each domain retains its own revision and authorization or read error. An `Authorized` operation also checks the authorization revision before executing a queued write, including writes submitted by Shell.
 
+Window initialization includes the Shell's single-cell icon mode, which defaults to ASCII. When it changes, Shell sends the revised mode to running AppHosts, and each frame reports the mode used to draw it. The Settings AppHost can request a terminal recheck from Shell.
+
 `transport::read_payload` separates asynchronous I/O from JSON decoding, and `encode_message` produces bounded complete messages for background writers. The synchronous `Framed` path attempts writes immediately after enqueueing.
 
 ## Validation

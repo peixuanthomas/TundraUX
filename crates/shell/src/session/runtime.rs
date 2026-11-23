@@ -858,6 +858,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let terminal_size_requirement = ShellTerminalSizeRequirement::from_assets(&ascii_assets);
     let initial_size = checked_current_terminal_size(terminal_size_requirement)?;
     let mut guard = TerminalGuard::enter(output)?;
+    let mut cell_icons = super::cell_icons::TerminalCellIcons::new(shell_watchdog);
     let mut workspace = WorkerConnection::current().map(|_| {
         let image_cell_size = terminal_graphics_probe.picker().map(|picker| {
             let (width, height) = picker.cell_size();
@@ -1116,6 +1117,14 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             if resize_runtime_session(&mut state, crossterm::terminal::size()?, platform.as_ref()) {
                 control.invalidate();
                 compositor.cancel_for_bounds_change();
+                redraw.request_redraw();
+            }
+            if update_ready_marked && cell_icons.poll(&mut state, &platform) {
+                let mode = cell_icons.mode();
+                super::cell_icons::set_render_mode(mode);
+                if let Some(windows) = &mut workspace {
+                    windows.set_cell_icon_mode(mode);
+                }
                 redraw.request_redraw();
             }
 
@@ -1664,6 +1673,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     );
     let restore = guard.restore();
     drop(guard);
+    cell_icons.join();
     let panic_message = finish_session_execution(
         execution,
         cleanup.and(image_cleanup).and(cursor_restore).and(restore),

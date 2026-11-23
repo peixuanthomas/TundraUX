@@ -23,6 +23,7 @@ The default manifest contains 24 items: 20 text assets, 3 TOML art sets, and 1 c
 - Default image bytes are shared through a static asset table; validation, repair, and in-memory fallback reuse the same data.
 - Hosts without image support can load every catalog, font, and text asset without reading PNG payloads. Reload preserves this choice; normal and recovery loaders still require declared images.
 - `app_icons.toml` defines ASCII artwork and optional images by built-in application ID. Home and Launcher use the same application catalog.
+- The separate [cell icon pack](assets/cell-icons/icons.json) maps 142 uses to 136 single-cell glyphs in the bundled `TundraCellAtlas.ttf`. Every glyph has a printable ASCII alternative. The build reads the catalog once and compiles the mappings and animation frame order into the binary.
 - Older themes can still supply their former icon files. The loader combines them in memory by app ID, using explicit Launcher entries when both files define the same app. Older default themes receive missing icons from the bundled theme.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
 
@@ -44,9 +45,10 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, and Tab focus navigation with arrows in the focused region |
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through Tasks in Launcher |
-| `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
+| `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The cell icon pack supplies each toolbar symbol and its ASCII fallback. |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |
+| `cell-icons.ftl`, `settings.ftl` | Terminal icon sample, installation feedback, and the Appearance recheck action |
 | `shell-command-line.ftl` | Command Line startup hint, missing interpreter message, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |
 | `settings.ftl` | Top bar contents and alignment, Command Line shell choices, animation phase fields, validation, reset, save, and cancel actions |

@@ -5,7 +5,7 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use workspace_protocol::transport::Framed;
 use workspace_protocol::{
-    AppStartupTimings, AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image,
+    AppStartupTimings, AppToShell, CellIconMode, Color, Cursor, CursorShape, Heading, Hello, Image,
     LayoutGeneration, MIN_CONTENT_SIZE, ProcessGeneration, Rect, RunId, ServiceError, ServiceReply,
     SessionId, Size, WindowFrame, WorkerId, WorkerRole, WorkerToSupervisor,
 };
@@ -26,6 +26,21 @@ fn the_explicit_debug_panic_is_a_distinct_reliable_control_message() {
 }
 
 #[test]
+fn shell_and_app_use_distinct_cell_icon_change_and_recheck_messages() {
+    use workspace_protocol::{ShellAction, ShellToApp};
+    let change = ShellToApp::CellIconMode(CellIconMode::Font);
+    assert_eq!(
+        serde_json::to_value(&change).unwrap(),
+        serde_json::json!({"cell_icon_mode": "font"})
+    );
+    let recheck = AppToShell::ShellAction(ShellAction::RecheckCellIcons);
+    assert_eq!(
+        serde_json::to_value(&recheck).unwrap(),
+        serde_json::json!({"shell_action": "recheck_cell_icons"})
+    );
+}
+
+#[test]
 fn initialization_tracks_the_latest_viewport_before_session_construction() {
     use workspace_protocol::{ShellToApp, WindowInit};
     let mut init = WindowInit {
@@ -38,6 +53,7 @@ fn initialization_tracks_the_latest_viewport_before_session_construction() {
         image_cell_size: None,
         text_sizing: false,
         ansi_colors: true,
+        cell_icon_mode: CellIconMode::Font,
     };
     init.update_viewport(&ShellToApp::Viewport {
         layout: LayoutGeneration(3),
@@ -63,6 +79,7 @@ fn initialization_tracks_the_latest_viewport_before_session_construction() {
     assert_eq!(init.size, Size::new(215, 35));
     assert!(!init.focused);
     assert!(init.ansi_colors);
+    assert_eq!(init.cell_icon_mode, CellIconMode::Font);
 }
 
 #[test]
@@ -83,6 +100,7 @@ fn initialization_shares_language_data_without_changing_its_json_object() {
         image_cell_size: None,
         text_sizing: false,
         ansi_colors: true,
+        cell_icon_mode: CellIconMode::Font,
     };
     assert!(Arc::ptr_eq(
         init.language.as_ref().unwrap(),
@@ -91,15 +109,21 @@ fn initialization_shares_language_data_without_changing_its_json_object() {
     let wire = serde_json::to_value(ShellToApp::Init(init)).unwrap();
     assert_eq!(wire["init"]["language"], language);
     assert_eq!(wire["init"]["ansi_colors"], true);
+    assert_eq!(wire["init"]["cell_icon_mode"], "font");
     let mut legacy_wire = wire.clone();
     legacy_wire["init"]
         .as_object_mut()
         .unwrap()
         .remove("ansi_colors");
+    legacy_wire["init"]
+        .as_object_mut()
+        .unwrap()
+        .remove("cell_icon_mode");
     let ShellToApp::Init(legacy_init) = serde_json::from_value(legacy_wire).unwrap() else {
         panic!("legacy initialization expected");
     };
     assert!(!legacy_init.ansi_colors);
+    assert_eq!(legacy_init.cell_icon_mode, CellIconMode::Ascii);
     let ShellToApp::Init(received) = serde_json::from_value(wire).unwrap() else {
         panic!("initialization expected");
     };

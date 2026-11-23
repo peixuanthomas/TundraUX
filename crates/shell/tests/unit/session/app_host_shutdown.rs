@@ -76,6 +76,7 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
         output: VecDeque::new(),
         input_fences: InputFences::default(),
         frame_sequence: 0,
+        cell_icon_mode: Default::default(),
     }
 }
 

@@ -17,6 +17,10 @@ This guide takes you from first launch to everyday tasks. On pages with contextu
 3. Open a terminal in that directory. On Linux or macOS run `./tundra-shell`; in PowerShell on Windows run `./tundra-shell.exe`. The Linux archive also has `./install-tux.sh`, which puts `tux` on your PATH through `~/.local/bin`. Optional desktop integration and package requirements are in the [Linux runtime guide](packaging/linux/README-LINUX.txt).
 4. Start with a terminal of at least **108 columns × 20 rows**. Pick language and appearance during first-time setup, or press **F9** to accept the defaults. You can change them later in Settings.
 
+TundraUX installs **Tundra Cell Atlas** for your account after setup or the first time you open the desktop after upgrading. In the icon check, look for a trash can between **A** and **B**. If you see the trash can and the two **B**s line up, select **Looks right**. If you see a box, a different symbol, or uneven spacing, choose **Use ASCII**. The trash can then appears as **X**. You can run the check again under **Settings → Appearance → Terminal icons**.
+
+Over SSH, install `assets/cell-icons/TundraCellAtlas.ttf` on the computer running your terminal. Some terminals let you choose **Tundra Cell Atlas** as a fallback font in the terminal profile. Reopen the terminal after changing its font settings. Windows and WSL sessions displayed by a Windows terminal share one installed copy. Resetting data from either one removes the copy installed by TundraUX.
+
 Launch as your normal OS user; TundraUX uses that account for file access and saved preferences. Linux system operations that need more permission ask for authorization separately. To build from source instead of using an archive, follow [Building and running](README-TECHNICAL.md#building-and-running).
 
 ## Navigate and arrange windows

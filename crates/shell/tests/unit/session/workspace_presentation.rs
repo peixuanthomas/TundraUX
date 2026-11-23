@@ -88,6 +88,45 @@ fn app_frame(workspace: &Workspace, id: SessionId, label: &str) -> WindowFrame {
 }
 
 #[test]
+fn cell_icon_update_rejects_old_frames_and_rechecks_only_from_settings() {
+    use workspace_protocol::CellIconMode;
+    let (mut workspace, id) = workspace(120, 30);
+    let mut state = shell_state();
+    let first = app_frame(&workspace, id, "ASCII");
+    assert!(
+        workspace
+            .receive(id, AppToShell::Frame(first.clone()), &mut state)
+            .unwrap()
+    );
+    workspace.set_cell_icon_mode(CellIconMode::Font);
+    assert!(workspace.windows[&id].frame.is_none());
+    assert_eq!(
+        workspace.windows[&id].pending_cell_icon_mode,
+        Some(CellIconMode::Font)
+    );
+    assert!(
+        !workspace
+            .receive(id, AppToShell::Frame(first), &mut state)
+            .unwrap()
+    );
+
+    let mut updated = app_frame(&workspace, id, "Font");
+    updated.cell_icon_mode = CellIconMode::Font;
+    assert!(
+        workspace
+            .receive(id, AppToShell::Frame(updated), &mut state)
+            .unwrap()
+    );
+
+    let recheck = AppToShell::ShellAction(HostAction::RecheckCellIcons);
+    workspace.receive(id, recheck.clone(), &mut state).unwrap();
+    assert!(!state.cell_icon_recheck_requested);
+    workspace.windows.get_mut(&id).unwrap().launch = WindowLaunch::Settings;
+    workspace.receive(id, recheck, &mut state).unwrap();
+    assert!(state.cell_icon_recheck_requested);
+}
+
+#[test]
 fn workspace_back_follows_the_focused_pane_and_pending_split_menu() {
     let (mut workspace, first) = workspace(240, 40);
     let second = SessionId(2);

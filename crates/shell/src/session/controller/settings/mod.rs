@@ -34,6 +34,7 @@ pub(in crate::session) const APPEARANCE_SETTINGS_FIELDS: &[ui::SettingsField] = 
     ui::SettingsField::BorderShape,
     ui::SettingsField::BorderColor,
     ui::SettingsField::AccentColor,
+    ui::SettingsField::RecheckCellIcons,
     ui::SettingsField::MotionPreference,
     ui::SettingsField::AnimationSpeed,
     ui::SettingsField::AnimationAdvanced,
@@ -778,6 +779,9 @@ impl ShellSession {
             }
             ui::SettingsField::AccentColor => {
                 self.open_settings_picker(ui::SettingsPickerKind::AccentColor)
+            }
+            ui::SettingsField::RecheckCellIcons => {
+                self.cell_icon_recheck_requested = true;
             }
             ui::SettingsField::Language => {
                 self.open_settings_picker(ui::SettingsPickerKind::Language)

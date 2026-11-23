@@ -2111,6 +2111,10 @@ impl ShellSession {
                     ShellAction::Redraw
                 }
             }
+            ShellCommand::SetCellIconChoice(choice) => {
+                self.cell_icon_choice = Some(choice);
+                ShellAction::Redraw
+            }
             ShellCommand::CaptureOverlayInput => ShellAction::Redraw,
             ShellCommand::RecordInput | ShellCommand::Noop => ShellAction::Redraw,
         }

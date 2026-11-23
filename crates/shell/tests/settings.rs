@@ -82,9 +82,7 @@ fn numeric_settings_wait_for_confirmation_and_escape_discards_changes() {
     let manager = initialize_profiles(&platform);
     let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
-    for _ in 0..5 {
-        press(&mut state, &platform, "Down");
-    }
+    select_field(&mut state, &platform, SettingsField::AnimationSpeed);
     let saved_speed = || {
         manager
             .load_profile("AdminUser")
@@ -1367,9 +1365,7 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
     let manager = initialize_profiles(&platform);
     let mut state = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut state, &platform);
-    for _ in 0..5 {
-        press(&mut state, &platform, "Down");
-    }
+    select_field(&mut state, &platform, SettingsField::AnimationSpeed);
     press(&mut state, &platform, "Enter");
     adjust_number(&mut state, &platform, true);
     press(&mut state, &platform, "Enter");
@@ -1441,10 +1437,7 @@ fn advanced_animation_phases_save_per_user_and_restore_with_speed_defaults() {
 
     let mut reopened = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut reopened, &platform);
-    press(&mut reopened, &platform, "Home");
-    for _ in 0..4 {
-        press(&mut reopened, &platform, "Down");
-    }
+    select_field(&mut reopened, &platform, SettingsField::MotionPreference);
     press(&mut reopened, &platform, "Enter");
     press(&mut reopened, &platform, "End");
     press(&mut reopened, &platform, "Up");
@@ -1473,9 +1466,7 @@ fn animation_form_cancels_drafts_and_validates_all_fields_before_saving() {
     let manager = initialize_profiles(&platform);
     let mut state = start_as_system_user(&platform, "NormalUser");
     open_settings_from_home(&mut state, &platform);
-    for _ in 0..6 {
-        press(&mut state, &platform, "Down");
-    }
+    select_field(&mut state, &platform, SettingsField::AnimationAdvanced);
     press(&mut state, &platform, "Enter");
     let original = manager.load_profile("NormalUser").unwrap();
     press(&mut state, &platform, "Ctrl+A");
@@ -1567,9 +1558,7 @@ fn animation_speed_is_per_user_adjustable_and_has_a_default_button() {
     let mut state = start_as_system_user(&platform, "NormalUser");
 
     open_settings_from_home(&mut state, &platform);
-    for _ in 0..5 {
-        press(&mut state, &platform, "Down");
-    }
+    select_field(&mut state, &platform, SettingsField::AnimationSpeed);
     let model = state.to_settings_view_model().unwrap();
     assert_eq!(model.selected_field, SettingsField::AnimationSpeed);
     let speed = model

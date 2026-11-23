@@ -29,6 +29,14 @@ pub const MIN_CONTENT_SIZE: Size = Size::new(106, 16);
 
 pub const MAX_IMAGE_BYTES: usize = 80_000_000;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CellIconMode {
+    #[default]
+    Ascii,
+    Font,
+}
+
 /// Zero-based window-local coordinates and dimensions in terminal cells.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rect {
@@ -49,6 +57,7 @@ impl Rect {
 pub enum ShellToApp {
     Hello(Hello),
     Init(WindowInit),
+    CellIconMode(CellIconMode),
     Viewport {
         layout: LayoutGeneration,
         /// `None` suspends viewport updates when the terminal cannot fit the workspace.
@@ -119,6 +128,7 @@ pub enum AppToShell {
 #[serde(rename_all = "snake_case")]
 pub enum ShellAction {
     SettingsChanged,
+    RecheckCellIcons,
     AutomationChanged(AutomationCommit),
     DebugPanicRequested,
     LanguageReloaded { code: String },
@@ -155,6 +165,8 @@ pub struct WindowInit {
     pub text_sizing: bool,
     #[serde(default)]
     pub ansi_colors: bool,
+    #[serde(default)]
+    pub cell_icon_mode: CellIconMode,
 }
 
 impl WindowInit {
@@ -239,6 +251,8 @@ pub struct WindowFrame {
     pub layout: LayoutGeneration,
     pub size: Size,
     #[serde(default)]
+    pub cell_icon_mode: CellIconMode,
+    #[serde(default)]
     pub page: String,
     #[serde(default)]
     pub animation_running: bool,
@@ -275,6 +289,7 @@ impl WindowFrame {
             confirmed_input_fence: 0,
             layout,
             size,
+            cell_icon_mode: CellIconMode::Ascii,
             page: String::new(),
             animation_running: false,
             keyboard_available: false,

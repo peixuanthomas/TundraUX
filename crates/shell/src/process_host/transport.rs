@@ -53,7 +53,10 @@ impl Message for ShellToApp {
     fn reserved(&self) -> bool {
         matches!(
             self,
-            Self::RequestClose | Self::CancelPointer { .. } | Self::InputFence { .. }
+            Self::RequestClose
+                | Self::CancelPointer { .. }
+                | Self::InputFence { .. }
+                | Self::CellIconMode(_)
         )
     }
     fn resident_bytes(&self) -> usize {

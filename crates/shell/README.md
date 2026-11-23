@@ -27,6 +27,7 @@
 | Native child hosts | `command_line_runtime`, `vim_host` (including `install`), `script_host` | Start and poll the runtime for each window; handle terminal input, editor synchronization or script results, and cleanup |
 | Frame and output | `presentation/`, `compositor/`, `automation`, `redraw` | Build view models, combine app frames and global UI, capture automation state, and choose when a new frame is needed |
 | Dialog and motion state | `overlays`, `overlay_focus`, `overlay_input`, `motion_effects`, `panel_motion`, `spring_progress` | Order dialogs, intercept input, restore focus, and track visual transitions |
+| Terminal icons | `cell_icons` | Install and check the single-cell font in the desktop Shell, store terminal choices, and synchronize app windows |
 | Special surfaces | `screen_keyboard`, `screen_saver` | Own the visible keyboard target and track idle weather and wake state |
 
 ### Page controllers
@@ -34,7 +35,7 @@
 | Modules under [`session/controller/`](src/session/controller/) | Responsibility |
 | --- | --- |
 | `input/`, `background` | Shared hit testing, focus traversal, pointer capture, Home ordering and navigation, command dispatch, and polling of accepted results |
-| `editor/`, `script` | Document and settings actions, menus, find, save and recovery tasks, Vim switching, and run/pause/breakpoint controls |
+| `editor/`, `script` | Document and settings actions, menus, find, save and recovery tasks, Vim switching, and run/pause/breakpoint controls. Editor find uses the same prefix for drawing and mouse cursor placement. |
 | `explorer/`, `launcher/`, `command_line/` | Browser and save picker, file tasks, launch/edit/reorder actions, and embedded CLI navigation |
 | `management/`, `auto_admin/`, `privilege_session` | System pages, selected targets, action forms, package and scheduled-task flows, configuration editing/backups, task output, AA prompts, and authorization lifetime |
 | `account/`, `settings/`, `clock/` | First-run setup and account actions, configuration and update dialogs, and clock-item editing and synchronization |
@@ -45,6 +46,10 @@ Explorer's asynchronous Rename and Undo completions merge refreshed listings int
 ## Worker lifecycle and shared state
 
 Shell attaches to the current system user, initializes assets and storage, and opens first-time setup or Home. It owns global input, pane focus, the display, and idle weather. AppHosts own their page state and child processes. Keeping idle weather in the Shell prevents an AppHost from interpreting a wake action in its active dialog.
+
+Shell starts the terminal font check after first-time setup completes or an existing profile opens. It installs the bundled font for the current OS user when the display is local. A visual check shows a real trash icon between `A` and `B` above `A.B`. Confirm the first line when the icon looks right and both `B`s line up. **Settings → Appearance → Terminal icons → Recheck** reopens the visual check.
+
+Each identifiable terminal configuration stores its own choice. Windows Terminal uses the profile identifier, iTerm2 uses its supplied profile name, WezTerm uses its configuration and executable, and kitty uses its configuration directory. GNOME Terminal can reuse a choice when the current settings contain a single profile. Apple Terminal, SSH, xterm, the Linux text console, and terminal multiplexers use the choice for the current session. For SSH, install `assets/cell-icons/TundraCellAtlas.ttf` on the client device. Shell starts in ASCII, reuses confirmation for the verified version of the font, and sends its current mode to all AppHosts. AppHosts can request a recheck from Settings.
 
 AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. If the Windows Shell stops during an inline image, the guardian releases the terminal display before restoring the original cursor. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
 

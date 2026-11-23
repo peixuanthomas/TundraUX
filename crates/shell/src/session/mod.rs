@@ -52,6 +52,7 @@ const CLOCK_MANAGE_NOTIFICATION_KEY_PREFIX: &str = "clock.manage";
 const CLOCK_DUE_NOTIFICATION_KEY_PREFIX: &str = "clock.due";
 mod app_host;
 mod automation;
+mod cell_icons;
 mod clock_workspace;
 pub use app_host::run_app_host;
 mod command_line_runtime;
