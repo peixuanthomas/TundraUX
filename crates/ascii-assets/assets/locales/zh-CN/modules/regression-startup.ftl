@@ -41,7 +41,7 @@ startup-cli-help = TundraUX 命令行
     { "  " }watchdog [list|kill]          查看或强制终止受管进程
     { "  " }debug <command>               调试工具，见 debug --help
     { "  " }cls                           清空终端
-    { "  " }new                           重置已保存的 TundraUX 数据
+    { "  " }reset                         重置已保存的 TundraUX 数据
     { "  " }repl                          交互命令行
     { "  " }help [command ...]            命令帮助
     { "  " }-h, --help                    帮助
@@ -111,8 +111,10 @@ startup-brand-launcher-restart = 请重启 TundraUX 以刷新正在运行的启�
 startup-brand-explain = TundraUX 启动流程和模块边界
 startup-brand-asset-help = TundraUX 资源测试命令
 startup-brand-reset-requested = 已请求重置 TundraUX，正在返回启动器。
-startup-brand-reset-help = 清除已保存的 TundraUX 配置和状态并恢复默认值。需要输入 RESET。
-    请先使用 debug paths 备份显示的配置和状态目录。只重置单个设置时，可使用 config reset <field>。
+startup-brand-reset-help = 用法：tundra-cli reset
+    立即清除已保存的 TundraUX 配置和状态，并恢复默认值。
+    在交互命令行中，/reset 会要求输入 RESET 确认清除数据。
+    使用 tundra-cli debug paths 查找并备份数据。只重置单个设置时，可使用 config reset <field>。
 startup-brand-reset-prompt = 输入 RESET 清除 TundraUX 数据，或按回车取消：
 startup-brand-smoke = TundraUX Shell 初步测试
 startup-brand-shell = TundraUX Shell

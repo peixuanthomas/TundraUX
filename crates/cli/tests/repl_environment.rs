@@ -19,7 +19,15 @@ fn run_child_if_requested() {
 }
 
 fn run_repl(test: &str, input: &str, embedded: bool) -> Output {
-    let mut command = Command::new(std::env::current_exe().unwrap());
+    run_repl_command(
+        Command::new(std::env::current_exe().unwrap()),
+        test,
+        input,
+        embedded,
+    )
+}
+
+fn run_repl_command(mut command: Command, test: &str, input: &str, embedded: bool) -> Output {
     #[cfg(target_os = "linux")]
     command.env("SHELL", "/bin/bash");
     let mut child = command
@@ -91,16 +99,50 @@ fn a_system_command_exit_76_does_not_become_an_embedded_debug_request() {
 #[test]
 fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
     run_child_if_requested();
-    for embedded in [false, true] {
-        let output = run_repl(
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let directory = std::env::temp_dir().join(format!("tundra-cli-native-reset-{suffix}"));
+    std::fs::create_dir(&directory).unwrap();
+    let executable = if cfg!(windows) {
+        let path = directory.join("reset.cmd");
+        std::fs::write(&path, "@echo NATIVE_RESET_RAN\r\n@exit /B 7\r\n").unwrap();
+        path
+    } else {
+        let path = directory.join("reset");
+        std::fs::write(&path, "#!/bin/sh\nprintf 'NATIVE_RESET_RAN\\n'\nexit 7\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        path
+    };
+    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+    let search_path = std::env::join_paths(
+        std::iter::once(directory.clone()).chain(std::env::split_paths(&inherited_path)),
+    )
+    .unwrap();
+    let outputs = [false, true].map(|embedded| {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command.env("PATH", &search_path).current_dir(&directory);
+        run_repl_command(
+            command,
             "repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives",
-            "  echo DEFAULT_COMMAND_RAN\n/echo MUST_NOT_RUN\n/config invalid\nnew\n/repl\n/\n/help\nexit\n",
+            "  echo DEFAULT_COMMAND_RAN\n/echo MUST_NOT_RUN\n/config invalid\nreset\n/repl\n/\n/help\nexit\n",
             embedded,
-        );
+        )
+    });
+    std::fs::remove_file(executable).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+
+    for output in outputs {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.success(), "{stdout}\n{stderr}");
         assert!(stdout.contains("DEFAULT_COMMAND_RAN"), "{stdout}");
+        assert!(stdout.contains("NATIVE_RESET_RAN"), "{stdout}");
         assert!(!stdout.contains("MUST_NOT_RUN"), "{stdout}");
         assert!(
             stderr.contains("Remove the '/' prefix: echo MUST_NOT_RUN"),
@@ -110,7 +152,7 @@ fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
             stderr.matches("This looks like a system command").count(),
             1
         );
-        assert!(stderr.contains("Prefix it with '/': /new"), "{stderr}");
+        assert!(stderr.contains("Prefix it with '/': /reset"), "{stderr}");
         assert!(!stderr.contains("Usage: tundra-cli"), "{stderr}");
         assert!(
             stderr.contains("repl cannot be started from inside repl"),
@@ -126,6 +168,32 @@ fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
         assert!(!stdout.contains("默认执行系统命令"), "{stdout}");
         assert!(!stderr.contains("这可能是"), "{stderr}");
     }
+}
+
+#[test]
+fn slash_reset_keeps_confirmation_and_embedded_exit_code() {
+    run_child_if_requested();
+    for embedded in [false, true] {
+        let output = run_repl(
+            "slash_reset_keeps_confirmation_and_embedded_exit_code",
+            "/new\n/reset --help\n/reset\nreset\necho AFTER_CANCEL\nexit\n",
+            embedded,
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stderr.contains("unknown command: new"), "{stderr}");
+        assert!(stdout.contains("Usage: tundra-cli reset"), "{stdout}");
+        assert!(stdout.contains("Reset cancelled."), "{stdout}");
+        assert!(stdout.contains("AFTER_CANCEL"), "{stdout}");
+    }
+
+    let output = run_repl(
+        "slash_reset_keeps_confirmation_and_embedded_exit_code",
+        "/reset\nRESET\n",
+        true,
+    );
+    assert_eq!(output.status.code(), Some(75), "{output:?}");
 }
 
 #[test]

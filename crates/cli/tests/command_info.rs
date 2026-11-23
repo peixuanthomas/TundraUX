@@ -13,6 +13,8 @@ fn help_and_version_work_without_startup_or_writable_watchdog_paths() {
         &["-V"],
         &["help", "config"],
         &["config", "set", "-h"],
+        &["reset", "--help"],
+        &["help", "reset"],
         &["launcher", "--help"],
         &["logs", "export", "--help"],
         &["services", "--help"],
@@ -70,7 +72,7 @@ fn help_and_version_work_without_startup_or_writable_watchdog_paths() {
         assert!(!text.contains('\x1b'), "must not enter terminal UI: {text}");
     }
     for args in [
-        &["new"][..],
+        &["reset"][..],
         &["doctor"],
         &["debug", "test-watchdog-panic"],
         &["repl"],

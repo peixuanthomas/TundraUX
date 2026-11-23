@@ -13,7 +13,7 @@ use crate::debug_command::{drain_watchdog_incidents, run_watchdog_test};
 use crate::doctor::run_doctor;
 use crate::help_text::{write_debug_help, write_explain, write_help, write_ui_style_help};
 use crate::path_report::run_paths;
-use crate::storage_reset::run_new;
+use crate::storage_reset::run_reset;
 
 const CLEAR_TERMINAL_SEQUENCE: &[u8] = b"\x1b[3J\x1b[2J\x1b[H";
 
@@ -187,7 +187,7 @@ where
             let _ = write_explain(stdout);
             0
         }
-        Ok(CliCommand::New) => run_new(platform, stdout, stderr),
+        Ok(CliCommand::Reset) => run_reset(platform, stdout, stderr),
         Ok(CliCommand::Repl { .. }) => {
             let _ = writeln!(stderr, "ERROR: repl cannot be started from inside repl");
             2

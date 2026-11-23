@@ -14,7 +14,7 @@ pub enum CliCommand {
     TopicHelp(String),
     Doctor,
     Explain,
-    New,
+    Reset,
     Paths,
     /// Starts the interactive command line. `embedded` is reserved for the
     /// Launcher-hosted terminal and is intentionally not advertised in help.
@@ -232,7 +232,7 @@ where
         "doctor" => parse_no_extra_args(&args, CliCommand::Doctor),
         "cls" => parse_no_extra_args(&args, CliCommand::Cls),
         "config" => parse_config_args(&args).map(CliCommand::Config),
-        "new" => parse_no_extra_args(&args, CliCommand::New),
+        "reset" => parse_no_extra_args(&args, CliCommand::Reset),
         "repl" => parse_repl_args(&args),
         "__update-probe" => parse_no_extra_args(&args, CliCommand::UpdateProbe),
         "__apply-update" => parse_internal_update_args(&args, false),

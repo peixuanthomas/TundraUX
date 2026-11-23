@@ -5,7 +5,7 @@ use storage::{StorageLayout, reset_saved_content};
 
 use crate::path_report::write_storage_files;
 
-pub(crate) fn run_new<Stdout: Write, Stderr: Write>(
+pub(crate) fn run_reset<Stdout: Write, Stderr: Write>(
     platform: &dyn Platform,
     stdout: &mut Stdout,
     stderr: &mut Stderr,

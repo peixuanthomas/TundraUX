@@ -1,6 +1,14 @@
 use super::*;
 
 #[test]
+fn reset_completes_as_a_ux_command_and_help_topic() {
+    assert_eq!(command_completions("/res", 4, &[]).1, ["/reset"]);
+    assert_eq!(command_completions("/help res", 9, &[]).1, ["reset"]);
+    assert!(command_completions("/new", 4, &[]).1.is_empty());
+    assert!(command_completions("res", 3, &[]).1.is_empty());
+}
+
+#[test]
 fn selected_candidates_preview_only_the_suffix_and_wrap() {
     let line = "/config set border-";
     assert_eq!(

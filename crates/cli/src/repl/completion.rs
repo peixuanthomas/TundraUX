@@ -35,7 +35,7 @@ const COMMANDS: &[&str] = &[
     "logs",
     "debug",
     "cls",
-    "new",
+    "reset",
 ];
 const CONFIG_FIELDS: &[&str] = &[
     "automation.enabled",

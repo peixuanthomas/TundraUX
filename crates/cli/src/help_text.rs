@@ -153,7 +153,7 @@ pub(crate) fn parse_help_topic(args: &[String]) -> Result<crate::CliCommand, cra
         | "launcher list"
         | "launcher pin"
         | "launcher unpin"
-        | "new"
+        | "reset"
         | "cls"
         | "repl"
         | "doctor"
@@ -191,6 +191,7 @@ pub(crate) fn write_topic_help(output: &mut impl Write, topic: &str) -> std::io:
     let localized = match topic {
         "doctor" => Some("startup-cli-doctor-help"),
         "repl" => Some("startup-cli-repl-help"),
+        "reset" => Some("startup-brand-reset-help"),
         "launcher" | "launcher list" | "launcher pin" | "launcher unpin" => {
             Some("startup-cli-launcher-help")
         }
@@ -201,9 +202,6 @@ pub(crate) fn write_topic_help(output: &mut impl Write, topic: &str) -> std::io:
         return writeln!(output, "{}", i18n::tr!(message));
     }
     writeln!(output, "Usage: tundra-cli {topic}")?;
-    if topic == "new" {
-        return writeln!(output, "{}", i18n::tr!("startup-brand-reset-help"));
-    }
     let detail = match topic {
         "debug paths" => {
             "Show path templates and the resolved config, data, state, logs, cache, and temporary paths."
@@ -307,6 +305,12 @@ mod tests {
             let text = String::from_utf8(output).unwrap();
             assert!(text.contains("软件源"));
             assert!(text.contains("--apply --expected-version"));
+
+            let mut output = Vec::new();
+            write_topic_help(&mut output, "reset").unwrap();
+            let text = String::from_utf8(output).unwrap();
+            assert!(text.contains("用法：tundra-cli reset"));
+            assert!(text.contains("/reset 会要求输入 RESET"));
         });
     }
 }

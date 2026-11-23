@@ -305,9 +305,11 @@ fn repl_requires_a_prefix_for_ux_commands_and_keeps_system_paths_intact() {
     );
     assert_eq!(ux_command_input("/"), Some(""));
     assert_eq!(ux_command_input("/echo example"), Some("echo example"));
+    assert_eq!(ux_command_input("/reset"), Some("reset"));
     for line in [
         "dir",
         "config get",
+        "reset",
         "/usr/bin/printf '%s' hello",
         "'/usr/bin/printf' hello",
         "echo \"$HOME\" | cat",
@@ -324,11 +326,11 @@ fn ux_hints_recognize_invalid_subcommands_without_guessing_unknown_names() {
         "config invalid",
         "debug invalid",
         "debug screen-keyboard",
-        "new",
+        "reset",
     ] {
         assert!(is_likely_ux_command(line), "{line}");
     }
-    for line in ["echo hello", "tundra-unknown", "config '", ""] {
+    for line in ["echo hello", "new", "tundra-unknown", "config '", ""] {
         assert!(!is_likely_ux_command(line), "{line}");
     }
     assert_eq!(visible_command("echo \u{1b}[31m\n"), "echo \\u{1b}[31m\\n");
