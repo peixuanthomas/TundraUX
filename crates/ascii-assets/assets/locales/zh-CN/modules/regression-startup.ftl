@@ -105,6 +105,7 @@ startup-brand-doctor = TundraUX 诊断
 startup-brand-storage-reset = TundraUX 存储重置
 cell-icon-font-removed = 已卸载由 TundraUX 安装的 Tundra Cell Atlas 字体。
 cell-icon-font-preserved = Tundra Cell Atlas 字体文件或注册信息已被更改，已保留你的副本。
+cell-icon-font-windows-check-failed = WSL 无法检查与 Windows 共用的字体。请启用 WSL 调用 Windows 程序的功能后重新执行重置。已保留 TundraUX 数据。
 startup-brand-config-saved = 已保存。请重启正在运行的 TundraUX 界面以应用设置。
 startup-brand-launcher-restart = 请重启 TundraUX 以刷新正在运行的启动器。
 startup-brand-explain = TundraUX 启动流程和模块边界

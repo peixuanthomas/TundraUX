@@ -21,7 +21,7 @@
 
 Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
 
-The icon font is installed under `$XDG_DATA_HOME/fonts` on Linux or `~/Library/Fonts` on macOS. Windows installs it under `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, registers it for the current user, and announces the change to running windows. WSL sessions with a recognized Windows terminal use the same Windows installer and ownership record as native Windows. If Windows interop is disabled, a WSL reset can clear the Linux installation and the Windows record stays available to the native Windows reset. An SSH session asks the user to install the font on the terminal's computer.
+The icon font is installed under `$XDG_DATA_HOME/fonts` on Linux or `~/Library/Fonts` on macOS. Windows installs it under `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, registers it for the current user, and announces the change to running windows. WSL sessions with a recognized Windows terminal use the same Windows installer and ownership record as native Windows. A WSL reset checks that record first. If it cannot reach Windows, it keeps the data and asks the user to retry after enabling interop. An SSH session asks the user to install the font on the terminal's computer.
 
 The ownership record identifies the installed file and its SHA-256 fingerprint. Linux retries a failed font cache refresh on the next installation attempt. A reset removes only a matching owned copy and, on Windows, its matching registry value. Manually installed copies are reused when the file matches. A different version or a file replaced after installation is preserved and reported to the caller.
 

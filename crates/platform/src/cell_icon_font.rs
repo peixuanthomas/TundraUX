@@ -79,10 +79,16 @@ pub fn uninstall_cell_icon_font(paths: &AppPaths) -> io::Result<CellIconFontRemo
     #[cfg(target_os = "linux")]
     if is_wsl() {
         use CellIconFontRemoval::*;
-        let windows = match windows::uninstall() {
-            Err(error) if windows_interop_unavailable(&error) => Missing,
-            result => result?,
-        };
+        let windows = windows::uninstall().map_err(|error| {
+            if windows_interop_unavailable(&error) {
+                io::Error::new(
+                    error.kind(),
+                    i18n::tr!("cell-icon-font-windows-check-failed"),
+                )
+            } else {
+                error
+            }
+        })?;
         return Ok(match (unix::uninstall(paths)?, windows) {
             (Preserved, _) | (_, Preserved) => Preserved,
             (Removed, _) | (_, Removed) => Removed,
