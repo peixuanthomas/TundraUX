@@ -10,6 +10,7 @@ pub struct ShellNotificationAction {
     pub shortcut: Option<InputKey>,
     pub cancel: bool,
     pub follow_up: Option<ShellCommand>,
+    danger: bool,
 }
 
 impl ShellNotificationAction {
@@ -20,6 +21,7 @@ impl ShellNotificationAction {
             shortcut: None,
             cancel: false,
             follow_up: None,
+            danger: false,
         }
     }
 
@@ -35,6 +37,11 @@ impl ShellNotificationAction {
 
     pub fn with_follow_up(mut self, command: ShellCommand) -> Self {
         self.follow_up = Some(command);
+        self
+    }
+
+    pub(crate) fn danger(mut self) -> Self {
+        self.danger = true;
         self
     }
 
@@ -243,13 +250,15 @@ impl NotificationBindings {
                         &action.id,
                         action.label.render_current(),
                     );
-                    if let Some(shortcut) = binding
-                        .and_then(|binding| {
-                            binding.actions.iter().find(|bound| bound.id == action.id)
-                        })
-                        .and_then(ShellNotificationAction::shortcut_label)
-                    {
-                        view = view.with_shortcut(shortcut);
+                    if let Some(bound) = binding.and_then(|binding| {
+                        binding.actions.iter().find(|bound| bound.id == action.id)
+                    }) {
+                        if let Some(shortcut) = bound.shortcut_label() {
+                            view = view.with_shortcut(shortcut);
+                        }
+                        if bound.danger {
+                            view = view.danger();
+                        }
                     }
                     view.selected(action.selected).cancel(action.cancel)
                 })

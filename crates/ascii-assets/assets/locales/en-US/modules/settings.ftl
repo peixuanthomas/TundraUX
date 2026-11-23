@@ -112,6 +112,13 @@ settings-animation-speed = Animation speed
 settings-animation-speed-help = Adjust transition speed from 50% to 200% in 25% steps.
 settings-restore-speed = Restore animation defaults
 settings-reset = Reset
+settings-reset-all-title = Reset TundraUX
+settings-reset-all-data = Current OS account's TundraUX data
+settings-reset-all-action = Reset and restart
+settings-reset-all-confirmation = Reset all TundraUX data?
+settings-reset-all-scope =
+    This permanently clears saved TundraUX data for the current OS account, including settings, profiles, Launcher shortcuts, alarms, countdowns, logs, cache, and recovery drafts. It also removes the icon font if TundraUX installed it.
+    TundraUX closes its windows before clearing the data, then restarts into first-time setup.
 settings-restore-speed-help = Restore 100% speed and all default phase times and speed curves.
 settings-language-timezone = Language and timezone
 settings-language = Language
@@ -316,6 +323,7 @@ settings-field-name =
         [TopBarEsc] { settings-top-bar-show-esc }
         [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
+        [ResetAll] { settings-reset-all-action }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
         [CheckUpdates] { settings-check-updates }
@@ -333,6 +341,7 @@ settings-category-name =
         [Editor] { ui-settings-editor }
         [CommandLine] { shell-command-line }
         [Update] { ui-settings-update }
+        [Reset] { settings-reset }
        *[other] { $category }
     }
 

@@ -198,6 +198,51 @@ pub(super) fn shell_state() -> ShellSession {
 }
 
 #[test]
+fn settings_reset_focuses_a_pending_close_and_can_be_cancelled() {
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let (draft, settings) = (SessionId(1), SessionId(2));
+    for (id, launch) in [
+        (draft, WindowLaunch::Editor),
+        (settings, WindowLaunch::Settings),
+    ] {
+        let mut app = window(Size::new(106, 16));
+        app.launch = launch;
+        workspace.windows.insert(id, app);
+        show(&mut workspace, id);
+    }
+    assert_eq!(workspace.selection.focused(), Some(settings));
+    workspace
+        .receive(
+            settings,
+            AppToShell::ShellAction(HostAction::Reset),
+            &mut state,
+        )
+        .unwrap();
+    workspace
+        .receive(draft, AppToShell::CloseDeferred, &mut state)
+        .unwrap();
+    assert_eq!(workspace.selection.focused(), Some(draft));
+    assert!(!workspace.reset_requested());
+    workspace
+        .receive(draft, AppToShell::CloseCancelled, &mut state)
+        .unwrap();
+    assert!(!workspace.reset);
+
+    workspace
+        .receive(
+            settings,
+            AppToShell::ShellAction(HostAction::Reset),
+            &mut state,
+        )
+        .unwrap();
+    workspace.finish_window_exit(draft, Some(0), false, &mut state);
+    assert!(!workspace.reset_requested());
+    workspace.finish_window_exit(settings, Some(0), false, &mut state);
+    assert!(workspace.reset_requested());
+}
+
+#[test]
 fn only_the_explicit_debug_message_reaches_the_shell_panic_boundary() {
     use watchdog::{BoundaryKind, BoundarySpec, WatchdogConfig, WatchdogRuntime};
     let root = std::env::temp_dir().join(format!(

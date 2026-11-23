@@ -13,6 +13,7 @@ use crate::session::*;
 use devices::*;
 use platform::SystemCommandShell;
 pub(in crate::session) const SETTINGS_RESTORE_NOTIFICATION_KEY: &str = "settings.restore-defaults";
+const SETTINGS_RESET_ALL_NOTIFICATION_KEY: &str = "settings.reset-all";
 pub(in crate::session) const SETTINGS_WEATHER_LOCATION_NOTIFICATION_KEY: &str =
     "settings.weather-location";
 pub(in crate::session) const WEATHER_LOCATION_MAX_LEN: usize = 120;
@@ -794,6 +795,7 @@ impl ShellSession {
             ui::SettingsField::ExplorerOpenExtensions => self.open_settings_file_extensions(),
             ui::SettingsField::ResetAnimationSpeed => self.reset_settings_animation_speed(),
             ui::SettingsField::RestoreDefaults => self.request_settings_restore_defaults(),
+            ui::SettingsField::ResetAll => self.request_settings_reset_all_confirmation(),
             ui::SettingsField::UpdateMode => self.switch_update_mode(),
             ui::SettingsField::CheckUpdates => self.begin_update_check(),
             ui::SettingsField::StartUpdate => self.open_update_confirmation(),
@@ -1179,6 +1181,29 @@ impl ShellSession {
         self.notify_modal_with_options(notification);
     }
 
+    fn request_settings_reset_all_confirmation(&mut self) {
+        if !self.can_change_global_settings() {
+            self.set_settings_error(i18n::msg!("settings-admin-required"));
+            return;
+        }
+        let notification = ShellNotification::modal(
+            i18n::msg!("settings-reset-all-confirmation"),
+            i18n::msg!("settings-reset-all-scope"),
+            ui::NotificationTone::Warning,
+            vec![
+                ShellNotificationAction::new("reset-all", i18n::msg!("settings-reset-all-action"))
+                    .danger()
+                    .with_follow_up(ShellCommand::SettingsResetAllConfirmed),
+                ShellNotificationAction::new("cancel", i18n::msg!("settings-cancel"))
+                    .with_shortcut(InputKey::Escape)
+                    .cancel(),
+            ],
+        )
+        .with_key(SETTINGS_RESET_ALL_NOTIFICATION_KEY)
+        .with_cancel_default();
+        self.notify_modal_with_options(notification);
+    }
+
     pub(in crate::session) fn restore_settings_defaults(&mut self) {
         let Some((category, application)) = self
             .pages
@@ -1244,6 +1269,7 @@ impl ShellSession {
             },
             ui::SettingsCategory::Appearance => unreachable!(),
             ui::SettingsCategory::Update
+            | ui::SettingsCategory::Reset
             | ui::SettingsCategory::Sound
             | ui::SettingsCategory::Display
             | ui::SettingsCategory::Wifi
@@ -1358,8 +1384,13 @@ pub(in crate::session) fn settings_fields(
         ui::SettingsCategory::Bluetooth => BLUETOOTH_FIELDS,
         ui::SettingsCategory::Applications => &[ui::SettingsField::ApplicationList],
         ui::SettingsCategory::Update => UPDATE_SETTINGS_FIELDS,
+        ui::SettingsCategory::Reset => &[ui::SettingsField::ResetAll],
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/session/controller/settings/reset_tests.rs"]
+mod reset_tests;
 
 #[cfg(test)]
 #[path = "../../../../tests/unit/session/controller/settings/update_tests.rs"]

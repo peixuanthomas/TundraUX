@@ -17,6 +17,101 @@ use ui::{
 };
 
 #[test]
+fn reset_page_and_confirmation_fit_at_minimum_in_both_languages() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    for (language, label, scope, restart, action) in [
+        (
+            "en-US",
+            "Current OS account's TundraUX data",
+            "current OS account",
+            "first-time setup",
+            "Reset and restart",
+        ),
+        (
+            "zh-CN",
+            "当前系统账户的 TundraUX 数据",
+            "当前系统账户",
+            "首次设置",
+            "重置并重启",
+        ),
+    ] {
+        let snapshot = i18n::LanguageSnapshot::load(&assets, language, 1)
+            .unwrap()
+            .snapshot;
+        let _language = i18n::enter_snapshot(std::sync::Arc::new(snapshot));
+        let area = Rect::new(0, 0, 106, 16);
+        let mut model = sample_model();
+        model.selected_category = SettingsCategory::Reset;
+        model.selected_field = SettingsField::ResetAll;
+        model.cards = vec![SettingsCardViewModel::new(
+            i18n::tr!("settings-reset-all-title"),
+            vec![SettingsItemViewModel::new(
+                SettingsField::ResetAll,
+                i18n::tr!("settings-reset-all-data"),
+                i18n::tr!("settings-reset-all-action"),
+                "",
+                SettingsControlKind::Action,
+            )],
+        )];
+        let context = ui::RenderContext::default();
+        let layout = settings_layout(area, &model);
+        assert_eq!(layout.max_scroll_offset, 0, "{language}");
+        let control = layout.fields[0].area;
+        assert_eq!(
+            settings_hit_test(&layout, (control.x, control.y)),
+            Some(SettingsHitTarget::Field(SettingsField::ResetAll))
+        );
+
+        let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
+        terminal
+            .draw(|frame| ui::render_settings_content(frame, &layout, &model, &context))
+            .unwrap();
+        let output = terminal.backend().to_string();
+        for text in [label, action] {
+            assert!(
+                output.contains(text),
+                "{language}: {text} should fit on the reset page\n{output}"
+            );
+        }
+        assert!(control.positions().any(|position| {
+            let cell = &terminal.backend().buffer()[position];
+            [cell.fg, cell.bg].contains(&context.theme.danger)
+        }));
+
+        let modal = ui::NotificationViewModel::new(
+            "reset-all",
+            ui::NotificationLevel::Modal,
+            NotificationTone::Warning,
+            i18n::tr!("settings-reset-all-confirmation"),
+            i18n::tr!("settings-reset-all-scope"),
+            vec![
+                ui::NotificationActionViewModel::new("reset-all", action).danger(),
+                ui::NotificationActionViewModel::new("cancel", i18n::tr!("settings-cancel"))
+                    .with_shortcut("Esc")
+                    .cancel(true)
+                    .selected(true),
+            ],
+        );
+        let ui::NotificationLayout::Dialog(dialog) = ui::notification_layout(area, &modal) else {
+            panic!("{language}: reset confirmation should fit at the minimum size");
+        };
+        assert!(dialog.scrollbar.is_none());
+        terminal
+            .draw(|frame| {
+                ui::render_notification_overlay(frame, area, &modal, &TundraTheme::default_dark())
+            })
+            .unwrap();
+        let output = terminal.backend().to_string();
+        for text in [scope, restart, action] {
+            assert!(
+                output.contains(text),
+                "{language}: {text} should fit in the reset confirmation\n{output}"
+            );
+        }
+    }
+}
+
+#[test]
 fn slider_options_keep_visible_labels_and_share_rendered_hit_areas() {
     for labels in [
         vec!["Deny all", "Ask every time (default)", "Always allow"],

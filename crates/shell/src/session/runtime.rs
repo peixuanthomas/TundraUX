@@ -955,7 +955,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let mut editor_vim = super::vim_host::EditorVimHost::new(shell_watchdog.clone());
     editor_vim.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
     let mut vim_cursor_style = crossterm::cursor::SetCursorStyle::DefaultUserShape;
-    let mut reset_requested = false;
     if let Some(cached) = cached_time_sync.as_ref() {
         cached.apply_to_state_at(&mut state, Instant::now());
     }
@@ -986,7 +985,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                     redraw.request_redraw();
                 }
                 if windows.reset_requested() {
-                    reset_requested = true;
+                    state.reset_requested = true;
                     break;
                 }
                 if let Some(path) = windows.take_update() {
@@ -1009,6 +1008,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 if windows.launch_pending(&mut state)? {
                     redraw.request_redraw();
                 }
+            } else if state.reset_requested {
+                break;
             }
             if state.poll_auto_admin() {
                 redraw.request_redraw();
@@ -1141,8 +1142,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 CommandLineHostEvent::None | CommandLineHostEvent::ExitToCaller => {}
                 CommandLineHostEvent::PanicRequested => trigger_command_line_panic(),
                 CommandLineHostEvent::ResetRequested => {
-                    reset_requested = true;
-                    break;
+                    state.reset_requested = true;
+                    continue;
                 }
             }
             if terminal_changed {
@@ -1554,7 +1555,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                                 state.close_page_instance(state.active_page_id());
                             }
                             CommandLineHostEvent::ResetRequested => {
-                                reset_requested = true;
+                                state.reset_requested = true;
                                 break;
                             }
                         }
@@ -1592,7 +1593,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         redraw.request_redraw();
                         break;
                     }
-                    if action.is_some_and(|action| action != ShellAction::Redraw) {
+                    if state.reset_requested
+                        || action.is_some_and(|action| action != ShellAction::Redraw)
+                    {
                         break;
                     }
                 }
@@ -1613,8 +1616,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 }
             }
 
-            if reset_requested {
-                break;
+            if state.reset_requested {
+                continue;
             }
             if let Some(windows) = workspace.as_mut() {
                 windows.finish_input_batch(has_external_input);
@@ -1685,7 +1688,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
 
     let outcome = if let Some(manifest) = state.update_apply_manifest().map(ToOwned::to_owned) {
         FullscreenShellSessionOutcome::UpdatePrepared(manifest)
-    } else if reset_requested {
+    } else if state.reset_requested {
         FullscreenShellSessionOutcome::ResetRequested
     } else if state.restart_requested {
         FullscreenShellSessionOutcome::RestartRequested

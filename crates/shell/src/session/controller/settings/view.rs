@@ -967,6 +967,19 @@ pub(in crate::session) fn settings_cards(
             ),
             Card::new(i18n::tr!("settings-reset"), vec![reset(global_enabled)]),
         ],
+        ui::SettingsCategory::Reset => vec![Card::new(
+            i18n::tr!("settings-reset-all-title"),
+            vec![
+                Item::new(
+                    Field::ResetAll,
+                    i18n::tr!("settings-reset-all-data"),
+                    i18n::tr!("settings-reset-all-action"),
+                    "",
+                    Kind::Action,
+                )
+                .enabled(global_enabled),
+            ],
+        )],
         ui::SettingsCategory::Update
         | ui::SettingsCategory::Sound
         | ui::SettingsCategory::Display

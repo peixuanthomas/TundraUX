@@ -471,6 +471,7 @@ fn category_navigation_keeps_application_list_and_content_arrows() {
         SettingsCategory::System,
         SettingsCategory::Applications,
         SettingsCategory::Update,
+        SettingsCategory::Reset,
         SettingsCategory::Appearance,
     ] {
         select_category(&mut state, &platform, expected);
@@ -664,6 +665,115 @@ fn restore_application_defaults_changes_only_the_selected_application() {
         state.to_settings_view_model().unwrap().selected_application,
         SettingsApplication::Editor
     );
+}
+
+#[test]
+fn full_reset_settings_request_is_cancelled_by_default_and_by_click() {
+    let fixture = FixtureRoot::new("settings-full-reset-cancel");
+    let platform = mock_platform(fixture.path());
+    let manager = initialize_profiles(&platform);
+    let saved_config = manager.load_config().unwrap();
+    let saved_profile = manager.load_profile("AdminUser").unwrap();
+    let mut state = start_as_system_user(&platform, "AdminUser");
+    open_settings_from_home(&mut state, &platform);
+    let terminal = Rect::new(0, 0, 108, 20);
+    state.apply_input_with_platform(
+        InputEvent::Resize {
+            width: terminal.width,
+            height: terminal.height,
+        },
+        &platform,
+    );
+    select_category(&mut state, &platform, SettingsCategory::Reset);
+    let model = state.to_settings_view_model().unwrap();
+    assert_eq!(model.selected_field, SettingsField::ResetAll);
+    assert!(model.cards[0].items[0].enabled);
+
+    press(&mut state, &platform, "Enter");
+    let modal = state
+        .to_notification_view_model()
+        .expect("reset confirmation");
+    assert_eq!(modal.title, "Reset all TundraUX data?");
+    assert!(modal.message.contains("current OS account"));
+    assert!(modal.message.contains("first-time setup"));
+    assert!(modal.actions[0].danger);
+    assert!(!modal.actions[0].selected);
+    assert!(modal.actions[1].cancel && modal.actions[1].selected);
+    press(&mut state, &platform, "Enter");
+    assert!(state.to_notification_view_model().is_none());
+
+    let ui::ShellLayout::Full { main, .. } = ui::compute_shell_layout(terminal) else {
+        panic!("minimum terminal should show settings");
+    };
+    let layout = ui::settings_layout(main, &model);
+    let reset = layout
+        .fields
+        .iter()
+        .find(|field| field.field == SettingsField::ResetAll)
+        .unwrap()
+        .area;
+    let reset_point = (reset.right() - 5, reset.y);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(ui::MouseButton::Left, reset_point),
+        &platform,
+    );
+    state.apply_input_with_platform(
+        InputEvent::mouse_up(ui::MouseButton::Left, reset_point),
+        &platform,
+    );
+    let modal = state
+        .to_notification_view_model()
+        .expect("reset confirmation after clicking");
+    let ui::NotificationLayout::Dialog(dialog) = ui::notification_layout(terminal, &modal) else {
+        panic!("reset confirmation should fit at minimum terminal size");
+    };
+    let cancel = dialog
+        .actions
+        .iter()
+        .find(|action| modal.actions[action.index].cancel)
+        .unwrap()
+        .area;
+    let cancel_point = (cancel.x + cancel.width / 2, cancel.y);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(ui::MouseButton::Left, cancel_point),
+        &platform,
+    );
+    assert!(state.to_notification_view_model().is_some());
+    state.apply_input_with_platform(
+        InputEvent::mouse_up(ui::MouseButton::Left, cancel_point),
+        &platform,
+    );
+    assert!(state.to_notification_view_model().is_none());
+    assert_eq!(
+        state.to_settings_view_model().unwrap().selected_field,
+        SettingsField::ResetAll
+    );
+    assert_eq!(manager.load_config().unwrap(), saved_config);
+    assert_eq!(manager.load_profile("AdminUser").unwrap(), saved_profile);
+}
+
+#[test]
+fn full_reset_settings_is_available_to_signed_in_normal_users() {
+    let fixture = FixtureRoot::new("settings-full-reset-permission");
+    let platform = mock_platform(fixture.path());
+    initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
+    open_settings_from_home(&mut state, &platform);
+    select_category(&mut state, &platform, SettingsCategory::Reset);
+    let model = state.to_settings_view_model().unwrap();
+    assert!(model.cards[0].items[0].enabled);
+    press(&mut state, &platform, "Enter");
+    let modal = state
+        .to_notification_view_model()
+        .expect("reset confirmation");
+    assert!(
+        modal
+            .actions
+            .iter()
+            .any(|action| action.cancel && action.selected)
+    );
+    press(&mut state, &platform, "Esc");
+    assert!(state.to_notification_view_model().is_none());
 }
 
 #[test]

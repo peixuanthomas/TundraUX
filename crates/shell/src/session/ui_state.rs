@@ -682,6 +682,7 @@ pub struct UiSessionState {
     pub(super) latest_watchdog_summary: Option<String>,
     pub(super) shutdown_requested: bool,
     pub(super) restart_requested: bool,
+    pub(super) reset_requested: bool,
     pub(super) last_command: Option<ShellCommand>,
     pub(super) last_routed_target: Option<RoutedTarget>,
     pub(super) last_key_event: Option<String>,

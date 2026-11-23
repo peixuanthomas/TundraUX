@@ -100,6 +100,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `ManagementWorkspace` organizes search, details, action bars, and expert areas that stay expanded when the selected object changes.
 - The management details scrollbar uses the wrapped line count for both the scroll range and offset clamping.
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
+- Settings groups the full data reset on its own page. The confirmation explains what will be removed and selects Cancel initially. When categories wrap in a short window, the navigation leaves room for the controls and footer.
 - Home and Launcher show a one-cell drag grip beside draggable names in organize mode. The grip falls back to `#`. The entire tile accepts the drag. Both pages share the insertion line and its geometry, including row gaps, empty tail slots, and scrollbar exclusion.
 - `ManagementViewModel::selected_rows` represents all selected rows; `selected` represents the current position.
 - Shared scrollbars draw a thin, muted track and a brighter thumb. The vertical thumb uses half a character cell's width, and the horizontal thumb uses a quarter of its height. `ScrollbarOrientation::hit_test` extends the pointer target by one cell on either side of a vertical bar or above and below a horizontal bar.

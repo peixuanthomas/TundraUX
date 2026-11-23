@@ -37,15 +37,17 @@ pub enum SettingsCategory {
     Bluetooth,
     Applications,
     Update,
+    Reset,
 }
 
 impl SettingsCategory {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Appearance,
         Self::RegionTime,
         Self::System,
         Self::Applications,
         Self::Update,
+        Self::Reset,
     ];
 
     pub fn is_system_device(self) -> bool {
@@ -66,6 +68,7 @@ impl SettingsCategory {
             Self::Bluetooth => i18n::tr!("ui-settings-bluetooth"),
             Self::Applications => i18n::tr!("ui-settings-applications"),
             Self::Update => i18n::tr!("ui-settings-update"),
+            Self::Reset => i18n::tr!("settings-reset"),
         }
     }
 
@@ -80,6 +83,7 @@ impl SettingsCategory {
             Self::Bluetooth => i18n::tr!("ui-settings-bluetooth-description"),
             Self::Applications => i18n::tr!("ui-settings-applications-description"),
             Self::Update => i18n::tr!("ui-settings-version-commits-and-source-updates"),
+            Self::Reset => i18n::tr!("settings-reset-all-data"),
         }
     }
 }
@@ -177,6 +181,7 @@ pub enum SettingsField {
     CursorHorizontalStep,
     CursorVerticalStep,
     RestoreDefaults,
+    ResetAll,
     InstalledVersion,
     RemoteVersion,
     CheckUpdates,
@@ -1472,6 +1477,11 @@ fn render_settings_control(
     )
     .with_bracketed_label(false)
     .with_capture_name(&item.label);
+    if item.field == SettingsField::ResetAll {
+        button = button
+            .with_emphasis(ButtonEmphasis::Danger)
+            .with_capture_name(&item.value);
+    }
     if item.kind == SettingsControlKind::Toggle {
         button = button
             .with_capture_role("checkbox")

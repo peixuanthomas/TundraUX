@@ -928,6 +928,14 @@ impl ShellSession {
                 self.restore_settings_defaults();
                 ShellAction::Redraw
             }
+            ShellCommand::SettingsResetAllConfirmed => {
+                if self.can_change_global_settings() {
+                    self.reset_requested = true;
+                } else {
+                    self.set_settings_error(i18n::msg!("settings-admin-required"));
+                }
+                ShellAction::Redraw
+            }
             ShellCommand::SettingsWeatherLocationConfirmed => {
                 self.save_settings_weather_location();
                 ShellAction::Redraw

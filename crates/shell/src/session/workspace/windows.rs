@@ -28,6 +28,7 @@ impl Workspace {
     }
 
     pub(in crate::session) fn poll(&mut self, state: &mut ShellSession) -> io::Result<bool> {
+        self.reset |= std::mem::take(&mut state.reset_requested);
         let mut redraw = self.placeholder_redraw_due(Instant::now());
         let connection = WorkerConnection::current().expect("managed workspace");
         connection.progress()?;
@@ -786,7 +787,9 @@ impl Workspace {
                 window.close = CloseProgress::Confirmation {
                     size_notice_dismissed: false,
                 };
-                if self.pending_global.is_some() && self.selection.focused() != Some(id) {
+                if (self.pending_global.is_some() || self.reset)
+                    && self.selection.focused() != Some(id)
+                {
                     self.selection.switch(id);
                 }
                 self.hide_close_wait(id);

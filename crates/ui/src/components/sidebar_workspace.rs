@@ -117,9 +117,9 @@ impl SidebarWorkspaceLayout {
             } else {
                 y.saturating_add(1).min(area.bottom())
             };
-            let top = bottom
-                .saturating_add(u16::from(!labels.is_empty()))
-                .min(area.bottom());
+            // On short pages the content row and its footer take priority over a blank line.
+            let gap = !labels.is_empty() && area.bottom().saturating_sub(bottom) > 2;
+            let top = bottom + u16::from(gap);
             (
                 Rect::new(area.x, area.y, area.width, bottom.saturating_sub(area.y)),
                 Rect::new(area.x, top, area.width, area.bottom().saturating_sub(top)),

@@ -144,6 +144,7 @@ pub enum ShellCommand {
     SettingsFormInput(InputEvent),
     SettingsPointer(MouseInput),
     SettingsRestoreDefaultsConfirmed,
+    SettingsResetAllConfirmed,
     SettingsWeatherLocationConfirmed,
     SetCellIconChoice(CellIconChoice),
     EditorSaveAndClose,

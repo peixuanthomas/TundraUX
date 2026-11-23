@@ -112,6 +112,13 @@ settings-animation-speed = 动画速度
 settings-animation-speed-help = 以 25% 为步长，在 50% 到 200% 之间调整过渡动画速度。
 settings-restore-speed = 恢复动画默认值
 settings-reset = 重置
+settings-reset-all-title = 重置 TundraUX
+settings-reset-all-data = 当前系统账户的 TundraUX 数据
+settings-reset-all-action = 重置并重启
+settings-reset-all-confirmation = 重置所有 TundraUX 数据？
+settings-reset-all-scope =
+    永久清除当前系统账户保存的 TundraUX 数据，包括设置、个人配置、启动器快捷方式、闹钟、倒计时、日志、缓存和恢复草稿。同时卸载由 TundraUX 安装的图标字体。
+    TundraUX 会先关闭所有窗口，再清除数据，最后重启并打开首次设置。
 settings-restore-speed-help = 恢复 100% 速度，以及全部默认阶段时长和速度曲线。
 settings-language-timezone = 语言与时区
 settings-language = 语言
@@ -316,6 +323,7 @@ settings-field-name =
         [TopBarEsc] { settings-top-bar-show-esc }
         [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
+        [ResetAll] { settings-reset-all-action }
         [InstalledVersion] { settings-installed-version }
         [RemoteVersion] { settings-github-version }
         [CheckUpdates] { settings-check-updates }
@@ -333,6 +341,7 @@ settings-category-name =
         [Editor] { ui-settings-editor }
         [CommandLine] { shell-command-line }
         [Update] { ui-settings-update }
+        [Reset] { settings-reset }
        *[other] { $category }
     }
 

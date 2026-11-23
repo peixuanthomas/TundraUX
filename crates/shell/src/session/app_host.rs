@@ -414,8 +414,7 @@ impl AppHostSession {
                 self.state.close_page_instance(self.state.active_page_id());
             }
             CommandLineHostEvent::ResetRequested => {
-                self.output
-                    .push_back(AppToShell::ShellAction(HostAction::Reset));
+                self.state.reset_requested = true;
             }
             CommandLineHostEvent::None => {}
         }
@@ -627,6 +626,10 @@ impl AppHostSession {
             self.theme.tokens().accent,
         );
         self.command_line_event(event);
+        if std::mem::take(&mut self.state.reset_requested) {
+            self.output
+                .push_back(AppToShell::ShellAction(HostAction::Reset));
+        }
         changed |= self.vim.poll(&mut self.state, self.platform.as_ref())
             | self.scripts.poll(&mut self.state, self.platform.as_ref())
             | terminal_changed;

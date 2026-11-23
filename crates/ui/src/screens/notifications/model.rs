@@ -7,6 +7,7 @@ pub struct NotificationActionViewModel {
     pub shortcut: Option<String>,
     pub selected: bool,
     pub cancel: bool,
+    pub danger: bool,
 }
 
 impl NotificationActionViewModel {
@@ -17,6 +18,7 @@ impl NotificationActionViewModel {
             shortcut: None,
             selected: false,
             cancel: false,
+            danger: false,
         }
     }
 
@@ -32,6 +34,11 @@ impl NotificationActionViewModel {
 
     pub fn cancel(mut self, cancel: bool) -> Self {
         self.cancel = cancel;
+        self
+    }
+
+    pub fn danger(mut self) -> Self {
+        self.danger = true;
         self
     }
 }

@@ -11,7 +11,7 @@ use super::layout::{
 use super::model::{
     NotificationLevel, NotificationTone, NotificationViewModel, notification_title,
 };
-use crate::components::{Button, DialogLayout, Scrollbar};
+use crate::components::{Button, ButtonEmphasis, DialogLayout, Scrollbar};
 use crate::{RenderContext, TundraTheme};
 pub fn render_notification_overlay(
     frame: &mut Frame<'_>,
@@ -119,6 +119,9 @@ pub(crate) fn render_notification_overlay_context(
         .with_label_alignment(HorizontalAlignment::Center)
         .with_background(theme.background)
         .with_focus_fill(Some(context.theme.accent_soft));
+        if action.danger {
+            button = button.with_emphasis(ButtonEmphasis::Danger);
+        }
         button.state.selected = action.selected;
         button.render_borderless_frame(frame, action_layout.area, theme);
     }
