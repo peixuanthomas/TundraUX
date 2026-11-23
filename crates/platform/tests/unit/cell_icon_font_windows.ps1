@@ -65,7 +65,21 @@ $ownership = Read-FontOwnership $record $fonts
 $legacy = Join-Path $fonts $fontName
 [IO.File]::Move($target, $legacy)
 $ownership.target = $legacy
-Save-FontOwnership $ownership $record
+$recordLock = [IO.File]::Open($record, 'Open', 'Read', 'ReadWrite')
+$script:recordRetryDelay = 0
+function Start-Sleep([int] $Milliseconds) {
+    $script:recordRetryDelay += $Milliseconds
+    $recordLock.Dispose()
+    Microsoft.PowerShell.Utility\Start-Sleep -Milliseconds $Milliseconds
+}
+try {
+    Save-FontOwnership $ownership $record
+    Assert-Equal ($recordRetryDelay -gt 0) $true
+    Assert-Equal (Read-FontOwnership $record $fonts).target $legacy
+} finally {
+    $recordLock.Dispose()
+    Remove-Item -LiteralPath Function:Start-Sleep
+}
 $registry.values[$fontValue] = $legacy
 Assert-Equal (Install-TestFont) 'installed'
 Assert-Equal ($registry.GetValue($fontValue)) $target

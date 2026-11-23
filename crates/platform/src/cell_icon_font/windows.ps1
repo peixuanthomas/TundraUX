@@ -167,8 +167,21 @@ function Save-FontOwnership($record, [string] $path) {
     Assert-PlainPath $temporary
     [IO.File]::Delete($temporary)
     Write-FontFile $temporary ([Text.Encoding]::UTF8.GetBytes(($record | ConvertTo-Json -Compress)))
-    if ([IO.File]::Exists($path)) { [IO.File]::Replace($temporary, $path, [NullString]::Value) }
-    else { [IO.File]::Move($temporary, $path) }
+    if (![IO.File]::Exists($path)) {
+        [IO.File]::Move($temporary, $path)
+        return
+    }
+    foreach ($delay in @(5, 10, 20, 40)) {
+        try {
+            [IO.File]::Replace($temporary, $path, [NullString]::Value)
+            return
+        } catch [IO.IOException] {
+            # These errors leave the existing record and its replacement intact.
+            if (($_.Exception.GetBaseException().HResult -band 0xffff) -notin @(32, 33, 1175)) { throw }
+            Start-Sleep -Milliseconds $delay
+        }
+    }
+    [IO.File]::Replace($temporary, $path, [NullString]::Value)
 }
 
 function Get-FontFingerprint([string] $path) {
