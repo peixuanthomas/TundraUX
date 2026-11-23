@@ -23,6 +23,15 @@ If folders looked like playback buttons or the trash can looked like a dash in a
 
 Over SSH, install `assets/cell-icons/TundraCellAtlas.ttf` on the computer running your terminal. Some terminals let you choose **Tundra Cell Atlas** as a fallback font in the terminal profile. Reopen the terminal after changing its font settings. Windows and WSL sessions displayed by a Windows terminal share one installed copy. Resetting data from either one removes the copy installed by TundraUX.
 
+On Windows, WezTerm 20240203 needs the atlas in its font list to display these icons. If you already have a `wezterm.font_with_fallback` list, append `'Tundra Cell Atlas'` after your existing fonts. For WezTerm's default JetBrains Mono, the following setting enables the fallback while the TundraUX font is installed. Place it before `return config` in your WezTerm Lua configuration. [WezTerm font settings](https://wezterm.org/config/fonts.html#fallback)
+
+```lua
+local local_app_data = os.getenv('LOCALAPPDATA')
+if local_app_data and #wezterm.glob('TundraCellAtlas*.ttf', local_app_data .. '/Microsoft/Windows/Fonts') > 0 then
+  config.font = wezterm.font_with_fallback { 'JetBrains Mono', 'Tundra Cell Atlas' }
+end
+```
+
 Launch as your normal OS user; TundraUX uses that account for file access and saved preferences. Linux system operations that need more permission ask for authorization separately. To build from source instead of using an archive, follow [Building and running](README-TECHNICAL.md#building-and-running).
 
 ## Navigate and arrange windows
