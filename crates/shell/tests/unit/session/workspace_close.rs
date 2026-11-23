@@ -740,6 +740,67 @@ fn split_chooser_cancellation_and_resize_restore_only_the_pending_region() {
     assert_eq!(workspace.selection.tree, previous);
 }
 
+#[test]
+fn pointer_input_after_split_selection_ignores_the_old_chooser_area() {
+    use ratatui::{Terminal, backend::TestBackend};
+
+    let mut state = shell_state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    let mut workspace = Workspace::new(None, false);
+    let (source, restored) = (SessionId(1), SessionId(2));
+    for id in [source, restored] {
+        workspace.windows.insert(id, window(Size::new(106, 16)));
+    }
+    workspace.selection.open(source);
+    let bounds = Rect::new(0, 0, 240, 36);
+    workspace.relayout(bounds, Rect::new(0, 1, 240, 34), false);
+    workspace.begin_split(source, WorkspaceSplitMode::LeftRight, &state);
+
+    let mut terminal = Terminal::new(TestBackend::new(bounds.width, bounds.height)).unwrap();
+    let mut snapshot = None;
+    terminal
+        .draw(|frame| {
+            let capture = ui::automation::FrameCapture::begin(bounds, "chooser");
+            workspace.render_chooser(frame, &ui::RenderContext::default(), Some(&capture));
+            snapshot = Some(capture.finish(frame.buffer_mut()));
+        })
+        .unwrap();
+    let snapshot = snapshot.unwrap();
+    let row = snapshot
+        .nodes
+        .iter()
+        .find(|node| node.id.ends_with("window.2"))
+        .unwrap()
+        .rect;
+    for kind in [
+        ui::MouseEventKind::Down(PointerButton::Left),
+        ui::MouseEventKind::Up(PointerButton::Left),
+    ] {
+        assert!(pointer(&mut workspace, &mut state, (row.x, row.y), kind));
+    }
+    assert!(workspace.chooser.is_none());
+    assert_eq!(workspace.selection.focused(), Some(restored));
+    assert!(
+        workspace
+            .layout
+            .panes
+            .iter()
+            .any(|pane| pane.id == SessionId(0))
+    );
+
+    for kind in [
+        ui::MouseEventKind::Moved,
+        ui::MouseEventKind::Down(PointerButton::Left),
+        ui::MouseEventKind::Up(PointerButton::Left),
+    ] {
+        assert!(pointer(&mut workspace, &mut state, (row.x, row.y), kind));
+        assert!(workspace.capture.is_none());
+    }
+    assert!(!workspace.take_input_rejection().0);
+    assert_eq!(workspace.selection.visible(), vec![source, restored]);
+    assert_eq!(workspace.windows[&restored].close, CloseProgress::Idle);
+}
+
 #[cfg(unix)]
 #[test]
 #[cfg_attr(not(feature = "native-tests"), ignore = "requires local socket access")]

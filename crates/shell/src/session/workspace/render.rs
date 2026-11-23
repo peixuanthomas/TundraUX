@@ -38,21 +38,13 @@ impl Workspace {
                 context,
             );
         }
-        for pane in self
-            .layout
-            .panes
-            .iter()
-            .filter(|pane| pane.id != SessionId(0))
-        {
+        for pane in &self.layout.panes {
             self.render_pane_frame(frame, pane, context, controls_blocked);
         }
-        for pane in self
-            .layout
-            .panes
-            .iter()
-            .filter(|pane| pane.id != SessionId(0))
-        {
-            let window = self.windows.get_mut(&pane.id).expect("visible window");
+        for pane in &self.layout.panes {
+            let Some(window) = self.windows.get_mut(&pane.id) else {
+                continue;
+            };
             let controls_blocked = controls_blocked || window.input_blocked;
             let focused = Some(pane.id) == self.selection.focused();
             if let Some(capture) = capture {
@@ -168,6 +160,9 @@ impl Workspace {
         context: &ui::RenderContext,
         controls_blocked: bool,
     ) {
+        let Some(window) = self.windows.get(&pane.id) else {
+            return;
+        };
         let interaction = WorkspaceWindowButtonsState {
             hovered: self
                 .last_pointer
@@ -177,13 +172,13 @@ impl Workspace {
                 PointerTarget::WindowButton(id, action) if id == pane.id => Some(action),
                 _ => None,
             }),
-            close_disabled: self.windows[&pane.id].close != CloseProgress::Idle,
+            close_disabled: window.close != CloseProgress::Idle,
             ..Default::default()
         };
         ui::render_workspace_pane_frame(
             frame,
             pane,
-            &self.windows[&pane.id].launch.title(),
+            &window.launch.title(),
             self.selection.focused() == Some(pane.id),
             interaction,
             context,
@@ -192,7 +187,7 @@ impl Workspace {
 
     fn taskbar_items(&self, ids: impl Iterator<Item = SessionId>) -> Vec<WorkspaceTaskbarItem> {
         let blocked_window = self.blocked_pane().map(|pane| pane.id);
-        ids.map(|id| (id, &self.windows[&id]))
+        ids.filter_map(|id| self.windows.get(&id).map(|window| (id, window)))
             .map(|(id, window)| WorkspaceTaskbarItem {
                 id,
                 title: window.launch.title(),
@@ -374,6 +369,10 @@ impl Workspace {
         let Some(id) = self.split_window else {
             return;
         };
+        let Some(window) = self.windows.get(&id) else {
+            self.close_split_menu();
+            return;
+        };
         let Some(pane) = self
             .layout
             .panes
@@ -389,7 +388,7 @@ impl Workspace {
         self.split_model.left_right = self.can_split(id, WorkspaceSplitMode::LeftRight);
         self.split_model.top_bottom = self.can_split(id, WorkspaceSplitMode::TopBottom);
         self.split_model.fullscreen =
-            self.selection.visible().len() > 1 && self.windows[&id].close == CloseProgress::Idle;
+            self.selection.visible().len() > 1 && window.close == CloseProgress::Idle;
         let menu = WorkspaceSplitMenu::new(
             self.layout.available,
             pane.controls.split,

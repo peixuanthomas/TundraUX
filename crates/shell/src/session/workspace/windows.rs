@@ -291,14 +291,15 @@ impl Workspace {
         matches_launch: impl Fn(&WindowLaunch) -> bool,
     ) -> bool {
         let matches = |id: SessionId| {
-            let window = &self.windows[&id];
-            !matches!(
-                window.close,
-                CloseProgress::Cleaning(_) | CloseProgress::Waiting | CloseProgress::Exiting
-            ) && !matches!(
-                window.state,
-                ProcessState::ForceStopping | ProcessState::Exited { .. }
-            ) && matches_launch(&window.launch)
+            self.windows.get(&id).is_some_and(|window| {
+                !matches!(
+                    window.close,
+                    CloseProgress::Cleaning(_) | CloseProgress::Waiting | CloseProgress::Exiting
+                ) && !matches!(
+                    window.state,
+                    ProcessState::ForceStopping | ProcessState::Exited { .. }
+                ) && matches_launch(&window.launch)
+            })
         };
         // Prefer the focused instance, then the newest live session for this app.
         let id = self
@@ -520,7 +521,7 @@ impl Workspace {
             window.launch.application()
                 == super::window_launch::WindowApplication::Management(ManagementKind::Tasks)
         };
-        if let Some(id) = focused.filter(|id| is_tasks(&self.windows[id])) {
+        if let Some(id) = focused.filter(|id| self.windows.get(id).is_some_and(is_tasks)) {
             self.request_close(id);
         } else if let Some((&id, _)) = self
             .windows

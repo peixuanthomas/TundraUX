@@ -202,12 +202,9 @@ impl Workspace {
     }
 
     fn move_focus(&mut self, x: i16, y: i16) {
-        let Some(current) = self
-            .layout
-            .panes
-            .iter()
-            .find(|pane| Some(pane.id) == self.selection.focused())
-        else {
+        let Some(current) = self.layout.panes.iter().find(|pane| {
+            Some(pane.id) == self.selection.focused() && self.windows.contains_key(&pane.id)
+        }) else {
             return;
         };
         let (cx, cy) = center(current.content);
@@ -215,6 +212,7 @@ impl Workspace {
             .layout
             .panes
             .iter()
+            .filter(|pane| self.windows.contains_key(&pane.id))
             .filter_map(|pane| {
                 let (px, py) = center(pane.content);
                 let overlaps = if x != 0 {
@@ -312,7 +310,7 @@ impl Workspace {
         }
         self.layout.panes.iter().find_map(|pane| {
             if pane.content.contains(point.into()) {
-                let window = &self.windows[&pane.id];
+                let window = self.windows.get(&pane.id)?;
                 window
                     .presented
                     .as_ref()
@@ -336,12 +334,9 @@ impl Workspace {
         if !pane.area.contains(point.into()) || pane.content.contains(point.into()) {
             return None;
         }
+        let window = self.windows.get(&pane.id)?;
         match pane.controls.hit_at(point) {
-            Some(WorkspaceWindowAction::Close)
-                if self.windows[&pane.id].close != CloseProgress::Idle =>
-            {
-                None
-            }
+            Some(WorkspaceWindowAction::Close) if window.close != CloseProgress::Idle => None,
             Some(action) => Some(PointerTarget::WindowButton(pane.id, action)),
             None => Some(PointerTarget::PaneFrame(pane.id)),
         }
@@ -365,7 +360,11 @@ impl Workspace {
         self.last_pointer = Some(point);
         if !matches!(mouse.kind, ui::MouseEventKind::Moved)
             && self.layout.panes.iter().any(|pane| {
-                pane.content.contains(point.into()) && self.windows[&pane.id].input_blocked
+                pane.content.contains(point.into())
+                    && self
+                        .windows
+                        .get(&pane.id)
+                        .is_some_and(|window| window.input_blocked)
             })
         {
             self.input_rejected = true;

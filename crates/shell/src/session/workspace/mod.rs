@@ -438,7 +438,7 @@ impl Workspace {
             && self
                 .selection
                 .focused()
-                .and_then(|id| self.windows[&id].frame.as_ref())
+                .and_then(|id| self.windows.get(&id)?.frame.as_ref())
                 .is_some_and(|frame| frame.size.width > 0 && frame.keyboard_available)
     }
 
