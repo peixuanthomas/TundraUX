@@ -1629,10 +1629,22 @@ impl ShellSession {
             .collect();
         if model.focus == ui::ExplorerFocus::Sidebar {
             let focused = self.pages.explorer.explorer_location_focus.as_deref();
-            model.quick_location_focus = model.quick_locations.iter()
+            model.quick_location_focus = model
+                .quick_locations
+                .iter()
                 .position(|location| location.enabled && Some(location.id.as_str()) == focused)
-                .or_else(|| model.quick_locations.iter().position(|location| location.enabled && location.current))
-                .or_else(|| model.quick_locations.iter().position(|location| location.enabled));
+                .or_else(|| {
+                    model
+                        .quick_locations
+                        .iter()
+                        .position(|location| location.enabled && location.current)
+                })
+                .or_else(|| {
+                    model
+                        .quick_locations
+                        .iter()
+                        .position(|location| location.enabled)
+                });
         }
         model.breadcrumbs = if is_trash {
             Vec::new()
@@ -1863,11 +1875,12 @@ impl ShellSession {
         } else if let Some(overlay_mode) = self.pages.explorer.explorer_overlay_mode {
             Some(match overlay_mode {
                 ExplorerOverlayMode::ContextMenu { .. } | ExplorerOverlayMode::MoreActions => {
-                    let (anchor, centered) = if let ExplorerOverlayMode::ContextMenu { anchor } = overlay_mode {
-                        (anchor, false)
-                    } else {
-                        ((0, 0), true)
-                    };
+                    let (anchor, centered) =
+                        if let ExplorerOverlayMode::ContextMenu { anchor } = overlay_mode {
+                            (anchor, false)
+                        } else {
+                            ((0, 0), true)
+                        };
                     explorer_context_menu_view_model(ExplorerContextMenuInput {
                         anchor,
                         centered,

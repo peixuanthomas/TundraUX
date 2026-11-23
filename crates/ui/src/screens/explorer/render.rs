@@ -5,8 +5,8 @@ use ratatui::widgets::Paragraph;
 
 use super::{
     ExplorerConflictChoice, ExplorerEntryViewModel, ExplorerFocus, ExplorerLayout,
-    ExplorerLayoutMode, ExplorerOverlayControl, ExplorerOverlayLayout, ExplorerOverlayViewModel,
-    ExplorerSaveFocus, ExplorerSearchViewModel, ExplorerSortColumn, ExplorerToolbarAction,
+    ExplorerOverlayControl, ExplorerOverlayLayout, ExplorerOverlayViewModel, ExplorerSaveFocus,
+    ExplorerSearchViewModel, ExplorerSortColumn, ExplorerToolbarAction,
     ExplorerToolbarButtonViewModel, ExplorerViewModel, explorer_layout,
 };
 use crate::components::{
@@ -456,10 +456,7 @@ fn render_explorer_table(
     }
 }
 
-pub(super) fn explorer_action_bar(
-    model: &ExplorerViewModel,
-    mode: ExplorerLayoutMode,
-) -> PageActionBar {
+pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
     let actions: Vec<_> = super::layout::explorer_page_action_buttons(model)
         .into_iter()
         .map(|button| {
@@ -509,14 +506,6 @@ pub(super) fn explorer_action_bar(
             text: i18n::tr!("ui-explorer-error", error = error),
             tone: ComponentTone::Danger,
         });
-    } else if model.listing_warning_count > 0 {
-        status.push(PageActionStatus {
-            text: i18n::tr!(
-                "ui-explorer-metadata-warnings",
-                count = model.listing_warning_count.clone()
-            ),
-            tone: ComponentTone::Muted,
-        });
     }
     let count = model.effective_selected_count();
     if model.selection_mode || count > 1 {
@@ -524,40 +513,6 @@ pub(super) fn explorer_action_bar(
             text: i18n::tr!("selection-count", count = count),
             tone: ComponentTone::Muted,
         });
-    } else if count == 1
-        && let Some(entry) = model.entries.iter().enumerate().find_map(|(index, entry)| {
-            let selected = model
-                .entry_presentation(index)
-                .map_or(entry.selected, |presentation| presentation.selected);
-            selected.then_some(entry)
-        })
-    {
-        let mut metadata = Vec::new();
-        if model.is_trash
-            && let Some(message) = &model.message
-        {
-            metadata.push(message.clone());
-        }
-        if !mode.shows_all_columns() {
-            if let Some(size) = entry.size.as_deref().filter(|size| !size.is_empty()) {
-                metadata.push(i18n::tr!("ui-explorer-entry-size", size = size));
-            }
-            if let Some(modified) = entry.modified.as_deref().filter(|date| !date.is_empty()) {
-                metadata.push(i18n::tr!("ui-explorer-entry-modified", modified = modified));
-            }
-        }
-        if !entry.attributes.is_empty() {
-            metadata.push(i18n::tr!(
-                "ui-explorer-entry-attributes",
-                attributes = entry.attributes.join(", ")
-            ));
-        }
-        if !metadata.is_empty() {
-            status.push(PageActionStatus {
-                text: metadata.join(" · "),
-                tone: ComponentTone::Muted,
-            });
-        }
     }
     let selected = match model.focus {
         ExplorerFocus::Toolbar(action) => {
@@ -593,7 +548,7 @@ fn render_explorer_footer(
     assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
 ) {
-    explorer_action_bar(model, layout.mode).render_layout(frame, &layout.action_bar, context);
+    explorer_action_bar(model).render_layout(frame, &layout.action_bar, context);
     if let (Some(cancel), Some(operation)) = (layout.cancel_operation, model.operation.as_ref()) {
         let icon = explorer_icon_line(assets, "cancel");
         render_explorer_button(

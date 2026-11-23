@@ -5,6 +5,7 @@ ui-explorer-explorer-ascii-assets-are-unavailable = Explorer ASCII assets are un
 ui-explorer-edit-button = Edit path
 ui-explorer-quick-access = Quick access
 ui-explorer-trash-is-empty = (Trash is empty)
+ui-explorer-original-location = Original location
 ui-explorer-empty-directory = (empty directory)
 ui-explorer-no-entry-selected = No entry selected
 ui-explorer-shown = shown

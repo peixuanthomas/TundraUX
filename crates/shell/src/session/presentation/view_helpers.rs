@@ -370,7 +370,12 @@ pub(in crate::session) fn explorer_context_menu_view_model(
     }
     if centered {
         if selected_count == 0 {
-            items.push(item("properties", i18n::tr!("shell-properties"), false, false));
+            items.push(item(
+                "properties",
+                i18n::tr!("shell-properties"),
+                false,
+                false,
+            ));
         }
         items.sort_by_key(|item| match item.id.as_str() {
             "sort" => 0,
@@ -622,6 +627,18 @@ pub(in crate::session) fn explorer_properties_view_model(
             },
         },
     ];
+    if state.current_location.is_trash() {
+        properties.insert(
+            2,
+            ui::ExplorerPropertyViewModel {
+                label: i18n::tr!("ui-explorer-original-location"),
+                value: entry.original_path.as_ref().map_or_else(
+                    || i18n::tr!("shell-unavailable"),
+                    |path| path.display().to_string(),
+                ),
+            },
+        );
+    }
     if let Some(reason) = entry.open_policy.reason() {
         properties.push(ui::ExplorerPropertyViewModel {
             label: i18n::tr!("shell-open-policy"),

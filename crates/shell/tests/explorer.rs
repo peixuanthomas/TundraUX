@@ -529,6 +529,8 @@ fn login_can_open_explorer_and_search_current_directory() {
 
 #[test]
 fn escape_clears_explorer_transient_actions_before_location_history() {
+    use ui::ExplorerToolbarAction as Action;
+
     let fixture = FixtureRoot::new("explorer-escape-priority");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
@@ -558,11 +560,20 @@ fn escape_clears_explorer_transient_actions_before_location_history() {
         state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
     }
     state.apply_input_with_platform(ctrl_key('a'), &platform);
-    state.apply_input_with_platform(InputEvent::key(InputKey::Tab), &platform);
-    assert_eq!(
-        state.to_explorer_view_model().focus,
-        ui::ExplorerFocus::Toolbar(ui::ExplorerToolbarAction::Menu)
-    );
+    for action in [
+        Action::New,
+        Action::Copy,
+        Action::Cut,
+        Action::SelectionMode,
+        Action::Delete,
+        Action::Menu,
+    ] {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Tab), &platform);
+        assert_eq!(
+            state.to_explorer_view_model().focus,
+            ui::ExplorerFocus::Toolbar(action)
+        );
+    }
     state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
     let Some(ui::ExplorerOverlayViewModel::ContextMenu(menu)) =
         state.to_explorer_view_model().overlay

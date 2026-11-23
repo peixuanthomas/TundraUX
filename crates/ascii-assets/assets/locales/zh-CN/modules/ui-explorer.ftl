@@ -5,6 +5,7 @@ ui-explorer-explorer-ascii-assets-are-unavailable = 文件管理器 ASCII 资源
 ui-explorer-edit-button = 编辑路径
 ui-explorer-quick-access = 快速访问
 ui-explorer-trash-is-empty = （回收站为空）
+ui-explorer-original-location = 原始位置
 ui-explorer-empty-directory = （空文件夹）
 ui-explorer-no-entry-selected = 未选择条目
 ui-explorer-shown = 显示

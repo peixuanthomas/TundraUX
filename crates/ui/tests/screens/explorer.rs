@@ -766,7 +766,12 @@ fn page_actions_keep_primary_and_disabled_targets_visible() {
             .iter()
             .find(|b| b.action == ExplorerToolbarAction::Open)
             .unwrap();
-        assert_eq!(open.area.right(), layout.footer.right());
+        let first = layout
+            .page_actions
+            .iter()
+            .min_by_key(|button| (button.area.y, button.area.x))
+            .unwrap();
+        assert_eq!(first.action, ExplorerToolbarAction::Open);
         assert_eq!(
             layout.hit_test(open.area.x, open.area.y),
             Some(ExplorerHitTarget::PageAction(ExplorerToolbarAction::Open))
@@ -860,6 +865,29 @@ fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
         model.focus = ui::ExplorerFocus::Toolbar(Action::Copy);
         model.set_history_availability(true, true);
         let layout = explorer_layout(area, &model);
+        assert_eq!(layout.footer.height, 1);
+        assert!(layout.action_bar.status.is_empty());
+        let actions = [
+            Action::Open,
+            Action::New,
+            Action::Copy,
+            Action::Cut,
+            Action::Paste,
+            Action::Rename,
+            Action::Undo,
+            Action::SelectionMode,
+            Action::Delete,
+            Action::Menu,
+        ];
+        let tab_order: Vec<_> = layout
+            .focus_targets(&model)
+            .into_iter()
+            .filter_map(|(focus, _)| match focus {
+                ui::ExplorerFocus::Toolbar(action) if actions.contains(&action) => Some(action),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tab_order, actions);
         for caps in [
             ui::RenderCapabilities::default(),
             ui::RenderCapabilities::ansi(),
@@ -884,18 +912,8 @@ fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
                     .sum::<usize>(),
                 1
             );
-            for action in [
-                Action::Open,
-                Action::New,
-                Action::Copy,
-                Action::Cut,
-                Action::Paste,
-                Action::Rename,
-                Action::Undo,
-                Action::SelectionMode,
-                Action::Delete,
-                Action::Menu,
-            ] {
+            let mut next_x = area.x;
+            for action in actions {
                 let id = format!("screen/explorer.toolbar.{action:?}");
                 let node = snapshot.nodes.iter().find(|node| node.id == id).unwrap();
                 let button = layout
@@ -905,6 +923,9 @@ fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
                     .unwrap();
                 assert_eq!(button.area.y, area.bottom() - 1, "{}", node.text);
                 assert_eq!(node.rect.y, button.area.y);
+                assert_eq!(node.rect.x, button.area.x);
+                assert!(node.rect.x >= next_x);
+                next_x = node.rect.x + node.rect.width;
                 assert!(node.text.contains(&action.label()));
                 assert_eq!(node.focused, action == Action::Copy);
                 if action == Action::Delete {

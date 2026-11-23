@@ -355,7 +355,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         )
     };
     let remaining_height = inner.height.saturating_sub(4);
-    let bar = super::render::explorer_action_bar(model, mode);
+    let bar = super::render::explorer_action_bar(model);
     let footer_height = bar.height(inner.width).min(remaining_height);
     let footer = Rect::new(
         inner.x,
@@ -981,17 +981,18 @@ pub(super) fn explorer_page_action_buttons(
             ExplorerToolbarAction::Menu,
         ]
     } else {
+        // PageActionBar places the rightmost controls first.
         &[
-            ExplorerToolbarAction::Open,
-            ExplorerToolbarAction::New,
-            ExplorerToolbarAction::Copy,
-            ExplorerToolbarAction::Cut,
-            ExplorerToolbarAction::Paste,
-            ExplorerToolbarAction::Rename,
-            ExplorerToolbarAction::Undo,
-            ExplorerToolbarAction::SelectionMode,
-            ExplorerToolbarAction::Delete,
             ExplorerToolbarAction::Menu,
+            ExplorerToolbarAction::Delete,
+            ExplorerToolbarAction::SelectionMode,
+            ExplorerToolbarAction::Undo,
+            ExplorerToolbarAction::Rename,
+            ExplorerToolbarAction::Paste,
+            ExplorerToolbarAction::Cut,
+            ExplorerToolbarAction::Copy,
+            ExplorerToolbarAction::New,
+            ExplorerToolbarAction::Open,
         ]
     };
     wanted

@@ -23,6 +23,37 @@ fn explorer_test_context_menu(state: &ShellSession) -> ui::ExplorerContextMenuVi
 }
 
 #[test]
+fn explorer_trash_properties_show_the_restore_location() {
+    let (mut state, _, _guard) = explorer_terminal_test_fixture();
+    let _language = i18n::enter_snapshot(state.language.clone());
+    let original = std::path::PathBuf::from("/original/first.txt");
+    for (path, expected) in [
+        (Some(original.clone()), original.display().to_string()),
+        (None, i18n::tr!("shell-unavailable")),
+    ] {
+        state.update_explorer_state(|explorer| {
+            explorer.current_location = app::explorer::ExplorerLocation::Trash;
+            explorer.select_index(0, app::explorer::ExplorerSelectionMode::Replace);
+            explorer.entries[0].original_path = path;
+        });
+        assert!(explorer_test_layout(&state).action_bar.status.is_empty());
+        state.open_explorer_popup(ExplorerOverlayMode::Properties, (0, 0));
+        let Some(ui::ExplorerOverlayViewModel::Properties(properties)) =
+            state.to_explorer_view_model().overlay
+        else {
+            panic!("Trash properties");
+        };
+        let location = properties
+            .properties
+            .iter()
+            .find(|property| property.label == i18n::tr!("ui-explorer-original-location"))
+            .unwrap();
+        assert_eq!(location.value, expected);
+        state.close_explorer_popup();
+    }
+}
+
+#[test]
 fn trash_delete_never_empties_other_items_and_empty_confirmation_defaults_to_cancel() {
     let (mut state, platform, _guard) = explorer_terminal_test_fixture();
     state.storage_manager = Some(
