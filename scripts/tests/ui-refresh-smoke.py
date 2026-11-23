@@ -83,12 +83,12 @@ def run_case(binary, language, color, motion, sizes, samples):
         def node(frame, identifier):
             return next(item for item in frame["nodes"] if item["id"] == identifier)
 
-        def tap(frame, identifier, double=False):
+        def tap(frame, identifier):
             frame = until(lambda current: any(item["id"] == identifier and item["actionable"]
                                               for item in current["nodes"]))
             x, y = smoke.control_position(frame, identifier)
             click = f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode()
-            send(click * (2 if double else 1))
+            send(click)
 
         def home_entry(frame, label):
             return next(item["id"] for item in frame["nodes"]
@@ -145,7 +145,7 @@ def run_case(binary, language, color, motion, sizes, samples):
             current = until(lambda frame: frame["page"] == "Home" and not has_modal(frame))
             settings_label, launcher_label = (("设置", "启动器") if language == "zh-CN"
                                                else ("Settings", "Launcher"))
-            tap(current, home_entry(current, settings_label), double=True)
+            tap(current, home_entry(current, settings_label))
             current = until(lambda frame: frame["page"] == "Settings")
             motion_id = "page/settings.field.motionpreference"
             current = until(lambda frame: any(item["id"] == motion_id and item["actionable"]
@@ -179,7 +179,7 @@ def run_case(binary, language, color, motion, sizes, samples):
                     assert item["actionable"] and rect["y"] >= 1
                     assert rect["y"] + rect["height"] <= rows - 1, "Home entry overlaps window bar"
                 assert_header(current)
-                tap(current, home_entry(current, settings_label), double=True)
+                tap(current, home_entry(current, settings_label))
                 send(b"\x1bOP")
                 current = until(lambda frame: frame["page"] == "Settings" and has_modal(frame))
                 assert not any(item["actionable"] for item in current["nodes"]
@@ -192,9 +192,8 @@ def run_case(binary, language, color, motion, sizes, samples):
                 close_tool(current)
                 current = until(lambda frame: frame["page"] == "Home")
 
-                tap(current, home_entry(current, launcher_label), double=True)
+                tap(current, home_entry(current, launcher_label))
                 current = until(lambda frame: frame["page"] == "Launcher")
-                tap(current, "page/launcher.search")
                 current = until(lambda frame: node(frame, "page/launcher.search")["focused"])
                 keyboard = next(item for item in current["nodes"] if item["id"].endswith("/input.keyboard"))
                 assert_header(current, keyboard["id"])
@@ -234,7 +233,8 @@ def run_case(binary, language, color, motion, sizes, samples):
                     "input_to_output_echo_ms_max": round(max(latencies), 3),
                 })
                 send(b"\x1b")
-                until(lambda frame: not node(frame, "page/launcher.search")["text"])
+                until(lambda frame: any(item["id"].endswith("launcher.item.builtin.settings")
+                                        for item in frame["nodes"]))
                 send(b"\x1b")
                 current = until(lambda frame: frame["page"] == "Home")
                 print(f"PASS: {columns}x{rows} {language} {color} {motion}; PTY echo P95 {p95:.3f}ms", flush=True)

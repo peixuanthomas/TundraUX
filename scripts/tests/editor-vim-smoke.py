@@ -215,11 +215,12 @@ def main():
                         if "workspace.title." in node["id"] and node["selected"])
 
         def restore_explorer():
-            current = shell.until_snapshot(lambda frame: frame["page"] == "Home" and not any(
+            current = shell.until_snapshot(lambda frame: frame["page"] in ("Home", "Explorer") and not any(
                 node["id"].endswith(f"workspace.taskbar.{editor_id}") for node in frame["nodes"]))
-            target = next(node for node in current["nodes"]
-                          if node["id"].endswith(f"workspace.taskbar.{explorer_id}"))
-            shell.tap(current, target["id"])
+            if current["page"] == "Home":
+                target = next(node for node in current["nodes"]
+                              if node["id"].endswith(f"workspace.taskbar.{explorer_id}"))
+                shell.tap(current, target["id"])
             shell.until_snapshot(lambda frame: frame["page"] == "Explorer"
                                  and focused_window(frame) == explorer_id
                                  and any(node["id"].startswith("page/") and node["actionable"]
