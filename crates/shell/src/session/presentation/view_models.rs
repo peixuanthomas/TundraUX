@@ -1539,12 +1539,7 @@ impl ShellSession {
             })
             .collect::<Vec<_>>();
         let selected_index = (!entries.is_empty()).then_some(state.selected_index);
-        let mut model = ui::ExplorerViewModel::with_ascii_assets(
-            display_path.clone(),
-            entries,
-            selected_index,
-            self.ascii_assets.clone(),
-        );
+        let mut model = ui::ExplorerViewModel::new(display_path.clone(), entries, selected_index);
         model.browse_title_id = browse_title_id;
         model.is_trash = is_trash;
         model.focus = self.pages.explorer.explorer_focus;

@@ -318,12 +318,7 @@ fn rich_block_line_count_up_to_with_heading(
             checked,
             spans,
         } => {
-            let marker = match checked {
-                Some(true) => "☒ ",
-                Some(false) => "☐ ",
-                None => "• ",
-            };
-            let prefix = format!("{}{}", "  ".repeat(usize::from(*depth)), marker);
+            let prefix = bullet_prefix(*depth, *checked);
             wrapped_line_count_up_to(&prefix, spans, width, limit)
         }
         EditorRenderBlock::OrderedListItem {
@@ -335,7 +330,7 @@ fn rich_block_line_count_up_to_with_heading(
             wrapped_line_count_up_to(&prefix, spans, width, limit)
         }
         EditorRenderBlock::Quote { depth, spans } => {
-            let prefix = "│ ".repeat(usize::from((*depth).max(1)));
+            let prefix = quote_prefix(*depth);
             wrapped_line_count_up_to(&prefix, spans, width, limit)
         }
         EditorRenderBlock::Footnote { label, spans } => {
@@ -381,6 +376,19 @@ fn rich_block_line_count_up_to_with_heading(
         | EditorRenderBlock::Image { .. }
         | EditorRenderBlock::Blank => fixed_line_count_up_to(1, limit),
     }
+}
+
+fn bullet_prefix(depth: u8, checked: Option<bool>) -> String {
+    let marker = match checked {
+        Some(true) => crate::cell_icon("state", "checked"),
+        Some(false) => crate::cell_icon("state", "unchecked"),
+        None => crate::cell_icon("editor", "bullet"),
+    };
+    format!("{}{marker} ", "  ".repeat(usize::from(depth)))
+}
+
+fn quote_prefix(depth: u8) -> String {
+    format!("{} ", crate::cell_icon("editor", "quote")).repeat(usize::from(depth.max(1)))
 }
 
 pub(super) fn fixed_line_count_up_to(line_count: usize, limit: usize) -> Option<usize> {
@@ -624,12 +632,7 @@ fn block_lines_with_heading(
             checked,
             spans,
         } => {
-            let marker = match checked {
-                Some(true) => "☒ ",
-                Some(false) => "☐ ",
-                None => "• ",
-            };
-            let prefix = format!("{}{}", "  ".repeat(usize::from(*depth)), marker);
+            let prefix = bullet_prefix(*depth, *checked);
             wrap_runs(
                 vec![DisplayRun::virtual_text(prefix, accent_span(), anchor)],
                 spans,
@@ -655,7 +658,7 @@ fn block_lines_with_heading(
             )
         }
         EditorRenderBlock::Quote { depth, spans } => {
-            let prefix = "│ ".repeat(usize::from((*depth).max(1)));
+            let prefix = quote_prefix(*depth);
             let quote_spans: Vec<_> = spans
                 .iter()
                 .cloned()

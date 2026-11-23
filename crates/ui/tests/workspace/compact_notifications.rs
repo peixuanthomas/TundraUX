@@ -85,7 +85,7 @@ fn compact_chrome_shows_toasts_and_preserves_page_header_without_notifications()
         let line = first_line(&terminal, 49);
         assert!(line.starts_with("TundraUX"), "{line}");
         assert_eq!(line.contains("Compact toast"), has_toast);
-        assert!(line.contains("◀ Esc"));
+        assert!(line.contains(&format!("{} Esc", ui::cell_icon("nav", "left"))));
         let content: String = (0..49)
             .map(|x| terminal.backend().buffer()[(x, 1)].symbol())
             .collect();
@@ -110,7 +110,10 @@ fn compact_notification_respects_empty_and_tiny_terminal_bounds() {
             let line = first_line(&terminal, width);
             assert!(line.starts_with('T'), "{width}x{height}: {line}");
             if width >= 49 {
-                assert!(line.contains('◀'), "{width}x{height}: {line}");
+                assert!(
+                    line.contains(ui::cell_icon("nav", "left")),
+                    "{width}x{height}: {line}"
+                );
             }
         }
     }
@@ -130,7 +133,8 @@ fn minimum_full_chrome_keeps_alert_in_the_header_with_title_and_controls() {
         .draw(|frame| render_shell_chrome(frame, &layout, &chrome, &context))
         .unwrap();
     let header = first_line(&terminal, 108);
-    for text in ["TundraUX", "F1 Help", "09:30", "◀ Esc"] {
+    let back = format!("{} Esc", ui::cell_icon("nav", "left"));
+    for text in ["TundraUX", "F1 Help", "09:30", &back] {
         assert!(header.contains(text), "{header}");
     }
     let status: String = layout

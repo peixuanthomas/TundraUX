@@ -72,7 +72,7 @@ pub fn notification_layout(area: Rect, model: &NotificationViewModel) -> Notific
     let action_texts = model
         .actions
         .iter()
-        .map(notification_action_text)
+        .map(notification_action_display_text)
         .collect::<Vec<_>>();
     let close = model
         .actions
@@ -220,6 +220,17 @@ pub(crate) fn notification_action_text(action: &NotificationActionViewModel) -> 
         Some(shortcut) => format!("{} {shortcut}", action.label),
         None => action.label.clone(),
     }
+}
+
+pub(crate) fn notification_action_display_text(action: &NotificationActionViewModel) -> String {
+    let text = notification_action_text(action);
+    let icon = match action.id.as_str() {
+        "cancel" | "close" => crate::cell_icon("nav", "close"),
+        "tasks" => crate::cell_icon("nav", "tasks"),
+        _ if action.cancel => crate::cell_icon("nav", "close"),
+        _ => return text,
+    };
+    format!("{icon} {text}")
 }
 
 pub(crate) fn wrap_notification_text(text: &str, width: u16) -> Vec<String> {

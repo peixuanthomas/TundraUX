@@ -34,6 +34,8 @@ Screens with separate `model.rs`, `layout.rs`, and `render.rs` keep the data, re
 
 The notification panel sits under the header. Its full status and single column of cards share a scrollable area. Dismiss, open-log, clear-all, and close buttons use the same rectangles for drawing, keyboard navigation, mouse input, and automation.
 
+Appearance settings expose the terminal icon check as an action. Shell draws the comparison in its shared notification dialog and sends the selected icon mode to AppHosts.
+
 ## Workspace frames
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
@@ -51,6 +53,8 @@ All live windows contribute to the minimum content size, including those in the 
 App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane. AppHost attaches frame sequence numbers, input tracing serials, confirmed input fences, and first-frame startup timings after UI capture.
 
 AppHosts without terminal image support load complete ASCII catalogs and fonts while omitting unused PNG bytes. Hosts with image support retain the full asset set, including when their current appearance uses ASCII icons.
+
+Single-cell controls, file rows, Launcher details, and status markers use Tundra Cell Atlas after the user verifies the font in their terminal. Each symbol has a single printable ASCII fallback. Home and the Launcher's large tiles use the separate application artwork catalog. The busy marker cycles through ten frames every 800 ms and uses a single static glyph when motion is reduced.
 
 Shell can compose a retained app frame at a new pane size, clipping from the top left and filling newly exposed space with the canvas color. Images keep the same clipping. Retained controls are non-actionable and the old cursor is hidden. Initial window startup uses a blank canvas for 100ms before showing the localized busy indicator; reduced motion keeps that indicator static.
 
@@ -96,7 +100,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `ManagementWorkspace` organizes search, details, action bars, and expert areas that stay expanded when the selected object changes.
 - The management details scrollbar uses the wrapped line count for both the scroll range and offset clamping.
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
-- Home and Launcher show a one-cell ASCII `#` beside draggable names in organize mode. The entire tile accepts the drag. Both pages share the insertion line and its geometry, including row gaps, empty tail slots, and scrollbar exclusion.
+- Home and Launcher show a one-cell drag grip beside draggable names in organize mode. The grip falls back to `#`. The entire tile accepts the drag. Both pages share the insertion line and its geometry, including row gaps, empty tail slots, and scrollbar exclusion.
 - `ManagementViewModel::selected_rows` represents all selected rows; `selected` represents the current position.
 - Shared scrollbars draw a thin, muted track and a brighter thumb. The vertical thumb uses half a character cell's width, and the horizontal thumb uses a quarter of its height. `ScrollbarOrientation::hit_test` extends the pointer target by one cell on either side of a vertical bar or above and below a horizontal bar.
 

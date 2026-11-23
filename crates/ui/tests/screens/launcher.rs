@@ -12,6 +12,52 @@ use ui::{
 use unicode_width::UnicodeWidthStr;
 
 #[test]
+fn launcher_details_draw_one_text_cell_per_role_even_with_an_image_renderer() {
+    struct NoThumbnails;
+    impl ui::LauncherIconRenderer for NoThumbnails {
+        fn render_icon(&self, _: &str, _: &mut ratatui::Frame<'_>, _: Rect) -> bool {
+            panic!("details must use text cells");
+        }
+    }
+    let mut external = item(1, LauncherItemStatus::Ready);
+    external.external_icon_role = "CustomCommand";
+    let model = LauncherViewModel::new(
+        vec![LauncherItemViewModel::command_line(), external],
+        Some(0),
+        LauncherViewMode::Details,
+        false,
+    );
+    let area = Rect::new(0, 0, 108, 20);
+    for mode in [ui::CellIconMode::Ascii, ui::CellIconMode::Font] {
+        ui::set_cell_icon_mode(mode);
+        let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+        terminal
+            .draw(|frame| {
+                ui::render_launcher_content(
+                    frame,
+                    area,
+                    &model,
+                    &Default::default(),
+                    Some(&NoThumbnails),
+                )
+            })
+            .unwrap();
+        for (row, role) in launcher_layout(area, &model)
+            .items
+            .iter()
+            .zip(["builtin.command-line", "CustomCommand"])
+        {
+            assert_eq!(row.icon_area.width, 1);
+            assert_eq!(
+                terminal.backend().buffer()[(row.icon_area.x, row.icon_area.y)].symbol(),
+                mode.icon("apps", role)
+            );
+        }
+    }
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
+}
+
+#[test]
 fn built_in_launcher_tiles_render_theme_art_and_supply_terminal_images() {
     let items = app::BUILT_IN_APPLICATIONS
         .iter()
@@ -98,12 +144,15 @@ fn launcher_marks_only_draggable_tiles_without_using_icon_cells() {
                     .unwrap();
                 let buffer = terminal.backend().buffer();
                 if let Some(indicator) = layout.drop_indicator {
-                    assert_eq!(buffer[(indicator.x, indicator.bottom() - 1)].symbol(), "┃");
+                    assert_eq!(
+                        buffer[(indicator.x, indicator.bottom() - 1)].symbol(),
+                        ui::cell_icon("nav", "drop")
+                    );
                 }
                 for tile in &layout.items {
                     let y = tile.icon_area.bottom();
-                    let marker =
-                        (tile.area.x..tile.area.right()).find(|&x| buffer[(x, y)].symbol() == "#");
+                    let marker = (tile.area.x..tile.area.right())
+                        .find(|&x| buffer[(x, y)].symbol() == ui::cell_icon("nav", "grip"));
                     assert_eq!(marker.is_some(), organizing && tile.index == 0);
                     if let Some(x) = marker {
                         assert_eq!(
@@ -654,7 +703,7 @@ fn large_icon_drop_target_uses_linear_insertion_boundaries_and_renders_a_vertica
     let indicator = layout.drop_indicator.expect("large-icon insertion line");
     assert_eq!(indicator.x, layout.items[1].area.x);
     assert_eq!(indicator.height, layout.items[1].area.height);
-    assert!(render(&model, 100, 30).contains('┃'));
+    assert!(render(&model, 100, 30).contains(ui::cell_icon("nav", "drop")));
 
     model.view_mode = LauncherViewMode::Details;
     assert!(

@@ -126,7 +126,13 @@ fn form_toggle_keeps_its_label_left_and_on_off_value_right() {
             .map(|x| terminal.backend().buffer()[(x, area.y)].symbol())
             .collect();
         assert!(line.starts_with("Keep screen after exit"));
-        assert!(line.ends_with(if checked { "[On]" } else { "[Off]" }));
+        let glyph = ui::cell_icon("state", if checked { "checked" } else { "unchecked" });
+        let text = i18n::tr!(if checked {
+            "settings-on"
+        } else {
+            "settings-off"
+        });
+        assert!(line.ends_with(&format!("{glyph} {text}")));
         assert!(
             management_button_regions(bounds, &model)
                 .iter()

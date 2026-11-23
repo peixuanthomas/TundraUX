@@ -20,7 +20,7 @@ pub struct BusyIndicator {
 }
 
 impl BusyIndicator {
-    pub const FRAME_INTERVAL: Duration = Duration::from_millis(80);
+    pub const FRAME_INTERVAL: Duration = Duration::from_millis(ascii_assets::CELL_ICON_FRAME_MS);
 
     pub const fn new(elapsed: Duration) -> Self {
         Self {
@@ -40,12 +40,8 @@ impl BusyIndicator {
     }
 
     pub fn symbol(self) -> &'static str {
-        const FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-        if self.reduced_motion {
-            return "⋯";
-        }
         let frame = self.elapsed.as_millis() / Self::FRAME_INTERVAL.as_millis();
-        FRAMES[(frame % FRAMES.len() as u128) as usize]
+        crate::cell_icon_mode().busy_icon(frame, self.reduced_motion)
     }
 
     pub fn redraw_interval(frame: MotionFrame, capability: ColorCapability) -> Option<Duration> {

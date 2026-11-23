@@ -1118,7 +1118,12 @@ pub(super) fn menu_popup_layout(
     let actions = editor_menu_actions(menu);
     let desired_width = actions
         .iter()
-        .map(|action| terminal_width(&menu_action_label(*action)))
+        .map(|action| {
+            terminal_width(&menu_action_display_label(
+                *action,
+                &menu_action_label(*action),
+            ))
+        })
         .max()
         .unwrap_or_default()
         .saturating_add(4);
@@ -1266,8 +1271,9 @@ pub(super) fn quick_menu_layout(
         EditorQuickAction::Heading(2),
         EditorQuickAction::Heading(3),
     ];
-    let item_widths =
-        actions.map(|action| to_u16(terminal_width(&quick_action_label(action)).saturating_add(2)));
+    let item_widths = actions.map(|action| {
+        to_u16(terminal_width(&quick_action_display_label(action)).saturating_add(2))
+    });
     let available_inner_width = area.width.saturating_sub(2);
     let minimum_inner_width = item_widths.iter().copied().max().unwrap_or_default();
     if available_inner_width < minimum_inner_width {
@@ -1396,6 +1402,24 @@ pub(super) fn quick_action_label(action: EditorQuickAction) -> String {
     }
 }
 
+pub(super) fn quick_action_display_label(action: EditorQuickAction) -> String {
+    let role = match action {
+        EditorQuickAction::Bold => "bold",
+        EditorQuickAction::Italic => "italic",
+        EditorQuickAction::Paragraph => "paragraph",
+        EditorQuickAction::Heading(1) => "h1",
+        EditorQuickAction::Heading(2) => "h2",
+        EditorQuickAction::Heading(3) => "h3",
+        EditorQuickAction::Heading(_) => "heading",
+    };
+    let glyph = crate::cell_icon("editor", role);
+    if action == EditorQuickAction::Paragraph {
+        format!("{glyph} {}", quick_action_label(action))
+    } else {
+        glyph.into()
+    }
+}
+
 pub(super) fn toolbar_layout(
     area: Rect,
     model: &EditorViewModel,
@@ -1441,9 +1465,48 @@ pub(super) fn toolbar_specs() -> Vec<(EditorToolbarAction, String, u16)> {
 }
 
 pub(super) fn toolbar_spec(action: EditorToolbarAction) -> (EditorToolbarAction, String, u16) {
-    let label = toolbar_label(action);
+    let label = toolbar_display_label(action, &toolbar_label(action));
     let width = to_u16(terminal_width(&label));
     (action, label, width)
+}
+
+pub(super) fn toolbar_display_label(action: EditorToolbarAction, label: &str) -> String {
+    let icon = toolbar_icon(action);
+    if matches!(
+        action,
+        EditorToolbarAction::Bold
+            | EditorToolbarAction::Italic
+            | EditorToolbarAction::Strikethrough
+    ) {
+        format!(" {icon} ")
+    } else {
+        format!(" {icon} {} ", label.trim())
+    }
+}
+
+fn toolbar_icon(action: EditorToolbarAction) -> &'static str {
+    use EditorToolbarAction::*;
+    let (group, role) = match action {
+        New => ("fileops", "new"),
+        Open => ("fileops", "open_item"),
+        Save => ("fileops", "save"),
+        Undo => ("fileops", "undo"),
+        Redo => ("fileops", "redo"),
+        Find => ("fileops", "search"),
+        More => ("fileops", "more"),
+        ParagraphStyle => ("editor", "paragraph"),
+        Bold => ("editor", "bold"),
+        Italic => ("editor", "italic"),
+        Strikethrough => ("editor", "strike"),
+        InlineCode => ("editor", "inline_code"),
+        BulletList => ("editor", "bullets"),
+        OrderedList => ("editor", "numbers"),
+        Quote => ("editor", "quote"),
+        Link => ("editor", "insert_link"),
+        Image => ("editor", "insert_image"),
+        Table => ("editor", "table"),
+    };
+    crate::cell_icon(group, role)
 }
 
 pub(super) fn toolbar_label(action: EditorToolbarAction) -> String {
@@ -1623,6 +1686,24 @@ pub(super) fn menu_action_label(action: EditorMenuAction) -> String {
         _ => None,
     };
     shortcut.map_or_else(|| label.clone(), |shortcut| format!("{shortcut} {label}"))
+}
+
+pub(super) fn menu_action_display_label(action: EditorMenuAction, label: &str) -> String {
+    use EditorMenuAction::*;
+    let icon = match action {
+        Toolbar(action) => toolbar_icon(action),
+        SaveAs => crate::cell_icon("fileops", "save"),
+        Cut => crate::cell_icon("fileops", "cut"),
+        Copy => crate::cell_icon("fileops", "copy"),
+        Paste => crate::cell_icon("fileops", "paste"),
+        SelectAll => crate::cell_icon("fileops", "select_all"),
+        Close => crate::cell_icon("nav", "close"),
+        Config(EditorConfigAction::Open) => crate::cell_icon("fileops", "open_item"),
+        Config(EditorConfigAction::Properties) => crate::cell_icon("fileops", "properties"),
+        Config(EditorConfigAction::Reload) => crate::cell_icon("fileops", "refresh"),
+        _ => return label.into(),
+    };
+    format!("{icon} {label}")
 }
 
 pub(super) fn mode_label(mode: EditorMode) -> String {

@@ -331,8 +331,12 @@ pub(super) fn clock_action_bar(model: &ClockViewModel) -> crate::components::Pag
     if model.is_read_only() {
         return bar;
     }
+    let new_label = i18n::tr!("ui-clock-touch-new");
+    let new_icon = crate::cell_icon("fileops", "new");
     bar.with_actions(vec![
-        PageAction::new("new", i18n::tr!("ui-clock-touch-new")).primary(),
+        PageAction::new("new", format!("{new_icon} {new_label}"))
+            .with_capture_name(new_label)
+            .primary(),
         PageAction::new("manage", i18n::tr!("ui-clock-touch-manage"))
             .disabled(model.selected_entry_id.is_none()),
     ])

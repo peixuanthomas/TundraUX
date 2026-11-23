@@ -91,7 +91,8 @@ impl CommandPalette {
 
         let mut input = self.query_input.clone();
         input.set_focused(self.state.focused);
-        input.render_borderless_with_prefix(Self::query_area(layout), buffer, &theme, "⌕ ");
+        let prefix = format!("{} ", crate::cell_icon("fileops", "search"));
+        input.render_borderless_with_prefix(Self::query_area(layout), buffer, &theme, &prefix);
 
         let mut results = self
             .results_for_render()
@@ -527,7 +528,8 @@ impl CommandPalette {
             }
             items.push(item);
         }
-        List::new(format!("{}.results", id.as_str()), items).with_highlight_symbol(Some("▌   "))
+        List::new(format!("{}.results", id.as_str()), items)
+            .with_highlight_symbol(Some(format!("{}   ", crate::cell_icon("nav", "current"))))
     }
 
     fn layout(&self, area: Rect) -> DialogLayout {

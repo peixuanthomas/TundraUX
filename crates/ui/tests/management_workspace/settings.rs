@@ -67,7 +67,14 @@ fn slider_options_keep_visible_labels_and_share_rendered_hit_areas() {
                     let x = option.x + option.width / 2;
                     assert_eq!(
                         terminal.backend().buffer()[(x, option.y)].symbol(),
-                        if index == selected { "●" } else { "○" }
+                        ui::cell_icon(
+                            "state",
+                            if index == selected {
+                                "radio_on"
+                            } else {
+                                "radio_off"
+                            }
+                        )
                     );
                     for y in option.y..option.bottom() {
                         assert_eq!(
@@ -1110,7 +1117,12 @@ fn update_git_tree_renders_merge_lines_and_only_targets_commit_rows() {
             settings_hit_test(&layout, (row.right() - 1, row.y + 2)),
             Some(SettingsHitTarget::UpdateCommit(2))
         );
-        for text in ["Git tree", "●", "│\\", "bbbbbbbb (feature)"] {
+        for text in [
+            "Git tree",
+            ui::cell_icon("clock", "commit"),
+            "│\\",
+            "bbbbbbbb (feature)",
+        ] {
             assert!(terminal_output(&terminal).contains(text), "missing {text}");
         }
         let buffer = terminal.backend().buffer();

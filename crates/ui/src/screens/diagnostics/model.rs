@@ -50,7 +50,17 @@ impl DiagnosticsStatus {
         }
     }
 
-    pub const fn marker(self) -> &'static str {
+    pub fn marker(self) -> &'static str {
+        let role = match self {
+            Self::Pass => "success",
+            Self::Unsupported => "unsupported",
+            Self::Warning => "warning",
+            Self::Fail => "error",
+        };
+        crate::cell_icon("state", role)
+    }
+
+    pub(crate) const fn legacy_marker(self) -> &'static str {
         match self {
             Self::Pass => "✓",
             Self::Unsupported => "–",
@@ -150,7 +160,7 @@ impl DiagnosticsViewModel {
                         vec![
                             r.label.clone(),
                             r.category.clone(),
-                            format!("{} {}", r.status.marker(), r.status.label()),
+                            format!("{} {}", r.status.legacy_marker(), r.status.label()),
                         ]
                     })
                     .collect(),

@@ -80,7 +80,11 @@ fn home_scrolled_drop_targets_use_absolute_indices_and_exclude_scrollbar() {
 #[test]
 fn home_edit_controls_and_indicator_render_in_both_languages_without_covering_icons() {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for language in ["en-US", "zh-CN"] {
+    for (language, mode) in [
+        ("en-US", ui::CellIconMode::Ascii),
+        ("zh-CN", ui::CellIconMode::Font),
+    ] {
+        ui::set_cell_icon_mode(mode);
         let load = i18n::LanguageSnapshot::load(&assets, language, 1).unwrap();
         let _language = i18n::enter_snapshot(Arc::new(load.snapshot));
         for main in [Rect::new(2, 3, 108, 14), Rect::new(2, 3, 42, 9)] {
@@ -137,7 +141,7 @@ fn home_edit_controls_and_indicator_render_in_both_languages_without_covering_ic
                         .cell((first.x, first.y))
                         .unwrap()
                         .symbol()
-                        == "┃",
+                        == ui::cell_icon("nav", "drop"),
                     editing
                 );
                 for item in layout.items.iter().skip(1) {
@@ -151,11 +155,15 @@ fn home_edit_controls_and_indicator_render_in_both_languages_without_covering_ic
                     let label: String = (tile.x..tile.right())
                         .map(|x| terminal.backend().buffer()[(x, y)].symbol())
                         .collect();
-                    assert_eq!(label.trim().starts_with('#'), editing);
+                    assert_eq!(
+                        label.trim().starts_with(ui::cell_icon("nav", "grip")),
+                        editing
+                    );
                 }
             }
         }
     }
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
     assert!(ui::home_edit_area(Rect::new(0, 0, 120, 40), &model(0)).is_none());
 }
 

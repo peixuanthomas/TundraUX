@@ -6,8 +6,8 @@ mod asset_resolver;
 mod asset_restore;
 mod asset_store;
 mod asset_validation;
-mod clock_font;
 mod cell_icons;
+mod clock_font;
 mod embedded_defaults;
 
 pub use artwork::{AppIcon, AppIconCatalog, ArtItem, ArtSet, ExplorerIcon, TextArt};
@@ -32,6 +32,6 @@ pub use asset_validation::{
     AssetCheck, AssetCheckReport, AssetCheckStatus, DefaultThemeCheck, DefaultThemeCheckReport,
     check_default_theme, check_required_assets,
 };
-pub use clock_font::ClockFontAsset;
 pub use cell_icons::{CELL_ICON_FONT, CELL_ICON_FRAME_MS, CellIconMode};
+pub use clock_font::ClockFontAsset;
 pub use embedded_defaults::{DefaultThemeFile, default_theme_files};

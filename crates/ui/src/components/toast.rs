@@ -135,11 +135,11 @@ impl Toast {
         }
         crate::automation::control("", "status", &self.message, area, Default::default(), &[]);
         let tokens = context.theme;
-        let feedback = match self.tone {
-            ToastTone::Info => tokens.accent,
-            ToastTone::Success => tokens.success,
-            ToastTone::Warning => tokens.warning,
-            ToastTone::Danger => tokens.danger,
+        let (feedback, role) = match self.tone {
+            ToastTone::Info => (tokens.accent, "info"),
+            ToastTone::Success => (tokens.success, "success"),
+            ToastTone::Warning => (tokens.warning, "warning"),
+            ToastTone::Danger => (tokens.danger, "error"),
         };
         let background = if context.capabilities.color == ColorCapability::TrueColor {
             use animate::Interpolate;
@@ -171,6 +171,10 @@ impl Toast {
         }
         Paragraph::new(lines.into_iter().map(Line::from).collect::<Vec<_>>()).render(text, buffer);
         if horizontal > 0 {
+            if let Some(cell) = buffer.cell_mut((area.x + 1, text.y)) {
+                cell.set_symbol(crate::cell_icon("state", role))
+                    .set_fg(feedback);
+            }
             let bounds = buffer.area;
             for x in [area.x, area.right() - 1] {
                 for point in Rect::new(x, area.y, 1, area.height)

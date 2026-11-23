@@ -134,6 +134,7 @@ pub enum SettingsField {
     BorderShape,
     BorderColor,
     AccentColor,
+    RecheckCellIcons,
     MotionPreference,
     AnimationSpeed,
     AnimationAdvanced,
@@ -1242,7 +1243,7 @@ fn render_update_confirmation(
     let theme = &DialogLayout::footer_theme(context);
     let chrome = update_confirmation_chrome(dialog);
     chrome.render_frame(frame, &confirmation.title, context);
-    Button::new("settings.update.close", "×")
+    Button::new("settings.update.close", crate::cell_icon("nav", "close"))
         .with_bracketed_label(false)
         .with_centered_label(true)
         .with_capture_name(i18n::tr!("ui-settings-touch-cancel"))
@@ -1272,7 +1273,7 @@ fn render_update_confirmation(
 }
 
 fn update_confirmation_chrome(dialog: Rect) -> DialogLayout {
-    DialogLayout::with_min_body(dialog, 1, Some("×"), 3)
+    DialogLayout::with_min_body(dialog, 1, Some(crate::cell_icon("nav", "close")), 3)
 }
 
 fn render_settings_footer(
@@ -1463,7 +1464,7 @@ fn render_settings_control(
         {
             format!("{} ↵", item.value)
         }
-        _ => item.value.clone(),
+        _ => settings_control_value(item),
     };
     let mut button = Button::new(
         format!("settings.field.{:?}", item.field).to_ascii_lowercase(),
@@ -1483,7 +1484,8 @@ fn render_settings_control(
 }
 
 fn settings_control_width(item: &SettingsItemViewModel) -> u16 {
-    let label_width = u16::try_from(terminal_width(&item.value)).unwrap_or(u16::MAX);
+    let label_width =
+        u16::try_from(terminal_width(&settings_control_value(item))).unwrap_or(u16::MAX);
     let component_padding = match item.kind {
         SettingsControlKind::Toggle => 2,
         SettingsControlKind::Cycle
@@ -1495,6 +1497,19 @@ fn settings_control_width(item: &SettingsItemViewModel) -> u16 {
         SettingsControlKind::Slider { .. } => return 0,
     };
     label_width.saturating_add(component_padding)
+}
+
+fn settings_control_value(item: &SettingsItemViewModel) -> String {
+    if item.kind == SettingsControlKind::Toggle
+        && let Some(checked) = item.checked
+    {
+        let marker = crate::cell_icon("state", if checked { "checked" } else { "unchecked" });
+        if matches!(item.value.as_str(), "[x]" | "[ ]") {
+            return marker.into();
+        }
+        return format!("{marker} {}", item.value);
+    }
+    item.value.clone()
 }
 
 fn settings_item_height(item: &SettingsItemViewModel) -> u16 {

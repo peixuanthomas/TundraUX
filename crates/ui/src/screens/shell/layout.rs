@@ -200,12 +200,9 @@ impl ShellFrameLayout {
         self.back_button = (visible && !self.bounds.is_empty())
             .then(|| {
                 let label = self.back_label();
-                let icon = terminal_width(crate::assets::BACK_ICON.trim());
-                let width = usize_to_u16(terminal_width(&label).saturating_add(icon + 3)).min(
-                    self.bounds
-                        .width
-                        .saturating_sub(usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title")))),
-                );
+                let icon = terminal_width(crate::cell_icon("nav", "left"));
+                let width = usize_to_u16(terminal_width(&label).saturating_add(icon + 3))
+                    .min(self.bounds.width.saturating_sub(power_button_width()));
                 Rect::new(self.bounds.right() - width, self.bounds.y, width, 1)
             })
             .filter(|area| !area.is_empty());
@@ -226,7 +223,7 @@ impl ShellFrameLayout {
 
     pub fn with_help_button(mut self, available: bool) -> Self {
         self.help_width = if available && !self.is_compact() {
-            usize_to_u16(terminal_width(&i18n::tr!("ui-shell-help-button")).saturating_add(2))
+            usize_to_u16(terminal_width(&i18n::tr!("ui-shell-help-button")).saturating_add(4))
         } else {
             0
         };
@@ -258,8 +255,7 @@ impl ShellFrameLayout {
             right - self.bounds.x,
             self.bounds.height.min(1),
         );
-        let title_width =
-            usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title"))).min(area.width);
+        let title_width = power_button_width().min(area.width);
         self.title = Rect::new(area.x, area.y, title_width, area.height);
         let title_space = title_width.saturating_add(1).min(area.width);
         area.x += title_space;
@@ -282,6 +278,10 @@ impl ShellFrameLayout {
         };
         self.status_message = (!area.is_empty()).then_some(area);
     }
+}
+
+fn power_button_width() -> u16 {
+    usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title")).saturating_add(2))
 }
 
 fn take_header_button(area: &mut Rect, width: u16) -> Option<Rect> {

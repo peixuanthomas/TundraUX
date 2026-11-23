@@ -153,15 +153,21 @@ impl WorkspacePanel {
         if max_scroll > 0 && list.height >= 2 {
             buttons.extend([
                 (
-                    PanelButton::new(WorkspaceAction::ScrollUp, "↑".into())
-                        .enabled(scroll > 0)
-                        .named(i18n::tr!("ui-workspace-scroll-up")),
+                    PanelButton::new(
+                        WorkspaceAction::ScrollUp,
+                        crate::cell_icon("nav", "up").into(),
+                    )
+                    .enabled(scroll > 0)
+                    .named(i18n::tr!("ui-workspace-scroll-up")),
                     Rect::new(list.right(), list.y, 3.min(dialog.body.width), 1),
                 ),
                 (
-                    PanelButton::new(WorkspaceAction::ScrollDown, "↓".into())
-                        .enabled(scroll < max_scroll)
-                        .named(i18n::tr!("ui-workspace-scroll-down")),
+                    PanelButton::new(
+                        WorkspaceAction::ScrollDown,
+                        crate::cell_icon("nav", "down").into(),
+                    )
+                    .enabled(scroll < max_scroll)
+                    .named(i18n::tr!("ui-workspace-scroll-down")),
                     Rect::new(list.right(), list.bottom() - 1, 3.min(dialog.body.width), 1),
                 ),
             ]);
@@ -296,7 +302,11 @@ pub fn render_workspace_panel(
         let description_width = terminal_width(&details).min(usize::from(area.width) / 2 + 4);
         let label_width = usize::from(area.width).saturating_sub(description_width + 3);
         let title = one_line(&window.title);
-        let marker = if selected { "▌ " } else { "  " };
+        let marker = if selected {
+            format!("{} ", crate::cell_icon("nav", "current"))
+        } else {
+            "  ".to_string()
+        };
         let detail_color = if window.unresponsive {
             context.theme.warning
         } else {

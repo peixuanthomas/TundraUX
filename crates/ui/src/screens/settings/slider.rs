@@ -75,7 +75,12 @@ impl SettingsSliderLayout {
                 buffer[(x, self.area.y)].set_symbol("─");
             }
             for (index, x) in centers.into_iter().enumerate() {
-                buffer[(x, self.area.y)].set_symbol(if index == selected { "●" } else { "○" });
+                let role = if index == selected {
+                    "radio_on"
+                } else {
+                    "radio_off"
+                };
+                buffer[(x, self.area.y)].set_symbol(crate::cell_icon("state", role));
             }
         }
     }

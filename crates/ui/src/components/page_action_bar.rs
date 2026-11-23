@@ -17,6 +17,7 @@ pub struct PageActionStatus {
 pub struct PageAction {
     pub id: ComponentId,
     pub label: String,
+    capture_name: Option<String>,
     pub enabled: bool,
     pub emphasis: ButtonEmphasis,
     pub latched: bool,
@@ -28,6 +29,7 @@ impl PageAction {
         Self {
             id: id.into(),
             label: label.into(),
+            capture_name: None,
             enabled: true,
             emphasis: ButtonEmphasis::Normal,
             latched: false,
@@ -37,6 +39,11 @@ impl PageAction {
 
     pub fn with_bracketed_label(mut self, bracketed: bool) -> Self {
         self.bracketed_label = bracketed;
+        self
+    }
+
+    pub fn with_capture_name(mut self, name: impl Into<String>) -> Self {
+        self.capture_name = Some(name.into());
         self
     }
 
@@ -209,6 +216,9 @@ impl PageActionBar {
             } else {
                 context.theme.raised
             });
+            if let Some(name) = &action.capture_name {
+                button = button.with_capture_name(name);
+            }
             button.set_disabled(!action.enabled);
             button.state.selected = self.selected.as_ref() == Some(&action.id);
             button.render_borderless_frame(frame, action_layout.area, &theme);

@@ -297,6 +297,24 @@ fn render_diagnostics_rows(
     table.state.focused = true;
     table.render_frame(frame, layout.list_rows_area, context);
 
+    if model.tab == DiagnosticsTab::Health {
+        let status_column = if model.table_columns.is_empty() { 2 } else { 1 };
+        if let Some((_, header)) = layout
+            .headers
+            .iter()
+            .find(|(index, _)| *index == status_column)
+        {
+            // Apply the marker to the visible cell so sort keys and captured names stay stable.
+            for row in &layout.rows {
+                let status = model.checks[row.index].status;
+                let cell = &mut frame.buffer_mut()[(header.x, row.area.y)];
+                if cell.symbol() == status.legacy_marker() {
+                    cell.set_symbol(status.marker());
+                }
+            }
+        }
+    }
+
     render_diagnostics_scrollbar(frame, layout, model, context);
 }
 

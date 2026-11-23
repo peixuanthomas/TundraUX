@@ -142,7 +142,7 @@ pub fn logs_content_model(model: &LogsViewModel) -> DiagnosticsViewModel {
         .map(|r| {
             vec![
                 r.time_label.clone(),
-                format!("{} {}", r.status.marker(), r.level),
+                format!("{} {}", r.status.legacy_marker(), r.level),
                 r.module.clone(),
                 r.operation.clone(),
                 r.summary.clone(),

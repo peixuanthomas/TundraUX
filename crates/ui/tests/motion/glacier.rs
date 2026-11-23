@@ -134,7 +134,7 @@ fn busy_label_sweeps_whole_glyphs_and_honors_speed_color_and_reduced_motion() {
     assert!(
         line(reduced, RenderCapabilities::default()).spans[0]
             .content
-            .starts_with('⋯')
+            .starts_with('.')
     );
     assert!(BusyIndicator::redraw_interval(reduced, ui::ColorCapability::TrueColor).is_none());
 }
@@ -153,6 +153,10 @@ fn toast_uses_fixed_geometry_and_semantic_edges_from_the_first_frame() {
         toast.render(area, &mut buffer, &context);
         assert_eq!(buffer[(area.x, area.y)].symbol(), "│");
         assert_eq!(buffer[(area.x, area.y)].fg, context.theme.success);
+        assert_eq!(
+            buffer[(area.x + 1, area.y + 1)].symbol(),
+            ui::cell_icon("state", "success")
+        );
         assert_eq!(buffer[(area.x + 3, area.y + 1)].symbol(), "保");
     }
 }

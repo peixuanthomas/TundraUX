@@ -42,11 +42,12 @@ impl WorkspaceWindowAction {
     }
 
     fn glyph(self) -> &'static str {
-        match self {
-            Self::Minimize => "−",
-            Self::SplitMenu => "◫",
-            Self::Close => "×",
-        }
+        let role = match self {
+            Self::Minimize => "minimize",
+            Self::SplitMenu => "split_v",
+            Self::Close => "close",
+        };
+        crate::cell_icon("nav", role)
     }
 }
 

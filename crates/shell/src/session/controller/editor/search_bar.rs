@@ -359,11 +359,8 @@ impl ShellSession {
             input.set_focused(true);
             // The actual editor layout is used below by hit testing; the input
             // prefix is excluded when locating its character cursor.
-            let prefix = ratatui::text::Line::raw(format!(
-                " {}: ",
-                ui::editor_search_label(control)
-            ))
-            .width() as u16;
+            let prefix =
+                ratatui::text::Line::raw(ui::editor_search_input_prefix(control)).width() as u16;
             let actual_y = mouse.row();
             input.handle_event_borderless(
                 InputEvent::Mouse(mouse),

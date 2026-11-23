@@ -5,7 +5,11 @@ use unicode_width::UnicodeWidthStr;
 #[test]
 fn permission_titles_and_painted_checkboxes_share_columns_in_both_matrices() {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for language in ["en-US", "zh-CN"] {
+    for (language, mode) in [
+        ("en-US", CellIconMode::Ascii),
+        ("zh-CN", CellIconMode::Font),
+    ] {
+        set_cell_icon_mode(mode);
         let snapshot = i18n::LanguageSnapshot::load(&assets, language, 1)
             .unwrap()
             .snapshot;
@@ -97,17 +101,25 @@ fn permission_titles_and_painted_checkboxes_share_columns_in_both_matrices() {
                         }
                     }
                     for (cell, area) in cells {
+                        let role = match field.value.as_bytes()[cell] {
+                            b'1' => "checked",
+                            b'0' => "unchecked",
+                            _ => "mixed",
+                        };
                         let painted_x = (area.x..area.right())
-                            .find(|x| terminal.backend().buffer()[(*x, area.y)].symbol() == "[")
+                            .find(|x| {
+                                terminal.backend().buffer()[(*x, area.y)].symbol()
+                                    == cell_icon("state", role)
+                            })
                             .expect("the checkbox must be visible inside its button target");
-                        assert_eq!(painted_x, area.x + area.width / 2 - 1);
+                        assert_eq!(painted_x, area.x + area.width / 2);
                         if let Some(center) = heading_centers[*index][cell % 3] {
-                            assert!(center.abs_diff((painted_x + 1) * 2) <= 1);
+                            assert!(center.abs_diff(painted_x * 2) <= 1);
                         }
                         assert!(regions.iter().any(|region| {
                             region.id.as_str() == management_permission_id(form, *index, cell)
                                 && region.area == area
-                                && region.area.contains((painted_x + 1, area.y).into())
+                                && region.area.contains((painted_x, area.y).into())
                         }));
                         seen[*index][cell] = true;
                     }
@@ -126,6 +138,7 @@ fn permission_titles_and_painted_checkboxes_share_columns_in_both_matrices() {
             );
         }
     }
+    set_cell_icon_mode(CellIconMode::Ascii);
 }
 
 #[test]
@@ -206,15 +219,10 @@ fn permission_matrix_has_nine_distinct_visible_button_targets() {
         terminal
             .draw(|frame| render_management_overlay(frame, main, &model, &context))
             .unwrap();
-        let text: String = terminal
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect();
-        assert!(text.contains("[x]"));
-        assert!(text.contains("[-]"));
-        assert!(text.contains("[ ]"));
+        for (region, role) in cells.iter().zip(["checked", "mixed", "unchecked"]) {
+            assert!(region.area.positions().any(|point| {
+                terminal.backend().buffer()[point].symbol() == cell_icon("state", role)
+            }));
+        }
     }
 }

@@ -1,5 +1,7 @@
 mod assets;
 pub mod automation;
+mod cell_icons;
+pub use cell_icons::{CellIconMode, cell_icon, cell_icon_mode, set_cell_icon_mode};
 mod foundation;
 mod screens;
 pub(crate) use foundation::input;

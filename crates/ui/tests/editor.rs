@@ -305,7 +305,7 @@ fn wrapped_source_mouse_caret_and_selection_share_byte_mapping() {
             terminal.backend().buffer()[(layout.canvas.x, layout.canvas.y + row as u16)].bg,
             TundraTheme::default_dark().accent_color
         );
-        assert!(terminal_output(&terminal).contains('↪'));
+        assert!(terminal_output(&terminal).contains(ui::cell_icon("editor", "wrap")));
     }
     assert_eq!(state.to_bytes(), source.as_bytes());
 }
@@ -375,6 +375,7 @@ fn shell_minimum_main_height_degrades_without_losing_the_editing_canvas() {
 
 #[test]
 fn source_mode_preserves_markdown_and_highlights_the_selection() {
+    ui::set_cell_icon_mode(ui::CellIconMode::Font);
     let mut model =
         EditorViewModel::source("README.md", "# raw **markdown**\n\n- [x] remains source");
     model.focus = EditorFocus::Canvas;
@@ -396,6 +397,7 @@ fn source_mode_preserves_markdown_and_highlights_the_selection() {
     assert_ne!(unselected.bg, TundraTheme::default_dark().accent_color);
 
     assert!(layout.modes.is_empty());
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
 }
 
 #[test]
@@ -473,9 +475,14 @@ fn settings_button_opens_a_modal_acceleration_panel_with_clickable_controls() {
     assert!(output.contains("Cursor acceleration"));
     assert!(output.contains("2000 ms"));
     assert!(output.contains("Horizontal maximum"));
+    let enabled = format!(
+        "{} {}",
+        ui::cell_icon("state", "checked"),
+        i18n::tr!("settings-on")
+    );
     for width in [52, 64, 100] {
         let output = terminal_output(&render(&model, width, 24));
-        for hint in ["[On]", "R Reset", "Ctrl+S Save", "Esc Cancel"] {
+        for hint in [enabled.as_str(), "R Reset", "Ctrl+S Save", "Esc Cancel"] {
             assert!(output.contains(hint), "{hint} must fit at width {width}");
         }
     }
@@ -494,7 +501,7 @@ fn quick_menu_orders_actions_renders_last_and_has_highest_hit_priority() {
     });
     let layout = editor_layout(Rect::new(0, 0, 40, 14), &model);
     let popup = layout.quick_menu_popup.expect("quick menu popup");
-    assert_eq!(popup, Rect::new(10, 6, 28, 3));
+    assert_eq!(popup, Rect::new(10, 6, 27, 3));
     assert_eq!(
         layout
             .quick_menu_items
@@ -530,7 +537,7 @@ fn quick_menu_orders_actions_renders_last_and_has_highest_hit_priority() {
 
     let terminal = render(&model, 40, 14);
     let heading_cell = &terminal.backend().buffer()[(heading.area.x + 1, heading.area.y)];
-    assert_eq!(heading_cell.symbol(), "H");
+    assert_eq!(heading_cell.symbol(), ui::cell_icon("editor", "h1"));
     assert_eq!(heading_cell.fg, TundraTheme::default_dark().accent_color);
     assert!(heading_cell.modifier.contains(Modifier::BOLD));
 
@@ -573,7 +580,7 @@ fn quick_menu_clamps_flips_wraps_and_hides_when_the_border_cannot_fit() {
     });
     let layout = editor_layout(Rect::new(5, 3, 12, 10), &model);
     let popup = layout.quick_menu_popup.expect("wrapped popup above anchor");
-    assert_eq!(popup, Rect::new(5, 6, 12, 6));
+    assert_eq!(popup, Rect::new(5, 7, 12, 5));
     assert_eq!(popup.bottom(), 12);
     assert_eq!(
         layout
@@ -581,7 +588,7 @@ fn quick_menu_clamps_flips_wraps_and_hides_when_the_border_cannot_fit() {
             .iter()
             .map(|item| item.area.y)
             .collect::<Vec<_>>(),
-        vec![7, 7, 8, 9, 9, 10]
+        vec![8, 8, 9, 10, 10, 10]
     );
     assert!(
         layout
@@ -598,7 +605,7 @@ fn quick_menu_clamps_flips_wraps_and_hides_when_the_border_cannot_fit() {
     assert_eq!(too_narrow.quick_menu_popup, None);
     assert!(too_narrow.quick_menu_items.is_empty());
 
-    let too_short = editor_layout(Rect::new(5, 3, 10, 5), &model);
+    let too_short = editor_layout(Rect::new(5, 3, 12, 4), &model);
     assert_eq!(too_short.quick_menu_popup, None);
     assert!(too_short.quick_menu_items.is_empty());
 }

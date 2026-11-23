@@ -79,10 +79,26 @@ impl NotificationViewModel {
 
 pub(crate) fn notification_title(model: &NotificationViewModel) -> String {
     if model.show_tone_prefix {
-        format!("{} {}", notification_tone_prefix(model.tone), model.title)
+        format!(
+            "{} {} {}",
+            notification_tone_marker(model.tone),
+            notification_tone_prefix(model.tone),
+            model.title
+        )
     } else {
         model.title.clone()
     }
+}
+
+pub(crate) fn notification_tone_marker(tone: NotificationTone) -> &'static str {
+    let role = match tone {
+        NotificationTone::Info => "info",
+        NotificationTone::Success => "success",
+        NotificationTone::Warning => "warning",
+        NotificationTone::Error => "error",
+        NotificationTone::Critical => "critical",
+    };
+    crate::cell_icon("state", role)
 }
 
 pub(crate) fn notification_tone_prefix(tone: NotificationTone) -> String {

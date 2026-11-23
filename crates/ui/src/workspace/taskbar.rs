@@ -18,13 +18,15 @@ pub struct WorkspaceTaskbarItem {
 }
 
 impl WorkspaceTaskbarItem {
-    fn status_marker(&self) -> &'static str {
+    fn status_marker(&self) -> Option<&'static str> {
         if self.unresponsive {
-            "! "
+            Some(crate::cell_icon("state", "warning"))
         } else if self.closing {
-            "… "
+            Some(crate::cell_icon("state", "static_wait"))
+        } else if self.minimized {
+            Some(crate::cell_icon("nav", "restore_window"))
         } else {
-            ""
+            None
         }
     }
 
@@ -76,7 +78,7 @@ impl WorkspaceTaskbar {
         let widths = items
             .iter()
             .map(|item| {
-                let marker_width = terminal_width(item.status_marker());
+                let marker_width = 2 * usize::from(item.status_marker().is_some());
                 (terminal_width(&one_line(&item.title)) + marker_width + 4).clamp(8, 28) as u16
             })
             .collect::<Vec<_>>();
@@ -190,14 +192,23 @@ pub fn render_workspace_taskbar(
             continue;
         };
         let mut button = if matches!(action, Close(_)) {
-            Button::new(action.id(), if area.width > 1 { " ×" } else { "×" })
+            let glyph = crate::cell_icon("nav", "close");
+            let label = if area.width > 1 {
+                format!(" {glyph}")
+            } else {
+                glyph.into()
+            };
+            Button::new(action.id(), label)
                 .with_capture_name(i18n::tr!(
                     "ui-workspace-close-window",
                     window = one_line(&item.title)
                 ))
                 .with_emphasis(crate::components::ButtonEmphasis::Danger)
         } else {
-            let title = format!("{}{}", item.status_marker(), one_line(&item.title));
+            let mut title = one_line(&item.title);
+            if let Some(glyph) = item.status_marker() {
+                title = format!("{glyph} {title}");
+            }
             let label = if area.width <= 2 {
                 fit_cell(&title, usize::from(area.width))
             } else {
@@ -217,14 +228,14 @@ pub fn render_workspace_taskbar(
         for (action, label, name, x, enabled) in [
             (
                 ScrollLeft,
-                "‹",
+                crate::cell_icon("nav", "previous"),
                 i18n::tr!("ui-workspace-scroll-left"),
                 taskbar.area.x,
                 taskbar.scroll > 0,
             ),
             (
                 ScrollRight,
-                "›",
+                crate::cell_icon("nav", "next"),
                 i18n::tr!("ui-workspace-scroll-right"),
                 taskbar.area.right() - taskbar.arrow_width,
                 taskbar.scroll < taskbar.max_scroll,

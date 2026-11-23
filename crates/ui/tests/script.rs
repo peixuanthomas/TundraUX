@@ -277,25 +277,35 @@ fn rejected_pending_and_verified_breakpoints_have_distinct_markers_and_labels() 
     let area = Rect::new(0, 0, 140, 36);
     let layout = script_layout(area, &model);
     let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).unwrap();
-    terminal
-        .draw(|frame| {
-            render_script_contextual(frame, area, &model, &context);
-        })
-        .unwrap();
-    for (line, symbol, color) in [
-        (1, "!", context.theme.danger),
-        (2, "?", context.theme.warning),
-        (3, "B", context.theme.accent),
+    for (mode, symbols) in [
+        (ui::CellIconMode::Ascii, ["!", "?", "B"]),
+        (ui::CellIconMode::Font, ["\u{e160}", "\u{e15f}", "\u{e15d}"]),
     ] {
-        let (_, rect) = layout
-            .breakpoint_lines
-            .iter()
-            .find(|(candidate, _)| *candidate == line)
+        ui::set_cell_icon_mode(mode);
+        terminal
+            .draw(|frame| {
+                render_script_contextual(frame, area, &model, &context);
+            })
             .unwrap();
-        let cell = &terminal.backend().buffer()[(rect.x, rect.y)];
-        assert_eq!(cell.symbol(), symbol);
-        assert_eq!(cell.fg, color);
+        for ((line, color), symbol) in [
+            (1, context.theme.danger),
+            (2, context.theme.warning),
+            (3, context.theme.accent),
+        ]
+        .into_iter()
+        .zip(symbols)
+        {
+            let (_, rect) = layout
+                .breakpoint_lines
+                .iter()
+                .find(|(candidate, _)| *candidate == line)
+                .unwrap();
+            let cell = &terminal.backend().buffer()[(rect.x, rect.y)];
+            assert_eq!(cell.symbol(), symbol);
+            assert_eq!(cell.fg, color);
+        }
     }
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
     let rendered: String = terminal
         .backend()
         .buffer()

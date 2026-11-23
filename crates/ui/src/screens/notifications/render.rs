@@ -5,7 +5,8 @@ use ratatui::text::Line;
 use ratatui::widgets::{Clear, Paragraph};
 
 use super::layout::{
-    NotificationLayout, notification_action_text, notification_layout, wrap_notification_text,
+    NotificationLayout, notification_action_display_text, notification_action_text,
+    notification_layout, wrap_notification_text,
 };
 use super::model::{
     NotificationLevel, NotificationTone, NotificationViewModel, notification_title,
@@ -99,7 +100,7 @@ pub(crate) fn render_notification_overlay_context(
         let Some(action) = model.actions.get(action_layout.index) else {
             continue;
         };
-        let action_text = notification_action_text(action);
+        let action_text = notification_action_display_text(action);
         let label = wrap_notification_text(&action_text, action_layout.area.width).join("\n");
         let theme = if action_layout.area == layout.surface.close {
             &close_theme
@@ -111,6 +112,10 @@ pub(crate) fn render_notification_overlay_context(
             label,
         )
         .with_bracketed_label(false)
+        .with_capture_name(
+            wrap_notification_text(&notification_action_text(action), action_layout.area.width)
+                .join("\n"),
+        )
         .with_label_alignment(HorizontalAlignment::Center)
         .with_background(theme.background)
         .with_focus_fill(Some(context.theme.accent_soft));

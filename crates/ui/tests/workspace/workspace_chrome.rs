@@ -17,10 +17,23 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
     let available = Rect::new(0, 1, 108, 18);
     let terminal = Rect::new(0, 0, 108, 20);
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for (language, names, restore) in [
-        ("en-US", ["Minimize", "Split", "Close window"], "Restore"),
-        ("zh-CN", ["最小化", "分屏", "关闭窗口"], "还原"),
+    for (language, mode, names, restore, glyphs) in [
+        (
+            "en-US",
+            ui::CellIconMode::Ascii,
+            ["Minimize", "Split", "Close window"],
+            "Restore",
+            ["-", "|", "x"],
+        ),
+        (
+            "zh-CN",
+            ui::CellIconMode::Font,
+            ["最小化", "分屏", "关闭窗口"],
+            "还原",
+            ["\u{e134}", "\u{e135}", "\u{e139}"],
+        ),
     ] {
+        ui::set_cell_icon_mode(mode);
         let language = i18n::LanguageSnapshot::load(&assets, language, 1)
             .unwrap()
             .snapshot;
@@ -127,7 +140,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             })
             .unwrap();
         let snapshot = snapshot.unwrap();
-        for ((action, name), glyph) in actions.into_iter().zip(names).zip(["−", "◫", "×"]) {
+        for ((action, name), glyph) in actions.into_iter().zip(names).zip(glyphs) {
             let node = snapshot
                 .nodes
                 .iter()
@@ -138,6 +151,7 @@ fn complete_window_edges_and_actions_share_geometry_in_both_languages() {
             assert!(node.actionable);
         }
     }
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
 }
 
 fn windows(count: u64) -> Vec<WorkspaceTaskbarItem> {
@@ -227,7 +241,7 @@ fn taskbar_keeps_minimized_windows_reachable_and_leaves_neighboring_status_cells
         .unwrap();
     assert_eq!(
         terminal.backend().buffer()[(close_area.right() - 1, close_area.y)].symbol(),
-        "×"
+        ui::cell_icon("nav", "close")
     );
     let minimized = snapshot
         .nodes

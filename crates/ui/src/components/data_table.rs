@@ -32,6 +32,8 @@ pub struct DataTable {
     pub interactive: bool,
     pub capture_focused_row: Option<usize>,
     pub row_ids: Vec<String>,
+    /// Accessible names for rows whose first cell includes a decorative icon.
+    pub row_names: Vec<String>,
 }
 
 impl DataTable {
@@ -60,6 +62,7 @@ impl DataTable {
             interactive: true,
             capture_focused_row: None,
             row_ids: Vec::new(),
+            row_names: Vec::new(),
         }
     }
 
@@ -164,6 +167,7 @@ impl DataTable {
                 "headers",
                 "columnheader",
                 &self.headers,
+                None,
                 Rect::new(inner.x, inner.y, inner.width, 1),
             );
             Paragraph::new(join_row(
@@ -228,7 +232,7 @@ impl DataTable {
             crate::automation::control(
                 "select",
                 "listitem",
-                "",
+                self.row_names.get(index).map_or("", String::as_str),
                 row_area,
                 state,
                 if self.interactive {
@@ -237,7 +241,13 @@ impl DataTable {
                     &[]
                 },
             );
-            self.capture_cells("cell", "cell", row, row_area);
+            self.capture_cells(
+                "cell",
+                "cell",
+                row,
+                self.row_names.get(index).map(String::as_str),
+                row_area,
+            );
             let mut style = row_style(state, &theme, tokens.surface);
             let tone = self.row_tones.get(index).copied().unwrap_or_default();
             if !state.disabled && tone != ComponentTone::Default {
@@ -262,7 +272,14 @@ impl DataTable {
         self.render(area, frame.buffer_mut(), context);
     }
 
-    fn capture_cells(&self, prefix: &str, role: &str, cells: &[String], area: Rect) {
+    fn capture_cells(
+        &self,
+        prefix: &str,
+        role: &str,
+        cells: &[String],
+        first_label: Option<&str>,
+        area: Rect,
+    ) {
         if !crate::automation::enabled() {
             return;
         }
@@ -286,7 +303,11 @@ impl DataTable {
             crate::automation::control(
                 &format!("{prefix}.{index}"),
                 role,
-                cell,
+                if index == 0 {
+                    first_label.unwrap_or(cell)
+                } else {
+                    cell
+                },
                 Rect::new(x, area.y, content_width, 1),
                 Default::default(),
                 &[],

@@ -185,7 +185,12 @@ fn starting_is_localized_and_pending_has_only_the_canvas() {
                 .unwrap();
             assert_eq!(starting.name, i18n::tr!("ui-workspace-starting"));
             assert!(!starting.actionable && starting.actions.is_empty());
-            assert!(snapshot.lines.join("\n").contains('⋯'));
+            assert!(
+                snapshot
+                    .lines
+                    .iter()
+                    .any(|line| line.trim_start().starts_with(". "))
+            );
 
             terminal
                 .draw(|frame| {

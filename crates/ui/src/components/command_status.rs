@@ -13,16 +13,16 @@ pub enum CommandStatus {
 
 impl CommandStatus {
     pub fn span(self, theme: &TundraTheme) -> Span<'static> {
-        let (symbol, style) = match self {
-            Self::Pending => ("○", theme.muted_style()),
+        let (role, style) = match self {
+            Self::Pending => ("pending", theme.muted_style()),
             Self::Succeeded => (
-                "●",
+                "success",
                 Style::default()
                     .fg(theme.tokens().success)
                     .bg(theme.background),
             ),
-            Self::Failed => ("×", theme.error_style()),
+            Self::Failed => ("error", theme.error_style()),
         };
-        Span::styled(symbol, style)
+        Span::styled(crate::cell_icon("state", role), style)
     }
 }

@@ -56,12 +56,23 @@ fn process_headers_show_sort_direction_and_all_headers_are_clickable() {
             ))
         );
         let text = render(width, height, &m);
-        assert!(text.contains("CPU% ↓"), "{text}");
+        assert!(
+            text.contains(&format!("CPU% {}", ui::cell_icon("fileops", "sort_desc"))),
+            "{text}"
+        );
     }
     m.process_sort.toggle(SystemStatusProcessSortColumn::Memory);
-    assert!(render(100, 24, &m).contains(&format!("{} ↓", i18n::tr!("ui-system-status-memory"))));
+    assert!(render(100, 24, &m).contains(&format!(
+        "{} {}",
+        i18n::tr!("ui-system-status-memory"),
+        ui::cell_icon("fileops", "sort_desc")
+    )));
     m.process_sort.toggle(SystemStatusProcessSortColumn::Memory);
-    assert!(render(100, 24, &m).contains(&format!("{} ↑", i18n::tr!("ui-system-status-memory"))));
+    assert!(render(100, 24, &m).contains(&format!(
+        "{} {}",
+        i18n::tr!("ui-system-status-memory"),
+        ui::cell_icon("fileops", "sort_asc")
+    )));
     m.route = SystemStatusRoute::Detail(SystemStatusDetail::Storage);
     assert!(
         system_status_layout(full_main(100, 24), &m)

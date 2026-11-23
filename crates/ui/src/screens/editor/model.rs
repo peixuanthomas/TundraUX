@@ -154,6 +154,15 @@ pub fn editor_search_label(control: EditorSearchControl) -> String {
     i18n::tr!(key)
 }
 
+pub fn editor_search_input_prefix(control: EditorSearchControl) -> String {
+    let label = editor_search_label(control);
+    if control == EditorSearchControl::Query {
+        format!(" {} {label}: ", crate::cell_icon("fileops", "search"))
+    } else {
+        format!(" {label}: ")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorConfigAction {
     Menu,

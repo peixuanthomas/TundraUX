@@ -82,6 +82,7 @@ pub fn render_table_headers(
                 format!("{id}.sort.{column}"),
                 table_header_text(&label, area.width),
             )
+            .with_capture_name(label)
             .with_background(context.theme.raised)
             .with_label_alignment(HorizontalAlignment::Left)
             .render_borderless_frame(frame, *area, &theme);
@@ -93,20 +94,28 @@ pub fn render_table_headers(
 pub(crate) fn table_header_text(label: &str, width: u16) -> String {
     use crate::components::{terminal_width, truncate_to_terminal_width};
     let width = usize::from(width);
-    let arrow = [" ▲", " ▼", " ↑", " ↓"]
-        .into_iter()
-        .find(|arrow| label.ends_with(arrow));
-    let text = if let Some(arrow) = arrow.filter(|_| width >= 2) {
-        format!(
-            "{}{}",
-            truncate_to_terminal_width(label.strip_suffix(arrow).unwrap(), width - 2),
-            arrow
-        )
+    let text = if let Some((label, glyph)) = table_sort_marker(label).filter(|_| width >= 2) {
+        format!("{} {glyph}", truncate_to_terminal_width(label, width - 2),)
     } else {
         truncate_to_terminal_width(label, width)
     };
     let padding = width.saturating_sub(terminal_width(&text));
     format!("{text}{}", " ".repeat(padding))
+}
+
+pub(crate) fn table_sort_marker(label: &str) -> Option<(&str, &'static str)> {
+    [
+        (" ▲", "sort_asc"),
+        (" ▼", "sort_desc"),
+        (" ↑", "sort_asc"),
+        (" ↓", "sort_desc"),
+    ]
+    .into_iter()
+    .find_map(|(suffix, role)| {
+        label
+            .strip_suffix(suffix)
+            .map(|text| (text, crate::cell_icon("fileops", role)))
+    })
 }
 
 /// A column selection shared by the built-in list pages.

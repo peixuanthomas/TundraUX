@@ -201,6 +201,7 @@ pub(super) fn render_processes(
             format!("system-status.process.sort.{index}"),
             crate::table_sort::table_header_text(&headers[index], rect.width),
         )
+        .with_capture_name(&headers[index])
         .with_bracketed_label(false)
         .with_background(context.theme.raised)
         .render_borderless_frame(frame, *rect, &context.compatibility_theme());

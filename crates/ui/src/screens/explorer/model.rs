@@ -136,24 +136,24 @@ impl ExplorerToolbarAction {
 
     pub const fn icon_key(self) -> &'static str {
         match self {
-            Self::SelectionMode => "options",
-            Self::Open => "forward",
-            Self::Menu => "options",
-            Self::Back => "back",
-            Self::Forward => "forward",
-            Self::Up => "up",
-            Self::Refresh => "refresh",
-            Self::New => "new",
-            Self::Cut => "cut",
-            Self::Copy => "copy",
-            Self::Paste => "paste",
-            Self::Rename => "rename",
-            Self::Undo => "back",
-            Self::Delete => "delete",
-            Self::Restore => "refresh",
-            Self::DumpTrash => "delete",
-            Self::Sort => "sort_asc",
-            Self::Options => "options",
+            Self::SelectionMode => "SelectionMode",
+            Self::Open => "Open",
+            Self::Menu => "Menu",
+            Self::Back => "Back",
+            Self::Forward => "Forward",
+            Self::Up => "Up",
+            Self::Refresh => "Refresh",
+            Self::New => "New",
+            Self::Cut => "Cut",
+            Self::Copy => "Copy",
+            Self::Paste => "Paste",
+            Self::Rename => "Rename",
+            Self::Undo => "Undo",
+            Self::Delete => "Delete",
+            Self::Restore => "Restore",
+            Self::DumpTrash => "DumpTrash",
+            Self::Sort => "Sort",
+            Self::Options => "Options",
         }
     }
 
@@ -439,6 +439,24 @@ pub struct ExplorerContextMenuItemViewModel {
     pub dangerous: bool,
 }
 
+impl ExplorerContextMenuItemViewModel {
+    pub(super) fn display_label(&self) -> String {
+        let role = match self.id.as_str() {
+            "open" => "open_item",
+            "new-folder" | "new-text" => "new",
+            "restore" => "restore_trash",
+            "dump-trash" => "empty_trash",
+            "select-all" => "select_all",
+            "invert-selection" => "invert",
+            "clear-selection" => "clear_selection",
+            role @ ("cut" | "copy" | "paste" | "rename" | "delete" | "refresh" | "undo"
+            | "sort" | "options" | "properties" | "filter") => role,
+            _ => return self.label.clone(),
+        };
+        format!("{} {}", crate::cell_icon("fileops", role), self.label)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerContextMenuViewModel {
     pub x: u16,
@@ -655,30 +673,6 @@ impl ExplorerViewModel {
         entries: Vec<ExplorerEntryViewModel>,
         selected_index: Option<usize>,
     ) -> Self {
-        Self::try_new(current_path, entries, selected_index)
-            .expect("default ASCII Explorer assets must load")
-    }
-
-    pub fn try_new(
-        current_path: impl Into<String>,
-        entries: Vec<ExplorerEntryViewModel>,
-        selected_index: Option<usize>,
-    ) -> Result<Self, AssetError> {
-        let ascii_assets = RuntimeAsciiAssets::load_default()?;
-        Ok(Self::with_ascii_assets(
-            current_path,
-            entries,
-            selected_index,
-            ascii_assets,
-        ))
-    }
-
-    pub fn with_ascii_assets(
-        current_path: impl Into<String>,
-        entries: Vec<ExplorerEntryViewModel>,
-        selected_index: Option<usize>,
-        ascii_assets: RuntimeAsciiAssets,
-    ) -> Self {
         let selected_count = entries.iter().filter(|entry| entry.selected).count();
         let current_path = current_path.into();
         Self {
@@ -697,7 +691,7 @@ impl ExplorerViewModel {
             show_hidden: false,
             message: None,
             error: None,
-            ascii_assets: Some(ascii_assets),
+            ascii_assets: None,
             entry_presentations: Vec::new(),
             toolbar: ExplorerToolbarViewModel::standard(false, false),
             quick_locations: Vec::new(),
@@ -717,6 +711,31 @@ impl ExplorerViewModel {
             operation: None,
             overlay: None,
             overlay_selection: 0,
+        }
+    }
+
+    pub fn try_new(
+        current_path: impl Into<String>,
+        entries: Vec<ExplorerEntryViewModel>,
+        selected_index: Option<usize>,
+    ) -> Result<Self, AssetError> {
+        Ok(Self::with_ascii_assets(
+            current_path,
+            entries,
+            selected_index,
+            RuntimeAsciiAssets::load_default()?,
+        ))
+    }
+
+    pub fn with_ascii_assets(
+        current_path: impl Into<String>,
+        entries: Vec<ExplorerEntryViewModel>,
+        selected_index: Option<usize>,
+        ascii_assets: RuntimeAsciiAssets,
+    ) -> Self {
+        Self {
+            ascii_assets: Some(ascii_assets),
+            ..Self::new(current_path, entries, selected_index)
         }
     }
 

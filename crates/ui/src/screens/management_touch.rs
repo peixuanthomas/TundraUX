@@ -296,9 +296,11 @@ fn choice_form(main: Rect, form: &ManagementForm, choice: &ManagementChoices) ->
 }
 fn field_lines(field: &ManagementFormField, width: u16) -> Vec<String> {
     if field.control == ManagementFormControl::Toggle {
+        let checked = field.value == "true";
         let value = format!(
-            "[{}]",
-            i18n::tr!(if field.value == "true" {
+            "{} {}",
+            crate::cell_icon("state", if checked { "checked" } else { "unchecked" }),
+            i18n::tr!(if checked {
                 "settings-on"
             } else {
                 "settings-off"
@@ -331,11 +333,15 @@ fn field_lines(field: &ManagementFormField, width: u16) -> Vec<String> {
         return lines;
     }
     let value = if field.control == ManagementFormControl::Checkbox {
-        if field.value == "true" {
-            "[x]".into()
-        } else {
-            "[ ]".into()
-        }
+        crate::cell_icon(
+            "state",
+            if field.value == "true" {
+                "checked"
+            } else {
+                "unchecked"
+            },
+        )
+        .into()
     } else if field.secret {
         "•".repeat(field.value.chars().count())
     } else {
@@ -665,7 +671,7 @@ fn management_content_layout(
     );
     let header_y = heading.bottom();
     let min_filter_width = management_search_prefix(0).width() as u16 + 3;
-    let refresh_width = management_controls()[0].1.width() as u16 + 2;
+    let refresh_width = management_controls()[0].1.width() as u16 + 4;
     let show_refresh = main.width >= refresh_width + 1 + min_filter_width;
     let refresh = Rect::new(
         main.x,
@@ -700,7 +706,7 @@ fn management_content_layout(
         i18n::tr!("regression-management-search-enter")
     }
     .width() as u16
-        + 2;
+        + 4;
     let show_search = clear.x.saturating_sub(filter_x) >= search_width + min_filter_width;
     let search = Rect::new(
         clear
@@ -917,7 +923,16 @@ fn management_content_layout(
                 .rows
                 .iter()
                 .filter_map(|row| row.get(index))
-                .map(|value| value.width())
+                .map(|value| {
+                    if model.selection_mode
+                        && index == 0
+                        && management_selection_marker(value).is_some()
+                    {
+                        value.width().saturating_sub(2)
+                    } else {
+                        value.width()
+                    }
+                })
                 .max()
                 .unwrap_or(0)
                 .max(label.width() + 2)
@@ -1087,7 +1102,13 @@ fn management_content_layout(
     let close_label = if form_model.is_some_and(|form| form.choice.is_some()) {
         Some(i18n::tr!("management-form-close"))
     } else {
-        cancel_index.map(|index| buttons[index].label())
+        cancel_index.map(|index| {
+            format!(
+                "{} {}",
+                crate::cell_icon("nav", "close"),
+                buttons[index].label()
+            )
+        })
     };
     let footer_indices = (0..buttons.len())
         .filter(|index| Some(*index) != cancel_index)
@@ -1626,7 +1647,21 @@ pub fn render_management_content(
             ManagementControl::ApplySearch => management_search_button_label(model),
             _ => management_controls()[0].1.clone(),
         };
-        let mut button = Button::new(management_control_id(model, *control), label);
+        let button = Button::new(management_control_id(model, *control), &label);
+        let mut button = match control {
+            ManagementControl::Refresh => {
+                button.with_icon_prefix(crate::cell_icon("fileops", "refresh"))
+            }
+            ManagementControl::ApplySearch => {
+                button.with_icon_prefix(crate::cell_icon("fileops", "filter"))
+            }
+            ManagementControl::ClearSearch => Button::new(
+                management_control_id(model, *control),
+                format!("{} [Ctrl+U]", crate::cell_icon("nav", "close")),
+            )
+            .with_capture_name(&label),
+            _ => button,
+        };
         button.set_disabled(
             *control == ManagementControl::Details
                 && model.rows.is_empty()
@@ -1685,22 +1720,28 @@ pub fn render_management_content(
         Surface::new()
             .raised(true)
             .render_frame(frame, layout.detail_actions_panel, context);
-        let table_line = |cells: &[String]| {
+        let table_line = |cells: &[String], selection: bool| {
             cells
                 .iter()
                 .enumerate()
                 .map(|(index, value)| {
+                    let value = if selection && index == 0 {
+                        management_selection_marker(value)
+                            .map_or_else(|| value.clone(), |(icon, text)| format!("{icon} {text}"))
+                    } else {
+                        value.clone()
+                    };
                     let width = layout.column_widths.get(index).copied().unwrap_or(6);
                     let value = if value.width() > width.saturating_sub(2) {
                         format!(
                             "{}…",
                             crate::components::truncate_to_terminal_width(
-                                value,
+                                &value,
                                 width.saturating_sub(3)
                             )
                         )
                     } else {
-                        value.clone()
+                        value
                     };
                     format!(
                         "{}{}",
@@ -1711,7 +1752,7 @@ pub fn render_management_content(
                 .collect::<String>()
         };
         let mut lines = vec![Line::styled(
-            table_line(&model.columns),
+            table_line(&model.columns, false),
             theme.title_style().bg(context.theme.surface),
         )];
         if crate::automation::enabled() {
@@ -1795,7 +1836,7 @@ pub fn render_management_content(
                 row_area,
                 Style::default().bg(style.bg.unwrap_or(context.theme.surface)),
             );
-            lines.push(Line::styled(table_line(row), style));
+            lines.push(Line::styled(table_line(row, model.selection_mode), style));
         }
         let area = Rect::new(
             layout.list_rows.x,
@@ -1853,6 +1894,7 @@ pub fn render_management_content(
                 management_header_id(model, *index),
                 crate::table_sort::table_header_text(&label, area.width),
             )
+            .with_capture_name(label)
             .with_background(context.theme.surface)
             .with_bracketed_label(false)
             .render_borderless_frame(frame, *area, &theme);
@@ -1949,13 +1991,29 @@ pub fn render_management_content(
             if let Some((label, enabled)) = model.actions.get(index) {
                 let canvas = layout.action_canvases.get(offset).copied().unwrap_or(*area);
                 let hidden = usize::from(area.x.saturating_sub(canvas.x));
-                let label = management_wrapped_lines(label, canvas.width)
+                let name = management_wrapped_lines(label, canvas.width)
                     .into_iter()
                     .skip(usize::from(area.y.saturating_sub(canvas.y)))
                     .map(|line| management_clipped_line(&line, hidden, area.width))
                     .collect::<Vec<_>>()
                     .join("\n");
+                let label = model
+                    .workspace
+                    .as_ref()
+                    .filter(|workspace| workspace.advanced_toggle == Some(index))
+                    .map_or_else(
+                        || name.clone(),
+                        |workspace| {
+                            let (marker, role) = if workspace.advanced_open {
+                                ('▾', "expanded")
+                            } else {
+                                ('▸', "collapsed")
+                            };
+                            name.replacen(marker, crate::cell_icon("nav", role), 1)
+                        },
+                    );
                 let mut button = Button::new(management_action_id(model, index), label)
+                    .with_capture_name(name)
                     .with_bracketed_label(false);
                 if model.action_tones.get(index) == Some(&crate::components::ComponentTone::Danger)
                 {
@@ -2044,7 +2102,12 @@ pub fn render_management_overlay(
                 &choice.search,
             )
             .with_placeholder(i18n::tr!("ui-workspace-search"))
-            .render_borderless_frame(frame, search, &theme);
+            .render_borderless_frame_with_prefix(
+                frame,
+                search,
+                &theme,
+                &format!("{} ", crate::cell_icon("fileops", "search")),
+            );
         if choice.values.is_empty() {
             frame.render_widget(
                 ratatui::widgets::Paragraph::new(i18n::tr!("management-empty")),
@@ -2064,7 +2127,11 @@ pub fn render_management_overlay(
             let selected = *index == choice.selected;
             let text = management_clipped_line(value, choice.columns, width);
             let text = if selected && inset > 0 {
-                format!("▌{}{text}", " ".repeat(usize::from(inset - 1)))
+                format!(
+                    "{}{}{text}",
+                    crate::cell_icon("nav", "current"),
+                    " ".repeat(usize::from(inset - 1))
+                )
             } else {
                 format!("{left}{text}")
             };
@@ -2182,14 +2249,16 @@ pub fn render_management_overlay(
                 input.set_focused(form.selected == *index && !field.disabled);
                 input.render_borderless_frame(frame, input_area, &theme);
                 if matches!(field.control, ManagementFormControl::Number { .. }) {
-                    for ((suffix, label), area) in [("decrease", "−"), ("increase", "+")]
-                        .into_iter()
-                        .zip(management_number_buttons(&layout, *index, field))
+                    for ((suffix, role, label), area) in
+                        [("decrease", "minus", "−"), ("increase", "increase", "+")]
+                            .into_iter()
+                            .zip(management_number_buttons(&layout, *index, field))
                     {
                         let mut button = Button::new(
                             format!("{}.{}", management_field_id(form, *index), suffix),
-                            label,
+                            crate::cell_icon("state", role),
                         )
+                        .with_capture_name(label)
                         .with_background(context.theme.surface)
                         .with_bracketed_label(area.width >= 3);
                         button.set_disabled(field.disabled);
@@ -2212,15 +2281,19 @@ pub fn render_management_overlay(
                 *area,
             );
             for (cell, area) in management_permission_cells(field, *area, skip) {
-                let value = match field.value.as_bytes().get(cell) {
-                    Some(b'1') => "[x]",
-                    Some(b'0') => "[ ]",
-                    _ => "[-]",
+                let (role, name) = match field.value.as_bytes().get(cell) {
+                    Some(b'1') => ("checked", "[x]"),
+                    Some(b'0') => ("unchecked", "[ ]"),
+                    _ => ("mixed", "[-]"),
                 };
-                let mut button = Button::new(management_permission_id(form, *index, cell), value)
-                    .with_background(context.theme.surface)
-                    .with_capture_role("checkbox")
-                    .with_capture_selected(field.value.as_bytes().get(cell) == Some(&b'1'));
+                let mut button = Button::new(
+                    management_permission_id(form, *index, cell),
+                    crate::cell_icon("state", role),
+                )
+                .with_background(context.theme.surface)
+                .with_capture_role("checkbox")
+                .with_capture_name(name)
+                .with_capture_selected(field.value.as_bytes().get(cell) == Some(&b'1'));
                 button.bracketed_label = false;
                 button.state.selected =
                     form.selected == *index && field.selected_cell == Some(cell);
@@ -2276,6 +2349,9 @@ pub fn render_management_overlay(
         })
         .with_label_alignment(ratatui::layout::HorizontalAlignment::Center)
         .with_bracketed_label(false);
+        if is_close {
+            button = button.with_icon_prefix(crate::cell_icon("nav", "close"));
+        }
         if action.action == FormAction::Submit {
             button = button.with_emphasis(ButtonEmphasis::Primary);
         }
@@ -2356,6 +2432,16 @@ pub fn management_search_prefix(width: u16) -> String {
     if usize::from(width) >= label.width() + 5 {
         label
     } else {
-        "⌕ ".into()
+        format!("{} ", crate::cell_icon("fileops", "search"))
+    }
+}
+
+fn management_selection_marker(value: &str) -> Option<(&'static str, &str)> {
+    if let Some(text) = value.strip_prefix("[x] ") {
+        Some((crate::cell_icon("state", "checked"), text))
+    } else {
+        value
+            .strip_prefix("[ ] ")
+            .map(|text| (crate::cell_icon("state", "unchecked"), text))
     }
 }

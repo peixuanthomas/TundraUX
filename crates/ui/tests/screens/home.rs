@@ -423,10 +423,13 @@ fn exit_menu_actions_stay_centered_and_separate_after_resize() {
                     layout.dialog,
                 );
                 let action = &model.actions[button.index];
-                let label = match &action.shortcut {
+                let mut label = match &action.shortcut {
                     Some(key) => format!("{} {key}", action.label),
                     None => action.label.clone(),
                 };
+                if action.id == "tasks" {
+                    label = format!("{} {label}", ui::cell_icon("nav", "tasks"));
+                }
                 let lines = ui::management_wrapped_lines(&label, button_area.width);
                 assert_eq!(lines.len(), usize::from(button_area.height));
                 for (row, text) in (button_area.y..button_area.bottom()).zip(lines) {

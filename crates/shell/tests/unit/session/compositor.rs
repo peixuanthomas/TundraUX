@@ -1440,7 +1440,10 @@ fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
         assert_eq!(area.x, layout.title.right() + 1);
         assert_eq!(area.right(), layout.bounds.right());
         assert!(area.width > default.status_message.unwrap().width);
-        assert_eq!(text(terminal.backend().buffer(), layout.title), "TundraUX");
+        assert_eq!(
+            text(terminal.backend().buffer(), layout.title),
+            format!("TundraUX {}", ui::cell_icon("nav", "power"))
+        );
         let remaining = area.width - 4;
         let offset = match alignment {
             storage::StatusTextAlignment::Left => 0,

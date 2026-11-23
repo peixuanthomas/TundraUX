@@ -296,7 +296,9 @@ impl SettingsUpdateGraphLayout {
                 1,
             );
             let mut spans = vec![Span::styled(
-                row.graph.replace('*', "●").replace('|', "│"),
+                row.graph
+                    .replace('*', crate::cell_icon("clock", "commit"))
+                    .replace('|', "│"),
                 graph_style,
             )];
             if let Some(commit) = &row.commit {

@@ -86,13 +86,16 @@ pub fn render_script_contextual_with_terminal_images(
             ScriptPane::Breakpoints => model.selected_breakpoint == *index,
             _ => false,
         };
+        let mut decoration = None;
         let text = match pane {
             ScriptPane::Variables => variables.get(*index).map(|row| {
                 let symbol = if row.variable.children.is_empty() {
                     " "
                 } else if model.expanded_variables.contains(&row.key) {
+                    decoration = Some((row.depth * 2, 1, crate::cell_icon("nav", "expanded")));
                     "v"
                 } else {
+                    decoration = Some((row.depth * 2, 1, crate::cell_icon("nav", "collapsed")));
                     ">"
                 };
                 format!(
@@ -116,6 +119,8 @@ pub fn render_script_contextual_with_terminal_images(
                 )
             }),
             ScriptPane::Breakpoints => model.state.breakpoints.get(*index).map(|row| {
+                let role = if row.enabled { "checked" } else { "unchecked" };
+                decoration = Some((0, 3, crate::cell_icon("state", role)));
                 format!(
                     "{} {} {} {}",
                     if row.enabled { "[x]" } else { "[ ]" },
@@ -143,7 +148,15 @@ pub fn render_script_contextual_with_terminal_images(
             if *pane == ScriptPane::Expression {
                 frame.render_widget(Paragraph::new(text), *rect);
             } else {
-                let mut button = Button::new(format!("script.row.{pane:?}.{index}"), text)
+                let label = if let Some((start, length, icon)) = decoration {
+                    let mut label = text.clone();
+                    label.replace_range(start..start + length, icon);
+                    label
+                } else {
+                    text.clone()
+                };
+                let mut button = Button::new(format!("script.row.{pane:?}.{index}"), label)
+                    .with_capture_name(text)
                     .with_bracketed_label(false)
                     .with_centered_label(false);
                 button.state.focused = selected && model.focus == *pane;

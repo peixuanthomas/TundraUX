@@ -169,7 +169,7 @@ fn navigation_keeps_current_fill_when_keyboard_focus_hides() {
         let mut buffer = Buffer::empty(area);
         rail.render(area, &mut buffer, &context);
         assert_eq!(buffer[(0, 0)].bg, context.theme.selected_row_background());
-        assert_eq!(buffer[(0, 0)].symbol(), "▌");
+        assert_eq!(buffer[(0, 0)].symbol(), ui::cell_icon("nav", "current"));
         assert_eq!(buffer[(17, 0)].bg, buffer[(0, 0)].bg);
         assert!(!buffer[(0, 0)].modifier.contains(Modifier::UNDERLINED));
         assert_eq!(
@@ -212,7 +212,7 @@ fn sidebar_rows_are_compact_full_width_targets_with_separate_focus() {
     );
     assert_eq!(
         buffer[(layout.navigation[1].x, layout.navigation[1].y)].symbol(),
-        "▌"
+        ui::cell_icon("nav", "current")
     );
     let focused = layout.navigation[1];
     assert!(
@@ -321,7 +321,7 @@ fn busy_indicator_uses_one_cell_eighty_millisecond_frames_and_static_reduced_mot
         assert_eq!(
             BusyIndicator::from_motion(MotionFrame::reduced(Duration::from_millis(elapsed)))
                 .symbol(),
-            "⋯"
+            "."
         );
     }
     let area = Rect::new(0, 0, 4, 2);
@@ -331,7 +331,7 @@ fn busy_indicator_uses_one_cell_eighty_millisecond_frames_and_static_reduced_mot
         &mut buffer,
         &RenderContext::default(),
     );
-    assert_eq!(text(&buffer, area), "⠙eep\nnext");
+    assert_eq!(text(&buffer, area), "/eep\nnext");
 }
 
 #[test]

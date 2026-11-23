@@ -216,7 +216,7 @@ fn ansi_components_keep_titles_neutral_and_show_focus_for_every_user_accent() {
         list.render_with_context(area, &mut buffer, &context);
         assert_eq!(buffer[(1, 0)].symbol(), "S");
         assert_eq!(buffer[(1, 0)].fg, context.theme.text);
-        assert_eq!(buffer[(1, 1)].symbol(), "▌");
+        assert_eq!(buffer[(1, 1)].symbol(), ui::cell_icon("nav", "current"));
         assert_ne!(buffer[(1, 1)].fg, buffer[(1, 1)].bg);
         assert!(buffer[(3, 1)].modifier.contains(Modifier::UNDERLINED));
 

@@ -19,6 +19,7 @@ use super::{
 pub struct ListItem {
     pub id: ComponentId,
     pub label: String,
+    capture_name: Option<String>,
     pub description: Option<String>,
     pub disabled: bool,
     pub tone: ComponentTone,
@@ -29,11 +30,17 @@ impl ListItem {
         Self {
             id: id.into(),
             label: label.into(),
+            capture_name: None,
             description: None,
             disabled: false,
             tone: ComponentTone::Default,
         }
     }
+    pub fn with_capture_name(mut self, name: impl Into<String>) -> Self {
+        self.capture_name = Some(name.into());
+        self
+    }
+
     pub const fn tone(mut self, tone: ComponentTone) -> Self {
         self.tone = tone;
         self
@@ -100,7 +107,7 @@ impl List {
             selected,
             hovered: None,
             viewport_start: None,
-            highlight_symbol: Some("▌ ".to_string()),
+            highlight_symbol: Some(format!("{} ", crate::cell_icon("nav", "current"))),
             background: None,
         }
     }
@@ -463,7 +470,7 @@ impl List {
             crate::automation::control(
                 item.id.as_str(),
                 "listitem",
-                &item.label,
+                item.capture_name.as_deref().unwrap_or(&item.label),
                 Rect::new(inner.x, inner.y + (index - start) as u16, inner.width, 1),
                 state,
                 &["click", "double_click"],

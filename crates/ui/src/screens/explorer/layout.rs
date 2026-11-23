@@ -368,7 +368,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
     let mut address_x = path_bar.x;
     for action in ExplorerToolbarAction::PATH_ACTIONS {
         if let Some(button) = model.toolbar.buttons.iter().find(|b| b.action == action) {
-            let width = path_bar.right().saturating_sub(address_x).min(3);
+            let width = path_bar.right().saturating_sub(address_x).min(1);
             toolbar_buttons.push(ExplorerToolbarButtonLayout {
                 action,
                 area: Rect::new(address_x, path_bar.y, width, path_bar.height),
@@ -734,7 +734,7 @@ fn explorer_overlay_layout(area: Rect, model: &ExplorerViewModel) -> Option<Expl
                 .items
                 .iter()
                 .map(|item| {
-                    item.label.cell_width().saturating_add(
+                    item.display_label().cell_width().saturating_add(
                         item.shortcut
                             .as_ref()
                             .map_or(0, |value| value.cell_width().saturating_add(2)),

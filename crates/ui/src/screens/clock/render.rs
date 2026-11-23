@@ -112,12 +112,13 @@ fn render_clock_panel(
             model.countdown_sort,
         ),
     ] {
-        Button::new(
-            format!("clock.sort.{id}"),
-            sort.map_or_else(|| label.clone(), |s| s.label(0, &label)),
-        )
-        .with_bracketed_label(false)
-        .render_inline_frame(frame, area, theme);
+        let name = sort.map_or_else(|| label.clone(), |s| s.label(0, &label));
+        let display = crate::table_sort::table_sort_marker(&name)
+            .map_or_else(|| name.clone(), |(text, glyph)| format!("{text} {glyph}"));
+        Button::new(format!("clock.sort.{id}"), display)
+            .with_capture_name(name)
+            .with_bracketed_label(false)
+            .render_inline_frame(frame, area, theme);
     }
 
     render_clock_entry_list(frame, layout, model, ClockEntryKind::Alarm, context);
@@ -157,15 +158,8 @@ fn render_clock_entry_list(
         .iter()
         .filter_map(|row| {
             let entry = clock_entry(model, row.kind, row.id)?;
-            let marker = match row.kind {
-                ClockEntryKind::Alarm => "[A]",
-                ClockEntryKind::Countdown => "[T]",
-            };
-            let strong = if entry.strong { " !" } else { "" };
-            Some(ListItem::new(
-                format!("clock.entry.{}", row.id),
-                format!("{marker} {}{strong}", entry.label),
-            ))
+            let (label, name) = clock_entry_labels(row.kind, entry);
+            Some(ListItem::new(format!("clock.entry.{}", row.id), label).with_capture_name(name))
         })
         .collect::<Vec<_>>();
     let selected = rows
@@ -180,26 +174,35 @@ fn render_clock_entry_list(
         let Some(entry) = clock_entry(model, row.kind, row.id) else {
             continue;
         };
-        let marker = if row.kind == ClockEntryKind::Alarm {
-            "[A]"
-        } else {
-            "[T]"
-        };
-        let label = crate::screens::shell::fit_cell(
-            &format!(
-                "{marker} {}{}",
-                entry.label,
-                if entry.strong { " !" } else { "" }
-            ),
-            usize::from(row.area.width),
-        );
-        let mut button = Button::new(format!("clock.entry.{}", row.id), label);
+        let (label, name) = clock_entry_labels(row.kind, entry);
+        let width = usize::from(row.area.width);
+        let mut button = Button::new(
+            format!("clock.entry.{}", row.id),
+            crate::screens::shell::fit_cell(&label, width),
+        )
+        .with_capture_name(crate::screens::shell::fit_cell(&name, width));
         let selected = model.selected_entry_id == Some(row.id);
         button.set_focused(selected);
         crate::components::SidebarWorkspaceLayout::render_workspace_row(
             frame, &button, row.area, selected, 0, context,
         );
     }
+}
+
+fn clock_entry_labels(kind: ClockEntryKind, entry: &ClockEntryViewModel) -> (String, String) {
+    let (role, legacy_marker) = match kind {
+        ClockEntryKind::Alarm => ("alarm", "[A]"),
+        ClockEntryKind::Countdown => ("timer", "[T]"),
+    };
+    let marker = crate::cell_icon("clock", role);
+    let mut label = format!("{marker} {}", entry.label);
+    let mut name = format!("{legacy_marker} {}", entry.label);
+    if entry.strong {
+        label.push(' ');
+        label.push_str(crate::cell_icon("clock", "strong"));
+        name.push_str(" !");
+    }
+    (label, name)
 }
 
 fn render_clock_create_dialog(

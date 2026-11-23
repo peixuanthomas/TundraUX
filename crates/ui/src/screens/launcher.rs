@@ -60,6 +60,7 @@ impl LauncherItemCapabilities {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LauncherItemViewModel {
     pub custom_icon: Option<String>,
+    pub external_icon_role: &'static str,
     pub id: String,
     pub name: String,
     pub path: String,
@@ -85,6 +86,7 @@ impl LauncherItemViewModel {
             type_label: type_label.into(),
             status,
             custom_icon: None,
+            external_icon_role: "None",
             source: LauncherItemSource::External,
             capabilities: LauncherItemCapabilities::EXTERNAL,
             selected: false,
@@ -100,10 +102,22 @@ impl LauncherItemViewModel {
             type_label: descriptor.localized_type_label().render_current(),
             status: LauncherItemStatus::Ready,
             custom_icon: None,
+            external_icon_role: "None",
             source: LauncherItemSource::BuiltIn,
             capabilities: LauncherItemCapabilities::BUILT_IN,
             selected: false,
         }
+    }
+
+    fn detail_icon(&self) -> &'static str {
+        crate::cell_icon(
+            "apps",
+            if self.is_builtin() {
+                &self.id
+            } else {
+                self.external_icon_role
+            },
+        )
     }
 
     pub fn command_line() -> Self {
@@ -837,7 +851,7 @@ fn launcher_details_layout(
             LauncherItemLayout {
                 index,
                 area,
-                icon_area: Rect::new(area.x, area.y, 3.min(area.width), area.height),
+                icon_area: Rect::new(area.x, area.y, 1.min(area.width), area.height),
             }
         })
         .collect();
@@ -941,16 +955,7 @@ pub fn render_launcher_content(
     );
     match model.view_mode {
         LauncherViewMode::LargeIcons => render_launcher_grid(frame, &layout, model, context, icons),
-        LauncherViewMode::Details => {
-            render_launcher_details(frame, &layout, model, context);
-            if let Some(icons) = icons {
-                for item_layout in &layout.items {
-                    if let Some(item) = model.items.get(item_layout.index) {
-                        icons.render_icon(&item.id, frame, item_layout.icon_area);
-                    }
-                }
-            }
-        }
+        LauncherViewMode::Details => render_launcher_details(frame, &layout, model, context),
     }
     if let Some(indicator) = layout.drop_indicator {
         crate::components::render_grid_drop_indicator(frame, indicator, theme);
@@ -1134,7 +1139,7 @@ fn render_launcher_details(
     ];
     let rows = model.items.iter().map(|item| {
         vec![
-            fit_text(&format!("    {}", item.name), widths[0]),
+            fit_text(&format!("{} {}", item.detail_icon(), item.name), widths[0]),
             fit_text(&item.type_label, widths[1]),
             fit_text(&launcher_status_label(item.status), widths[2]),
             fit_text(&item.path, widths[3]),
@@ -1158,6 +1163,9 @@ fn render_launcher_details(
         .bordered(false);
     table.selected = model.selected_index;
     table.capture_focused_row = model.selected_index.filter(|_| !model.search.state.focused);
+    if crate::automation::enabled() {
+        table.row_names = model.items.iter().map(|item| item.name.clone()).collect();
+    }
     table.row_ids = model.items.iter().map(|item| item.id.clone()).collect();
     table.state.focused = false;
     let table_context = RenderContext {

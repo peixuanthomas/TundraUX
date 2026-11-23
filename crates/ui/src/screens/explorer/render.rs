@@ -15,7 +15,7 @@ use crate::components::{
     terminal_width,
 };
 use crate::screens::shell::fit_cell;
-use crate::{RuntimeAsciiAssets, TundraTheme};
+use crate::{TundraTheme, cell_icon};
 
 pub fn render_explorer_content(
     frame: &mut Frame<'_>,
@@ -37,24 +37,12 @@ pub fn render_explorer_content(
     surface.render_frame(frame, layout.panel, context);
 
     Surface::new().render_frame(frame, layout.table, context);
-    let Some(assets) = model.ascii_assets.as_ref() else {
-        frame.render_widget(
-            Paragraph::new(i18n::tr!(
-                "ui-explorer-explorer-ascii-assets-are-unavailable"
-            ))
-            .style(theme.error_style())
-            .alignment(HorizontalAlignment::Center),
-            layout.table,
-        );
-        return;
-    };
-
     Surface::new().render_frame(frame, layout.path_bar, context);
-    render_explorer_toolbar(frame, &layout, model, assets, theme);
+    render_explorer_toolbar(frame, &layout, model, theme);
     render_explorer_path_bar(frame, &layout, model, &DialogLayout::body_theme(context));
-    render_explorer_sidebar(frame, &layout, model, assets, context, theme);
-    render_explorer_table(frame, &layout, model, assets, context);
-    render_explorer_footer(frame, &layout, model, assets, context);
+    render_explorer_sidebar(frame, &layout, model, context, theme);
+    render_explorer_table(frame, &layout, model, context);
+    render_explorer_footer(frame, &layout, model, context);
     if let Some(picker) = &model.save_picker {
         Surface::new().raised(true).render_frame(
             frame,
@@ -92,7 +80,13 @@ pub fn render_explorer_content(
                 ExplorerSaveFocus::Cancel,
             ),
         ] {
-            let mut button = Button::new(id, label);
+            let role = if focus == ExplorerSaveFocus::Save {
+                "save"
+            } else {
+                "cancel"
+            };
+            let mut button = Button::new(id, format!("{} {label}", cell_icon("fileops", role)))
+                .with_capture_name(label);
             if focus == ExplorerSaveFocus::Save {
                 button = button.with_emphasis(ButtonEmphasis::Primary);
             }
@@ -106,7 +100,6 @@ fn render_explorer_toolbar(
     frame: &mut Frame<'_>,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
     theme: &TundraTheme,
 ) {
     for button_layout in &layout.toolbar_buttons {
@@ -119,9 +112,9 @@ fn render_explorer_toolbar(
             continue;
         };
         let text = if ExplorerToolbarAction::PATH_ACTIONS.contains(&button.action) {
-            explorer_icon_line(assets, &button.icon_key)
+            cell_icon("explorer_toolbar", &button.icon_key).to_owned()
         } else {
-            explorer_action_label(button, assets)
+            explorer_action_label(button)
         };
         let mut action = Button::new(format!("explorer.toolbar.{:?}", button.action), text)
             .with_capture_name(&button.label)
@@ -172,18 +165,16 @@ fn render_explorer_path_bar(
         let Some(crumb) = model.breadcrumbs.get(crumb_layout.index) else {
             continue;
         };
-        let suffix = if crumb_layout.index + 1 < model.breadcrumbs.len() {
-            " > "
+        let label = if crumb_layout.index + 1 < model.breadcrumbs.len() {
+            format!("{} {} ", crumb.label, cell_icon("nav", "right"))
         } else {
-            ""
+            crumb.label.clone()
         };
         let mut button = Button::new(
             format!("explorer.breadcrumb.{}", crumb.id),
-            fit_cell(
-                &format!("{}{suffix}", crumb.label),
-                usize::from(crumb_layout.area.width),
-            ),
+            fit_cell(&label, usize::from(crumb_layout.area.width)),
         )
+        .with_capture_name(&crumb.label)
         .with_current(crumb.drop_target);
         button.set_focused(model.focus == ExplorerFocus::Breadcrumb(crumb_layout.index));
         button.set_disabled(!crumb.enabled);
@@ -197,7 +188,6 @@ fn render_explorer_sidebar(
     frame: &mut Frame<'_>,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
     theme: &TundraTheme,
 ) {
@@ -226,9 +216,10 @@ fn render_explorer_sidebar(
         let Some(location) = model.quick_locations.get(location_layout.index) else {
             continue;
         };
-        let icon = explorer_icon_line(assets, &location.icon_key);
+        let icon = cell_icon("explorer_assets", &location.icon_key);
         let label = format!("{icon} {}", location.label);
-        let mut button = Button::new(format!("explorer.quick.{}", location_layout.index), label);
+        let mut button = Button::new(format!("explorer.quick.{}", location_layout.index), label)
+            .with_capture_name(&location.label);
         button.set_focused(
             model.focus == ExplorerFocus::Sidebar
                 && model.quick_location_focus == Some(location_layout.index),
@@ -244,18 +235,14 @@ fn render_explorer_sidebar(
     }
 }
 
-fn explorer_table_header(
-    layout: &ExplorerLayout,
-    model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
-) -> Vec<String> {
+fn explorer_table_header(layout: &ExplorerLayout, model: &ExplorerViewModel) -> Vec<String> {
     let last_column = layout.columns.last().map(|column| column.column);
     let cells = layout.columns.iter().map(|column| {
         let mut label = column.column.label().to_string();
         if model.sort_column == column.column {
             label.push(' ');
-            label.push_str(&explorer_icon_line(
-                assets,
+            label.push_str(cell_icon(
+                "fileops",
                 super::explorer_sort_direction_icon_key(model.sort_direction),
             ));
         }
@@ -272,14 +259,17 @@ fn explorer_table_row(
     row: &super::ExplorerRowLayout,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
 ) -> Option<(Vec<String>, ComponentTone)> {
     let entry = model.entries.get(row.index)?;
     let presentation = model.entry_presentation(row.index);
     let icon_key = presentation
         .map(|presentation| presentation.icon_key.as_str())
         .unwrap_or_else(|| legacy_explorer_icon_key(entry));
-    let icon = explorer_icon_line(assets, icon_key);
+    let icon = if presentation.is_some_and(|entry| entry.is_directory && entry.drop_target) {
+        cell_icon("kinds", "folder_open")
+    } else {
+        cell_icon("explorer_assets", icon_key)
+    };
     let selected = presentation
         .map(|presentation| presentation.selected)
         .unwrap_or(entry.selected);
@@ -289,13 +279,13 @@ fn explorer_table_row(
     let cut = presentation.is_some_and(|presentation| presentation.cut);
     let drop_target = presentation.is_some_and(|presentation| presentation.drop_target);
     let marker = if model.selection_mode {
-        if selected { "[x] " } else { "[ ] " }
+        cell_icon("state", if selected { "checked" } else { "unchecked" })
     } else if selected {
-        "* "
+        cell_icon("nav", "current")
     } else {
-        "  "
+        " "
     };
-    let name = format!("{marker}{icon} {}", entry.name);
+    let name = format!("{marker} {icon} {}", entry.name);
     let values = [
         (ExplorerSortColumn::Name, name),
         (ExplorerSortColumn::Type, entry.kind.clone()),
@@ -338,7 +328,6 @@ fn render_explorer_table(
     frame: &mut Frame<'_>,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
 ) {
     if let (Some(first), Some(last)) = (layout.columns.first(), layout.columns.last()) {
@@ -350,35 +339,32 @@ fn render_explorer_table(
         let row_data = layout
             .rows
             .iter()
-            .filter_map(|row| explorer_table_row(row, layout, model, assets))
+            .filter_map(|row| explorer_table_row(row, layout, model))
             .collect::<Vec<_>>();
         let rows = row_data
             .iter()
             .map(|(row, _)| row.clone())
             .collect::<Vec<_>>();
         let tones = row_data.iter().map(|(_, tone)| *tone).collect();
-        let mut table = DataTable::new(
-            "explorer.table",
-            explorer_table_header(layout, model, assets),
-            rows,
-        )
-        .bordered(false)
-        .with_column_widths(widths)
-        .with_row_tones(tones)
-        .with_selected_rows(
-            layout
-                .rows
-                .iter()
-                .enumerate()
-                .filter_map(|(visible, row)| {
-                    let selected = model
-                        .entry_presentation(row.index)
-                        .map(|entry| entry.selected)
-                        .unwrap_or_else(|| model.entries[row.index].selected);
-                    selected.then_some(visible)
-                })
-                .collect(),
-        );
+        let mut table =
+            DataTable::new("explorer.table", explorer_table_header(layout, model), rows)
+                .bordered(false)
+                .with_column_widths(widths)
+                .with_row_tones(tones)
+                .with_selected_rows(
+                    layout
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(visible, row)| {
+                            let selected = model
+                                .entry_presentation(row.index)
+                                .map(|entry| entry.selected)
+                                .unwrap_or_else(|| model.entries[row.index].selected);
+                            selected.then_some(visible)
+                        })
+                        .collect(),
+                );
         // File selection persists in mouse mode and can contain several rows;
         // the keyboard cursor alone must not paint an unselected file as selected.
         table.selected = None;
@@ -390,6 +376,13 @@ fn render_explorer_table(
                         entry.focused
                     })
             });
+        }
+        if crate::automation::enabled() {
+            table.row_names = layout
+                .rows
+                .iter()
+                .map(|row| model.entries[row.index].name.clone())
+                .collect();
         }
         table.row_ids = layout
             .rows
@@ -461,13 +454,13 @@ pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
         .into_iter()
         .map(|button| {
             let action = button.action;
-            let label = model.ascii_assets.as_ref().map_or_else(
-                || button.label.clone(),
-                |assets| explorer_action_label(&button, assets),
-            );
-            let page = PageAction::new(format!("toolbar.{action:?}"), label)
-                .disabled(!button.enabled)
-                .latched(button.active);
+            let page = PageAction::new(
+                format!("toolbar.{action:?}"),
+                explorer_action_label(&button),
+            )
+            .with_capture_name(button.label)
+            .disabled(!button.enabled)
+            .latched(button.active);
             if matches!(
                 action,
                 super::ExplorerToolbarAction::Delete | super::ExplorerToolbarAction::DumpTrash
@@ -530,13 +523,10 @@ pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
         .with_selected(selected)
 }
 
-fn explorer_action_label(
-    button: &ExplorerToolbarButtonViewModel,
-    assets: &RuntimeAsciiAssets,
-) -> String {
+fn explorer_action_label(button: &ExplorerToolbarButtonViewModel) -> String {
     format!(
         "{} {}",
-        explorer_icon_line(assets, &button.icon_key),
+        cell_icon("explorer_toolbar", &button.icon_key),
         button.label
     )
 }
@@ -545,12 +535,11 @@ fn render_explorer_footer(
     frame: &mut Frame<'_>,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
-    assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
 ) {
     explorer_action_bar(model).render_layout(frame, &layout.action_bar, context);
     if let (Some(cancel), Some(operation)) = (layout.cancel_operation, model.operation.as_ref()) {
-        let icon = explorer_icon_line(assets, "cancel");
+        let icon = cell_icon("fileops", "cancel");
         render_explorer_button(
             frame,
             cancel,
@@ -627,7 +616,7 @@ pub fn render_explorer_overlay(
                             .map(|shortcut| format!("  {shortcut}"))
                             .unwrap_or_default();
                         let text = fit_cell(
-                            &item.label,
+                            &item.display_label(),
                             usize::from(control.area.width.saturating_sub(2)),
                         );
                         let tone = if !item.enabled {
@@ -638,6 +627,7 @@ pub fn render_explorer_overlay(
                             ComponentTone::Default
                         };
                         ListItem::new(format!("explorer.context.{index}"), text)
+                            .with_capture_name(&item.label)
                             .with_description(shortcut.trim())
                             .disabled(!item.enabled)
                             .tone(tone)
@@ -860,7 +850,11 @@ fn render_explorer_search(
         input.set_selection_anchor(search.selection_anchor);
         input.set_focused(search.active);
     }
-    let prefix = i18n::tr!("ui-explorer-search-padded");
+    let prefix = format!(
+        "{} {}",
+        cell_icon("fileops", "search"),
+        i18n::tr!("ui-explorer-search-padded")
+    );
     input.render_borderless_frame_with_prefix(frame, area, theme, &prefix);
 
     let Some(search) = search.filter(|search| !search.query.is_empty()) else {
@@ -892,16 +886,6 @@ fn render_explorer_search(
             }),
         suffix_area,
     );
-}
-
-fn explorer_icon_line(assets: &RuntimeAsciiAssets, key: &str) -> String {
-    assets
-        .explorer_icon(key)
-        .unwrap_or_else(|error| panic!("required Explorer icon {key} is unavailable: {error}"))
-        .lines()
-        .first()
-        .cloned()
-        .expect("validated Explorer icon must contain one line")
 }
 
 fn explorer_table_cell(text: &str, width: u16, separator: bool) -> String {

@@ -99,7 +99,7 @@ fn render_search_bar(
                     frame,
                     *area,
                     theme,
-                    &format!(" {}: ", editor_search_label(*control)),
+                    &editor_search_input_prefix(*control),
                 );
             }
             _ => {
@@ -109,25 +109,21 @@ fn render_search_bar(
                     Regex => Some(search.options.regex),
                     _ => None,
                 };
-                let label = format!(
-                    "{}{}",
-                    checked.map_or(String::new(), |checked| if checked {
-                        "[x] "
+                let label = editor_search_label(*control);
+                let mut button = Button::new(format!("editor.search.{control:?}"), &label);
+                if let Some(checked) = checked {
+                    let (role, marker) = if checked {
+                        ("checked", "[x]")
                     } else {
-                        "[ ] "
-                    }
-                    .into()),
-                    editor_search_label(*control)
-                );
-                render_editor_button(
-                    frame,
-                    *area,
-                    format!("editor.search.{control:?}"),
-                    label,
-                    focused,
-                    model.read_only && matches!(control, Replace | ReplaceAll),
-                    theme,
-                );
+                        ("unchecked", "[ ]")
+                    };
+                    button = button
+                        .with_icon_prefix(crate::cell_icon("state", role))
+                        .with_capture_name(format!("{marker} {label}"));
+                }
+                button.state.selected = focused;
+                button.set_disabled(model.read_only && matches!(control, Replace | ReplaceAll));
+                button.render_inline_frame(frame, *area, theme);
             }
         }
     }
@@ -205,7 +201,8 @@ fn render_menu_bar(
         }
     }
     if model.dirty {
-        title.push_str(" *");
+        title.push(' ');
+        title.push_str(crate::cell_icon("editor", "dirty"));
     }
     frame.render_widget(
         Paragraph::new(terminal_safe_text(&title).into_owned())
@@ -255,10 +252,12 @@ fn render_menu_popup(
         .menu_items
         .iter()
         .map(|item| {
+            let label = menu_action_label(item.action);
             ListItem::new(
                 format!("editor.menu.action.{:?}", item.action),
-                menu_action_label(item.action),
+                menu_action_display_label(item.action, &label),
             )
+            .with_capture_name(label)
             .disabled(!item.enabled)
         })
         .collect();
@@ -298,8 +297,9 @@ fn render_quick_menu(frame: &mut Frame<'_>, layout: &EditorLayout, context: &Ren
         }
         let mut button = Button::new(
             format!("editor.quick.{:?}", item.action),
-            quick_action_label(item.action),
+            quick_action_display_label(item.action),
         )
+        .with_capture_name(quick_action_label(item.action))
         .with_background(context.theme.raised);
         button.state.selected = matches!(item.action, EditorQuickAction::Heading(_));
         button.set_disabled(!item.enabled);
@@ -324,10 +324,12 @@ fn render_toolbar(
         let active = model.toolbar.is_active(item.action);
         let selected = model.selected_toolbar_action == Some(item.action)
             && model.focus == EditorFocus::Toolbar;
+        let label = toolbar_label(item.action);
         let mut button = Button::new(
             format!("editor.toolbar.{:?}", item.action),
-            toolbar_label(item.action),
+            toolbar_display_label(item.action, &label),
         )
+        .with_capture_name(label)
         .with_current(active);
         if matches!(item.action, EditorToolbarAction::Save) {
             button = button.with_emphasis(ButtonEmphasis::Primary);
@@ -377,7 +379,8 @@ fn render_canvas(
     if layout.canvas_framed {
         let mut title = model.file_name.clone();
         if model.dirty {
-            title.push_str(" *");
+            title.push(' ');
+            title.push_str(crate::cell_icon("editor", "dirty"));
         }
         if model.read_only {
             title = i18n::tr!("ui-editor-read-only-title", title = title);
@@ -450,14 +453,14 @@ fn render_canvas(
             };
             let number_width = usize::from(layout.gutter.width.saturating_sub(2 + script_width));
             let number = if wrapped.as_ref().is_some_and(|row| row.continuation) {
-                format!("{:>number_width$}", "↪")
+                format!("{:>number_width$}", crate::cell_icon("editor", "wrap"))
             } else {
                 format!("{:>number_width$}", logical_line + 1)
             };
             let deletion = match (marker.deleted_before > 0, marker.deleted_after > 0) {
-                (true, true) => "↕",
-                (true, false) => "▔",
-                (false, true) => "▁",
+                (true, true) => crate::cell_icon("editor", "deleted_both"),
+                (true, false) => crate::cell_icon("editor", "deleted_above"),
+                (false, true) => crate::cell_icon("editor", "deleted_below"),
                 _ => " ",
             };
             let mut spans = Vec::new();
@@ -470,10 +473,10 @@ fn render_canvas(
                     " "
                 } else {
                     match breakpoint {
-                        Some(point) if !point.enabled => ".",
-                        Some(point) if point.rejected => "!",
-                        Some(point) if point.verified => "B",
-                        Some(_) => "?",
+                        Some(point) if !point.enabled => crate::cell_icon("editor", "bp_off"),
+                        Some(point) if point.rejected => crate::cell_icon("editor", "bp_rejected"),
+                        Some(point) if point.verified => crate::cell_icon("editor", "bp_on"),
+                        Some(_) => crate::cell_icon("editor", "bp_pending"),
                         None => " ",
                     }
                 };
@@ -488,7 +491,7 @@ fn render_canvas(
                 ));
                 spans.push(Span::styled(
                     if first_row && model.script_execution_line == Some(logical_line + 1) {
-                        ">"
+                        crate::cell_icon("editor", "exec_line")
                     } else {
                         " "
                     },
@@ -661,7 +664,7 @@ fn render_status_bar(
         status.push(terminal_safe_text(&model.file_name).into_owned());
     }
     if model.dirty {
-        status.push("*".into());
+        status.push(crate::cell_icon("editor", "dirty").into());
     }
     if model.reload_available {
         let button = Button::new("editor.reload", i18n::tr!("ui-editor-reload"))

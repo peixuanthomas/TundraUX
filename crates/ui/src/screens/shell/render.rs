@@ -171,22 +171,23 @@ pub fn render_shell_chrome_with_status_focus(
     Surface::new().render_frame(frame, top, context);
     crate::automation::with_unblocked_controls(|| {
         if !layout.title.is_empty() {
+            let name = i18n::tr!("ui-shell-title");
+            let glyph = crate::cell_icon("nav", "power");
             let mut title =
-                Button::new("shell.power", i18n::tr!("ui-shell-title")).with_bracketed_label(false);
+                Button::new("shell.power", format!("{name} {glyph}")).with_capture_name(name);
             title.state.focused = chrome.title_focused;
             title.render_borderless_frame(frame, layout.title, &theme);
         }
         if let Some(area) = layout.back_button {
-            let mut button = Button::new(
-                "shell.back",
-                format!(
+            let mut button = Button::new("shell.back", layout.back_label())
+                .with_icon_prefix(crate::cell_icon("nav", "left"))
+                .with_capture_name(format!(
                     "{} {}",
                     crate::assets::BACK_ICON.trim(),
                     layout.back_label()
-                ),
-            )
-            .with_bracketed_label(false)
-            .with_centered_label(true);
+                ))
+                .with_bracketed_label(false)
+                .with_centered_label(true);
             button.state.hovered = chrome.back_button_hovered;
             button.set_disabled(layout.back_action.is_none());
             button.render_borderless_frame(frame, area, &theme);
@@ -194,6 +195,7 @@ pub fn render_shell_chrome_with_status_focus(
     });
     if let Some(area) = layout.help_button {
         let mut button = Button::new("shell.help", i18n::tr!("ui-shell-help-button"))
+            .with_icon_prefix(crate::cell_icon("nav", "help"))
             .with_bracketed_label(false)
             .with_centered_label(true);
         button.state.hovered = chrome.help_button_hovered;

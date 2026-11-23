@@ -1,5 +1,7 @@
 use super::layout::wrap_notification_text;
-use super::model::{NotificationTone, NotificationViewModel, notification_tone_prefix};
+use super::model::{
+    NotificationTone, NotificationViewModel, notification_tone_marker, notification_tone_prefix,
+};
 use crate::RenderContext;
 use crate::components::{Button, Scrollbar};
 use ratatui::Frame;
@@ -74,7 +76,12 @@ impl NotificationPanelLayout {
             rows.push((RowStyle::Gap, i18n::tr!("notification-panel-empty")));
         }
         for card in &panel.cards {
-            let meta = format!("{}  {}", notification_tone_prefix(card.tone), card.source);
+            let meta = format!(
+                "{} {}  {}",
+                notification_tone_marker(card.tone),
+                notification_tone_prefix(card.tone),
+                card.source
+            );
             let head = rows.len();
             for line in wrap_notification_text(&meta, text_width.saturating_sub(4).max(1)) {
                 rows.push((RowStyle::Meta(card.tone), line));
@@ -240,7 +247,7 @@ impl NotificationPanelLayout {
             let (id, label, name) = match action {
                 Action::Dismiss(id) => (
                     format!("dismiss-{id}"),
-                    i18n::tr!("notification-panel-cross"),
+                    crate::cell_icon("nav", "close").into(),
                     Some(i18n::tr!("notification-panel-dismiss")),
                 ),
                 Action::Open(id) => (

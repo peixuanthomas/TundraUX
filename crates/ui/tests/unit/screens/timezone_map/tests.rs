@@ -182,10 +182,9 @@ fn widget_draws_bordered_panel_selected_polygon_and_marker() {
         cell.symbol() != " " && (cell.fg == Color::DarkGray || cell.bg == Color::DarkGray)
     }));
     assert!(
-        buffer
-            .content()
-            .iter()
-            .any(|cell| cell.symbol() == CITY_MARKER_SYMBOL && cell.fg == Color::Cyan)
+        buffer.content().iter().any(
+            |cell| cell.symbol() == crate::cell_icon("clock", "city") && cell.fg == Color::Cyan
+        )
     );
     assert_eq!(buffer.cell((0, 0)).unwrap().symbol(), "╭");
 }
@@ -206,10 +205,9 @@ fn missing_selected_boundary_keeps_base_map_and_marker() {
         cell.symbol() != " " && (cell.fg == Color::DarkGray || cell.bg == Color::DarkGray)
     }));
     assert!(
-        buffer
-            .content()
-            .iter()
-            .any(|cell| cell.symbol() == CITY_MARKER_SYMBOL && cell.fg == Color::Cyan)
+        buffer.content().iter().any(
+            |cell| cell.symbol() == crate::cell_icon("clock", "city") && cell.fg == Color::Cyan
+        )
     );
 }
 

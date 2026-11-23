@@ -178,9 +178,9 @@ pub(crate) fn row_marker(state: ComponentState, theme: &TundraTheme) -> Span<'st
     if state.selected {
         let accent =
             crate::theme::readable_foreground(tokens.accent, tokens.selected_row_background());
-        Span::styled("▌", style.fg(accent))
+        Span::styled(crate::cell_icon("nav", "current"), style.fg(accent))
     } else if state.focused && theme.keyboard_focus_visible() {
-        Span::styled("▌", style.fg(tokens.focus))
+        Span::styled(crate::cell_icon("nav", "current"), style.fg(tokens.focus))
     } else {
         Span::styled(" ", style)
     }

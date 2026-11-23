@@ -13,7 +13,6 @@ use zip::ZipArchive;
 
 use crate::{BorderShape, TundraTheme};
 
-const CITY_MARKER_SYMBOL: &str = "◎";
 const DEFAULT_CACHE_CAPACITY: usize = 8;
 const BRAILLE_PIXEL_WIDTH: u16 = 2;
 const BRAILLE_PIXEL_HEIGHT: u16 = 4;
@@ -1107,7 +1106,7 @@ fn render_city_marker(
     };
     if let Some(cell) = buffer.cell_mut((x, y)) {
         let background = cell.bg;
-        cell.set_symbol(CITY_MARKER_SYMBOL);
+        cell.set_symbol(crate::cell_icon("clock", "city"));
         cell.set_style(Style::default().fg(colors.marker).bg(background));
     }
 }

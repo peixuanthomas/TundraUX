@@ -341,7 +341,7 @@ impl ContextMenu {
                 })
                 .collect(),
         )
-        .with_highlight_symbol(Some("▌   "))
+        .with_highlight_symbol(Some(format!("{}   ", crate::cell_icon("nav", "current"))))
     }
 
     fn list_area(&self, area: Rect) -> Rect {

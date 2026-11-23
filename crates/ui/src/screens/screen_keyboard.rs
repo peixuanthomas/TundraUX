@@ -214,6 +214,24 @@ impl ScreenKeyboardAction {
         }
     }
 
+    fn display_label(self, modifiers: ScreenKeyboardModifiers, collapsed: bool) -> String {
+        let role = match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::ToggleKeyboard => {
+                return format!(
+                    "{} {}",
+                    crate::cell_icon("nav", "keyboard"),
+                    self.label(modifiers, collapsed)
+                );
+            }
+            _ => return self.label(modifiers, collapsed),
+        };
+        crate::cell_icon("nav", role).into()
+    }
+
     fn is_toolbar(self) -> bool {
         matches!(
             self,
@@ -234,8 +252,8 @@ impl ScreenKeyboardAction {
             right_ctrl: true,
             alt: true,
         };
-        let visible = self.label(latched, false);
-        let collapsed = self.label(latched, true);
+        let visible = self.display_label(latched, false);
+        let collapsed = self.display_label(latched, true);
         UnicodeWidthStr::width(visible.as_str()).max(UnicodeWidthStr::width(collapsed.as_str()))
             as u16
             + if bordered { 2 } else { 0 }
@@ -493,7 +511,7 @@ pub fn screen_keyboard_launcher_area(bounds: Rect) -> Rect {
         .max(crate::components::terminal_width(&i18n::tr!(
             "screen-keyboard-hide"
         )))
-        .saturating_add(2)
+        .saturating_add(4)
         .min(usize::from(bounds.width)) as u16;
     Rect::new(
         bounds.right().saturating_sub(width),
@@ -842,26 +860,31 @@ fn render_screen_keyboard_keys(
         {
             continue;
         }
-        let mut button = Button::new(
-            target.action.button_id(),
-            if target.action == ScreenKeyboardAction::Paste
-                && !layout
-                    .buttons
-                    .iter()
-                    .any(|key| key.action == ScreenKeyboardAction::Copy)
-            {
-                i18n::tr!("screen-keyboard-input-paste")
-            } else {
-                target.action.label(model.modifiers, layout.collapsed)
-            },
-        )
-        .with_bracketed_label(false)
-        .with_centered_label(true)
-        .with_pressed_fill(true)
-        .with_latched(
-            target.action.is_latched(model.modifiers)
-                || model.physical_pressed.contains(&target.action),
-        );
+        let (label, name) = if target.action == ScreenKeyboardAction::Paste
+            && !layout
+                .buttons
+                .iter()
+                .any(|key| key.action == ScreenKeyboardAction::Copy)
+        {
+            let label = i18n::tr!("screen-keyboard-input-paste");
+            (label.clone(), label)
+        } else {
+            (
+                target
+                    .action
+                    .display_label(model.modifiers, layout.collapsed),
+                target.action.label(model.modifiers, layout.collapsed),
+            )
+        };
+        let mut button = Button::new(target.action.button_id(), label)
+            .with_capture_name(name)
+            .with_bracketed_label(false)
+            .with_centered_label(true)
+            .with_pressed_fill(true)
+            .with_latched(
+                target.action.is_latched(model.modifiers)
+                    || model.physical_pressed.contains(&target.action),
+            );
         button.set_focused(target.action == model.focus);
         if layout.bordered_buttons && target.area.height >= 3 {
             button.render_frame(frame, target.area, &theme);

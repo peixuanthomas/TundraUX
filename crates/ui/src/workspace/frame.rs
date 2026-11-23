@@ -67,6 +67,7 @@ pub fn capture_workspace_frame(
         confirmed_input_fence: 0,
         layout,
         size,
+        cell_icon_mode: workspace_protocol::CellIconMode::Ascii,
         cells,
         cursor: cursor.filter(|cursor| cursor.x < size.width && cursor.y < size.height),
         images: Vec::new(),

@@ -136,7 +136,10 @@ fn narrow_layout_keeps_digital_time_and_operable_panel_without_panicking() {
     assert!(layout.new_button.height > 0);
     assert!(output.contains("14:32:08"));
     assert!(output.contains("N New"));
-    assert!(output.contains("[A] 07:30:00 Daily"));
+    assert!(output.contains(&format!(
+        "{} 07:30:00 Daily",
+        ui::cell_icon("clock", "alarm")
+    )));
 }
 
 #[test]
@@ -172,8 +175,14 @@ fn small_fallback_keeps_entries_and_compacts_dialog_controls() {
     assert_eq!(dialog.create_alarm.y, dialog.create_countdown.y);
     assert!(terminal_output(&terminal).contains("Example error"));
     for index in 0..3 {
-        assert!(region_text(&terminal, dialog.increments[index]).contains('+'));
-        assert!(region_text(&terminal, dialog.decrements[index]).contains('−'));
+        assert!(
+            region_text(&terminal, dialog.increments[index])
+                .contains(ui::cell_icon("state", "increase"))
+        );
+        assert!(
+            region_text(&terminal, dialog.decrements[index])
+                .contains(ui::cell_icon("state", "minus"))
+        );
         assert!(region_text(&terminal, dialog.values[index]).contains(&format!("0{}", index + 1)));
         assert!(dialog.decrements[index].bottom() <= dialog.create_alarm.y);
     }

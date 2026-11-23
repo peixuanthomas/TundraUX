@@ -1183,17 +1183,23 @@ impl ShellSession {
                     .enumerate()
                     .map(|(external_index, item)| {
                         let name = app::launcher::launcher_entry_name(&item.record);
-                        let type_label = match item.record.executable_kind {
+                        let (type_label, role) = match item.record.executable_kind {
                             Some(LauncherExecutableKind::NativeBinary) => {
-                                i18n::tr!("shell-application")
+                                (i18n::tr!("shell-application"), "NativeBinary")
                             }
-                            Some(LauncherExecutableKind::Installer) => i18n::tr!("shell-installer"),
-                            Some(LauncherExecutableKind::Script) => i18n::tr!("shell-script"),
-                            Some(LauncherExecutableKind::Shortcut) => i18n::tr!("shell-shortcut"),
+                            Some(LauncherExecutableKind::Installer) => {
+                                (i18n::tr!("shell-installer"), "Installer")
+                            }
+                            Some(LauncherExecutableKind::Script) => {
+                                (i18n::tr!("shell-script"), "Script")
+                            }
+                            Some(LauncherExecutableKind::Shortcut) => {
+                                (i18n::tr!("shell-shortcut"), "Shortcut")
+                            }
                             Some(LauncherExecutableKind::ApplicationBundle) => {
-                                i18n::tr!("shell-application-bundle")
+                                (i18n::tr!("shell-application-bundle"), "ApplicationBundle")
                             }
-                            None => i18n::tr!("shell-unknown"),
+                            None => (i18n::tr!("shell-unknown"), "None"),
                         };
                         let mut model = ui::LauncherItemViewModel::new(
                             item.record.id.clone(),
@@ -1202,7 +1208,9 @@ impl ShellSession {
                             type_label,
                             item.status,
                         );
+                        model.external_icon_role = role;
                         if let Some(custom) = &item.record.custom {
+                            model.external_icon_role = "CustomCommand";
                             model.path = custom.command.clone();
                         }
                         model.custom_icon = item

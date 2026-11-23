@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::{ScrollbarOrientation, contains_point, truncate_to_terminal_width};
+use super::{ScrollbarOrientation, contains_point, terminal_width, truncate_to_terminal_width};
 use crate::TundraTheme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,7 +85,8 @@ pub(crate) fn grid_drop_target(
 pub(crate) fn render_grid_drop_indicator(frame: &mut Frame<'_>, area: Rect, theme: &TundraTheme) {
     for y in area.y..area.bottom() {
         frame.render_widget(
-            Paragraph::new("┃").style(theme.title_style().fg(theme.button_accent_color())),
+            Paragraph::new(crate::cell_icon("nav", "drop"))
+                .style(theme.title_style().fg(theme.button_accent_color())),
             Rect::new(area.x, y, area.width, 1),
         );
     }
@@ -94,9 +95,16 @@ pub(crate) fn render_grid_drop_indicator(frame: &mut Frame<'_>, area: Rect, them
 pub(crate) fn grid_drag_label(label: &str, width: u16, style: Style) -> Line<'static> {
     // Leave the tile edges available for the insertion line when the label fits.
     let label_width = width - 2 * u16::from(width > 4);
-    let marker = if label_width > 3 { "# " } else { "#" };
-    let label =
-        truncate_to_terminal_width(label, usize::from(label_width).saturating_sub(marker.len()));
+    let grip = crate::cell_icon("nav", "grip");
+    let marker = if label_width > 3 {
+        format!("{grip} ")
+    } else {
+        grip.to_owned()
+    };
+    let label = truncate_to_terminal_width(
+        label,
+        usize::from(label_width).saturating_sub(terminal_width(&marker)),
+    );
     Line::from(vec![
         Span::styled(marker, style.remove_modifier(Modifier::UNDERLINED)),
         Span::styled(label, style),

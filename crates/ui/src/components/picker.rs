@@ -123,9 +123,15 @@ impl Picker {
             base
         };
         let line = Line::from(vec![
-            Span::styled("‹ ", marker_style),
+            Span::styled(
+                format!("{} ", crate::cell_icon("nav", "previous")),
+                marker_style,
+            ),
             Span::styled(selected, style),
-            Span::styled(" ›", marker_style),
+            Span::styled(
+                format!(" {}", crate::cell_icon("nav", "next")),
+                marker_style,
+            ),
         ]);
         Paragraph::new(line)
             .alignment(HorizontalAlignment::Left)

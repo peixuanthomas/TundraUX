@@ -234,6 +234,14 @@ impl Button {
         self
     }
 
+    pub(crate) fn with_icon_prefix(mut self, icon: &str) -> Self {
+        if self.capture_name.is_none() {
+            self.capture_name = Some(self.label.clone());
+        }
+        self.label = format!("{icon} {}", self.label);
+        self
+    }
+
     pub fn set_focused(&mut self, focused: bool) {
         self.state.focused = focused;
         if !focused {

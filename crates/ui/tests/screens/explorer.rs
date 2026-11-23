@@ -926,7 +926,8 @@ fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
                 assert!(node.text.contains(&action.label()));
                 assert_eq!(node.focused, action == Action::Copy);
                 if action == Action::Delete {
-                    assert!(node.text.contains(r"\_/"));
+                    assert!(node.text.contains("X "));
+                    assert_eq!(node.name, action.label());
                 }
             }
             for (action, symbol) in [
@@ -937,8 +938,51 @@ fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
                 let id = format!("screen/explorer.toolbar.{action:?}");
                 let node = snapshot.nodes.iter().find(|node| node.id == id).unwrap();
                 assert_eq!(node.rect.y, layout.path_bar.y);
+                assert_eq!(node.rect.width, 1);
+                assert_eq!(node.name, action.label());
                 assert_eq!(node.text.trim(), symbol);
             }
         }
     }
+}
+#[test]
+fn atlas_toolbar_distinguishes_trash_actions_and_retains_their_hit_targets() {
+    use ui::ExplorerToolbarAction as A;
+    let mut model = sample_model();
+    model.is_trash = true;
+    model.toolbar = ui::ExplorerToolbarViewModel::trash(true, true, true, true);
+    let bounds = Rect::new(0, 0, 108, 20);
+    let area = Rect::new(1, 2, 106, 16);
+    ui::set_cell_icon_mode(ui::CellIconMode::Font);
+    let layout = explorer_layout(area, &model);
+    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+    terminal
+        .draw(|frame| ui::render_explorer_content(frame, area, &model, &Default::default()))
+        .unwrap();
+    for (action, symbol) in [(A::Restore, "\u{e124}"), (A::DumpTrash, "\u{e125}")] {
+        let target = layout
+            .page_actions
+            .iter()
+            .find(|item| item.action == action)
+            .unwrap()
+            .area;
+        assert!(bounds.contains(target.as_position()));
+        assert_eq!(
+            layout.hit_test(target.x, target.y),
+            Some(ExplorerHitTarget::PageAction(action))
+        );
+        assert!(
+            (target.x..target.right())
+                .any(|x| terminal.backend().buffer()[(x, target.y)].symbol() == symbol)
+        );
+    }
+    assert_eq!(
+        ui::cell_icon("explorer_toolbar", A::Undo.icon_key()),
+        "\u{e122}"
+    );
+    assert_eq!(
+        ui::cell_icon("explorer_toolbar", A::Delete.icon_key()),
+        "\u{e108}"
+    );
+    ui::set_cell_icon_mode(ui::CellIconMode::Ascii);
 }

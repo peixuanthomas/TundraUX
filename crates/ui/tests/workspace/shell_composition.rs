@@ -82,7 +82,7 @@ fn compact_threshold_keeps_escape_above_the_content() {
             assert_eq!(layout.main.y, 1);
             assert_eq!(layout.main.height, height - 1);
             assert!(row(&terminal, 0).contains("TundraUX"));
-            assert!(row(&terminal, 0).contains("◀ Esc"));
+            assert!(row(&terminal, 0).contains(&format!("{} Esc", ui::cell_icon("nav", "left"))));
             assert!(row(&terminal, layout.main.y).contains("PAGE CONTENT"));
             assert_eq!(
                 layout.back_button.unwrap().intersection(layout.main).area(),

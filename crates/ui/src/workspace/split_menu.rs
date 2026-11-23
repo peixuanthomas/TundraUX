@@ -123,7 +123,15 @@ pub fn render_workspace_split_menu(
     let mut theme = context.compatibility_theme();
     theme.buttons = None;
     for (action, label, enabled, area) in &menu.items {
-        let mut button = Button::new(action.id(), label)
+        let role = match action {
+            WorkspaceAction::SetMode(WorkspaceSplitMode::LeftRight) => "split_v",
+            WorkspaceAction::SetMode(WorkspaceSplitMode::TopBottom) => "split_h",
+            WorkspaceAction::Maximize(_) => "full",
+            _ => "close",
+        };
+        let glyph = crate::cell_icon("nav", role);
+        let mut button = Button::new(action.id(), format!("{glyph} {label}"))
+            .with_capture_name(label)
             .with_centered_label(true)
             .with_background(context.theme.raised);
         button.state = ComponentState::default()

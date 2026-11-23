@@ -368,7 +368,7 @@ pub(super) fn render_auto_admin_contents(
             frame,
             layout.input,
             &DialogLayout::body_theme(context),
-            "> ",
+            &format!("{} ", crate::cell_icon("nav", "prompt")),
         );
     } else {
         frame.render_widget(
