@@ -1,4 +1,5 @@
 use ratatui::layout::{HorizontalAlignment, Rect};
+use workspace_protocol::BackAction;
 
 use crate::components::terminal_width;
 
@@ -93,6 +94,7 @@ pub struct ShellFrameLayout {
     pub main: Rect,
     pub title: Rect,
     pub back_button: Option<Rect>,
+    pub back_action: Option<BackAction>,
     pub help_button: Option<Rect>,
     pub status_message: Option<Rect>,
     pub status_alignment: HorizontalAlignment,
@@ -120,6 +122,7 @@ impl ShellFrameLayout {
             main,
             title: Rect::default(),
             back_button: None,
+            back_action: None,
             help_button: None,
             status_message: None,
             status_alignment: HorizontalAlignment::Center,
@@ -134,7 +137,7 @@ impl ShellFrameLayout {
                 }),
             keyboard_width: 0,
         }
-        .with_back_label(None)
+        .with_back_button(false, None)
     }
 
     pub fn is_compact(self) -> bool {
@@ -192,12 +195,13 @@ impl ShellFrameLayout {
         self
     }
 
-    pub fn with_back_label(mut self, label: Option<&str>) -> Self {
-        self.back_button = label
-            .filter(|_| !self.bounds.is_empty())
-            .map(|label| {
+    pub fn with_back_button(mut self, visible: bool, action: Option<BackAction>) -> Self {
+        self.back_action = action.filter(|_| visible);
+        self.back_button = (visible && !self.bounds.is_empty())
+            .then(|| {
+                let label = self.back_label();
                 let icon = terminal_width(crate::assets::BACK_ICON.trim());
-                let width = usize_to_u16(terminal_width(label).saturating_add(icon + 3)).min(
+                let width = usize_to_u16(terminal_width(&label).saturating_add(icon + 3)).min(
                     self.bounds
                         .width
                         .saturating_sub(usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title")))),
@@ -207,6 +211,17 @@ impl ShellFrameLayout {
             .filter(|area| !area.is_empty());
         self.layout_header();
         self
+    }
+
+    pub(super) fn back_label(self) -> String {
+        match self.back_action {
+            Some(BackAction::Cancel) => i18n::tr!("ui-shell-back-cancel"),
+            Some(BackAction::PreviousLocation) => i18n::tr!("ui-shell-back-location"),
+            Some(BackAction::PreviousPage) => i18n::tr!("ui-shell-back-page"),
+            Some(BackAction::Home) => i18n::tr!("ui-shell-back-home"),
+            Some(BackAction::PowerMenu) => i18n::tr!("ui-shell-back-power"),
+            None => i18n::tr!("screen-keyboard-escape"),
+        }
     }
 
     pub fn with_help_button(mut self, available: bool) -> Self {

@@ -127,7 +127,7 @@ fn nested_visits_restore_each_callers_focus_and_ignore_held_escape() {
         )));
         assert_eq!(state.active_screen(), ShellScreen::Clock);
     }
-    assert!(state.header_back_label().is_none());
+    assert!(state.back_action().is_none());
     back(&mut state, false);
     assert_eq!(state.active_screen(), ShellScreen::Clock);
     state.close_clock();
@@ -207,7 +207,7 @@ fn editor_rollback_restores_picker_beneath_overlay_and_rejects_stale_results() {
 }
 
 #[test]
-fn command_line_terminal_keys_are_forwarded_without_a_back_button() {
+fn command_line_handles_escape_while_shell_back_is_disabled() {
     let mut state = state();
     state.enter_screen(ShellScreen::Explorer);
     state.enter_screen(ShellScreen::CommandLine);
@@ -224,7 +224,7 @@ fn command_line_terminal_keys_are_forwarded_without_a_back_button() {
         let (_, command) = state.route_key_input(&key);
         assert_eq!(command, ShellCommand::CommandLineKey(key));
     }
-    assert!(state.frame_layout.unwrap().back_button.is_none());
+    assert!(state.frame_layout.unwrap().back_action.is_none());
     state.apply_input(escape);
     assert!(state.command_line_close_request.is_none());
     assert_eq!(state.active_screen(), ShellScreen::CommandLine);
@@ -250,7 +250,7 @@ fn tool_roots_keep_the_same_page_open_with_escape() {
             prepare_page(&mut state, screen);
             let page = state.active_page_id();
             assert!(
-                state.frame_layout.unwrap().back_button.is_none(),
+                state.frame_layout.unwrap().back_action.is_none(),
                 "{screen:?}"
             );
             back(&mut state, false);
@@ -328,9 +328,29 @@ fn setup_goes_to_each_previous_step_and_stays_on_language() {
             back(&mut state, false);
         }
         assert_eq!(state.pages.setup.setup_step, ui::SetupStep::Language);
-        assert!(state.header_back_label().is_none());
+        assert!(state.back_action().is_none());
         back(&mut state, false);
         assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
+    }
+}
+
+#[test]
+fn idle_home_escape_button_opens_and_dismisses_the_power_menu() {
+    let mut state = state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    for pointer in [true, false] {
+        assert_eq!(
+            state.back_action(),
+            Some(workspace_protocol::BackAction::PowerMenu)
+        );
+        back(&mut state, pointer);
+        assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+        assert_eq!(
+            state.back_action(),
+            Some(workspace_protocol::BackAction::Cancel)
+        );
+        back(&mut state, pointer);
+        assert_eq!(state.active_screen(), ShellScreen::Home);
     }
 }
 

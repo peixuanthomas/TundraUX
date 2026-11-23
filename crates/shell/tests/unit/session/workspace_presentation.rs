@@ -124,7 +124,7 @@ fn workspace_back_follows_the_focused_pane_and_pending_split_menu() {
             None,
             &ui::RenderContext::default(),
         )
-        .with_back_label(Some("Cancel"));
+        .with_back_button(true, Some(BackAction::Cancel));
         workspace.remember_chrome(layout, None);
         assert_eq!(workspace.back_action(), Some(BackAction::Cancel));
         if pointer {

@@ -176,14 +176,19 @@ pub fn render_shell_chrome_with_status_focus(
             title.state.focused = chrome.title_focused;
             title.render_borderless_frame(frame, layout.title, &theme);
         }
-        if let (Some(area), Some(label)) = (layout.back_button, &chrome.back_label) {
+        if let Some(area) = layout.back_button {
             let mut button = Button::new(
                 "shell.back",
-                format!("{} {label}", crate::assets::BACK_ICON.trim()),
+                format!(
+                    "{} {}",
+                    crate::assets::BACK_ICON.trim(),
+                    layout.back_label()
+                ),
             )
             .with_bracketed_label(false)
             .with_centered_label(true);
             button.state.hovered = chrome.back_button_hovered;
+            button.set_disabled(layout.back_action.is_none());
             button.render_borderless_frame(frame, area, &theme);
         }
     });

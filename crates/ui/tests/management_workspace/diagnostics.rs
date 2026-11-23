@@ -370,7 +370,6 @@ fn render(width: u16, height: u16, model: &DiagnosticsViewModel) -> Terminal<Tes
         title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,

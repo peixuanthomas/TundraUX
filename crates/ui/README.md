@@ -38,7 +38,7 @@ The notification panel sits under the header. Its full status and single column 
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The title at the left opens the power menu, which includes Tasks. Its list of actions is centered in the dialog. The status text can be left-aligned, centered, or right-aligned. Screen keyboard, Help, clock and Back follow it. Back shows the next available action from the focused window and disappears at its starting page.
+The title at the left opens the power menu, which includes Tasks. Its list of actions is centered in the dialog. The status text can be left-aligned, centered, or right-aligned. Screen keyboard, Help, clock and Back follow it. When **Show Back button** is on, the right edge shows Esc and its current action. A dimmed Esc marks a tool with no return step.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 

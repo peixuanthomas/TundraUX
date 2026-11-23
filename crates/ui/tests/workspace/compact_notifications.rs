@@ -11,7 +11,6 @@ fn chrome() -> ShellChromeViewModel {
         title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Compact status".into(),
             toast: Some("Compact toast".into()),
@@ -46,7 +45,7 @@ fn compact_pages_keep_the_highest_priority_notification_above_their_content() {
         terminal
             .draw(|frame| {
                 let layout = ShellFrameLayout::new(frame.area(), None, &context)
-                    .with_back_label(chrome.back_label.as_deref());
+                    .with_back_button(true, None);
                 page.render_content(frame, &layout, &context, None, None);
                 page.render_overlay(frame, &layout, &context);
                 render_shell_chrome(frame, &layout, &chrome, &context);
@@ -74,8 +73,8 @@ fn compact_chrome_shows_toasts_and_preserves_page_header_without_notifications()
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                let layout = ShellFrameLayout::new(area, None, &context)
-                    .with_back_label(chrome.back_label.as_deref());
+                let layout =
+                    ShellFrameLayout::new(area, None, &context).with_back_button(true, None);
                 frame.render_widget(
                     Paragraph::new("Page header"),
                     Rect::new(layout.main.x, layout.main.y, layout.main.width, 1),
@@ -103,7 +102,7 @@ fn compact_notification_respects_empty_and_tiny_terminal_bounds() {
         terminal
             .draw(|frame| {
                 let layout = ShellFrameLayout::new(frame.area(), None, &context)
-                    .with_back_label(chrome.back_label.as_deref());
+                    .with_back_button(true, None);
                 render_shell_chrome(frame, &layout, &chrome, &context);
             })
             .unwrap();
@@ -125,7 +124,7 @@ fn minimum_full_chrome_keeps_alert_in_the_header_with_title_and_controls() {
     chrome.status.time_button_label = Some("09:30".into());
     let layout = ShellFrameLayout::new(Rect::new(0, 0, 108, 20), Some("09:30"), &context)
         .with_help_button(true)
-        .with_back_label(chrome.back_label.as_deref());
+        .with_back_button(true, None);
     let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
     terminal
         .draw(|frame| render_shell_chrome(frame, &layout, &chrome, &context))

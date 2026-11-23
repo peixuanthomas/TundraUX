@@ -30,14 +30,6 @@ impl ShellSession {
         self.app.auth_session().is_some() && !self.is_strict_guest()
     }
 
-    pub(in crate::session) fn header_back_label(&self) -> Option<String> {
-        if self.app.storage_config().top_bar.show_esc {
-            self.back_action().map(navigation::back_label)
-        } else {
-            None
-        }
-    }
-
     pub(in crate::session) fn shell_frame_layout(
         &self,
         bounds: Rect,
@@ -46,7 +38,7 @@ impl ShellSession {
     ) -> ui::ShellFrameLayout {
         let top_bar = self.app.storage_config().top_bar;
         let mut layout = ui::ShellFrameLayout::new(bounds, time_label, context)
-            .with_back_label(self.header_back_label().as_deref())
+            .with_back_button(top_bar.show_esc, self.back_action())
             .with_help_button(self.help_button_visible());
         layout.status_alignment = match top_bar.status_alignment {
             storage::StatusTextAlignment::Left => HorizontalAlignment::Left,

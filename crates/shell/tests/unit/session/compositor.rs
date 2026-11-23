@@ -826,8 +826,7 @@ fn auto_admin_keeps_shell_title_and_status_visible_after_resize() {
             terminal.backend().buffer(),
             original.status_message.unwrap(),
         );
-        let clock = original.time_button.unwrap();
-        let clock_before = text(terminal.backend().buffer(), clock);
+        let clock_before = text(terminal.backend().buffer(), original.time_button.unwrap());
         let (responses, _inputs) = mpsc::channel();
         state
             .begin_auto_admin("Remove neofetch".into(), false, responses)
@@ -843,7 +842,8 @@ fn auto_admin_keeps_shell_title_and_status_visible_after_resize() {
             text(terminal.backend().buffer(), message).trim(),
             status_before.trim()
         );
-        assert_eq!(layout.time_button, Some(clock));
+        let clock = layout.time_button.unwrap();
+        assert!(clock.right() <= layout.back_button.unwrap().x);
         assert_eq!(text(terminal.backend().buffer(), clock), clock_before);
         let keyboard = layout.keyboard_launcher.unwrap();
         assert!(message.intersection(keyboard).is_empty());
@@ -1279,7 +1279,10 @@ fn compact_power_title_and_cancel_button_respond_only_on_matching_release() {
         let prepared = home_frame(&state, 0, true);
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
         let layout = state.frame_layout.unwrap();
-        assert!(layout.back_button.is_none());
+        assert_eq!(
+            layout.back_action,
+            Some(workspace_protocol::BackAction::PowerMenu)
+        );
         assert!(text(terminal.backend().buffer(), layout.title).contains("TundraUX"));
         let title = (layout.title.x, layout.title.y);
         state.apply_input(InputEvent::mouse_down(PointerButton::Left, title));
@@ -1360,6 +1363,47 @@ fn compositor_resize_uses_actual_frame_geometry_for_chrome_and_hit_map() {
 }
 
 #[test]
+fn show_back_button_controls_the_visible_escape_key_at_the_settings_root() {
+    let mut state = animation_settings_session();
+    let settings = state.pages.settings.settings_state.as_mut().unwrap();
+    settings.animation_editor = None;
+    settings.category = ui::SettingsCategory::System;
+    settings.selected_field = ui::SettingsField::TopBarEsc;
+    let mut compositor = ScreenCompositor {
+        capture_enabled: true,
+        ..Default::default()
+    };
+    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+    for visible in [true, false, true] {
+        let mut config = state.app.storage_config().clone();
+        config.top_bar.show_esc = visible;
+        state.replace_storage_config(config);
+        let mut prepared = home_frame(&state, 0, true);
+        prepared.page =
+            ScreenViewModel::Settings(Box::new(state.to_settings_view_model().unwrap()));
+        draw(&mut compositor, &mut terminal, &mut state, &prepared);
+        let back = compositor
+            .snapshot
+            .as_ref()
+            .unwrap()
+            .nodes
+            .iter()
+            .find(|node| node.id == "chrome/shell.back");
+        assert_eq!(back.is_some(), visible);
+        if let Some(back) = back {
+            assert_eq!(back.rect.x + back.rect.width, 108);
+            assert_eq!(back.rect.y, 0);
+            assert!(back.name.contains("Esc"));
+            assert!(!back.enabled && !back.actionable);
+            let point = (back.rect.x, back.rect.y);
+            state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+            state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+            assert_eq!(state.active_screen(), ShellScreen::Settings);
+        }
+    }
+}
+
+#[test]
 fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
     let mut state = session();
     let mut compositor = ScreenCompositor {
@@ -1373,7 +1417,10 @@ fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
     let default = state.frame_layout.unwrap();
     assert!(default.help_button.is_some());
     assert!(default.time_button.is_some());
-    assert!(default.back_button.is_none());
+    assert_eq!(
+        default.back_action,
+        Some(workspace_protocol::BackAction::PowerMenu)
+    );
 
     let mut config = state.app.storage_config().clone();
     config.top_bar.show_time = false;

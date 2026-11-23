@@ -304,7 +304,8 @@ def main():
             assert refused["error"]["code"] == "stale_snapshot", refused
             assert len(current["lines"]) == 41
             print("PASS: drag, scroll, modal blocking and real terminal resize")
-            assert not any(node["id"] == "chrome/shell.back" for node in current["nodes"])
+            back = next(node for node in current["nodes"] if node["id"] == "chrome/shell.back")
+            assert "Esc" in back["name"] and not back["actionable"]
             window_action("close")
             until(lambda current: current["page"] == "Explorer")
             window_action("minimize")

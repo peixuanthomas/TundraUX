@@ -279,7 +279,10 @@ pub(in crate::session) fn build_shell_hit_map(
         }
     }
 
-    if let Some(area) = frame_layout.back_button {
+    if let Some(area) = frame_layout
+        .back_button
+        .filter(|_| frame_layout.back_action.is_some())
+    {
         regions.push(ShellHitRegion {
             component: ShellComponent::BackButton,
             area,

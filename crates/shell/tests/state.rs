@@ -1050,7 +1050,13 @@ fn keyboard_activation_opens_clock_and_escape_stays_at_the_root() {
 
     state.apply_input(InputEvent::from_key_label("Esc"));
     assert_eq!(state.active_screen(), ShellScreen::Clock);
-    assert!(state.to_shell_chrome_view_model().back_label.is_none());
+    assert!(
+        !state
+            .hit_map()
+            .regions()
+            .iter()
+            .any(|region| region.component == ShellComponent::BackButton)
+    );
     assert_eq!(state.last_command(), Some(&ShellCommand::Noop));
 }
 

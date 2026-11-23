@@ -101,11 +101,8 @@ def run_case(binary, language, color, motion, sizes, samples):
         def assert_header(frame, keyboard_id=None):
             assert not any(item["id"] == "chrome/shell.tasks" for item in frame["nodes"])
             ids = ["chrome/shell.power", "chrome/shell.status", "chrome/shell.help",
-                   "chrome/shell.status.time"]
-            back_visible = any(item["id"] == "chrome/shell.back" for item in frame["nodes"])
-            assert back_visible == (frame["page"] == "Launcher")
-            if back_visible:
-                ids.append("chrome/shell.back")
+                   "chrome/shell.status.time", "chrome/shell.back"]
+            assert "Esc" in node(frame, "chrome/shell.back")["name"]
             if keyboard_id is not None:
                 ids.insert(2, keyboard_id)
             right = 0

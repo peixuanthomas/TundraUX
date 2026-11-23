@@ -71,7 +71,7 @@ For a system change, review the targets and choose the action. AutoAdmin shows a
 
 - **Clock:** Select the clock in the header or open **Clock** from Launcher. **N** opens the creation dialog for an alarm or countdown and **M** manages the selected entry. Clock windows share your items. On Linux, the clock follows the OS time and timezone.
 - **Weather:** The workspace shows weather after the configured period of inactivity. Settings controls the screen timeout and weather location. Press a key or tap to return to your open windows without signing in again.
-- **Top bar:** Click the title for the power menu and Tasks, or click the status for notifications. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, time, and Back. When enabled, Back appears whenever there is a step to undo or a previous page to visit.
+- **Top bar:** Click the title for the power menu and Tasks, or click the status for notifications. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, time, and Back. With **Show Back button** on, the upper-right corner shows **Esc** and its current action. A dimmed **Esc** means the tool has no step to go back. On idle Home, click **Esc Power menu** to open the menu.
 - **Appearance and input:** Change language, theme, icon mode, or motion in Settings. ASCII icons work in terminals without image support. Use the header's keyboard button for supported text fields and embedded terminals.
 
 ## Update or troubleshoot

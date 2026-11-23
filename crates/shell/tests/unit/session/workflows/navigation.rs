@@ -148,7 +148,7 @@ fn back_button_hit_region_tracks_resize_including_compact_mode() {
             None,
             &ui::RenderContext::default(),
         )
-        .with_back_label(state.header_back_label().as_deref());
+        .with_back_button(true, state.back_action());
         let hit = state
             .hit_map
             .regions()

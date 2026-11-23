@@ -681,7 +681,7 @@ fn logs_navigation_restores_covered_filters_and_new_pages_start_clean() {
     );
     key(&mut state, "Esc");
     assert_eq!(state.active_page_id(), first);
-    assert!(state.header_back_label().is_none());
+    assert!(state.back_action().is_none());
     state.return_from_screen(ShellScreen::Logs);
     state.open_logs();
     assert_eq!(state.pages.logs.logs_state.category, ui::LogsCategory::Ux);

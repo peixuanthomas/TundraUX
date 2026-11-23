@@ -123,7 +123,7 @@ Selection dialogs share a top search field, case-insensitive filtering, stable o
 
 **Settings → Applications → Command Line** selects the system command interpreter for newly opened Command Line sessions. Each session reads the choice at launch and continues to offer Tundra commands such as `/help`.
 
-Esc and the header Back button cancel one dialog, menu, drag or edit, then go back one step within the focused tool. At the tool’s starting page the window stays open. Vim and embedded terminals handle their own Esc. Press Esc on idle Home or click the top-left title to open the power menu.
+Esc and the header Back button cancel one dialog, menu, drag or edit, then go back one step within the focused tool. With **Show Back button** on, the upper-right Esc control stays visible and dims when the focused tool has no step to go back. Vim and embedded terminals handle their own Esc. Press Esc on idle Home or click the top-left title to open the power menu.
 
 Closing a window prompts for unsaved changes or running tasks. If cleanup still runs after two seconds, the Shell offers **Keep waiting** and **Force kill**. A force kill goes directly to the watchdog.
 

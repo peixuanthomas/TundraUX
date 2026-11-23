@@ -227,6 +227,7 @@ pub enum BackAction {
     PreviousLocation,
     PreviousPage,
     Home,
+    PowerMenu,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

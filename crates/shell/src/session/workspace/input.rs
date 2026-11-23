@@ -312,11 +312,12 @@ impl Workspace {
         {
             return None;
         }
-        if self
-            .chrome_layout
-            .and_then(|layout| layout.back_button)
-            .is_some_and(|area| area.contains(point.into()))
-            && let Some(action) = self.back_action()
+        if let Some(layout) = self.chrome_layout
+            && layout
+                .back_button
+                .is_some_and(|area| area.contains(point.into()))
+            && let Some(action) = layout.back_action
+            && self.back_action() == Some(action)
         {
             return Some(PointerTarget::Chrome(ChromeAction::Back(action)));
         }

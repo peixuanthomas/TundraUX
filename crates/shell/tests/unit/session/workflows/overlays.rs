@@ -106,7 +106,7 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
         state.status_time_button_label().as_deref(),
         &ui::RenderContext::default(),
     )
-    .with_back_label(state.header_back_label().as_deref())
+    .with_back_button(true, state.back_action())
     .with_help_button(state.help_button_available());
     let settled = state.input_keyboard_content_layout(settled);
     for progress in [0, 250, 499, 500, 1_000] {

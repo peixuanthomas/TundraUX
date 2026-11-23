@@ -568,7 +568,7 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
     assert!(process_is_running(descendant_pid));
 
     state.refresh_hit_map();
-    assert!(state.header_back_label().is_none());
+    assert!(state.back_action().is_none());
     state.request_command_line_close();
     assert_eq!(state.command_line_close_request, Some((second_id, false)));
     assert!(hosts.process_close_request(&mut state));

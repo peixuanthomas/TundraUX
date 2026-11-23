@@ -11,7 +11,6 @@ fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
         title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "系统状态消息很长但不应覆盖时钟".repeat(8),
             toast: None,
@@ -33,7 +32,7 @@ fn header_keeps_help_and_back_without_a_tasks_entry() {
     let model = chrome(120, 40);
     let context = RenderContext::default();
     let layout = ShellFrameLayout::new(Rect::new(0, 0, 120, 40), None, &context)
-        .with_back_label(model.back_label.as_deref())
+        .with_back_button(true, None)
         .with_help_button(true);
     assert!(layout.help_button.unwrap().right() < layout.back_button.unwrap().x);
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
@@ -56,7 +55,7 @@ fn render(
         model.status.time_button_label.as_deref(),
         context,
     )
-    .with_back_label(model.back_label.as_deref());
+    .with_back_button(true, None);
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
@@ -397,19 +396,25 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
 
 #[test]
 fn header_navigation_stays_separate_from_keyboard_content() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    let pack = i18n::LanguageSnapshot::load(&assets, "zh-CN", 1).unwrap();
+    let _language = i18n::enter_snapshot(std::sync::Arc::new(pack.snapshot));
     for size in [(108, 20), (140, 40)] {
-        let mut model = chrome(size.0, size.1);
-        model.back_label = Some("返回上个位置".into());
+        let model = chrome(size.0, size.1);
         let context = RenderContext::default();
         let layout = ShellFrameLayout::new(Rect::new(0, 0, size.0, size.1), None, &context)
             .with_help_button(true)
-            .with_back_label(model.back_label.as_deref());
+            .with_back_button(true, Some(workspace_protocol::BackAction::PreviousLocation));
         assert!(layout.help_button.unwrap().right() <= layout.back_button.unwrap().x);
         let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
         terminal
             .draw(|frame| render_shell_chrome(frame, &layout, &model, &context))
             .unwrap();
-        assert!(row(&terminal, 0).replace(' ', "").contains("返回上个位置"));
+        assert!(
+            row(&terminal, 0)
+                .replace(' ', "")
+                .contains(&i18n::tr!("ui-shell-back-location").replace(' ', ""))
+        );
         let collapsed =
             layout.with_input_keyboard(Rect::new(0, size.1 / 2, size.0, size.1 / 2), 1000);
         assert_eq!(collapsed.back_button.unwrap().height, 1);
@@ -420,9 +425,17 @@ fn header_navigation_stays_separate_from_keyboard_content() {
 #[test]
 fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
-        for label in ["取消", "返回上个位置"] {
-            let mut model = chrome(width, height);
-            model.back_label = Some(label.into());
+        for (action, label) in [
+            (
+                workspace_protocol::BackAction::Cancel,
+                i18n::tr!("ui-shell-back-cancel"),
+            ),
+            (
+                workspace_protocol::BackAction::PreviousLocation,
+                i18n::tr!("ui-shell-back-location"),
+            ),
+        ] {
+            let model = chrome(width, height);
             let theme = TundraTheme::default();
             let buttons = components::ButtonFrame::new(None, None, &theme);
             let mut context =
@@ -434,7 +447,7 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                 &context,
             )
             .with_help_button(true)
-            .with_back_label(model.back_label.as_deref());
+            .with_back_button(true, Some(action));
             assert_eq!(layout.main, Rect::new(0, 1, width, height - 2));
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
@@ -461,7 +474,11 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                     assert!(area.intersection(*other).is_empty());
                 }
             }
-            assert!(row(&terminal, 0).replace(' ', "").contains(label));
+            assert!(
+                row(&terminal, 0)
+                    .replace(' ', "")
+                    .contains(&label.replace(' ', ""))
+            );
             assert!(row(&terminal, 0).contains("09:30"));
         }
     }
@@ -523,7 +540,7 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
                 &context,
             )
             .with_help_button(true)
-            .with_back_label(model.back_label.as_deref())
+            .with_back_button(true, None)
             .with_keyboard_launcher(true);
             let layout = original.with_workspace_taskbar(true);
             assert_eq!(layout.main, original.main);

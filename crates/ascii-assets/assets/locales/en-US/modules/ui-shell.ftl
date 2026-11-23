@@ -3,10 +3,11 @@
 ui-shell-title = TundraUX
 ui-shell-minimum-terminal-size = TundraUX needs at least { $width }x{ $height } terminal cells.
 ui-shell-help-button = F1 Help
-ui-shell-back-cancel = Cancel
-ui-shell-back-location = Back to previous location
-ui-shell-back-page = Back to previous page
-ui-shell-back-home = Back to Home
+ui-shell-back-cancel = Esc Cancel
+ui-shell-back-location = Esc Back to previous location
+ui-shell-back-page = Esc Back to previous page
+ui-shell-back-home = Esc Back to Home
+ui-shell-back-power = Esc Power menu
 ui-shell-time-sync = Time Sync
 ui-shell-home = Home
 ui-shell-status = Status

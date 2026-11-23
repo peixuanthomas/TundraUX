@@ -57,6 +57,8 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 
 ## Default asset repair
 
+The header’s Esc labels include the key name and the current action in both bundled languages.
+
 Startup checks default graphics and the Chinese and English language resources. Missing or corrupt default files are restored from embedded content, while healthy custom content remains unchanged.
 
 If the asset directory cannot be written, the program uses in-memory copies and reports the repair result. See [Language resources and recovery](../i18n/docs/localization.md) for language message IDs, argument contracts, and fallback rules.

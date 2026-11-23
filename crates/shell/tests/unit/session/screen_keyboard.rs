@@ -22,7 +22,7 @@ fn closed_keyboard_entry_uses_header_without_covering_page_content() {
             state.status_time_button_label().as_deref(),
             &ui::RenderContext::default(),
         )
-        .with_back_label(state.header_back_label().as_deref())
+        .with_back_button(true, state.back_action())
         .with_help_button(state.help_button_available());
         let layout = state.input_keyboard_content_layout(base);
         let launcher = state.keyboard_launcher_area().unwrap();

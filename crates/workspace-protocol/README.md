@@ -43,7 +43,7 @@ AppHost sends a reliable persisted external-control configuration receipt before
 
 Window initialization can carry Shell's validated language snapshot and catalog. AppHost can use them when the snapshot matches its configuration. The language JSON is reference-counted within each process so queueing and cloning initialization do not copy its strings; its wire representation remains a JSON object.
 
-Shell initializes each window with the latest viewport size, layout generation, focus, and terminal color mode. AppHost folds pending viewport updates into initialization before constructing its session, then applies retained input and control messages in order. Each app frame tells Shell which Back action is available. The header uses that action for its label and sends it to the focused window when clicked.
+Shell initializes each window with the latest viewport size, layout generation, focus, and terminal color mode. AppHost folds pending viewport updates into initialization before constructing its session, then applies retained input and control messages in order. Each app frame tells Shell which Back action is available. Shell displays the focused window’s reported action beside Esc and checks it again before forwarding a click. An empty action leaves Esc disabled. Idle Home handles the power-menu action locally.
 
 File Explorer reports a selected path to Shell. After the picker exits, Shell returns the result to the opening Editor with its request ID. The result carries a native path or indicates cancellation. Document data stays in the Editor process.
 

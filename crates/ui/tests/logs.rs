@@ -140,7 +140,6 @@ fn render(
         title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Ready".into(),
             toast: None,

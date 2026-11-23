@@ -339,7 +339,8 @@ def main():
                 shell.drain(0.3)
                 frame = ui("snapshot")
                 assert frame["page"] == "CommandLine"
-                assert not any(node["id"] == "chrome/shell.back" for node in frame["nodes"])
+                back = next(node for node in frame["nodes"] if node["id"] == "chrome/shell.back")
+                assert "Esc" in back["name"] and not back["actionable"]
                 close = next(node for node in frame["nodes"] if "workspace.close." in node["id"])
                 ui("click", "--id", close["id"])
                 open_launcher()

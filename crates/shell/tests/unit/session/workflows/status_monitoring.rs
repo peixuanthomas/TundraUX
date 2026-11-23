@@ -306,7 +306,7 @@ fn diagnostics_is_integrated_into_system_status_tabs() {
         );
         state.apply_input(InputEvent::from_key_label("Esc"));
         assert_eq!(state.active_screen(), ShellScreen::SystemStatus);
-        assert!(state.header_back_label().is_none());
+        assert!(state.back_action().is_none());
     }
 }
 

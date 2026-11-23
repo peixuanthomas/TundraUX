@@ -47,7 +47,6 @@ pub struct ShellChromeViewModel {
     pub help_available: bool,
     pub help_button_hovered: bool,
     pub help_button_focused: bool,
-    pub back_label: Option<String>,
     pub status: StatusViewModel,
 }
 

@@ -888,7 +888,7 @@ fn running_auto_admin_f12_reaches_page_close_choices_and_stay_restores_its_input
         "close-choice keys must not reach the operation"
     );
     state.refresh_hit_map();
-    assert!(state.frame_layout.unwrap().back_button.is_none());
+    assert!(state.frame_layout.unwrap().back_action.is_none());
     state.apply_input(InputEvent::key(InputKey::F(12)));
     assert!(!state.auto_admin_visible());
     assert_eq!(

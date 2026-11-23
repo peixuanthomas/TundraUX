@@ -1960,7 +1960,6 @@ impl ShellSession {
             help_available: self.help_button_visible(),
             help_button_hovered: self.hovered_component == Some(ShellComponent::HelpButton),
             help_button_focused: self.pages.common.focused_component == ShellComponent::HelpButton,
-            back_label: self.header_back_label(),
             build_mode: build_mode_label().to_string(),
             display_mode: self.home_display_mode(),
             terminal_size: self.terminal_size,

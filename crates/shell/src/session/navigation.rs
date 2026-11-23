@@ -1,15 +1,6 @@
 use super::*;
 use workspace_protocol::BackAction;
 
-pub(in crate::session) fn back_label(action: BackAction) -> String {
-    match action {
-        BackAction::Cancel => i18n::tr!("ui-shell-back-cancel"),
-        BackAction::PreviousLocation => i18n::tr!("ui-shell-back-location"),
-        BackAction::PreviousPage => i18n::tr!("ui-shell-back-page"),
-        BackAction::Home => i18n::tr!("ui-shell-back-home"),
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NavigationEntry {
     id: PageInstanceId,
@@ -628,6 +619,9 @@ impl ShellSession {
             return cancel(command(ShellCommand::CancelPointerGesture));
         }
         let local = match screen {
+            ShellScreen::Home if !self.window_owner.is_app() => {
+                Some((BackAction::PowerMenu, command(ShellCommand::RequestExit)))
+            }
             ShellScreen::FirstRunSetup
                 if self.pages.setup.setup_step != ui::SetupStep::Language =>
             {
@@ -723,10 +717,18 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn route_back_button(&self) -> (RoutedTarget, ShellCommand) {
-        self.back_navigation()
-            .map_or((RoutedTarget::Global, ShellCommand::Noop), |(_, route)| {
+        let displayed = self.frame_layout.and_then(|layout| layout.back_action);
+        match self.back_navigation() {
+            Some((action, route)) if Some(action) == displayed => route,
+            // Launcher names the window underneath it in the workspace header.
+            Some((BackAction::Home, route))
+                if displayed == Some(BackAction::PreviousPage)
+                    && self.active_screen() == ShellScreen::Launcher =>
+            {
                 route
-            })
+            }
+            _ => (RoutedTarget::Global, ShellCommand::Noop),
+        }
     }
 
     pub(in crate::session) fn route_back_key(
@@ -736,12 +738,6 @@ impl ShellSession {
         if key.phase == InputPhase::Press && !key.has_non_shift_modifier() {
             if let Some((_, route)) = self.back_navigation() {
                 return route;
-            }
-            if self.active_screen() == ShellScreen::Home
-                && !self.window_owner.is_app()
-                && self.interactive_overlays().is_empty()
-            {
-                return (RoutedTarget::Global, ShellCommand::RequestExit);
             }
         }
         if self.interactive_overlays().is_empty() {

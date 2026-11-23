@@ -97,7 +97,6 @@ impl ScreenCompositor {
             title_focused: false,
             help_button_hovered: false,
             help_button_focused: false,
-            back_label: None,
             status: ui::StatusViewModel {
                 status: i18n::tr!("screen-keyboard-aa-safe"),
                 toast: None,
