@@ -38,7 +38,7 @@ The notification panel sits under the header. Its full status and single column 
 
 Pages render only the content in `ShellFrameLayout.main` and their own overlays. Shell handles the header, window bar, Toast, and modal dialogs, using the same layout for rendering and clicks.
 
-The title stays at the left of the header. The status message uses the space left by the visible controls and can be left-aligned, centered, or right-aligned. The screen keyboard, Tasks, Help, clock, and Back controls appear in that order when visible. The default centers the status and shows Help, clock, and Back. The optional Tasks button keeps the same label as tasks change state.
+The title at the left opens the power menu, which includes Tasks. The status text can be left-aligned, centered, or right-aligned. Screen keyboard, Help, clock and Back follow it. Back shows the next available action from the focused window and disappears at its starting page.
 
 Each app window has a complete frame with **Minimize**, **Split**, and **Close** controls. The Split menu offers left/right, top/bottom, and full screen, with unavailable actions disabled. Full screen retains only the chosen pane and minimizes the others. Window controls, rendering, automation, and hit testing share the same geometry.
 
@@ -96,7 +96,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `ManagementWorkspace` organizes search, details, action bars, and expert areas that stay expanded when the selected object changes.
 - The management details scrollbar uses the wrapped line count for both the scroll range and offset clamping.
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
-- Home exposes an Edit icons / Done action, an edit-mode summary, and insertion indicators. Home and Launcher share grid insertion geometry, including row gaps, empty tail slots, and scrollbar exclusion.
+- Home and Launcher show a one-cell ASCII `#` beside draggable names in organize mode. The entire tile accepts the drag. Both pages share the insertion line and its geometry, including row gaps, empty tail slots, and scrollbar exclusion.
 - `ManagementViewModel::selected_rows` represents all selected rows; `selected` represents the current position.
 - Shared scrollbars draw a thin, muted track and a brighter thumb. The vertical thumb uses half a character cell's width, and the horizontal thumb uses a quarter of its height. `ScrollbarOrientation::hit_test` extends the pointer target by one cell on either side of a vertical bar or above and below a horizontal bar.
 
@@ -109,10 +109,10 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 ### Page controls
 
 - Home and Launcher tiles show the icon and application name. Keyboard focus underlines the name. Home centers its title, account, and grid within 112 columns and uses name-only tiles when the artwork would force scrolling. Launcher shows the selected custom entry's path and any status that needs attention.
-- Explorer uses a distinct background for context menus in truecolor and ANSI terminals. It keeps Undo Move/Rename visible and disabled when no history is available. The context menu and platform-specific Ctrl/Cmd+Z shortcut use the same command. Save pickers keep the filename and Save/Cancel controls beside directory browsing; Tab moves between them, F10 saves, and Esc cancels.
+- Explorer puts Back, Parent, and Forward beside the path and fits ten short actions on one row at 108×20, from Open on the left to More on the right. The Delete button retains its trash icon and red feedback through hover and press on truecolor and ANSI terminals. The sidebar and file list each take one Tab stop. Save pickers add filename, Save and Cancel to the same focus order.
 - The ordinary editor keeps Save, Undo, and Find visible. Its footer shows the cursor position and filename on the buttons that act on them. Its context menu stays inside the window and preserves the selection. Rich Markdown keeps its selection-formatting menu.
 - Office previews use the read-only Rich Markdown canvas and wrap long values inside table cells.
-- Launcher search uses `TextInput` and shares its region between rendering and hit testing. The entry menu offers Open, New session for managed apps, Move, and Add to Home. User-added entries also expose Delete and their editing actions. Right-click the blank area for launcher-wide actions.
+- Launcher opens with its search field focused. The field uses `TextInput` and shares its region between rendering and hit testing. The entry menu offers Open, New session for managed apps, Move, and Add to Home. User-added entries also expose Delete and editing actions. Right-click the blank area for launcher-wide actions.
 - Settings uses Tab/Shift+Tab across categories, the operating-system entry, and controls. Arrows switch categories when that region is focused and operate content otherwise; ordinary numeric options open the shared input dialog.
 - Command Line appears in the application settings list and uses the shared searchable picker for its shell setting.
 - The Release update page adds a large action, download meter, and update notes when an update is available. Source updates use a scrollable Git tree with full-row commit targets and a live output panel that moves below the graph in narrow windows.

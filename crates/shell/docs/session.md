@@ -71,7 +71,7 @@ Unix input messages are assembled by the local Crossterm patch. A standalone Esc
 
 `tasks.rs` registers the page or session a task belongs to, its request ID, generation, and cancellation action. Results from old Shell sessions, closed pages, and superseded requests do not update new pages. watchdog handles execution and failure isolation; Shell handles ownership and presentation.
 
-Open Tasks from Launcher or enable the optional title-bar button in **Settings → System → Top bar contents**. The button's label stays the same while tasks run or await approval. Activating it while Tasks is open closes that page through the normal page lifecycle and returns to its originating page. Esc or Back from saved output restores the task list and selection before leaving the task page.
+Open Tasks from the power menu or Launcher. Esc or Back from saved output restores the task list and selection.
 
 Before exit, save editor recovery records, stop tasks for the current session, and revoke authorization. Task summaries and output persist across program restarts; scheduled tasks run independently through system services.
 
@@ -87,7 +87,7 @@ A floating Toast leaves keyboard focus with the current page. The compositor blo
 
 presentation assembles ViewModels from `AppSnapshot` and the necessary session state. `ScreenCompositor` handles final rendering; it does not decide application state or return targets during rendering.
 
-The global `ShellFrameLayout` defines the header, central `main`, and bottom window bar. The header places the left-aligned title and status message before the screen keyboard, Tasks, Help, clock, and Back controls. Each app window adds a frame around its content. Rendering, mouse hit testing, PTY sizing, and effects use the same content rectangle. Window buttons and the bottom entries act on release inside their original target. Dragging outside, resizing, losing focus, or opening a new overlay cancels a pending press. Input batching preserves the drag path so leaving a button and returning cannot accidentally activate it.
+The global `ShellFrameLayout` defines the header, central `main`, and bottom window bar. The title opens the power menu even while an app has a dialog open. The status, screen keyboard, Help, clock, and contextual Back controls follow the title. Each app has a frame around its content. Rendering, hit testing, PTY sizing, and effects use the same content rectangle. Buttons activate on release inside the original target. Leaving the button, resizing, losing focus, or opening an overlay cancels a pending press.
 
 Compositing order:
 
@@ -98,7 +98,7 @@ Compositing order:
 5. Animations and effects for the current frame;
 6. Floating Toast and the on-screen keyboard.
 
-Esc first dismisses a modal or menu. On an ordinary app page Esc minimizes its window. Vim and command terminals process Esc natively. The top-right Back button returns from local subpages. A window's Close button and Ctrl+W, Q ask about unsaved documents or running operations before cleanup.
+Esc and Back perform one step in the focused app. They dismiss a menu or dialog, cancel a drag or edit, or return to a previous location or page. At the start of an app the window stays open. Vim and terminals receive Esc directly. Idle Home opens the power menu with Esc. The window’s × and Ctrl+W followed by Q keep the normal save and running-task confirmations.
 
 The window's Split button offers left/right, top/bottom, and full screen. A split keeps the source app left/top and opens a searchable app/window selector in the new pane; cancel removes the pending pane. Full screen minimizes the other panes and clears the split. Ctrl+W then v/s splits outside editor canvases and native terminals, which preserve their own Ctrl+W. The bottom bar switches to a running window or restores a minimized one. A restore uses the previous split position when it fits and the focused slot when the split is full.
 
@@ -125,9 +125,9 @@ Page buttons show their shortcuts, and F1 opens help on pages that provide it. F
 
 | Page | Common input |
 | --- | --- |
-| General | Tab/Shift+Tab moves focus, Enter/Space activates, Esc dismisses the active overlay or minimizes an ordinary app |
-| Home | Arrows select entries; Enter/Space opens the selection; Q/Esc opens exit confirmation |
-| Launcher | Enter opens, V switches views, R/F5 refreshes, F2 organizes |
+| General | Tab/Shift+Tab moves focus, Enter/Space activates, Esc cancels the top action or goes back within the focused app |
+| Home | Arrows select entries, Enter/Space opens the selection, and Esc on idle Home opens the power menu |
+| Launcher | Type to search, Enter opens the selected match, Down focuses results, and F2 organizes |
 | File management | S, Ctrl+F, or `/` searches; F5 refreshes; F6 sorts; Ctrl/Cmd+Z undoes a move or rename |
 | Management pages | S searches, R/F5 refreshes, F3 toggles expert actions, F4 shows details, Ctrl+Enter submits |
 | Logs | O/Enter opens, L/M/T filters, C clears, G opens the log directory, F3 toggles expert tools, F10 opens More |
@@ -145,9 +145,9 @@ Management lists use Ctrl/Cmd+click for individual selection, Shift+click for a 
 
 Settings uses Tab/Shift+Tab across categories, the operating-system entry, and content controls. Arrows switch categories only while the category region is focused; Left/Right moves between the application list and its settings. Advanced animation settings show nine phase durations in one three-column form. Reset changes the draft, Save validates and writes all values, and Cancel or Esc discards it and restores focus.
 
-Launcher search filters by name, path/command, and type. Ctrl/Cmd+F or Tab focuses it, Enter opens the current result, Down enters the results, and Esc clears the query before leaving the field. Filtering pauses reordering, and an empty result cannot launch or configure hidden entries. Built-in context menus provide Open and page actions; blank-area menus provide Add, Refresh, View, and Organize. Built-in entries remain protected from editing and deletion.
+Launcher focuses search when it opens. It matches localized app names and descriptions, paths, commands, and types. Exact names take priority. Enter opens the selected app and Down focuses results. Esc clears a query before returning to the opener. Filtering pauses reordering, and an empty result cannot activate a hidden item. In organize mode a `#` marks each draggable tile on Home and in Launcher. The insertion line previews the new position.
 
-Explorer copy and cut are shared only within the Tundra session. Undo Move/Rename and Ctrl/Cmd+Z use the same application command and restore location without discarding later edits. Active tasks, replaced objects, or an occupied original path prevent undo. Replacements, merges, and cross-volume moves clear older history and report that they cannot be undone. Text fields retain their own shortcuts. First save and Save As keep directory browsing, filename, Save, and Cancel together; Tab changes focus, F10 saves, and Esc cancels. Existing-file conflicts and external modifications are still checked.
+In Explorer, the path row’s Back and Forward follow visit history, while Parent opens the current directory’s parent. Esc follows history after dismissing any local menu or edit. Tab and Shift+Tab move through enabled controls in screen order. Arrow keys select within the sidebar or file list. Save As adds the filename, Save, and Cancel to this order. F10 submits. Explorer shares copied and cut files within the session. Undo and Ctrl/Cmd+Z can reverse a safe move or rename. Replacements, merges, and cross-volume moves clear undo history. Active tasks, changed objects, or an occupied original path prevent undo.
 
 The standard editor's right-click or Shift+F10 menu preserves the selection and uses existing clipboard commands; read-only text can be copied but not cut or pasted. On macOS, Command moves to line/document boundaries and Option moves or deletes by word. Vim and child terminals keep their own key handling.
 

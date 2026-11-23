@@ -42,7 +42,7 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 ## Configuration notes
 
 - `[automation].enabled` stores external CLI control, defaulting to `false`.
-- `[top_bar]` stores `status_alignment` (`left`, `center`, or `right`) and the `show_help`, `show_time`, `show_esc`, and `show_tasks` checkboxes. Missing preferences use centered status text with Help, time, and Esc visible and Tasks hidden.
+- `[top_bar]` stores `status_alignment` (`left`, `center`, or `right`) and the `show_help`, `show_time`, and `show_esc` preferences. The defaults center the status and show Help, time, and Back when available. Older configurations with `show_tasks` still load. Tasks is available from the title's power menu.
 - `[appearance].icon_display_mode` defaults to `ascii` on Linux and `image` on other platforms. User profiles use the same default when the field is missing.
 - `screen_timeout_seconds` stores the idle-weather timeout; `0` means never, and the default is 300 seconds.
 - `[editor].vim_mode_enabled` stores the default for newly opened editor sessions, disabled by default. F8 changes only the current editor session.

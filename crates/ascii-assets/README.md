@@ -38,13 +38,13 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 
 | File | Interface text |
 | --- | --- |
-| `ui-launcher.ftl` | Persistent search, no results, search shortcuts, and entry/context-menu actions |
+| `ui-launcher.ftl` | Launcher search, result and organize controls. Built-in search uses the active language pack’s app names and descriptions. |
 | `ui-home.ftl` | Home shortcut actions and icon editing |
 | `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, and Tab focus navigation with arrows in the focused region |
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through Tasks in Launcher |
-| `ui-explorer.ftl` | Open and Save document picker titles, filename field, and actions |
+| `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |
 | `shell-command-line.ftl` | Command Line startup hint, missing interpreter message, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |

@@ -17,12 +17,12 @@ The default dark appearance uses Glacier Night blue surfaces and one accent. Lay
 | Border | `#29434E` | Inputs and necessary overlay boundaries |
 
 - Each application window has one complete outer frame with its own title and controls. Separate the page's internal groups, lists, tables, and action areas with headings, whitespace, alignment, or a background change; do not nest decorative frames.
-- Launcher is a Shell page covering the workspace. It lists available built-in and user-added apps, with no window frame or window bar entry. Home and Launcher look up the same themed icons by built-in application ID. Each graphical icon fits completely above its label and stays centered when the selection, window size, or terminal font changes. Home keeps the Launcher shortcut visible. Users can add shortcuts from Launcher and remove them through the Home context menu without changing the Launcher entries.
+- Home and Launcher use the same catalog, localized names, artwork, and launch actions. Launcher lists every built-in and user-added app available to the current platform and account. A shortcut can be removed from Home and added again from Launcher. Keep the Launcher shortcut on Home. Center each icon above its label. In organize mode, prefix each draggable label with a one-cell ASCII `#`. The whole tile accepts a drag and the insertion line marks where the tile will land.
 - A modal, menu, or input may use one boundary. Temporary messages use the shared surface and the matching success, warning, or danger color.
 - Dialogs share three-column side padding, a title and top-right close action, a readable body, and a raised footer when actions exist. Compact windows reduce vertical gaps before hiding required content. Dim covered content without moving it; toasts stay in the upper-right and do not take focus.
 - Ordinary buttons use plain action text without `[]` on a visible control surface, distinct from nearby static text. Primary actions use an accent fill; destructive actions use the danger color. Selection and the current item use background emphasis independently of keyboard focus.
 - Navigation entries and table rows each occupy one terminal row. Use one row between groups, two columns between adjacent groups, and one cell between grid items. Keep a whole row clickable, including its padding, for mouse and touch.
-- The header and bottom window bar each occupy one row. The title sits at the far left. The status message uses all space between the title and the visible controls, with left, center, or right alignment. The controls appear in the order of screen keyboard, Tasks, Help, clock, and Back. The default centers the status text and shows Help, clock, and Back. Click the status text to open the notification panel directly below the header. At 108 × 20, the application window occupies 108 × 18 cells and its outer frame leaves 106 × 16 content cells.
+- The header and bottom window bar each occupy one row. The title at the far left opens the power menu from any page. Tasks is an action in that menu. The status text fills the space between the title and the screen keyboard, Help, clock, and contextual Back controls. Click the status text to open notifications. The default centers the status and enables Help, clock, and Back. At 108 × 20, the application window occupies 108 × 18 cells and its frame leaves 106 × 16 content cells.
 - Use the same spacing, typography, and control states across pages. Text must stay readable with truecolor or ANSI color, and with Chinese, English, combining marks, and wide characters.
 
 New defaults apply when a preference is absent. Keep explicit saved border, color, theme, animation speed, and timing preferences; do not overwrite them just because the defaults changed.
@@ -40,7 +40,7 @@ OpenCode's dialog mounts directly; it does not supply TundraUX's page/dialog ent
 
 ## Text and action entry points
 
-- Buttons state the action and its object directly, with any existing shortcut next to the action text. Full keyboard instructions belong in F1 help.
+- Use short action labels. File Explorer keeps shortcuts in F1 help so its common actions fit at the minimum width.
 - Common operations use visible buttons and options. Keep search, filters, refresh, and path navigation near the top, and page actions at the bottom right of the content area. Wrap actions at their full text width in narrow windows; there is no fixed button count or three-row limit.
 - Reduce decoration without losing features: multi-selection, sorting, search, expert areas, help, return paths, and task management must stay reachable.
 - Keep service logs, file copy/cut/paste/rename, editor save/undo/find, and scheduled-task run-now directly visible. Home shows supported system tasks with compact readable entries in small windows.
@@ -62,7 +62,7 @@ The shared Button, Theme, and RenderContext own control states. Pages pass focus
 | --- | --- |
 | Normal | Readable text on a neutral background |
 | Mouse hover | Accent feedback without changing layout |
-| Mouse pressed | Stronger accent feedback; release within the same target activates it |
+| Mouse pressed | Stronger feedback until release inside the same target. Danger buttons retain their icon and use different shades of red for normal, hover, and press in both truecolor and ANSI. |
 | Keyboard focus | Visible accent indicator independent of current-item and selection backgrounds |
 | Disabled | `TundraTheme::disabled_style()`; ignore activation |
 | Click completed | Clear pressed and hover feedback until actual pointer movement |
@@ -117,9 +117,9 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 
 ## Pages, navigation, and global bars
 
-- `ScreenCompositor` draws the header and bottom window bar. The Tasks label and its clickable area stay fixed when task activity changes. Pages draw only `ShellFrameLayout.main` and their own overlays.
+- `ScreenCompositor` draws the header and bottom window bar. Pages draw inside `ShellFrameLayout.main`. The title remains available above page overlays.
 - Create an independent instance when opening a subpage or explicitly starting a new application session. An ordinary application launch restores an existing window when available. Check instance IDs for state, task results, and focus restoration so late results cannot enter a reopened page.
-- Shell handles entry and overlays. Esc first cancels the top dialog, menu, or page-local action. At an ordinary app root, Esc moves only the focused app to the background and keeps its state and work. Command Line, native Vim, and custom terminal apps receive their own Esc.
+- Esc and the header Back control take the same single step in the focused window. Cancel a dialog, menu, drag or edit first, then return to the previous location or page. An app stays open at its starting page. Use the matching Cancel, Previous location or page, or Home label and hide Back when there is no return step. Command Line, native Vim, and embedded terminals handle physical Esc. On idle Home, Esc opens the power menu. Esc dismisses that menu.
 - Every visible window, including a single or maximized window, has a complete frame. Its top edge holds the title, Minimize, Split, and Close buttons. Full screen is an action inside Split. Clicking the frame focuses that window. Buttons act on their own window on release, even if another window had focus before.
 - The bottom window bar lists running apps. Click a label to focus or restore it. Click the separate × button to request a normal close. Scroll buttons keep overflow entries reachable. Right-click a taskbar entry for Open, New session, and Move. Delete appears only for user-added Launcher entries and removes the entry after the selected window closes successfully. Launcher icons use the same menu labels for the applicable actions. The split button offers incremental left/right, top/bottom, and full screen. The original app stays left/top. The new pane opens a searchable selector for minimized windows and new app sessions, with a scrollbar for overflowing results. The mouse wheel scrolls those results without changing the selected app. Cancel removes only the pending split. Unavailable actions stay visible and disabled.
 - The workspace prefix is Ctrl+W followed by v/s for splitting, h/j/k/l or arrows for focus, o for full screen, b for minimize, w for windows, q for normal close, and uppercase X for immediate kill. Outside native editing areas, Ctrl+W twice forwards one literal Ctrl+W; Esc cancels a pending prefix. Editor canvases, Vim, and terminals keep native Ctrl+W and use window buttons. Topmost dialogs receive input first; the old Ctrl+B prefix is removed. Holding a key must not repeat splits or dismiss several layers.
@@ -144,7 +144,10 @@ Use one three-column form with direct input and Tab navigation. Each phase accep
 - Keyboard keys use neutral boundaries and text contrast of at least 4.5:1. Pressed or latched keys use accent fill.
 - Use the shared `FormDialog`. Enter advances fields and submits from the last field; Space or a tap toggles switches; Ctrl+Enter submits directly; F10 activates the default confirmation.
 - Keep the current field, Confirm, and Cancel reachable while scrolling long forms. Passwords stay masked in both rendering and snapshots.
-- Packages uses an Installed, Updates, Search sidebar; Settings reuses that workspace structure. Tab/Shift+Tab moves between regions and controls. Arrows change categories only in the focused sidebar and otherwise operate content. Packages keeps F7/F8/F6 for Installed/Updates/Search.
+- Launcher opens with search focused. Match the active language pack’s app names and descriptions and prefer an exact name. Enter opens the selected result and Down moves focus to the results. Esc clears an active query, then returns to the screen that opened Launcher.
+- In File Explorer, put `<` Back, `^` Parent, and `>` Forward on the path row. Esc goes back in visit history. Tab and Shift+Tab visit enabled controls in screen order. The sidebar and file list each take one stop. Arrows select within a region and Enter opens the selection. Changing focus preserves the directory and current files. Include the Save As filename, Save and Cancel in that order.
+- At 108 × 20, Explorer shows Open, New, Copy, Cut, Paste, Rename, Undo, Select, Delete, and More from left to right on one row with short localized labels and ASCII icons. More contains sort, properties and advanced options. Reserve the footer for multi-selection counts, progress, or errors.
+- Packages uses an Installed, Updates, Search sidebar. Settings shares its layout. Tab and Shift+Tab move between controls. Arrows change categories in the focused sidebar. Packages keeps F7/F8/F6 for Installed/Updates/Search.
 - In application settings, Left/Right moves between the application list and its controls. Enter/Space activates controls; arrow navigation does not save options.
 - Numeric options support direct entry or minus/plus controls. AA policy and screen timeout use selection dialogs.
 - First-time setup offers F9 to finish with the default appearance. Home shows the current system username, and Users is available on Linux.

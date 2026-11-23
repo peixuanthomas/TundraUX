@@ -89,7 +89,7 @@ After an AppHost welcomes the Shell, its current viewport and initialization joi
 
 When closing a page with running work, users can continue in the background, cancel and close, or stay on the page. watchdog handles task execution and process supervision; Shell handles the page a task belongs to, cancellation choices, and result presentation.
 
-The header shows the focused app's status beside the title. Click the status to open the notification panel. It shows the full status followed by this session’s warning, error, and critical reports, newest first. Each card names its source and can be dismissed individually. Hidden and closed windows keep their history on the desktop. After an abnormal desktop exit, the panel offers that session’s report to users with diagnostics access. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, clock, Esc, and Tasks. The default centers the status and shows Help, clock, and Esc. First-time setup can finish with the default appearance using F9.
+Click the title on any page to open the power menu, which includes Tasks. Click the status beside the title for the focused app’s full status and this session’s warnings, errors, and critical reports. Each card names its source and can be dismissed individually. Closed and hidden windows keep their history on the desktop. After an abnormal exit, the panel offers that session’s report to users with diagnostics access. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, clock, and Back. First-time setup can finish with default appearance using F9.
 
 ## Windows
 
@@ -123,7 +123,7 @@ Selection dialogs share a top search field, case-insensitive filtering, stable o
 
 **Settings → Applications → Command Line** selects the system command interpreter for newly opened Command Line sessions. Each session reads the choice at launch and continues to offer Tundra commands such as `/help`.
 
-Esc first dismisses an active dialog or menu. On an ordinary application page, it moves the window to the background. Vim and embedded terminal input handle their own Esc. The global Back control can return from a subpage.
+Esc and the header Back button cancel one dialog, menu, drag or edit, then go back one step within the focused tool. At the tool’s starting page the window stays open. Vim and embedded terminals handle their own Esc. Press Esc on idle Home or click the top-left title to open the power menu.
 
 Closing a window prompts for unsaved changes or running tasks. If cleanup still runs after two seconds, the Shell offers **Keep waiting** and **Force kill**. A force kill goes directly to the watchdog.
 
@@ -144,8 +144,8 @@ Floating toasts preserve keyboard focus and block pointer input in the area they
 ## Interface hosting
 
 - **Home:** The minimum terminal size is 108×20, shared by startup, runtime resizing and Command Line. Supported Home entries fit on one page, using name-only tiles when icons would force scrolling; smaller terminals show an error. Larger windows center the title, account, and grid while keeping the action footer at the bottom. F2 or the Edit icons button enters edit mode. Pointer drops and Shift+Left/Right save icon order in each user’s `home.order.<username>` state entry. Esc cancels a drag first, then finishes editing; focus loss, resizing, overlays, and navigation cancel pending drops.
-- **Home and Launcher:** Home holds shortcuts. Right-click one to remove it from Home. Launcher is a Shell page that covers the workspace until you press Esc or open a workspace app. It lists built-in and user-added applications and offers **Add to Home** in each app's context menu. Both pages use the same themed icons for built-in applications. Search by name, path, command, or type. **New session** is available for built-in apps and embedded terminals. User-added entries offer editing and deletion within Launcher.
-- **Files:** share copied/cut files across Explorer pages and undo safe moves or renames through the shared application service. First save and Save As keep directory browsing, filename, Save, and Cancel together.
+- **Home and Launcher:** Home shortcuts and Launcher use the same app catalog and opening actions. Removing a shortcut from Home leaves the app in Launcher. Launcher opens with search focused and matches names and descriptions from the active language pack alongside paths, commands, and types. An exact app name is selected first. Enter launches it and Down focuses the results. Esc clears a query, then returns to the opener. In organize mode both grids put a `#` beside each draggable name and mark the drop position with a vertical line.
+- **Files:** The path row has Back, Parent, and Forward. Esc follows visit history. Tab and Shift+Tab move between enabled controls while keeping the directory and selected files. The sidebar and file list each take one stop. Save As adds filename, Save, and Cancel. At 108×20 the ten common actions fit on one row. More holds sorting, properties, and advanced options. F1 lists shortcuts. Explorer windows share copied and cut files and undo history.
 - **Editor and scripts:** keep common editing tools visible, preserve the text selection when opening the standard editor's context menu, manage multi-document pages and Vim, and host script execution and debugging. F8 switches Vim mode for the current editor window. New editor windows start with the configured default. macOS text editing follows Command and Option conventions.
 - **System management and logs:** present platform operations with AA authorization, shared focus and selection controls, and persistent expert areas opened with F3. UX logs keep expert filters and related actions visible while changing rows or filters; F10 still opens the menu.
 - **Settings and status:** use Tab to move between regions and controls and arrows within the focused region. Advanced animation timings use one three-column form with a draft and a single save/cancel operation. New Linux profiles use ASCII icons. On a terminal with image support, users can switch to image icons in Settings → Appearance → Theme.
@@ -199,6 +199,8 @@ Per-window input queues stop admitting new application input when their bounded 
 Restoring an existing window creates no startup sample. Page-specific background work can continue after the first frame.
 
 AppHosts without terminal image support skip PNG file reads while loading all catalogs, clock glyphs, and text artwork before their first frame. Hosts with image support keep all image bytes available for appearance changes.
+
+Shell sends the detected color mode to each AppHost so controls use the terminal's ANSI or truecolor styles.
 
 `app-startup-presented` is a separate event recorded after successful terminal output. Its `total_us` runs from sending `SpawnApp` through that output; `accepted_us` retains the earlier acceptance measurement, `accepted_to_present_us` measures the remaining Shell wait, and `terminal_output_us` includes composition, terminal diffing, image retirement, cursor updates, and output for that draw. `starting_shown` records whether a Starting placeholder was actually output before the first application frame. These fields measure output completion, not a terminal emulator's pixel presentation.
 

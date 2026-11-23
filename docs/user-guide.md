@@ -26,7 +26,8 @@ From Home, use the arrow keys and **Enter** or **Space**, or click a tile. Home 
 | What you want to do | How |
 | --- | --- |
 | Read help or a status message | Select **Help** or press **F1**. Click the status text beside the title for the full message and recent warnings. Use **×** on a card or **Clear all**. Press **Esc** to return. |
-| Go back or dismiss an overlay | Use the header's **Back** control for a local subpage. **Esc** dismisses the active dialog or menu first, and minimizes an ordinary app window when no overlay handles it. Vim and child terminals handle their own **Esc**. |
+| Go back or dismiss an overlay | Press **Esc** or click the header’s **Back** button to cancel the top dialog, menu, drag, or edit. Press again to return to the previous location in the focused app. At its starting page the app stays open. Vim and terminals handle their own **Esc**. |
+| Open the power menu or Tasks | Click the title at the top left of any page, or press **Esc** on idle Home. Choose **Tasks** to see running work. **Esc** closes the menu. |
 | Minimize, restore, or close | Use the window frame's **Minimize** or **Close** button. In the bottom window bar, click a title to focus or restore it, or click its **×** button to close it normally. |
 | Split the workspace | Choose **Split → Left/right** or **Top/bottom**, then pick an app or a minimized window. Cancel the chooser to undo that split. Repeat where space permits, up to four panes. |
 | Make a pane full screen | Choose **Split → Full screen**. Other panes minimize and remain available in the window bar. |
@@ -40,7 +41,7 @@ With the default minimum, left/right needs 217 × 20 cells, top/bottom needs 108
 
 ## Browse and edit files
 
-- **Open a location:** In File Explorer, use **Ctrl+L** (**Cmd+L** on macOS) to edit the path, **Alt+Up** to go to its parent, or **/** to search the list. Press **Enter** to open the selected entry.
+- **Open a location:** Beside the path, **<** and **>** follow your visits and **^** opens the parent folder. **Esc** goes back one visit. **Ctrl+L** (**Cmd+L** on macOS) edits the path. Use **Tab** or **Shift+Tab** to focus the sidebar or file list, arrows to select, and **Enter** to open. Find sorting and file details under **More** and shortcuts under **F1**. In Trash, **Properties** also shows where a file will be restored.
 - **Organize files:** In the file list, **N** creates a folder, **T** creates a text file, **F2** renames, **C/X/V** copies, cuts, or pastes, and **Delete** moves items to Trash where supported. Right-click or press **Shift+F10** to see the current entry's actions. In a regular directory, the empty-area menu can open Command Line in that directory.
 - **Act on several entries:** Use the selection toggle, **Ctrl/Cmd+click** for individual entries, **Shift+click** for a range, or **Shift+Enter** to toggle the current row. **Ctrl/Cmd+A** selects all, **Ctrl/Cmd+I** inverts selection, and **Ctrl/Cmd+Shift+A** clears it. [Multi-selection](list-selection.md) spells out what stays selected when you filter, sort, or refresh.
 - **Undo a move or rename:** Use **Undo Move/Rename** in Explorer or **Ctrl/Cmd+Z** while browsing. Explorer windows in this run share the file clipboard and undo history. Cross-volume moves, replacements, and directory merges cannot be undone. Undo also refuses when the original location is occupied or the moved object has changed identity.
@@ -50,7 +51,7 @@ Markdown files opened in the standard editor are edited as source text. In Vim, 
 
 ## Launch programs and run commands
 
-Open **Launcher** to browse all apps available on your platform and add your own entries. Search by name, path, command, or type, then press **Enter** to open the selected result. **Esc** returns to the workspace. Right-click an entry for **Add to Home**, **New session**, or **Move** where available. Use **Remove from Home** on a Home shortcut to hide it from Home. Right-click empty space in Launcher to add a custom entry. **F4** opens Run settings for supported entries.
+Open **Launcher** and type an app’s name in your current interface language. An exact name is selected first. **Enter** opens the selected result and **↓** moves into the results. Search also looks at descriptions, paths, commands and types. **Esc** clears the search, then returns to the screen that opened Launcher. Launcher lists available built-in and user-added apps, including apps removed from Home. Use a tile’s right-click menu to add or remove a Home shortcut. In organize mode, draggable names on both pages show **#**. Drag anywhere on a tile and release at the vertical line. Right-click empty space in Launcher to add a custom entry. **F4** opens Run settings for supported entries.
 
 In **Command Line**, type a normal command such as `pwd` (Unix) or `cd` (Windows) to use the OS command interpreter. Prefix a TundraUX command with a slash, for example `/help` or `/doctor`; from an external terminal, use `tundra-cli help` or `tundra-cli doctor` without the slash. The built-in session keeps its working directory and exported environment. At the end of the input, **Right** cycles completion candidates and **Tab** accepts the gray suggestion. Type `exit` to close that session normally.
 
@@ -70,7 +71,7 @@ For a system change, review the targets and choose the action. AutoAdmin shows a
 
 - **Clock:** Select the clock in the header or open **Clock** from Launcher. **N** opens the creation dialog for an alarm or countdown and **M** manages the selected entry. Clock windows share your items. On Linux, the clock follows the OS time and timezone.
 - **Weather:** The workspace shows weather after the configured period of inactivity. Settings controls the screen timeout and weather location. Press a key or tap to return to your open windows without signing in again.
-- **Top bar:** Open **Settings → System → Top bar contents** to align the status text or show and hide Help, time, Esc, and Tasks. By default, the status is centered and Help, time, and Esc are visible. Press **F1** or **Esc** to use their keyboard actions when their buttons are hidden.
+- **Top bar:** Click the title for the power menu and Tasks, or click the status for notifications. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, time, and Back. When enabled, Back appears whenever there is a step to undo or a previous page to visit.
 - **Appearance and input:** Change language, theme, icon mode, or motion in Settings. ASCII icons work in terminals without image support. Use the header's keyboard button for supported text fields and embedded terminals.
 
 ## Update or troubleshoot
