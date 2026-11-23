@@ -1,6 +1,7 @@
 use super::*;
 
 const FONT: &[u8] = b"bundled test font";
+const UPGRADE: &[u8] = b"upgraded bundled font";
 
 fn fixture() -> (tempfile::TempDir, FontPaths) {
     let temp = tempfile::tempdir().unwrap();
@@ -30,6 +31,99 @@ fn owned_font_survives_a_retry_and_can_be_removed() {
         paths.install(FONT, || Ok(Vec::new()), |_| Ok(())).unwrap(),
         CellIconFontInstall::Installed
     );
+}
+
+#[test]
+fn upgrade_replaces_only_the_owned_version() {
+    let (temp, paths) = fixture();
+    paths.install(FONT, || Ok(Vec::new()), |_| Ok(())).unwrap();
+    let manual = temp.path().join("manual.ttf");
+    fs::write(&manual, FONT).unwrap();
+
+    assert_eq!(
+        paths
+            .install(
+                UPGRADE,
+                || Ok(vec![paths.font.clone(), manual.clone()]),
+                |_| Ok(())
+            )
+            .unwrap(),
+        CellIconFontInstall::Conflict
+    );
+    assert_eq!(fs::read(&paths.font).unwrap(), FONT);
+    assert_eq!(fs::read(&manual).unwrap(), FONT);
+
+    assert_eq!(
+        paths
+            .install(UPGRADE, || Ok(vec![paths.font.clone()]), |_| Ok(()))
+            .unwrap(),
+        CellIconFontInstall::Installed
+    );
+    assert_eq!(fs::read(&paths.font).unwrap(), UPGRADE);
+    assert_eq!(
+        paths
+            .install(UPGRADE, || Ok(vec![paths.font.clone()]), |_| Ok(()))
+            .unwrap(),
+        CellIconFontInstall::Available
+    );
+    assert_eq!(
+        paths.uninstall(|_| Ok(())).unwrap(),
+        CellIconFontRemoval::Removed
+    );
+    assert_eq!(fs::read(&manual).unwrap(), FONT);
+}
+
+#[test]
+fn upgrade_retries_a_failed_refresh_while_retaining_the_old_file() {
+    let (_temp, paths) = fixture();
+    paths.install(FONT, || Ok(Vec::new()), |_| Ok(())).unwrap();
+    let old = paths.ownership().unwrap().unwrap();
+    let backup = paths.font.with_file_name(old.stage_file);
+    assert!(
+        paths
+            .install(
+                UPGRADE,
+                || Ok(Vec::new()),
+                |_| Err(io::Error::other("test failure"))
+            )
+            .is_err()
+    );
+    assert_eq!(fs::read(&backup).unwrap(), FONT);
+    assert_eq!(fs::read(&paths.font).unwrap(), UPGRADE);
+    assert!(paths.ownership().unwrap().unwrap().upgrade.is_some());
+
+    assert_eq!(
+        paths
+            .install(
+                UPGRADE,
+                || Ok(vec![paths.font.clone(), backup.clone()]),
+                |_| Ok(())
+            )
+            .unwrap(),
+        CellIconFontInstall::Installed
+    );
+    assert!(!backup.exists());
+    assert!(paths.ownership().unwrap().unwrap().upgrade.is_none());
+}
+
+#[test]
+fn uninstall_recovers_an_upgrade_interrupted_between_versions() {
+    let (_temp, paths) = fixture();
+    paths.install(FONT, || Ok(Vec::new()), |_| Ok(())).unwrap();
+    let mut record = paths.ownership().unwrap().unwrap();
+    let fonts = paths.font.parent().unwrap();
+    paths.prepare_upgrade(fonts, &mut record, UPGRADE).unwrap();
+    let new_stage = fonts.join(&record.upgrade.as_ref().unwrap().stage_file);
+    let old_stage = fonts.join(&record.stage_file);
+    fs::rename(&paths.font, &old_stage).unwrap();
+
+    assert_eq!(
+        paths.uninstall(|_| Ok(())).unwrap(),
+        CellIconFontRemoval::Removed
+    );
+    assert!(!old_stage.exists());
+    assert!(!new_stage.exists());
+    assert!(!paths.record.exists());
 }
 
 #[test]
@@ -65,6 +159,12 @@ fn an_identical_replacement_is_preserved() {
     fs::rename(&paths.font, temp.path().join("original.ttf")).unwrap();
     fs::write(&paths.font, FONT).unwrap();
 
+    assert_eq!(
+        paths
+            .install(UPGRADE, || Ok(Vec::new()), |_| Ok(()))
+            .unwrap(),
+        CellIconFontInstall::Conflict
+    );
     assert_eq!(
         paths.uninstall(|_| Ok(())).unwrap(),
         CellIconFontRemoval::Preserved

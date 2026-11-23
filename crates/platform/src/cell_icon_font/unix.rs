@@ -40,6 +40,25 @@ struct Ownership {
     fingerprint: Fingerprint,
     #[serde(default)]
     phase: FontPhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    upgrade: Option<StagedFont>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StagedFont {
+    stage_file: OsString,
+    fingerprint: Fingerprint,
+}
+
+impl StagedFont {
+    fn into_ownership(self, phase: FontPhase) -> Ownership {
+        Ownership {
+            stage_file: self.stage_file,
+            fingerprint: self.fingerprint,
+            phase,
+            upgrade: None,
+        }
+    }
 }
 
 #[derive(Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,14 +120,10 @@ impl FontPaths {
             None => return Ok(None),
         };
         let ownership: Ownership = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
-        let file_name = Path::new(&ownership.stage_file);
-        if !matches!(
-            file_name.components().collect::<Vec<_>>().as_slice(),
-            [Component::Normal(_)]
-        ) || !ownership
-            .stage_file
-            .as_encoded_bytes()
-            .starts_with(STAGE_PREFIX.as_bytes())
+        if !valid_stage_name(&ownership.stage_file)
+            || ownership.upgrade.as_ref().is_some_and(|upgrade| {
+                !valid_stage_name(&upgrade.stage_file) || upgrade.stage_file == ownership.stage_file
+            })
         {
             return Err(io::Error::other("invalid cell icon font ownership file"));
         }
@@ -141,6 +156,77 @@ impl FontPaths {
         Ok(())
     }
 
+    fn prepare_upgrade(&self, fonts: &Path, record: &mut Ownership, font: &[u8]) -> io::Result<()> {
+        let (file, staged) = stage_font(fonts, font)?;
+        record.upgrade = Some(staged);
+        self.save_ownership(record)?;
+        file.keep().map_err(|error| error.error)?;
+        Ok(())
+    }
+
+    fn upgrade(
+        &self,
+        fonts: &Path,
+        mut record: Ownership,
+        current: Option<&Fingerprint>,
+        font: &[u8],
+        refresh: impl FnOnce(&Path) -> io::Result<()>,
+    ) -> io::Result<CellIconFontInstall> {
+        use CellIconFontInstall::*;
+
+        let backup = fonts.join(&record.stage_file);
+        let backup_state = owned_file(&backup, &record.fingerprint)?;
+        if backup_state == OwnedFile::Changed {
+            if current.is_none() {
+                self.restore_staged_file(&backup, record.phase)?;
+            }
+            return Ok(Conflict);
+        }
+        let expected_hash: [u8; 32] = Sha256::digest(font).into();
+        if record.upgrade.is_none() {
+            self.prepare_upgrade(fonts, &mut record, font)?;
+        }
+        let next = record.upgrade.as_ref().expect("prepared upgrade");
+        if next.fingerprint.sha256 != expected_hash {
+            return Ok(Conflict);
+        }
+        if current != Some(&next.fingerprint) {
+            match owned_file(&fonts.join(&next.stage_file), &next.fingerprint)? {
+                OwnedFile::Changed => return Ok(Conflict),
+                OwnedFile::Missing => self.prepare_upgrade(fonts, &mut record, font)?,
+                OwnedFile::Matches => {}
+            }
+            if current.is_some() {
+                if backup_state != OwnedFile::Missing {
+                    return Ok(Conflict);
+                }
+                // Record the move before it can capture a replacement written by another program.
+                record.phase = FontPhase::Removing;
+                self.save_ownership(&record)?;
+                rename_path_no_replace(&self.font, &backup).map_err(io::Error::other)?;
+                if owned_file(&backup, &record.fingerprint)? != OwnedFile::Matches {
+                    self.restore_staged_file(&backup, record.phase)?;
+                    return Ok(Conflict);
+                }
+            }
+            let next = record.upgrade.as_ref().expect("prepared upgrade");
+            rename_path_no_replace(&fonts.join(&next.stage_file), &self.font)
+                .map_err(io::Error::other)?;
+        }
+        let next = record.upgrade.expect("prepared upgrade");
+        if owned_file(&self.font, &next.fingerprint)? != OwnedFile::Matches {
+            return Ok(Conflict);
+        }
+        File::open(fonts)?.sync_all()?;
+        refresh(fonts)?;
+        if !remove_owned_file(&backup, &record.fingerprint)? {
+            return Ok(Conflict);
+        }
+        File::open(fonts)?.sync_all()?;
+        self.save_ownership(&next.into_ownership(FontPhase::Ready))?;
+        Ok(Installed)
+    }
+
     fn install(
         &self,
         font: &[u8],
@@ -158,16 +244,33 @@ impl FontPaths {
             Err(error) if error.kind() == io::ErrorKind::InvalidInput => return Ok(Conflict),
             result => result?,
         };
-        if let Some(current) = &current
-            && (current.sha256 != expected_hash
-                || record
-                    .as_ref()
-                    .is_some_and(|record| record.fingerprint != *current))
-        {
-            return Ok(Conflict);
+        if let Some(current) = &current {
+            let matches = match &record {
+                Some(record) => {
+                    record.fingerprint == *current
+                        || record
+                            .upgrade
+                            .as_ref()
+                            .is_some_and(|next| next.fingerprint == *current)
+                }
+                None => current.sha256 == expected_hash,
+            };
+            if !matches {
+                return Ok(Conflict);
+            }
         }
 
-        let mut available = current.is_some();
+        let current_path = current
+            .as_ref()
+            .map(|_| fs::canonicalize(&self.font))
+            .transpose()?;
+        let owned_backup = record
+            .as_ref()
+            .filter(|record| record.upgrade.is_some())
+            .map(|record| (fonts.join(&record.stage_file), &record.fingerprint));
+        let mut available = current
+            .as_ref()
+            .is_some_and(|file| file.sha256 == expected_hash);
         for installed in inventory()? {
             // A manually installed font can be exposed through a symlink.
             let installed = match fs::canonicalize(installed) {
@@ -175,28 +278,40 @@ impl FontPaths {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(error),
             };
+            if current_path.as_ref() == Some(&installed) {
+                continue;
+            }
+            if let Some((backup, expected)) = &owned_backup
+                && &installed == backup
+                && owned_file(backup, expected)? == OwnedFile::Matches
+            {
+                continue;
+            }
             match fingerprint(&installed)? {
                 Some(installed) if installed.sha256 == expected_hash => available = true,
                 Some(_) => return Ok(Conflict),
                 None => {}
             }
         }
-        if available {
-            if current.is_some()
-                && let Some(record) = record
-                && record.phase != FontPhase::Ready
-            {
-                return self.finish_install(fonts, record, refresh);
-            }
-            return Ok(Available);
-        }
-
         if let Some(record) = record {
+            if record.upgrade.is_some()
+                || current
+                    .as_ref()
+                    .is_some_and(|file| file.sha256 != expected_hash)
+            {
+                return self.upgrade(fonts, record, current.as_ref(), font, refresh);
+            }
+            if available {
+                if current.is_some() && record.phase != FontPhase::Ready {
+                    return self.finish_install(fonts, record, refresh);
+                }
+                return Ok(Available);
+            }
             let stage = fonts.join(&record.stage_file);
             match fingerprint(&stage) {
                 Ok(Some(fingerprint)) if fingerprint == record.fingerprint => {
                     if fingerprint.sha256 != expected_hash {
-                        return Ok(Conflict);
+                        return self.upgrade(fonts, record, None, font, refresh);
                     }
                     rename_path_no_replace(&stage, &self.font).map_err(io::Error::other)?;
                     return self.finish_install(fonts, record, refresh);
@@ -212,24 +327,12 @@ impl FontPaths {
                 }
                 Err(error) => return Err(error),
             }
+        } else if available {
+            return Ok(Available);
         }
 
-        fs::create_dir_all(fonts)?;
-        let mut stage = tempfile::Builder::new()
-            .prefix(STAGE_PREFIX)
-            .tempfile_in(fonts)?;
-        stage.write_all(font)?;
-        stage.as_file().sync_all()?;
-        let fingerprint = fingerprint(stage.path())?.expect("just staged font");
-        let ownership = Ownership {
-            stage_file: stage
-                .path()
-                .file_name()
-                .expect("staged filename")
-                .to_owned(),
-            fingerprint,
-            phase: FontPhase::Pending,
-        };
+        let (stage, copy) = stage_font(fonts, font)?;
+        let ownership = copy.into_ownership(FontPhase::Pending);
         self.save_ownership(&ownership)?;
         let (_file, stage) = stage.keep().map_err(|error| error.error)?;
         rename_path_no_replace(&stage, &self.font).map_err(io::Error::other)?;
@@ -248,6 +351,27 @@ impl FontPaths {
         };
         let fonts = self.font.parent().expect("font directory");
         validate_no_follow_path(fonts, false).map_err(io::Error::other)?;
+        if let Some(next) = record.upgrade.take() {
+            match owned_file(&self.font, &next.fingerprint)? {
+                OwnedFile::Matches => {
+                    if !remove_owned_file(&fonts.join(&record.stage_file), &record.fingerprint)? {
+                        return Ok(Preserved);
+                    }
+                    record = next.into_ownership(FontPhase::Pending);
+                }
+                OwnedFile::Changed
+                    if owned_file(&self.font, &record.fingerprint)? != OwnedFile::Matches =>
+                {
+                    return Ok(Preserved);
+                }
+                _ => {
+                    if !remove_owned_file(&fonts.join(&next.stage_file), &next.fingerprint)? {
+                        return Ok(Preserved);
+                    }
+                }
+            }
+            self.save_ownership(&record)?;
+        }
         let stage = fonts.join(&record.stage_file);
         match fingerprint(&self.font) {
             Ok(Some(current)) if current == record.fingerprint => {
@@ -286,6 +410,53 @@ impl FontPaths {
         fs::remove_file(&self.record)?;
         Ok(Removed)
     }
+}
+
+fn valid_stage_name(file: &std::ffi::OsStr) -> bool {
+    let mut components = Path::new(file).components();
+    matches!(components.next(), Some(Component::Normal(_)))
+        && components.next().is_none()
+        && file.as_encoded_bytes().starts_with(STAGE_PREFIX.as_bytes())
+}
+
+fn stage_font(fonts: &Path, font: &[u8]) -> io::Result<(tempfile::NamedTempFile, StagedFont)> {
+    fs::create_dir_all(fonts)?;
+    let mut file = tempfile::Builder::new()
+        .prefix(STAGE_PREFIX)
+        .tempfile_in(fonts)?;
+    file.write_all(font)?;
+    file.as_file().sync_all()?;
+    let staged = StagedFont {
+        stage_file: file.path().file_name().expect("staged filename").to_owned(),
+        fingerprint: fingerprint(file.path())?.expect("just staged font"),
+    };
+    Ok((file, staged))
+}
+
+#[derive(PartialEq, Eq)]
+enum OwnedFile {
+    Missing,
+    Matches,
+    Changed,
+}
+
+fn owned_file(path: &Path, expected: &Fingerprint) -> io::Result<OwnedFile> {
+    match fingerprint(path) {
+        Ok(Some(actual)) if actual == *expected => Ok(OwnedFile::Matches),
+        Ok(None) => Ok(OwnedFile::Missing),
+        Ok(Some(_)) => Ok(OwnedFile::Changed),
+        Err(error) if error.kind() == io::ErrorKind::InvalidInput => Ok(OwnedFile::Changed),
+        Err(error) => Err(error),
+    }
+}
+
+fn remove_owned_file(path: &Path, expected: &Fingerprint) -> io::Result<bool> {
+    match owned_file(path, expected)? {
+        OwnedFile::Matches => fs::remove_file(path)?,
+        OwnedFile::Missing => {}
+        OwnedFile::Changed => return Ok(false),
+    }
+    Ok(true)
 }
 
 fn read_regular_file(path: &Path) -> io::Result<Option<File>> {

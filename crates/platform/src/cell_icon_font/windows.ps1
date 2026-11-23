@@ -39,9 +39,31 @@ public static class TundraNativeFont {
     public static extern bool RemoveFontResource(string path);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern bool SendNotifyMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("dwrite.dll")]
+    static extern int DWriteCreateFactory(uint type, ref Guid iid, out IntPtr factory);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    delegate int GetSystemFontCollection(IntPtr factory, out IntPtr collection,
+        [MarshalAs(UnmanagedType.Bool)] bool checkForUpdates);
 
     public static void Notify() {
         SendNotifyMessage(new IntPtr(0xffff), 0x001d, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    public static void RefreshSystemFonts() {
+        var iid = new Guid("b859ee5a-d838-4b5b-a2e8-1adc7d93db48");
+        IntPtr factory;
+        Marshal.ThrowExceptionForHR(DWriteCreateFactory(0, ref iid, out factory));
+        try {
+            // GetSystemFontCollection follows the three IUnknown methods.
+            IntPtr method = Marshal.ReadIntPtr(Marshal.ReadIntPtr(factory), 3 * IntPtr.Size);
+            var getFonts = (GetSystemFontCollection)Marshal.GetDelegateForFunctionPointer(
+                method, typeof(GetSystemFontCollection));
+            IntPtr collection;
+            Marshal.ThrowExceptionForHR(getFonts(factory, out collection, true));
+            Marshal.Release(collection);
+        } finally {
+            Marshal.Release(factory);
+        }
     }
 
     public static string Fingerprint(string path, string removeExpected) {
@@ -158,18 +180,56 @@ function Get-FontFingerprint([string] $path) {
     return [TundraNativeFont]::Fingerprint($path, [NullString]::Value)
 }
 
-function Read-FontOwnership([string] $recordPath, [string] $target) {
+function Get-FontVersionPath([string] $fonts, [string] $hash) {
+    $suffix = $hash.Substring(0, 16).ToLowerInvariant()
+    return Join-Path $fonts "TundraCellAtlas-$suffix.ttf"
+}
+
+function Test-FontReceipt($copy, [string] $fonts, [bool] $allowLegacy) {
+    if ($copy.staged -cnotmatch '^stage-[0-9a-f]{32}$' -or
+        $copy.fingerprint -cnotmatch '^[0-9A-F]{40}:[0-9A-F]{64}$' -or $copy.ready -isnot [bool]) {
+        return $false
+    }
+    $versioned = Get-FontVersionPath $fonts $copy.fingerprint.Split(':')[1]
+    return $copy.target -ieq $versioned -or ($allowLegacy -and $copy.target -ieq (Join-Path $fonts $fontName))
+}
+
+function Read-FontOwnership([string] $recordPath, [string] $fonts) {
     Assert-PlainPath $recordPath
     if ($null -eq (Get-PathAttributes $recordPath)) { return $null }
     $record = [IO.File]::ReadAllText($recordPath) | ConvertFrom-Json
-    if ($record.target -ine $target -or $record.staged -cnotmatch '^stage-[0-9a-f]{32}$' -or
-        $record.fingerprint -cnotmatch '^[0-9A-F]{40}:[0-9A-F]{64}$' -or $record.ready -isnot [bool]) {
+    if (!(Test-FontReceipt $record $fonts $true)) {
         throw 'Invalid cell icon font ownership record'
+    }
+    if ($null -ne $record.upgrade -and (!(Test-FontReceipt $record.upgrade $fonts $false) -or
+        $record.upgrade.staged -ieq $record.staged -or $record.upgrade.target -ieq $record.target)) {
+        throw 'Invalid cell icon font upgrade record'
     }
     return $record
 }
 
-function Get-FontRegistryEntries($userKey, $machineKey, [string] $fonts, [string] $systemFonts, [string] $target) {
+function New-FontStage([string] $owner, [string] $target, [byte[]] $font) {
+    $name = 'stage-' + [Guid]::NewGuid().ToString('N')
+    $path = Join-Path $owner $name
+    Write-FontFile $path $font
+    return [PSCustomObject]@{ target = $target; staged = $name;
+        fingerprint = (Get-FontFingerprint $path); ready = $false }
+}
+
+function Remove-RecordedFontFile([string] $path, [string] $fingerprint) {
+    if ($null -eq (Get-FontFingerprint $path)) { return $true }
+    return [TundraNativeFont]::Fingerprint($path, $fingerprint) -ceq $fingerprint
+}
+
+function Remove-LoadedFont([string] $target, [string] $fingerprint, [bool] $notify) {
+    if ($notify) {
+        while ([TundraNativeFont]::RemoveFontResource($target)) {}
+        [TundraNativeFont]::Notify()
+    }
+    return Remove-RecordedFontFile $target $fingerprint
+}
+
+function Get-FontRegistryEntries($userKey, $machineKey, [string] $fonts, [string] $systemFonts, [string[]] $targets) {
     foreach ($source in @(@{ key = $userKey; dir = $fonts; user = $true },
                           @{ key = $machineKey; dir = $systemFonts; user = $false })) {
         if ($null -eq $source.key) { continue }
@@ -183,7 +243,7 @@ function Get-FontRegistryEntries($userKey, $machineKey, [string] $fonts, [string
                     $path = [IO.Path]::GetFullPath($path)
                 } catch [ArgumentException], [NotSupportedException] { $path = $null }
             }
-            if ($path -ieq $target -or $name -match '^Tundra Cell Atlas(?:$|[ (])') {
+            if ($path -in $targets -or $name -match '^Tundra Cell Atlas(?:$|[ (])') {
                 [PSCustomObject]@{ name = $name; path = $path; user = $source.user; raw = $raw;
                     kind = $source.key.GetValueKind($name) }
             }
@@ -191,114 +251,143 @@ function Get-FontRegistryEntries($userKey, $machineKey, [string] $fonts, [string
     }
 }
 
+function Read-FontCopyState($copy, [string] $owner) {
+    $stage = Join-Path $owner $copy.staged
+    $published = Get-FontFingerprint $copy.target
+    $prepared = Get-FontFingerprint $stage
+    return [PSCustomObject]@{
+        receipt = $copy; stage = $stage; published = $null -ne $published; prepared = $null -ne $prepared
+        changed = ($null -ne $published -and $published -cne $copy.fingerprint) -or
+            ($null -ne $prepared -and $prepared -cne $copy.fingerprint)
+    }
+}
+
+function Test-FontRegistryValue($userKey, [string] $expected) {
+    if (!$userKey) { return !$expected }
+    $actual = $userKey.GetValue($fontValue, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    if (!$expected) { return $null -eq $actual }
+    return $actual -ieq $expected -and $userKey.GetValueKind($fontValue) -eq [Microsoft.Win32.RegistryValueKind]::String
+}
+
+function Remove-FontCopy($copy, [bool] $notify) {
+    if ($copy.published -and !(Remove-LoadedFont $copy.receipt.target $copy.receipt.fingerprint $notify)) {
+        return $false
+    }
+    return Remove-RecordedFontFile $copy.stage $copy.receipt.fingerprint
+}
+
 function Invoke-CellIconFont([string] $owner, [string] $fonts, [string] $systemFonts,
                             $userKey, $machineKey, [byte[]] $font, [bool] $notify) {
-    $target = Join-Path $fonts $fontName
     $recordPath = Join-Path $owner 'ownership.json'
+    $legacy = Join-Path $fonts $fontName
     $install = ($font.Length -gt 0)
     Assert-PlainPath $owner
     if (!$install -and ![IO.Directory]::Exists($owner)) { return 'missing' }
     $lock = Open-FontLock $owner
     try {
-        $record = Read-FontOwnership $recordPath $target
+        $record = Read-FontOwnership $recordPath $fonts
         if (!$install -and $null -eq $record) { return 'missing' }
         Assert-PlainPath $fonts
         Initialize-NativeFontApi
-        $current = Get-FontFingerprint $target
+        $active = if ($record) { Read-FontCopyState $record $owner }
+        $pending = if ($record.upgrade) { Read-FontCopyState $record.upgrade $owner }
+        $copies = @($active, $pending) | Where-Object { $null -ne $_ }
+        if ($copies | Where-Object changed) {
+            if ($install) { return 'conflict' }
+            return 'preserved'
+        }
+
+        $copyTargets = @($copies | ForEach-Object { $_.receipt.target })
+        $watched = @($legacy) + $copyTargets
+        if ($install) {
+            $sha = Get-FontHash $font
+            $target = Get-FontVersionPath $fonts $sha
+            $watched += $target
+        }
+
         $slot = $null
         $other = @()
-        foreach ($entry in @(Get-FontRegistryEntries $userKey $machineKey $fonts $systemFonts $target)) {
+        foreach ($entry in @(Get-FontRegistryEntries $userKey $machineKey $fonts $systemFonts $watched)) {
             if ($entry.user -and $entry.name -ieq $fontValue) { $slot = $entry }
             else { $other += $entry }
         }
-        $ownedSlot = $null -ne $record -and $null -ne $slot -and
-            $slot.kind -eq [Microsoft.Win32.RegistryValueKind]::String -and $slot.raw -ieq $target
+        $registered = if ($slot.kind -eq [Microsoft.Win32.RegistryValueKind]::String) {
+            $copies | Where-Object { $_.receipt.target -ieq $slot.raw } | Select-Object -First 1
+        }
+        $slotPath = if ($registered) { $registered.receipt.target }
+        $aliases = $other | Where-Object { $_.path -in $copyTargets }
 
         if (!$install) {
-            if (($null -ne $current -and $current -cne $record.fingerprint) -or
-                ($null -ne $slot -and (!$ownedSlot -or $null -eq $current)) -or
-                ($other | Where-Object { $_.path -ieq $target })) { return 'preserved' }
-
-            $stage = Join-Path $owner $record.staged
-            $staged = Get-FontFingerprint $stage
-            if ($null -ne $staged -and $staged -cne $record.fingerprint) { return 'preserved' }
-
-            if ($ownedSlot) {
-                if ($userKey.GetValueKind($fontValue) -ne [Microsoft.Win32.RegistryValueKind]::String -or
-                    $userKey.GetValue($fontValue) -ine $target) { return 'preserved' }
+            if (($slot -and !$registered.published) -or $aliases) { return 'preserved' }
+            if ($registered) {
+                if (!(Test-FontRegistryValue $userKey $slotPath)) { return 'preserved' }
                 $userKey.DeleteValue($fontValue, $false)
                 $userKey.Flush()
             }
-            if ($null -ne $current) {
-                if ($notify) {
-                    while ([TundraNativeFont]::RemoveFontResource($target)) {}
-                    [TundraNativeFont]::Notify()
-                }
-                if ([TundraNativeFont]::Fingerprint($target, $record.fingerprint) -cne $record.fingerprint) {
-                    return 'preserved'
-                }
-            }
-            if ($null -ne $staged -and
-                [TundraNativeFont]::Fingerprint($stage, $record.fingerprint) -cne $record.fingerprint) {
-                return 'preserved'
+            foreach ($copy in $copies) {
+                if (!(Remove-FontCopy $copy $notify)) { return 'preserved' }
             }
             [IO.File]::Delete($recordPath)
             return 'removed'
         }
 
-        $sha = Get-FontHash $font
-        if ($null -ne $record -and $null -ne $current -and $current -cne $record.fingerprint) {
-            return 'conflict'
-        }
-        $available = $false
-        if ($null -ne $slot -and !$ownedSlot) { $other += $slot }
+        $manualAvailable = $false
+        if ($slot -and !$registered) { $other += $slot }
         foreach ($entry in $other) {
             $manual = if ($entry.path) { Get-FontFingerprint $entry.path }
             if (!$manual -or !$manual.EndsWith(":$sha")) { return 'conflict' }
-            $available = $true
+            $manualAvailable = $true
         }
-        if ($available) { return 'available' }
-        if ($null -ne $current -and ($null -eq $record -or !$current.EndsWith(":$sha"))) { return 'conflict' }
-        if ($ownedSlot -and $null -eq $current) { return 'conflict' }
-        if ($ownedSlot -and $record.ready) { return 'available' }
+        if (($slot -and !$registered) -or ($manualAvailable -and !$record)) { return 'available' }
+        if (($registered -and !$registered.published) -or $aliases) { return 'conflict' }
+        if ($pending -and $pending.receipt.target -ine $target) { return 'conflict' }
+        if ($target -notin $copyTargets -and $null -ne (Get-PathAttributes $target)) { return 'conflict' }
+        if (!$record -and $null -ne (Get-PathAttributes $legacy)) { return 'conflict' }
 
-        if ($null -eq $current) {
-            if ($null -ne $record) {
-                $stage = Join-Path $owner $record.staged
-                $staged = Get-FontFingerprint $stage
-                if ($null -ne $staged -and ($staged -cne $record.fingerprint -or !$staged.EndsWith(":$sha"))) {
-                    return 'conflict'
-                }
-                if ($null -eq $staged) { $record = $null }
-            }
-            if ($null -eq $record) {
-                $staged = 'stage-' + [Guid]::NewGuid().ToString('N')
-                $stage = Join-Path $owner $staged
-                Write-FontFile $stage $font
-                $record = [PSCustomObject]@{ target = $target; staged = $staged;
-                    fingerprint = (Get-FontFingerprint $stage); ready = $false }
-                Save-FontOwnership $record $recordPath
-            }
-            [void][IO.Directory]::CreateDirectory($fonts)
-            [IO.File]::Move($stage, $target)
+        $candidate = if ($pending) { $pending } elseif ($record.target -ieq $target) { $active }
+        if (!$pending -and $candidate.published -and $candidate.receipt.ready -and $slotPath -ieq $target) {
+            return 'available'
         }
-        if ((Get-FontFingerprint $target) -cne $record.fingerprint) { return 'conflict' }
-        if (!$ownedSlot) {
-            if ($null -ne $userKey.GetValue($fontValue)) { return 'conflict' }
+        $migrating = $record -and $record.target -ine $target
+        if (!$candidate.published -and !$candidate.prepared) {
+            $next = New-FontStage $owner $target $font
+            if ($migrating) { $record | Add-Member NoteProperty upgrade $next -Force }
+            else { $record = $next }
+            Save-FontOwnership $record $recordPath
+            $candidate = Read-FontCopyState $next $owner
+        }
+        $next = $candidate.receipt
+        if (!$candidate.published) {
+            [void][IO.Directory]::CreateDirectory($fonts)
+            [IO.File]::Move($candidate.stage, $target)
+        }
+        if ((Get-FontFingerprint $target) -cne $next.fingerprint -or
+            !(Test-FontRegistryValue $userKey $slotPath)) { return 'conflict' }
+        if ($slotPath -ine $target) {
             $userKey.SetValue($fontValue, $target, [Microsoft.Win32.RegistryValueKind]::String)
             $userKey.Flush()
         }
-        if ($notify) {
+        if ($notify -and (!$next.ready -or $slotPath -ine $target)) {
+            if ($migrating -and $active.published -and
+                (Get-FontFingerprint $active.receipt.target) -ceq $active.receipt.fingerprint) {
+                while ([TundraNativeFont]::RemoveFontResource($active.receipt.target)) {}
+            }
             if ([TundraNativeFont]::AddFontResource($target) -eq 0) { throw 'Windows could not load the registered font' }
+            [TundraNativeFont]::RefreshSystemFonts()
             [TundraNativeFont]::Notify()
         }
-        $record.ready = $true
+        $next.ready = $true
         Save-FontOwnership $record $recordPath
+        if ($migrating) {
+            if (!(Remove-FontCopy $active $notify)) { return 'conflict' }
+            Save-FontOwnership $next $recordPath
+        }
         return 'installed'
     } finally {
         $lock.Dispose()
     }
 }
+
 
 function Invoke-CurrentUserFont([byte[]] $font) {
     $local = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
