@@ -182,6 +182,32 @@ fn all_page_kinds_keep_separate_state_and_reopen_with_a_fresh_identity() {
 }
 
 #[test]
+fn leaving_launcher_returns_to_its_opener_while_work_continues() {
+    let mut state = state();
+    let opener = state.active_page_id();
+    state.enter_new_page(ShellScreen::Launcher);
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let flag = cancelled.clone();
+    state.register_page_task(
+        TaskDomain::Explorer,
+        1,
+        TaskClass::Operation,
+        TaskControl::new(move || flag.store(true, Ordering::Release), || false),
+    );
+    state.apply_input(InputEvent::key(InputKey::Escape));
+    assert_eq!(state.active_page_id(), opener);
+    assert!(!cancelled.load(Ordering::Acquire));
+    assert_eq!(
+        state.tasks.owner(TaskDomain::Explorer, 1),
+        Some(TaskOwner::Session)
+    );
+    assert_eq!(
+        state.app.notification_center().active_modal_action_count(),
+        0
+    );
+}
+
+#[test]
 fn close_choices_preserve_page_or_transfer_task_or_wait_for_real_completion() {
     for choice in 0..3 {
         let mut state = state();
@@ -202,7 +228,7 @@ fn close_choices_preserve_page_or_transfer_task_or_wait_for_real_completion() {
                 move || complete.load(Ordering::Acquire),
             ),
         );
-        state.close_launcher();
+        state.request_page_close(page);
         assert!(state.page_screen(page).is_some());
         assert_eq!(
             state.app.notification_center().active_modal_action_count(),

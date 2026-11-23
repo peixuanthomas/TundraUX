@@ -204,7 +204,11 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn close_launcher(&mut self) {
-        self.return_from_screen(ShellScreen::Launcher);
+        if self.active_screen() == ShellScreen::Launcher {
+            let page = self.active_page_id();
+            self.tasks.transfer_operations(page);
+            self.request_page_close(page);
+        }
     }
 
     pub(in crate::session) fn launcher_preference_key(&self) -> Option<String> {
