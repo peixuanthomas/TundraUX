@@ -26,14 +26,16 @@ impl ShellSession {
         self.app.storage_config().top_bar.show_help && self.help_button_available()
     }
 
-    pub(in crate::session) fn tasks_button_label(&self) -> Option<String> {
-        if !self.app.storage_config().top_bar.show_tasks
-            || self.app.auth_session().is_none()
-            || self.is_strict_guest()
-        {
-            return None;
+    pub(in crate::session) fn tasks_available(&self) -> bool {
+        self.app.auth_session().is_some() && !self.is_strict_guest()
+    }
+
+    pub(in crate::session) fn header_back_label(&self) -> Option<String> {
+        if self.app.storage_config().top_bar.show_esc {
+            self.back_action().map(navigation::back_label)
+        } else {
+            None
         }
-        Some(i18n::tr!("ui-shell-tasks-button"))
     }
 
     pub(in crate::session) fn shell_frame_layout(
@@ -44,9 +46,8 @@ impl ShellSession {
     ) -> ui::ShellFrameLayout {
         let top_bar = self.app.storage_config().top_bar;
         let mut layout = ui::ShellFrameLayout::new(bounds, time_label, context)
-            .with_back_shortcut(top_bar.show_esc.then(|| self.shell_back_shortcut()))
-            .with_help_button(self.help_button_visible())
-            .with_tasks_button(self.tasks_button_label().as_deref());
+            .with_back_label(self.header_back_label().as_deref())
+            .with_help_button(self.help_button_visible());
         layout.status_alignment = match top_bar.status_alignment {
             storage::StatusTextAlignment::Left => HorizontalAlignment::Left,
             storage::StatusTextAlignment::Center => HorizontalAlignment::Center,

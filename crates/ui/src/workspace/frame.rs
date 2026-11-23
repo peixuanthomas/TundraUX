@@ -74,6 +74,7 @@ pub fn capture_workspace_frame(
         controls: Vec::new(),
         masks: Vec::new(),
         native_escape: Vec::new(),
+        back_action: None,
         ctrl_w_passthrough: false,
         modal: false,
         startup_timings: None,

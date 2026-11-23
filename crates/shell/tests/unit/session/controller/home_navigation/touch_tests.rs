@@ -23,15 +23,6 @@ fn state(size: (u16, u16)) -> ShellSession {
     state
 }
 
-fn state_with_tasks_button(size: (u16, u16)) -> ShellSession {
-    let mut state = state(size);
-    let mut config = state.app.storage_config().clone();
-    config.top_bar.show_tasks = true;
-    state.replace_storage_config(config);
-    state.refresh_hit_map();
-    state
-}
-
 fn main_area(state: &ShellSession) -> Rect {
     let ui::ShellLayout::Full { main, .. } = state.shell_layout_for(Rect::new(
         0,
@@ -185,14 +176,13 @@ fn launcher_includes_available_home_applications_and_omits_its_own_shortcut() {
         .iter()
         .filter(|entry| entry.icon_identity() != "launcher")
     {
-        assert!(
-            launcher
-                .items
-                .iter()
-                .any(|item| ShellSession::home_shortcut_key(&item.id) == entry.icon_identity()),
-            "{} should be available in Launcher",
-            entry.icon_identity()
-        );
+        let application = launcher
+            .items
+            .iter()
+            .find(|item| ShellSession::home_shortcut_key(&item.id) == entry.icon_identity())
+            .unwrap_or_else(|| panic!("{} should be available in Launcher", entry.icon_identity()));
+        assert_eq!(entry.label, application.name);
+        assert_eq!(entry.description, application.path);
     }
     assert!(
         launcher
@@ -277,6 +267,7 @@ fn home_letters_are_inactive_and_launcher_shortcuts_require_fresh_unmodified_key
         }
     }
     state.enter_screen(ShellScreen::Launcher);
+    state.apply_input(InputEvent::key(InputKey::Down));
     for (label, command) in [
         ("R", ShellCommand::LauncherRefresh),
         ("F5", ShellCommand::LauncherRefresh),
@@ -438,100 +429,74 @@ fn launcher_open_button_waits_for_release_and_drag_cancels_activation() {
     assert_eq!(state.active_screen(), ShellScreen::Editor);
 }
 
-#[test]
-fn global_tasks_entry_toggles_tasks_and_restores_the_original_page() {
-    for size in [(108, 20), (140, 40)] {
-        let mut state = state_with_tasks_button(size);
-        state.open_settings();
-        let original_page = state.active_page_id();
-        let original_stack = state.screen_stack().to_vec();
-        for _ in 0..3 {
-            state.refresh_hit_map();
-            let area = state
-                .frame_layout
-                .unwrap()
-                .tasks_button
-                .expect("visible task entry");
-            let point = (area.x + 1, area.y);
-            state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
-            state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
-            assert_eq!(state.active_screen(), ShellScreen::Management);
-            assert!(
-                state
-                    .to_management_view_model()
-                    .title
-                    .starts_with(&i18n::tr!("tasks-title"))
-            );
-            assert_eq!(state.screen_stack().len(), original_stack.len() + 1);
-            let tasks_page = state.active_page_id();
-            state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
-            state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
-            assert_eq!(state.active_page_id(), original_page);
-            assert_eq!(state.screen_stack(), original_stack);
-            assert!(state.page_screen(tasks_page).is_none());
-        }
-    }
-}
-
-#[test]
-fn global_tasks_entry_closes_tasks_opened_from_home() {
-    let mut state = state_with_tasks_button((108, 20));
-    let home = state.active_page_id();
-    let index = state
-        .user_home_entries()
-        .iter()
-        .position(|entry| entry.icon_identity() == "tasks")
-        .unwrap();
-    state.select_home_entry(index);
-    state.apply_input(InputEvent::key(InputKey::Enter));
-    assert_eq!(state.active_screen(), ShellScreen::Management);
-    let area = state.frame_layout.unwrap().tasks_button.unwrap();
-    let point = (area.x + 1, area.y);
+fn power_menu_actions(state: &mut ShellSession) -> ui::NotificationViewModel {
+    let title = state.frame_layout.unwrap().title;
+    let point = (title.x + 1, title.y);
     state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    assert_ne!(state.active_screen(), ShellScreen::ExitConfirm);
     state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
-    assert_eq!(state.active_page_id(), home);
-    assert_eq!(state.screen_stack(), &[ShellScreen::Home]);
-    assert_eq!(state.selected_home_entry_index(), index);
+    assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+    state.to_notification_view_model().unwrap()
 }
 
 #[test]
-fn global_tasks_entry_keeps_its_label_during_queries_operations_and_approval() {
-    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
-    for (language, label) in [("en-US", "Tasks"), ("zh-CN", "任务")] {
-        let mut state = state_with_tasks_button((108, 20));
-        state.language = Arc::new(
-            i18n::LanguageSnapshot::load(&assets, language, 1)
-                .unwrap()
-                .snapshot,
-        );
-        let _language = i18n::enter_snapshot(state.language.clone());
-        let check = |state: &ShellSession| {
-            assert_eq!(
-                state.to_shell_chrome_view_model().tasks_label.as_deref(),
-                Some(label)
-            );
-        };
-        check(&state);
-        state.tasks.register(
-            TaskDomain::Logs,
-            1,
-            TaskOwner::Session,
-            TaskClass::Query,
-            TaskControl::new(|| {}, || false),
-        );
-        check(&state);
-        state.tasks.register(
-            TaskDomain::Explorer,
-            2,
-            TaskOwner::Session,
-            TaskClass::Operation,
-            TaskControl::new(|| {}, || false),
-        );
-        check(&state);
-        let (tx, _rx) = mpsc::channel();
-        state
-            .begin_auto_admin("test approval".into(), true, tx)
+fn tasks_in_power_menu_opens_tasks_from_a_tool() {
+    for size in [(108, 20), (140, 40)] {
+        let mut state = state(size);
+        state.enter_screen(ShellScreen::Settings);
+        state.refresh_hit_map();
+        let original_page = state.active_page_id();
+        let menu = power_menu_actions(&mut state);
+        let task_index = menu
+            .actions
+            .iter()
+            .position(|action| action.id == "tasks")
             .unwrap();
-        check(&state);
+        let ui::NotificationLayout::Dialog(dialog) =
+            ui::notification_layout(state.shell_modal_area(), &menu)
+        else {
+            panic!("power menu at the minimum supported size")
+        };
+        let area = dialog
+            .actions
+            .iter()
+            .find(|action| action.index == task_index)
+            .unwrap()
+            .area;
+        let point = (area.x, area.y);
+        state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+        state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+        assert_eq!(state.active_screen(), ShellScreen::Management);
+        assert!(
+            state
+                .to_management_view_model()
+                .title
+                .starts_with(&i18n::tr!("tasks-title"))
+        );
+        assert_eq!(
+            state.screen_stack(),
+            &[
+                ShellScreen::Home,
+                ShellScreen::Settings,
+                ShellScreen::Management
+            ]
+        );
+        assert_eq!(
+            state.page_screen(original_page),
+            Some(ShellScreen::Settings)
+        );
     }
+}
+
+#[test]
+fn tasks_in_power_menu_respects_existing_role_requirements() {
+    let mut state = state((108, 20));
+    let menu = power_menu_actions(&mut state);
+    assert!(menu.actions.iter().any(|action| action.id == "tasks"));
+    state.apply_input(InputEvent::key(InputKey::Escape));
+    state
+        .app
+        .dispatch_at(app::AppCommand::SetAuthSession(None), Instant::now());
+    let menu = power_menu_actions(&mut state);
+    assert!(menu.actions.iter().all(|action| action.id != "tasks"));
 }

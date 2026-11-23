@@ -2,6 +2,39 @@ use super::*;
 use crate::session::*;
 
 impl ShellSession {
+    pub(in crate::session) fn management_native_escape(&self) -> bool {
+        let state = &self.pages.management.management_state;
+        state.terminal_mode && state.form.is_none() && state.kind != Some(ManagementKind::Tasks)
+    }
+
+    pub(in crate::session) fn management_local_back(
+        &self,
+        escape: &KeyInput,
+    ) -> Option<(workspace_protocol::BackAction, (RoutedTarget, ShellCommand))> {
+        use workspace_protocol::BackAction;
+        let state = &self.pages.management.management_state;
+        let action = if state.filtering {
+            BackAction::Cancel
+        } else if state.terminal_mode && state.kind == Some(ManagementKind::Tasks)
+            || state.details_only
+                && (state.kind == Some(ManagementKind::Packages)
+                    || state.snapshot.details_complete
+                    || state.problem.is_some()
+                    || state.snapshot.rows.is_empty())
+        {
+            BackAction::PreviousPage
+        } else {
+            return None;
+        };
+        Some((
+            action,
+            (
+                RoutedTarget::Component(ShellComponent::Management),
+                ShellCommand::ManagementKey(escape.clone()),
+            ),
+        ))
+    }
+
     pub(super) fn edit_management_filter(&mut self, event: InputEvent) {
         let area = if matches!(event, InputEvent::Mouse(_)) {
             let model = self.to_management_view_model();

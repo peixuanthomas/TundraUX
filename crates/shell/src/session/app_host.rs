@@ -352,52 +352,7 @@ impl AppHostSession {
         }
     }
 
-    fn escape(&mut self, key: KeyInput, from_chrome: bool) {
-        let press = key.phase == InputPhase::Press;
-        let input = InputEvent::Key(key);
-        let screen = self.state.active_screen();
-        let modal = !self.state.interactive_overlays().is_empty()
-            || self.state.current_vim_install().is_some()
-            || (screen == ShellScreen::Explorer
-                && (self.state.pages.explorer.explorer_input_mode != ExplorerInputMode::Browse
-                    || matches!(
-                        self.state.pages.explorer.explorer_purpose,
-                        ExplorerPurpose::EditorOpen | ExplorerPurpose::EditorSaveAs { .. }
-                    )))
-            || (screen == ShellScreen::Editor
-                && self.state.pages.editor.editor_search_bar.is_some());
-        let native = self.vim.captures_input(&self.state, &input)
-            || screen == ShellScreen::CommandLine
-            || self.scripts.captures_terminal_input(&self.state)
-            || (screen == ShellScreen::Management
-                && self.state.to_management_view_model().terminal);
-        if (!from_chrome && native) || (modal && press) {
-            self.dispatch(input);
-        } else if !press {
-            return;
-        } else if from_chrome && screen == ShellScreen::CommandLine {
-            self.request_close();
-        } else if from_chrome && self.state.screen_stack().len() > 2 {
-            if self.vim.captures_input(&self.state, &input) {
-                self.state.request_editor_close(self.platform.as_ref());
-            } else {
-                self.dispatch(input);
-            }
-        } else if screen == ShellScreen::SystemStatus
-            && matches!(
-                self.state
-                    .route_back_key(&KeyInput::new(InputKey::Escape))
-                    .1,
-                ShellCommand::SystemStatusBack | ShellCommand::SystemStatusRequestCancelEdit
-            )
-        {
-            self.dispatch(input);
-        } else {
-            self.output.push_back(AppToShell::BackgroundRequested);
-        }
-    }
-
-    fn dispatch(&mut self, input: InputEvent) {
+    fn dispatch(&mut self, input: InputEvent, from_back_button: bool) {
         let received_at = Instant::now();
         let _language = i18n::enter_snapshot(self.state.language.clone());
         let before = RedrawIdentity::from_session(&self.state);
@@ -410,9 +365,10 @@ impl AppHostSession {
             self.redraw.request_input_redraw();
             return;
         };
-        let action = if self.scripts.handle_input(&self.state, &input) {
+        let native = !from_back_button && !self.state.escape_cancels_action(&input);
+        let action = if native && self.scripts.handle_input(&self.state, &input) {
             ShellAction::Redraw
-        } else if self.vim.captures_input(&self.state, &input) {
+        } else if native && self.vim.captures_input(&self.state, &input) {
             if let Err(error) = self.vim.handle_input(&self.state, &input) {
                 self.state.report_editor_error(i18n::msg!(
                     "shell-vim-runtime-error",
@@ -420,7 +376,7 @@ impl AppHostSession {
                 ));
             }
             ShellAction::Redraw
-        } else if command_line_captures_input(&self.state, &input) {
+        } else if native && command_line_captures_input(&self.state, &input) {
             let terminal_area = self.state.command_line_input_area();
             let event = self
                 .command_lines
@@ -568,19 +524,15 @@ impl AppHostSession {
                 if let InputEvent::Mouse(mouse) = &mut input {
                     mouse.position.row = mouse.position.row.saturating_add(1);
                 }
-                match input {
-                    InputEvent::Key(key)
-                        if key.key == InputKey::Escape && !key.has_non_shift_modifier() =>
-                    {
-                        self.escape(key, false);
-                    }
-                    input => self.dispatch(input),
-                }
+                self.dispatch(input, false);
             }
-            ShellToApp::Back { layout }
-                if layout == self.layout && self.focused && !self.frozen =>
+            ShellToApp::Back { layout, action }
+                if layout == self.layout
+                    && self.focused
+                    && !self.frozen
+                    && self.state.back_action() == Some(action) =>
             {
-                self.escape(KeyInput::new(InputKey::Escape), true)
+                self.dispatch(InputEvent::key(InputKey::Escape), true);
             }
             ShellToApp::Keyboard { layout }
                 if layout == self.layout && self.focused && !self.frozen =>
@@ -913,6 +865,7 @@ impl AppHostSession {
         let mut frame = ui::capture_workspace_frame(self.layout, backend.buffer(), content, cursor);
         let mut images = self.compositor.take_workspace_images();
         frame.modal = !self.state.interactive_overlays().is_empty();
+        frame.back_action = self.state.back_action();
         if !frame.modal && !self.state.input_keyboard_open() && !self.compositor.toast_visible() {
             frame.headings = headings.finish();
             images.extend(icons.finish());
@@ -952,9 +905,11 @@ impl AppHostSession {
                 self.state.command_line_input_area()
             } else if self.scripts.captures_terminal_input(&self.state) {
                 Some(self.state.script_layout().output_area)
-            } else if self
-                .vim
-                .captures_input(&self.state, &InputEvent::key(InputKey::Escape))
+            } else if (self.state.active_screen() == ShellScreen::Management
+                && self.state.management_native_escape())
+                || self
+                    .vim
+                    .captures_input(&self.state, &InputEvent::key(InputKey::Escape))
             {
                 Some(content)
             } else {

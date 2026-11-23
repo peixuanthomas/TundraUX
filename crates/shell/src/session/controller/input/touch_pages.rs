@@ -118,6 +118,10 @@ struct TouchScrollRegion {
 }
 
 impl ShellSession {
+    pub(in crate::session) fn touch_pages_pointer_drag_active(&self) -> bool {
+        self.pages.common.page_touch.drag.is_some()
+    }
+
     pub(in crate::session) fn cancel_touch_pages_pointer(&mut self) {
         self.pages.common.page_touch.drag = None;
     }

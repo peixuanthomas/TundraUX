@@ -398,7 +398,7 @@ fn keyboard_and_pointer_open_the_same_readable_transition_and_navigation_interru
                 .begin_auto_admin("Keyboard interruption".into(), false, tx)
                 .unwrap();
         } else if pointer {
-            let area = state.frame_layout.unwrap().back_button.unwrap();
+            let area = state.frame_layout.unwrap().title;
             let point = (area.x + 1, area.y);
             send(
                 &mut state,
@@ -608,13 +608,19 @@ fn page_keyboard_animates_chrome_and_content_together_and_restores_them() {
             }
         }
         let layout = state.frame_layout.unwrap();
-        assert_eq!(layout.back_button.unwrap().height, 1);
+        assert_eq!(layout.title.height, 1);
         assert!(layout.status_message.unwrap().width > original.status_message.unwrap().width);
-        assert_eq!(layout.time_button, original.time_button);
+        assert_eq!(
+            layout.time_button.unwrap().width,
+            original.time_button.unwrap().width
+        );
         assert_eq!(layout.main.y, 1);
         assert_eq!(state.keyboard_launcher_area().unwrap().bottom(), 40);
         assert!(text(terminal.backend().buffer(), Rect::new(0, 0, 120, 1)).contains("TundraUX"));
         state.toggle_input_keyboard();
+        if screen == ShellScreen::Management {
+            state.apply_input(InputEvent::key(InputKey::Escape));
+        }
         let prepared = home_frame(&state, 500, true);
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
         assert_eq!(state.frame_layout.unwrap(), original);
@@ -1139,11 +1145,17 @@ fn pointer_input_hides_home_focus_but_keeps_launcher_selection() {
         };
         render(&mut state, &mut compositor, &mut terminal);
         assert!(state.interaction.keyboard_focus_visible());
+        if launcher {
+            state.apply_input(InputEvent::key(InputKey::Tab));
+            assert!(!state.pages.launcher.search.state.focused);
+        }
         state.apply_input(InputEvent::key(InputKey::Home));
         assert!(state.interaction.keyboard_focus_visible());
         render(&mut state, &mut compositor, &mut terminal);
         let id = if launcher {
-            format!("launcher.item.{}", app::EDITOR_APPLICATION.id)
+            let model = state.to_launcher_view_model();
+            let selected = state.pages.launcher.launcher_selected_index;
+            format!("launcher.item.{}", model.items[selected].id)
         } else {
             "home.entry.0".to_string()
         };
@@ -1153,7 +1165,12 @@ fn pointer_input_hides_home_focus_but_keeps_launcher_selection() {
             else {
                 panic!("full layout required");
             };
-            ui::launcher_layout(main, &state.to_launcher_view_model()).items[0].area
+            ui::launcher_layout(main, &state.to_launcher_view_model())
+                .items
+                .into_iter()
+                .find(|item| item.index == state.pages.launcher.launcher_selected_index)
+                .unwrap()
+                .area
         } else {
             state
                 .button_regions
@@ -1169,7 +1186,7 @@ fn pointer_input_hides_home_focus_but_keeps_launcher_selection() {
                     .modifier
                     .contains(ratatui::style::Modifier::UNDERLINED)
             })
-            .expect("selected label has keyboard focus");
+            .unwrap_or_else(|| panic!("selected label has keyboard focus in mode {mode}"));
         let focused_cell = terminal.backend().buffer()[point].clone();
         assert!(
             focused_cell
@@ -1183,8 +1200,8 @@ fn pointer_input_hides_home_focus_but_keeps_launcher_selection() {
             state.pages.home.selected_home_entry_index
         };
         for pointer in [
-            InputEvent::mouse_moved((0, 0)),
-            InputEvent::mouse_down(PointerButton::Left, (0, 0)),
+            InputEvent::mouse_moved((0, 39)),
+            InputEvent::mouse_down(PointerButton::Left, (0, 39)),
         ] {
             state.apply_input(pointer);
             assert!(!state.interaction.keyboard_focus_visible());
@@ -1231,7 +1248,7 @@ fn pointer_input_hides_home_focus_but_keeps_launcher_selection() {
 }
 
 #[test]
-fn pointer_back_button_does_not_restore_keyboard_focus() {
+fn pointer_power_title_does_not_restore_keyboard_focus() {
     let mut state = session();
     state.apply_input(InputEvent::key(InputKey::Home));
     let mut compositor = ScreenCompositor::default();
@@ -1241,7 +1258,7 @@ fn pointer_back_button_does_not_restore_keyboard_focus() {
     let area = state
         .button_regions
         .iter()
-        .find(|region| region.id.as_str() == "shell.back")
+        .find(|region| region.id.as_str() == "shell.power")
         .unwrap()
         .area;
     let point = (area.x, area.y);
@@ -1253,90 +1270,38 @@ fn pointer_back_button_does_not_restore_keyboard_focus() {
 }
 
 #[test]
-fn command_line_back_button_has_no_keyboard_shortcut_and_routes_to_confirmation() {
-    let mut state = session();
-    assert_eq!(state.to_shell_chrome_view_model().back_shortcut, "Esc");
-    state.enter_screen(ShellScreen::CommandLine);
-    state.refresh_hit_map();
-    assert_eq!(state.to_shell_chrome_view_model().back_shortcut, "");
-    let back = state.frame_layout.unwrap().back_button.unwrap();
-    assert!(back.width < 18);
-    let input = InputEvent::mouse_down(PointerButton::Left, (back.x, back.y));
-    assert_eq!(state.normalize_shell_navigation_input(input.clone()), input);
-    assert_eq!(
-        state.route_input_at(input, Instant::now()).command,
-        ShellCommand::RequestCommandLineClose
-    );
-}
-
-#[test]
-fn compact_escape_button_closes_pages_and_modals_only_on_matching_release() {
+fn compact_power_title_and_cancel_button_respond_only_on_matching_release() {
     for (width, height) in [(49, 11), (30, 8)] {
         let mut state = session();
         state.apply_input(InputEvent::Resize { width, height });
-        state.enter_screen(ShellScreen::Clock);
-        state.refresh_hit_map();
         let mut compositor = ScreenCompositor::default();
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        let mut prepared = home_frame(&state, 0, true);
-        prepared.page = ScreenViewModel::Clock(Box::new(
-            state.to_clock_view_model_at(&state.app.snapshot().clock, Instant::now()),
-        ));
-        draw(&mut compositor, &mut terminal, &mut state, &prepared);
-        let back = state.frame_layout.unwrap().back_button.unwrap();
-        assert!(text(terminal.backend().buffer(), back).contains("◀ Esc"));
-        assert_eq!(
-            back.intersection(state.frame_layout.unwrap().main).area(),
-            0
-        );
-        let point = (back.x + back.width / 2, back.y);
-        let now = Instant::now();
-        state.apply_input_at(InputEvent::mouse_down(PointerButton::Left, point), now);
-        assert_eq!(state.active_screen(), ShellScreen::Clock);
-        state.apply_input_at(
-            InputEvent::mouse_up(PointerButton::Left, point),
-            now + Duration::from_millis(10),
-        );
-        assert_eq!(state.active_screen(), ShellScreen::Home);
-
-        // Home still reaches the exit dialog through the same global button.
         let prepared = home_frame(&state, 0, true);
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
-        state.apply_input_at(InputEvent::mouse_down(PointerButton::Left, point), now);
+        let layout = state.frame_layout.unwrap();
+        assert!(layout.back_button.is_none());
+        assert!(text(terminal.backend().buffer(), layout.title).contains("TundraUX"));
+        let title = (layout.title.x, layout.title.y);
+        state.apply_input(InputEvent::mouse_down(PointerButton::Left, title));
         assert_eq!(state.active_screen(), ShellScreen::Home);
-        state.apply_input_at(
-            InputEvent::mouse_up(PointerButton::Left, point),
-            now + Duration::from_millis(10),
-        );
-        assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+        state.apply_input(InputEvent::mouse_up(PointerButton::Left, title));
         let mut prepared = home_frame(&state, 0, true);
         prepared.notification = state.to_notification_view_model();
         draw(&mut compositor, &mut terminal, &mut state, &prepared);
-        assert!(text(terminal.backend().buffer(), back).contains("◀ Esc"));
+        let layout = state.frame_layout.unwrap();
+        let back = layout.back_button.unwrap();
+        assert!(
+            text(terminal.backend().buffer(), back).contains(&i18n::tr!("ui-shell-back-cancel"))
+        );
+        assert!(back.intersection(layout.main).is_empty());
+        let point = (back.x + back.width / 2, back.y);
         assert_eq!(
             state.hit_map().target_at(point),
             Some(ShellComponent::BackButton)
         );
-        if let ui::NotificationLayout::Dialog(dialog) = ui::notification_layout(
-            state.frame_layout.unwrap().modal_area(),
-            prepared.notification.as_ref().unwrap(),
-        ) {
-            assert_eq!(dialog.dialog.intersection(back).area(), 0);
-            for action in &dialog.actions {
-                assert_eq!(
-                    state.notification_action_index_at((action.area.x, action.area.y)),
-                    Some(action.index)
-                );
-            }
-        } else {
-            assert_eq!((width, height), (30, 8));
-        }
-        state.apply_input_at(InputEvent::mouse_down(PointerButton::Left, point), now);
+        state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
         assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
-        state.apply_input_at(
-            InputEvent::mouse_up(PointerButton::Left, point),
-            now + Duration::from_millis(10),
-        );
+        state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
         assert_eq!(state.active_screen(), ShellScreen::Home);
         assert!(!state.shutdown_requested());
     }
@@ -1390,7 +1355,7 @@ fn compositor_resize_uses_actual_frame_geometry_for_chrome_and_hit_map() {
     assert!(state.frame_layout.unwrap().is_compact());
     assert!(state.hit_map().regions().iter().all(|region| !matches!(
         region.component,
-        ShellComponent::TopBar | ShellComponent::StatusBar | ShellComponent::ClockButton
+        ShellComponent::StatusBar | ShellComponent::ClockButton
     )));
 }
 
@@ -1408,8 +1373,7 @@ fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
     let default = state.frame_layout.unwrap();
     assert!(default.help_button.is_some());
     assert!(default.time_button.is_some());
-    assert!(default.back_button.is_some());
-    assert!(default.tasks_button.is_none());
+    assert!(default.back_button.is_none());
 
     let mut config = state.app.storage_config().clone();
     config.top_bar.show_time = false;
@@ -1459,11 +1423,7 @@ fn header_uses_all_free_space_and_aligns_status_in_the_painted_hit_region() {
                 "{id}"
             );
         }
-        for component in [
-            ShellComponent::ClockButton,
-            ShellComponent::HelpButton,
-            ShellComponent::TasksButton,
-        ] {
+        for component in [ShellComponent::ClockButton, ShellComponent::HelpButton] {
             assert!(!state.focus_order().contains(&component));
         }
     }
@@ -1540,8 +1500,8 @@ fn exit_dialog_round_trip_with_keyboard_mouse_or_touch_alone() {
                 KeyModifiers::NONE,
             ))));
         } else {
-            let back = state.frame_layout.unwrap().back_button.unwrap();
-            tap(&mut state, back);
+            let title = state.frame_layout.unwrap().title;
+            tap(&mut state, title);
         }
         assert!(state.notification_has_active_modal(), "{input_mode}");
         assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
@@ -1585,7 +1545,7 @@ fn rendered_chrome_buttons_hover_press_and_activate_only_on_release() {
     let back = state
         .button_regions
         .iter()
-        .find(|r| r.id.as_str() == "shell.back")
+        .find(|r| r.id.as_str() == "shell.power")
         .unwrap()
         .clone();
     let point = (back.area.x + 3, back.area.y);
@@ -1619,14 +1579,14 @@ fn button_capture_cancels_outside_on_focus_loss_resize_and_page_change() {
         let back = state
             .button_regions
             .iter()
-            .find(|r| r.id.as_str() == "shell.back")
+            .find(|r| r.id.as_str() == "shell.power")
             .unwrap()
             .area;
         let point = (back.x + 3, back.y);
         state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
         match cancel {
             0 => {
-                state.apply_input(InputEvent::mouse_up(PointerButton::Left, (0, 0)));
+                state.apply_input(InputEvent::mouse_up(PointerButton::Left, (0, 1)));
             }
             1 => {
                 state.apply_input(InputEvent::FocusLost);
@@ -1697,7 +1657,7 @@ fn button_click_allows_short_presses_but_rejects_holds_over_500_ms() {
                     .iter()
                     .find(|region| {
                         if kind == 0 {
-                            region.id.as_str() == "shell.back"
+                            region.id.as_str() == "shell.power"
                         } else {
                             region.id.as_str().starts_with("notification.")
                         }

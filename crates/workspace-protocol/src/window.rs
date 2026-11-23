@@ -77,6 +77,7 @@ pub enum ShellToApp {
     },
     Back {
         layout: LayoutGeneration,
+        action: BackAction,
     },
     Keyboard {
         layout: LayoutGeneration,
@@ -106,7 +107,6 @@ pub enum AppToShell {
     OpenApp(Value),
     FilePicked(NativePath),
     LaunchFailed(String),
-    BackgroundRequested,
     CloseRequested,
     CloseDeferred,
     CloseStarted,
@@ -257,6 +257,8 @@ pub struct WindowFrame {
     pub controls: Vec<ControlNode>,
     pub masks: Vec<Rect>,
     pub native_escape: Vec<Rect>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_action: Option<BackAction>,
     #[serde(default)]
     pub ctrl_w_passthrough: bool,
     pub modal: bool,
@@ -284,6 +286,7 @@ impl WindowFrame {
             controls: Vec::new(),
             masks: Vec::new(),
             native_escape: Vec::new(),
+            back_action: None,
             ctrl_w_passthrough: false,
             modal: false,
             startup_timings: None,

@@ -568,29 +568,8 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
     assert!(process_is_running(descendant_pid));
 
     state.refresh_hit_map();
-    let back = state
-        .hit_map()
-        .regions()
-        .iter()
-        .find(|region| region.component == crate::ShellComponent::BackButton)
-        .unwrap()
-        .area;
-    state.button_regions.push(ui::components::ButtonRegion {
-        id: "shell.back".into(),
-        area: back,
-        disabled: false,
-    });
-    let now = std::time::Instant::now();
-    state.apply_input_with_platform_at(
-        InputEvent::mouse_down(ui::MouseButton::Left, (back.x, back.y)),
-        platform.as_ref(),
-        now,
-    );
-    state.apply_input_with_platform_at(
-        InputEvent::mouse_up(ui::MouseButton::Left, (back.x, back.y)),
-        platform.as_ref(),
-        now + Duration::from_millis(20),
-    );
+    assert!(state.header_back_label().is_none());
+    state.request_command_line_close();
     assert_eq!(state.command_line_close_request, Some((second_id, false)));
     assert!(hosts.process_close_request(&mut state));
     let modal = state

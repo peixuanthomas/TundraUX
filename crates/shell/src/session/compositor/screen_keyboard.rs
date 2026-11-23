@@ -94,12 +94,10 @@ impl ScreenCompositor {
             terminal_size: (bounds.width, bounds.height),
             back_button_hovered: false,
             help_available: false,
-            tasks_label: None,
-            tasks_button_focused: false,
-            tasks_button_hovered: false,
+            title_focused: false,
             help_button_hovered: false,
             help_button_focused: false,
-            back_shortcut: "Esc",
+            back_label: None,
             status: ui::StatusViewModel {
                 status: i18n::tr!("screen-keyboard-aa-safe"),
                 toast: None,
@@ -111,8 +109,7 @@ impl ScreenCompositor {
         };
         let shell =
             ui::ShellFrameLayout::new(bounds, chrome.status.time_button_label.as_deref(), context)
-                .with_help_button(chrome.help_available)
-                .with_tasks_button(chrome.tasks_label.as_deref());
+                .with_help_button(chrome.help_available);
         ui::components::Surface::new().render_frame(frame, bounds, context);
         frame.render_widget(
             Paragraph::new(i18n::tr!("aa-preview-page-content"))

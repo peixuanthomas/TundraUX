@@ -54,14 +54,12 @@ fn command_line_keeps_the_shell_clock_button_visible_and_clickable() {
 }
 
 #[test]
-fn back_button_routes_escape_except_for_command_line_close_confirmation() {
+fn back_button_routes_the_same_command_as_escape() {
     for size in [(120, 40), (49, 11), (30, 8)] {
         let mut state = ShellSession::new(ShellLaunchConfig::default(), size);
         set_test_auth_role(&mut state, UserRole::Admin);
         while state.notification_dismiss_active_modal_without_response() {}
         for screen in [
-            ShellScreen::FirstRunSetup,
-            ShellScreen::Home,
             ShellScreen::Clock,
             ShellScreen::Diagnostics,
             ShellScreen::SystemStatus,
@@ -72,26 +70,20 @@ fn back_button_routes_escape_except_for_command_line_close_confirmation() {
             ShellScreen::Editor,
             ShellScreen::Settings,
             ShellScreen::ExitConfirm,
-            ShellScreen::CommandLine,
         ] {
-            state.set_navigation_path(vec![ShellScreen::Home, screen]);
+            let caller = match screen {
+                ShellScreen::Clock => ShellScreen::Logs,
+                _ => ShellScreen::Clock,
+            };
+            state.set_navigation_path(vec![ShellScreen::Home, caller, screen]);
             state.refresh_hit_map();
             let back = hit_region_center(&state, ShellComponent::BackButton);
             let click = state.route_input_at(
                 InputEvent::mouse_down(PointerButton::Left, back),
                 Instant::now(),
             );
-            if screen == ShellScreen::CommandLine {
-                assert_eq!(
-                    click.command,
-                    ShellCommand::RequestCommandLineClose,
-                    "{size:?}"
-                );
-            } else {
-                let escape =
-                    state.route_input_at(InputEvent::key(InputKey::Escape), Instant::now());
-                assert_eq!(click, escape, "{screen:?} at {size:?}");
-            }
+            let escape = state.route_input_at(InputEvent::key(InputKey::Escape), Instant::now());
+            assert_eq!(click, escape, "{screen:?} at {size:?}");
         }
     }
 }
@@ -100,7 +92,11 @@ fn back_button_routes_escape_except_for_command_line_close_confirmation() {
 fn back_button_cancels_the_overlay_before_leaving_the_page_and_only_activates_once() {
     let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
     while state.notification_dismiss_active_modal_without_response() {}
-    state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::Clock]);
+    state.set_navigation_path(vec![
+        ShellScreen::Home,
+        ShellScreen::Logs,
+        ShellScreen::Clock,
+    ]);
     state.pages.clock.clock_create_state = Some(ClockCreateState::default());
     state.refresh_hit_map();
     let back = hit_region_center(&state, ShellComponent::BackButton);
@@ -118,10 +114,11 @@ fn back_button_cancels_the_overlay_before_leaving_the_page_and_only_activates_on
         assert_eq!(state.active_screen(), ShellScreen::Clock);
     }
     assert!(state.to_shell_chrome_view_model().back_button_hovered);
+    let back = hit_region_center(&state, ShellComponent::BackButton);
     state.apply_input(InputEvent::mouse_down(PointerButton::Left, back));
     assert_eq!(state.active_screen(), ShellScreen::Clock);
     state.apply_input(InputEvent::mouse_up(PointerButton::Left, back));
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert_eq!(state.active_screen(), ShellScreen::Logs);
     assert_ne!(state.focused_component(), ShellComponent::BackButton);
 
     state.notify_modal(
@@ -130,6 +127,7 @@ fn back_button_cancels_the_overlay_before_leaving_the_page_and_only_activates_on
         ui::NotificationTone::Info,
         vec![ShellNotificationAction::new("ok", "OK")],
     );
+    let back = hit_region_center(&state, ShellComponent::BackButton);
     let escape = state.route_input_at(InputEvent::key(InputKey::Escape), Instant::now());
     let click = state.route_input_at(
         InputEvent::mouse_down(PointerButton::Left, back),
@@ -141,13 +139,16 @@ fn back_button_cancels_the_overlay_before_leaving_the_page_and_only_activates_on
 #[test]
 fn back_button_hit_region_tracks_resize_including_compact_mode() {
     let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
+    while state.notification_dismiss_active_modal_without_response() {}
+    state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::Launcher]);
     for (width, height) in [(80, 24), (50, 12), (49, 12), (30, 8), (120, 40)] {
         state.apply_input(InputEvent::Resize { width, height });
         let layout = ui::ShellFrameLayout::new(
             Rect::new(0, 0, width, height),
             None,
             &ui::RenderContext::default(),
-        );
+        )
+        .with_back_label(state.header_back_label().as_deref());
         let hit = state
             .hit_map
             .regions()

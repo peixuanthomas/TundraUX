@@ -282,7 +282,15 @@ impl ShellSession {
         Some(job)
     }
     pub(in crate::session) fn auto_admin_visible(&self) -> bool {
-        self.auto_admin.visible && self.auto_admin.job.is_some()
+        self.auto_admin.visible
+            && self.auto_admin.job.is_some()
+            && self.active_screen() != ShellScreen::ExitConfirm
+    }
+
+    pub(in crate::session) fn auto_admin_can_go_back(&self) -> bool {
+        self.auto_admin.job.as_ref().is_some_and(|job| {
+            job.stop_warning() || job.phase() != RUNNING || self.auto_admin.button_focus.is_some()
+        })
     }
 
     fn request_auto_admin_owner_close(&mut self) -> bool {
@@ -481,7 +489,7 @@ impl ShellSession {
     fn handle_auto_admin_input_inner(&mut self, input: &InputEvent, received_at: Instant) -> bool {
         // AA consumes input before ordinary page routing. Its Back button still
         // uses the shared release capture and exactly the same policy as Esc.
-        let normalized;
+        let back;
         let input = if self.auto_admin_visible()
             && (matches!(input, InputEvent::Mouse(mouse)
                 if self.hit_map.target_at(mouse.coordinates()) == Some(ShellComponent::BackButton))
@@ -494,18 +502,11 @@ impl ShellSession {
             let Some(prepared) = self.prepare_button_input(input.clone(), received_at) else {
                 return true;
             };
-            normalized = self.normalize_shell_navigation_input(prepared);
-            if matches!(&normalized, InputEvent::Key(key) if key.key == InputKey::Escape)
-                && self
-                    .auto_admin
-                    .job
-                    .as_ref()
-                    .is_some_and(|job| job.phase() == RUNNING)
-                && self.request_auto_admin_owner_close()
-            {
+            if !self.is_back_button_press(&prepared) {
                 return true;
             }
-            &normalized
+            back = InputEvent::key(InputKey::Escape);
+            &back
         } else {
             input
         };

@@ -2,6 +2,19 @@
 use crate::session::*;
 
 impl ShellSession {
+    pub(in crate::session) fn is_back_button_press(&self, input: &InputEvent) -> bool {
+        matches!(input, InputEvent::Mouse(mouse)
+            if mouse.kind == ui::MouseEventKind::Down(PointerButton::Left)
+                && self.hit_map.target_at(mouse.coordinates()) == Some(ShellComponent::BackButton))
+    }
+
+    pub(in crate::session) fn power_title_pointer(&self, input: &InputEvent) -> bool {
+        matches!(input, InputEvent::Mouse(mouse)
+            if self.hit_map.target_at(mouse.coordinates()) == Some(ShellComponent::TopBar)
+                || self.interaction.button_capture.as_ref().is_some_and(|capture|
+                    capture.region.id.as_str() == "shell.power"))
+    }
+
     /// Consume panel/modal input, adapt shared button gestures, then normalize
     /// navigation. The caller routes the result to the child terminal or Shell.
     /// Returning `None` means consumed; it must never fall through to a page.
@@ -60,7 +73,8 @@ impl ShellSession {
         }
         self.synchronize_overlay_focus();
         let input = self.route_screen_keyboard_input(input, platform, received_at)?;
-        if self.handle_auto_admin_input_at(&input, received_at) {
+        if !self.power_title_pointer(&input) && self.handle_auto_admin_input_at(&input, received_at)
+        {
             return None;
         }
         let input = self.prepare_button_input(input, received_at)?;
@@ -120,37 +134,6 @@ impl ShellSession {
                 .and_then(char::from_u32)
         {
             return InputEvent::Key(KeyInput::new(InputKey::Char(code)));
-        }
-        if let InputEvent::Mouse(mouse) = &input
-            && mouse.kind == ui::MouseEventKind::Down(PointerButton::Left)
-            && self.hit_map.target_at(mouse.coordinates()) == Some(ShellComponent::BackButton)
-        {
-            if self.active_screen() == ShellScreen::CommandLine
-                && !self.notification_has_active_modal()
-                && !self.auto_admin_visible()
-            {
-                return input;
-            }
-            if self.active_screen() == ShellScreen::Editor && self.editor_vim_terminal.is_some() {
-                return input;
-            }
-            if self.active_screen() == ShellScreen::Editor
-                && self.editor_vim_enabled()
-                && self.pages.editor.editor_focus == ui::EditorFocus::Canvas
-                && self.pages.editor.editor_load_state.is_none()
-                && self.pages.editor.editor_save_state.is_none()
-                && self
-                    .active_overlay_descriptor()
-                    .is_none_or(|overlay| overlay.kind == ui::MotionOverlayKind::Toast)
-                && self.pages.editor.editor_search_bar.is_none()
-            {
-                // Vim reserves physical Esc; the Back button still closes the document.
-                return InputEvent::Key(KeyInput::with_modifiers(
-                    InputKey::Char('w'),
-                    InputModifiers::CTRL,
-                ));
-            }
-            return InputEvent::Key(KeyInput::new(InputKey::Escape));
         }
         input
     }

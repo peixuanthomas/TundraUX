@@ -60,7 +60,6 @@ pub(in crate::session) const SYSTEM_SETTINGS_FIELDS: &[ui::SettingsField] = &[
     ui::SettingsField::TopBarHelp,
     ui::SettingsField::TopBarTime,
     ui::SettingsField::TopBarEsc,
-    ui::SettingsField::TopBarTasks,
     ui::SettingsField::RestoreDefaults,
 ];
 pub(in crate::session) const UPDATE_SETTINGS_FIELDS: &[ui::SettingsField] = &[
@@ -871,9 +870,6 @@ impl ShellSession {
             ui::SettingsField::TopBarHelp => config.top_bar.show_help = !config.top_bar.show_help,
             ui::SettingsField::TopBarTime => config.top_bar.show_time = !config.top_bar.show_time,
             ui::SettingsField::TopBarEsc => config.top_bar.show_esc = !config.top_bar.show_esc,
-            ui::SettingsField::TopBarTasks => {
-                config.top_bar.show_tasks = !config.top_bar.show_tasks
-            }
             ui::SettingsField::ShowHidden => {
                 config.explorer.show_hidden = !config.explorer.show_hidden
             }

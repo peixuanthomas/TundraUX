@@ -87,6 +87,168 @@ fn app_frame(workspace: &Workspace, id: SessionId, label: &str) -> WindowFrame {
     frame
 }
 
+#[test]
+fn workspace_back_follows_the_focused_pane_and_pending_split_menu() {
+    let (mut workspace, first) = workspace(240, 40);
+    let second = SessionId(2);
+    workspace.windows.insert(second, window(Size::new(106, 16)));
+    assert!(
+        workspace
+            .selection
+            .split(first, WorkspaceSplitMode::LeftRight)
+    );
+    workspace.selection.open(second);
+    workspace.selection.focus(first);
+    relayout(&mut workspace, 240, 40);
+
+    let mut first_frame = app_frame(&workspace, first, "previous page");
+    first_frame.back_action = Some(BackAction::PreviousPage);
+    workspace.windows.get_mut(&first).unwrap().frame = Some(Arc::new(first_frame));
+    assert_eq!(workspace.back_action(), Some(BackAction::PreviousPage));
+
+    workspace.selection.focus(second);
+    relayout(&mut workspace, 240, 40);
+    let second_frame = app_frame(&workspace, second, "tool root");
+    workspace.windows.get_mut(&second).unwrap().frame = Some(Arc::new(second_frame));
+    assert_eq!(workspace.back_action(), None);
+
+    let windows_before = workspace.selection.visible();
+    let mut state = shell_state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    state.terminal_size = (240, 40);
+    state.refresh_hit_map();
+    for pointer in [true, false] {
+        workspace.split_window = Some(second);
+        let layout = ui::ShellFrameLayout::new(
+            Rect::new(0, 0, 240, 40),
+            None,
+            &ui::RenderContext::default(),
+        )
+        .with_back_label(Some("Cancel"));
+        workspace.remember_chrome(layout, None);
+        assert_eq!(workspace.back_action(), Some(BackAction::Cancel));
+        if pointer {
+            let area = layout.back_button.unwrap();
+            let point = (area.x, area.y);
+            assert!(
+                workspace
+                    .input(
+                        &InputEvent::mouse_down(PointerButton::Left, point),
+                        &mut state
+                    )
+                    .unwrap()
+            );
+            assert!(
+                !workspace
+                    .input(
+                        &InputEvent::mouse_drag(PointerButton::Left, (0, 0)),
+                        &mut state
+                    )
+                    .unwrap()
+            );
+            assert!(
+                workspace
+                    .input(
+                        &InputEvent::mouse_up(PointerButton::Left, point),
+                        &mut state
+                    )
+                    .unwrap()
+            );
+            assert!(workspace.split_window.is_some());
+            assert!(
+                workspace
+                    .input(
+                        &InputEvent::mouse_down(PointerButton::Left, point),
+                        &mut state
+                    )
+                    .unwrap()
+            );
+            assert!(workspace.split_window.is_some());
+            assert!(
+                workspace
+                    .input(
+                        &InputEvent::mouse_up(PointerButton::Left, point),
+                        &mut state
+                    )
+                    .unwrap()
+            );
+        } else {
+            assert!(
+                workspace
+                    .input(&InputEvent::key(InputKey::Escape), &mut state)
+                    .unwrap()
+            );
+        }
+        assert!(workspace.split_window.is_none());
+        assert_eq!(workspace.selection.visible(), windows_before);
+        assert_eq!(workspace.selection.focused(), Some(second));
+    }
+}
+
+#[test]
+fn power_title_suspends_the_workspace_split_menu_and_restores_it_after_cancel() {
+    let (mut workspace, id) = workspace(240, 40);
+    let mut state = shell_state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    state.terminal_size = (240, 40);
+    state.refresh_hit_map();
+    let mut compositor = ScreenCompositor::default();
+    compositor.capture_enabled = true;
+    let mut terminal = Terminal::new(TestBackend::new(240, 40)).unwrap();
+    let host = CommandLineHost::new(default_editor_watchdog().unwrap());
+    let mut draw = |state: &mut ShellSession, workspace: &mut Workspace| {
+        let context = ui::RenderContext {
+            motion: ui::MotionFrame::reduced(Duration::ZERO),
+            ..Default::default()
+        };
+        let prepared = compositor.prepare(
+            state,
+            &host,
+            Instant::now(),
+            Default::default(),
+            context,
+            None,
+        );
+        terminal
+            .draw(|frame| {
+                compositor.render(frame, state, &prepared, None, Some(workspace));
+            })
+            .unwrap();
+        compositor.snapshot.clone().unwrap()
+    };
+    workspace.split_window = Some(id);
+    let snapshot = draw(&mut state, &mut workspace);
+    let title = snapshot
+        .nodes
+        .iter()
+        .find(|node| node.id == "chrome/shell.power")
+        .unwrap();
+    assert!(title.actionable);
+    let point = (title.rect.x, title.rect.y);
+    for event in [
+        InputEvent::mouse_down(PointerButton::Left, point),
+        InputEvent::mouse_up(PointerButton::Left, point),
+    ] {
+        assert!(!workspace.input(&event, &mut state).unwrap());
+        state.apply_input(event);
+    }
+    assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+    draw(&mut state, &mut workspace);
+    assert_eq!(workspace.split_window, Some(id));
+    let escape = InputEvent::key(InputKey::Escape);
+    assert!(!workspace.input(&escape, &mut state).unwrap());
+    state.apply_input(escape);
+    let snapshot = draw(&mut state, &mut workspace);
+    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert_eq!(workspace.split_window, Some(id));
+    assert!(
+        snapshot
+            .nodes
+            .iter()
+            .any(|node| node.id == "chrome/shell.back" && node.actionable)
+    );
+}
+
 fn render(
     workspace: &mut Workspace,
     terminal: &mut Terminal<TestBackend>,

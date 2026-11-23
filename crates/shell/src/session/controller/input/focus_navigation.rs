@@ -1,15 +1,6 @@
 use crate::session::overlays::ShellOverlayCategory;
 use crate::session::*;
 impl ShellSession {
-    pub(in crate::session) fn shell_back_shortcut(&self) -> &'static str {
-        if self.active_screen() == ShellScreen::CommandLine && !self.notification_has_active_modal()
-        {
-            ""
-        } else {
-            "Esc"
-        }
-    }
-
     pub(in crate::session) fn refresh_hit_map(&mut self) {
         let _language = i18n::enter_snapshot(self.language.clone());
         self.refresh_hit_map_with_motion(ui::MotionTransitions::default());
@@ -243,7 +234,7 @@ impl ShellSession {
             .iter()
             .any(|region| region.component == ShellComponent::CompactHome)
         {
-            return vec![ShellComponent::CompactHome];
+            return vec![ShellComponent::CompactHome, ShellComponent::TopBar];
         }
 
         let mut order = vec![ShellComponent::Home];
@@ -254,7 +245,6 @@ impl ShellSession {
             order.extend(
                 [
                     (layout.time_button, ShellComponent::ClockButton),
-                    (layout.tasks_button, ShellComponent::TasksButton),
                     (layout.help_button, ShellComponent::HelpButton),
                 ]
                 .into_iter()

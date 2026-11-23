@@ -752,11 +752,6 @@ pub(in crate::session) fn settings_cards(
                         i18n::tr!("settings-top-bar-show-esc"),
                         top_bar.show_esc,
                     ),
-                    checkbox(
-                        Field::TopBarTasks,
-                        i18n::tr!("settings-top-bar-show-tasks"),
-                        top_bar.show_tasks,
-                    ),
                 ]
             }),
             Card::new(i18n::tr!("settings-reset"), vec![reset(global_enabled)]),

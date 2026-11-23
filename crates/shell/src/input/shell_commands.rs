@@ -20,6 +20,7 @@ pub enum ShellCommand {
     ManagementKey(KeyInput),
     ManagementPointer(MouseInput),
     TouchPagesPointer(MouseInput),
+    CancelPointerGesture,
     ManagementPaste(String),
     Noop,
     Tick,

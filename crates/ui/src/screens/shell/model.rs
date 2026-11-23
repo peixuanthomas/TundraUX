@@ -43,13 +43,11 @@ pub struct ShellChromeViewModel {
     pub display_mode: HomeDisplayMode,
     pub terminal_size: (u16, u16),
     pub back_button_hovered: bool,
+    pub title_focused: bool,
     pub help_available: bool,
-    pub tasks_label: Option<String>,
-    pub tasks_button_focused: bool,
-    pub tasks_button_hovered: bool,
     pub help_button_hovered: bool,
     pub help_button_focused: bool,
-    pub back_shortcut: &'static str,
+    pub back_label: Option<String>,
     pub status: StatusViewModel,
 }
 

@@ -91,6 +91,7 @@ impl ResolvedExplorerOverlay {
                 ui::MotionOverlayKind::Popover,
                 match mode {
                     ExplorerOverlayMode::ContextMenu { .. } => "explorer-popover:context-menu",
+                    ExplorerOverlayMode::MoreActions => "explorer-popover:more-actions",
                     ExplorerOverlayMode::Sort { .. } => "explorer-popover:sort",
                     ExplorerOverlayMode::Options => "explorer-popover:options",
                     ExplorerOverlayMode::Properties => "explorer-popover:properties",

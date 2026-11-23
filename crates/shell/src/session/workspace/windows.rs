@@ -212,8 +212,7 @@ impl Workspace {
             return Ok(false);
         }
         let mut launches = std::mem::take(&mut state.window_launches);
-        let toggle_tasks = std::mem::take(&mut state.window_tasks_requested)
-            | std::mem::take(&mut self.toggle_tasks_requested);
+        let toggle_tasks = std::mem::take(&mut state.window_tasks_requested);
         let delete = state.window_delete_launcher.take();
         let redraw = !launches.is_empty() || toggle_tasks || delete.is_some();
         if let Some(id) = delete
@@ -754,10 +753,6 @@ impl Workspace {
                     window.picked_file = Some(path);
                     self.request_close(id);
                 }
-            }
-            AppToShell::BackgroundRequested => {
-                self.selection.minimize(id);
-                self.cancel_capture();
             }
             AppToShell::CloseRequested => {
                 self.request_close(id);

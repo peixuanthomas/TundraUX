@@ -88,7 +88,10 @@ fn launcher_marks_only_draggable_tiles_without_using_icon_cells() {
                 side: LauncherDropSide::Before,
             });
             let layout = launcher_layout(main, &model);
-            assert_eq!(layout.items.len(), 2);
+            assert!(!layout.items.is_empty());
+            if width > 3 {
+                assert_eq!(layout.items.len(), 2);
+            }
             for icons in [None, Some(&Image as &dyn ui::LauncherIconRenderer)] {
                 terminal
                     .draw(|frame| ui::render_launcher_content(frame, main, &model, &context, icons))
@@ -108,9 +111,13 @@ fn launcher_marks_only_draggable_tiles_without_using_icon_cells() {
                             Some(LauncherHitTarget::Item(tile.index))
                         );
                     }
-                    if icons.is_some() {
+                    if icons.is_some() && !tile.icon_area.is_empty() {
                         assert_eq!(
-                            buffer[(tile.icon_area.x + tile.icon_area.width / 2, tile.icon_area.y)].symbol(),
+                            buffer[(
+                                tile.icon_area.x + tile.icon_area.width / 2,
+                                tile.icon_area.y
+                            )]
+                                .symbol(),
                             "@"
                         );
                     }
@@ -333,12 +340,10 @@ fn chrome(size: (u16, u16)) -> ShellChromeViewModel {
         terminal_size: size,
         back_button_hovered: false,
         help_available: false,
-        tasks_label: None,
-        tasks_button_focused: false,
-        tasks_button_hovered: false,
+        title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_shortcut: "Esc",
+        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Ready".into(),
             toast: None,

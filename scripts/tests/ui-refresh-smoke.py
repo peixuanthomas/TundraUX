@@ -83,11 +83,12 @@ def run_case(binary, language, color, motion, sizes, samples):
         def node(frame, identifier):
             return next(item for item in frame["nodes"] if item["id"] == identifier)
 
-        def tap(frame, identifier):
+        def tap(frame, identifier, double=False):
             frame = until(lambda current: any(item["id"] == identifier and item["actionable"]
                                               for item in current["nodes"]))
             x, y = smoke.control_position(frame, identifier)
-            send(f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
+            click = f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode()
+            send(click * (2 if double else 1))
 
         def home_entry(frame, label):
             return next(item["id"] for item in frame["nodes"]
@@ -99,15 +100,23 @@ def run_case(binary, language, color, motion, sizes, samples):
 
         def assert_header(frame, keyboard_id=None):
             assert not any(item["id"] == "chrome/shell.tasks" for item in frame["nodes"])
-            ids = ["chrome/shell.status", "chrome/shell.help",
-                   "chrome/shell.status.time", "chrome/shell.back"]
+            ids = ["chrome/shell.power", "chrome/shell.status", "chrome/shell.help",
+                   "chrome/shell.status.time"]
+            back_visible = any(item["id"] == "chrome/shell.back" for item in frame["nodes"])
+            assert back_visible == (frame["page"] == "Launcher")
+            if back_visible:
+                ids.append("chrome/shell.back")
             if keyboard_id is not None:
-                ids.insert(1, keyboard_id)
+                ids.insert(2, keyboard_id)
             right = 0
             for identifier in ids:
                 rect = node(frame, identifier)["rect"]
                 assert rect["height"] == 1 and rect["y"] == 0 and rect["x"] >= right, (identifier, rect)
                 right = rect["x"] + rect["width"]
+
+        def close_tool(frame):
+            close = next(item for item in frame["nodes"] if "workspace.close." in item["id"])
+            tap(frame, close["id"])
 
         measurements = []
         try:
@@ -136,7 +145,7 @@ def run_case(binary, language, color, motion, sizes, samples):
             current = until(lambda frame: frame["page"] == "Home" and not has_modal(frame))
             settings_label, launcher_label = (("设置", "启动器") if language == "zh-CN"
                                                else ("Settings", "Launcher"))
-            tap(current, home_entry(current, settings_label))
+            tap(current, home_entry(current, settings_label), double=True)
             current = until(lambda frame: frame["page"] == "Settings")
             motion_id = "page/settings.field.motionpreference"
             current = until(lambda frame: any(item["id"] == motion_id and item["actionable"]
@@ -151,7 +160,7 @@ def run_case(binary, language, color, motion, sizes, samples):
                 tap(current, motion_id)
             current = until(lambda frame: motion_value(frame) == expected_motion)
             assert node(current, "page/settings.field.animationspeed")["enabled"] == (motion == "full")
-            tap(current, "chrome/shell.back")
+            close_tool(current)
             current = until(lambda frame: frame["page"] == "Home")
             home_ids = {item["id"] for item in current["nodes"] if "home.entry." in item["id"]}
             for columns, rows in sizes:
@@ -170,7 +179,7 @@ def run_case(binary, language, color, motion, sizes, samples):
                     assert item["actionable"] and rect["y"] >= 1
                     assert rect["y"] + rect["height"] <= rows - 1, "Home entry overlaps window bar"
                 assert_header(current)
-                tap(current, home_entry(current, settings_label))
+                tap(current, home_entry(current, settings_label), double=True)
                 send(b"\x1bOP")
                 current = until(lambda frame: frame["page"] == "Settings" and has_modal(frame))
                 assert not any(item["actionable"] for item in current["nodes"]
@@ -180,10 +189,10 @@ def run_case(binary, language, color, motion, sizes, samples):
                 assert has_modal(current), "resize lost the active dialog"
                 send(b"\x1b")
                 current = until(lambda frame: frame["page"] == "Settings" and not has_modal(frame))
-                tap(current, "chrome/shell.back")
+                close_tool(current)
                 current = until(lambda frame: frame["page"] == "Home")
 
-                tap(current, home_entry(current, launcher_label))
+                tap(current, home_entry(current, launcher_label), double=True)
                 current = until(lambda frame: frame["page"] == "Launcher")
                 tap(current, "page/launcher.search")
                 current = until(lambda frame: node(frame, "page/launcher.search")["focused"])
@@ -224,8 +233,8 @@ def run_case(binary, language, color, motion, sizes, samples):
                     "motion": motion, "samples": samples, "input_to_output_echo_ms_p95": round(p95, 3),
                     "input_to_output_echo_ms_max": round(max(latencies), 3),
                 })
-                send(b"\x15\t")
-                until(lambda frame: not node(frame, "page/launcher.search")["focused"])
+                send(b"\x1b")
+                until(lambda frame: not node(frame, "page/launcher.search")["text"])
                 send(b"\x1b")
                 current = until(lambda frame: frame["page"] == "Home")
                 print(f"PASS: {columns}x{rows} {language} {color} {motion}; PTY echo P95 {p95:.3f}ms", flush=True)

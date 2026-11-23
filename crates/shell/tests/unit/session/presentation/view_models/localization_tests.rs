@@ -87,6 +87,7 @@ fn selected_file_menu_keeps_the_actions_moved_from_the_toolbar() {
     let ui::ExplorerOverlayViewModel::ContextMenu(menu) =
         explorer_context_menu_view_model(ExplorerContextMenuInput {
             anchor: (0, 0),
+            centered: true,
             selected_count: 1,
             entry_count: 1,
             clipboard_available: false,
@@ -143,7 +144,7 @@ fn localized_status_stays_above_the_command_line_viewport() {
             chrome.status.time_button_label.as_deref(),
             &context,
         )
-        .with_back_shortcut(Some(chrome.back_shortcut));
+        .with_back_label(chrome.back_label.as_deref());
         assert_eq!(
             ui::command_line_terminal_area_in(&layout),
             Some(Rect::new(0, 1, 108, 18))

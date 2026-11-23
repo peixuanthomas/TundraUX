@@ -177,12 +177,17 @@ impl ShellSession {
                     self.clock_button_activation_command(),
                 )
             }
-            _ if self.pages.common.focused_component == ShellComponent::TasksButton
-                && matches!(&key.key, InputKey::Enter | InputKey::Char(' ')) =>
+            _ if self.pages.common.focused_component == ShellComponent::TopBar
+                && key.phase == InputPhase::Press
+                && key.is_unmodified_action_key()
+                && matches!(
+                    key.key,
+                    InputKey::Enter | InputKey::Space | InputKey::Char(' ')
+                ) =>
             {
                 (
-                    RoutedTarget::Component(ShellComponent::TasksButton),
-                    ShellCommand::ToggleTasks,
+                    RoutedTarget::Component(ShellComponent::TopBar),
+                    ShellCommand::RequestExit,
                 )
             }
             _ if self.pages.common.focused_component == ShellComponent::HelpButton
@@ -235,7 +240,7 @@ impl ShellSession {
                 RoutedTarget::Component(ShellComponent::Home),
                 ShellCommand::ActivateSelectedHomeEntry,
             ),
-            ShellScreen::Home if key.is_character('q') || matches!(&key.key, InputKey::Escape) => {
+            ShellScreen::Home if key.is_character('q') => {
                 (RoutedTarget::Global, ShellCommand::RequestExit)
             }
             _ => (
@@ -315,12 +320,23 @@ impl ShellSession {
         let hit_target = self.hit_map.target_at(coordinates);
         let hit_layer = self.hit_map.layer_at(coordinates);
 
-        if self.active_screen() == ShellScreen::CommandLine
-            && self.interactive_overlays().is_empty()
-            && hit_target == Some(ShellComponent::BackButton)
-            && mouse.kind == ui::MouseEventKind::Down(PointerButton::Left)
-        {
-            return (RoutedTarget::Global, ShellCommand::RequestCommandLineClose);
+        if matches!(
+            mouse.kind,
+            ui::MouseEventKind::Down(PointerButton::Left)
+                | ui::MouseEventKind::Click(PointerButton::Left)
+        ) {
+            match hit_target {
+                Some(ShellComponent::TopBar) => {
+                    self.last_click = None;
+                    let command = if self.active_screen() == ShellScreen::ExitConfirm {
+                        ShellCommand::CancelExit
+                    } else {
+                        ShellCommand::RequestExit
+                    };
+                    return (RoutedTarget::Component(ShellComponent::TopBar), command);
+                }
+                _ => {}
+            }
         }
 
         if (self.status_details_visible() || self.notification_scrollbar_drag.is_some())
@@ -644,11 +660,6 @@ impl ShellSession {
                 (target, self.clock_button_activation_command())
             }
             ui::MouseEventKind::Down(PointerButton::Left)
-                if hit_target == Some(ShellComponent::TasksButton) =>
-            {
-                (target, ShellCommand::ToggleTasks)
-            }
-            ui::MouseEventKind::Down(PointerButton::Left)
                 if hit_target == Some(ShellComponent::HelpButton) =>
             {
                 (target, ShellCommand::OpenPageHelp)
@@ -714,7 +725,6 @@ impl ShellSession {
             ),
         }
     }
-
 }
 
 // Share the overlay focus bindings so Shift+Tab and both arrow axes behave alike.

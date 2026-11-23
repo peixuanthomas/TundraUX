@@ -1,6 +1,35 @@
 use crate::session::*;
 
 impl ShellSession {
+    pub(in crate::session) fn launcher_back(
+        &self,
+    ) -> Option<(workspace_protocol::BackAction, (RoutedTarget, ShellCommand))> {
+        let target = RoutedTarget::Component(ShellComponent::Launcher);
+        let key = KeyInput::new(InputKey::Escape);
+        let launcher = &self.pages.launcher;
+        let command = if launcher.context_menu.is_some() || launcher.entry_editor.is_some() {
+            ShellCommand::LauncherEntryInput(InputEvent::Key(key))
+        } else if launcher.launcher_run_settings.is_some() {
+            ShellCommand::LauncherRunSettingsKey(key)
+        } else if launcher.launcher_pending_confirmation.is_some() {
+            ShellCommand::LauncherCancelConfirmation
+        } else if launcher.launcher_drag.is_some()
+            || matches!(
+                self.scrollbar_drag,
+                Some(ScrollbarDragState::Launcher { .. })
+            )
+        {
+            ShellCommand::LauncherCancelDrag
+        } else if launcher.organizing {
+            ShellCommand::LauncherOrganize
+        } else if !launcher.search.value().is_empty() {
+            ShellCommand::LauncherSearchInput(InputEvent::Key(key))
+        } else {
+            return None;
+        };
+        Some((workspace_protocol::BackAction::Cancel, (target, command)))
+    }
+
     pub(in crate::session) fn route_launcher_key(
         &self,
         key: &KeyInput,

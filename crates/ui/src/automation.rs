@@ -203,6 +203,22 @@ pub fn enabled() -> bool {
     CAPTURE.with_borrow(Option::is_some)
 }
 
+pub(crate) fn with_unblocked_controls(draw: impl FnOnce()) {
+    let previous = CAPTURE.with_borrow_mut(|capture| {
+        capture
+            .as_mut()
+            .map(|state| std::mem::replace(&mut state.blocked, false))
+    });
+    draw();
+    if let Some(previous) = previous {
+        CAPTURE.with_borrow_mut(|capture| {
+            if let Some(state) = capture {
+                state.blocked = previous;
+            }
+        });
+    }
+}
+
 pub fn node(id: impl Into<String>, role: &str, name: impl Into<String>, rect: Rect) -> Node {
     Node::new(
         id,

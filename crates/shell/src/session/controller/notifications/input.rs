@@ -10,15 +10,20 @@ impl ShellSession {
             .unwrap_or(ShellComponent::NotificationDialog);
         let target = RoutedTarget::Modal(target_component);
 
-        if !self.notification_can_render() {
-            return if key.phase == InputPhase::Press
-                && key.is_unmodified_action_key()
-                && matches!(key.key, InputKey::Escape)
-            {
-                (target, ShellCommand::NotificationCancel)
+        if key.key == InputKey::Escape {
+            let command = if key.phase == InputPhase::Press && key.is_unmodified_action_key() {
+                self.notification_action_index_for_input(key).map_or(
+                    ShellCommand::NotificationCancel,
+                    ShellCommand::NotificationActivateAction,
+                )
             } else {
-                (target, ShellCommand::CaptureOverlayInput)
+                ShellCommand::CaptureOverlayInput
             };
+            return (target, command);
+        }
+
+        if !self.notification_can_render() {
+            return (target, ShellCommand::CaptureOverlayInput);
         }
 
         if self.status_details_visible()
@@ -81,13 +86,6 @@ impl ShellSession {
             InputKey::Enter | InputKey::Char(' ') => {
                 if key.phase == InputPhase::Press && key.is_unmodified_action_key() {
                     (target, ShellCommand::NotificationActivateSelected)
-                } else {
-                    (target, ShellCommand::CaptureOverlayInput)
-                }
-            }
-            InputKey::Escape => {
-                if key.phase == InputPhase::Press && key.is_unmodified_action_key() {
-                    (target, ShellCommand::NotificationCancel)
                 } else {
                     (target, ShellCommand::CaptureOverlayInput)
                 }

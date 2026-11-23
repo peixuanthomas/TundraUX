@@ -11,9 +11,9 @@ use ui::{
     WorkspaceWindowViewModel,
 };
 use workspace_protocol::{
-    AppStartupTimings, AppToShell, CursorShape, LayoutGeneration, NativePath, ProcessState,
-    SessionId, ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker, WindowFrame,
-    WindowInit, WindowStatus, WorkerId, WorkerRole, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, BackAction, CursorShape, LayoutGeneration, NativePath,
+    ProcessState, SessionId, ShellAction as HostAction, ShellToApp, Size, SupervisorToWorker,
+    WindowFrame, WindowInit, WindowStatus, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 mod chooser;
@@ -105,9 +105,8 @@ enum CloseProgress {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChromeAction {
-    Back,
+    Back(BackAction),
     Help,
-    Tasks,
     Keyboard,
 }
 
@@ -175,7 +174,6 @@ pub(super) struct Workspace {
     input_busy_notice: bool,
     task_catalogs: BTreeMap<SessionId, Vec<String>>,
     tasks_return: Option<(SessionId, SessionId)>,
-    toggle_tasks_requested: bool,
     shutdown: bool,
     reset: bool,
     frozen: bool,
@@ -231,7 +229,6 @@ impl Workspace {
             input_busy_notice: false,
             task_catalogs: BTreeMap::new(),
             tasks_return: None,
-            toggle_tasks_requested: false,
             shutdown: false,
             reset: false,
             frozen: false,
@@ -360,6 +357,18 @@ impl Workspace {
             .and_then(|id| self.windows.get(&id))
             .and_then(|window| window.frame.as_ref())
             .is_some_and(|frame| !frame.modal && !frame.native_escape.is_empty())
+    }
+
+    pub(super) fn back_action(&self) -> Option<BackAction> {
+        if self.has_overlay() || self.prefix.pending() {
+            return Some(BackAction::Cancel);
+        }
+        let window = self.windows.get(&self.input_focus?)?;
+        let frame = window.frame.as_ref()?;
+        if self.layout.blocked || window.input_blocked || frame.layout != self.generation {
+            return None;
+        }
+        frame.back_action
     }
 
     pub(super) fn finish_input_batch(&mut self, external: bool) {
@@ -514,7 +523,7 @@ impl Workspace {
                 chooser.list.cancel_pointer();
             }
         }
-        if modal || dimensions_changed {
+        if dimensions_changed {
             self.close_split_menu();
             self.taskbar_menu = None;
         }

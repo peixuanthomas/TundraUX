@@ -59,14 +59,21 @@ impl ShellSession {
                 disabled: false,
             });
         }
-        if self.hit_map.target_at(point) == Some(ShellComponent::BackButton)
-            && let Some(area) = self.frame_layout.and_then(|layout| layout.back_button)
-        {
-            return Some(ui::components::ButtonRegion {
-                id: "shell.back".into(),
-                area,
-                disabled: false,
-            });
+        if let Some(layout) = self.frame_layout {
+            let chrome_button = match self.hit_map.target_at(point) {
+                Some(ShellComponent::BackButton) => {
+                    layout.back_button.map(|area| ("shell.back", area))
+                }
+                Some(ShellComponent::TopBar) => Some(("shell.power", layout.title)),
+                _ => None,
+            };
+            if let Some((id, area)) = chrome_button {
+                return Some(ui::components::ButtonRegion {
+                    id: id.into(),
+                    area,
+                    disabled: false,
+                });
+            }
         }
         if self.auto_admin_visible() {
             return self
@@ -288,12 +295,7 @@ impl ShellSession {
         }
         self.update_button_input_mode(&input);
         let InputEvent::Mouse(mouse) = input else {
-            let cancel_home_drag = self.active_screen() == ShellScreen::Home
-                && self.pages.home.drag.is_some()
-                && matches!(&input, InputEvent::Key(key) if key.key == InputKey::Escape && key.phase.is_press_like() && !key.has_non_shift_modifier());
-            let cancel_launcher_drag = self.active_screen() == ShellScreen::Launcher
-                && self.pages.launcher.launcher_drag.is_some()
-                && matches!(&input, InputEvent::Key(key) if key.key == InputKey::Escape && key.phase.is_press_like());
+            let escape = matches!(&input, InputEvent::Key(key) if key.key == InputKey::Escape);
             if matches!(
                 input,
                 InputEvent::FocusLost
@@ -301,11 +303,12 @@ impl ShellSession {
                     | InputEvent::Key(_)
                     | InputEvent::Paste(_)
             ) {
-                self.cancel_pointer_gestures_for_modal();
+                if escape {
+                    self.interaction.button_capture = None;
+                } else {
+                    self.cancel_pointer_gestures_for_modal();
+                }
                 self.last_click = None;
-            }
-            if cancel_launcher_drag || cancel_home_drag {
-                return None;
             }
             if matches!(input, InputEvent::FocusLost) {
                 self.interaction.pointer_position = None;
@@ -321,7 +324,8 @@ impl ShellSession {
         if matches!(
             mouse.kind,
             ui::MouseEventKind::Scroll(_) | ui::MouseEventKind::Down(_)
-        ) {
+        ) && !self.is_back_button_press(&input)
+        {
             self.pages.home.drag = None;
         }
         // Wheel reports are not button releases. A wheel or a move outside

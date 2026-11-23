@@ -850,6 +850,22 @@ impl ShellSession {
         }
     }
 
+    pub(in crate::session) fn logs_local_back(
+        &self,
+        escape: &KeyInput,
+    ) -> Option<(workspace_protocol::BackAction, (RoutedTarget, ShellCommand))> {
+        let state = &self.pages.logs.logs_state;
+        (state.expert_open && state.expert_focus.is_some()).then(|| {
+            (
+                workspace_protocol::BackAction::Cancel,
+                (
+                    RoutedTarget::Component(ShellComponent::Logs),
+                    ShellCommand::LogsKey(escape.clone()),
+                ),
+            )
+        })
+    }
+
     pub(in crate::session) fn handle_logs_key(&mut self, key: &KeyInput) {
         if !key.phase.is_press_like() {
             return;

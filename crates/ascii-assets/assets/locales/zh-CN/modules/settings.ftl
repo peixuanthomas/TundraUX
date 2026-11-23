@@ -314,7 +314,6 @@ settings-field-name =
         [TopBarHelp] { settings-top-bar-show-help }
         [TopBarTime] { settings-top-bar-show-time }
         [TopBarEsc] { settings-top-bar-show-esc }
-        [TopBarTasks] { settings-top-bar-show-tasks }
         [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
@@ -487,5 +486,4 @@ settings-top-bar-align-center = 居中
 settings-top-bar-align-right = 右对齐
 settings-top-bar-show-help = 显示帮助按钮
 settings-top-bar-show-time = 显示时间
-settings-top-bar-show-esc = 显示 Esc 按钮
-settings-top-bar-show-tasks = 显示任务按钮
+settings-top-bar-show-esc = 显示返回按钮

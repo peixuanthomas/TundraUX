@@ -212,6 +212,13 @@ def main():
             key("Enter")
             return contains(expected)
 
+        def open_launcher():
+            snapshot = until(lambda frame: frame["page"] == "Home")
+            launcher = next(node for node in snapshot["nodes"]
+                            if "home.entry." in node["id"] and node["name"] == "Launcher")
+            ui("click", "--id", launcher["id"], "--double")
+            return until(lambda frame: frame["page"] == "Launcher")
+
         def settings(path, arguments):
             key("End")
             if path == nvim:
@@ -248,15 +255,10 @@ def main():
                     break
                 key("F10" if current["page"] == "FirstRunSetup" and not modal else "Enter")
                 shell.drain(0.1)
-            until(lambda snapshot: snapshot["page"] == "Home")
-            key("End")
-            key("Left")
-            key("Left")
-            key("Enter")
-            current = until(lambda snapshot: snapshot["page"] == "Launcher")
+            current = open_launcher()
             command_node = next(node for node in current["nodes"]
                                 if node["role"] == "button" and "Command Line" in node["name"])
-            ui("click", "--id", command_node["id"])
+            ui("click", "--id", command_node["id"], "--double")
             until(lambda snapshot: snapshot["page"] == "CommandLine" and ">>" in body(snapshot))
 
             repl_command(shlex.join([str(nvim), "--clean", "-n", "-i", "NONE",
@@ -314,15 +316,15 @@ def main():
             assert yazi_cwd.read_text().strip() == str(yazi_workspace)
             text("exit")
             key("Enter")
-            until(lambda snapshot: snapshot["page"] == "Launcher")
+            open_launcher()
             print("PASS: Yazi image/text files, navigation, mouse, pasted filter and return to REPL")
 
             settings(nvim, ["--clean", "-n", "-i", "NONE", str(launcher_document)])
             key("Enter")
             contains("LAUNCHER_NEOVIM_LINE")
             ex("qa!")
-            until(lambda snapshot: snapshot["page"] == "Launcher")
-            print("PASS: saved Launcher settings started real Neovim and success returned to Launcher")
+            open_launcher()
+            print("PASS: saved Launcher settings started real Neovim and exited successfully")
 
             for code in (75, 76):
                 report = workspace / f"launcher-{code}.json"
@@ -335,9 +337,12 @@ def main():
                     "cwd": str(workspace), "arguments": literal_arguments,
                 }
                 shell.drain(0.3)
-                assert ui("snapshot")["page"] == "CommandLine"
-                ui("click", "--id", "chrome/shell.back")
-                until(lambda snapshot: snapshot["page"] == "Launcher")
+                frame = ui("snapshot")
+                assert frame["page"] == "CommandLine"
+                assert not any(node["id"] == "chrome/shell.back" for node in frame["nodes"])
+                close = next(node for node in frame["nodes"] if "workspace.close." in node["id"])
+                ui("click", "--id", close["id"])
+                open_launcher()
                 print(f"PASS: external exit {code} retained output and did not reset or panic Shell")
         except Exception:
             summary = {key: current[key] for key in ("page", "number", "width", "height")} if current else None

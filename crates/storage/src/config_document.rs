@@ -142,7 +142,6 @@ pub struct TopBarConfig {
     pub show_help: bool,
     pub show_time: bool,
     pub show_esc: bool,
-    pub show_tasks: bool,
 }
 
 impl Default for TopBarConfig {
@@ -152,7 +151,6 @@ impl Default for TopBarConfig {
             show_help: true,
             show_time: true,
             show_esc: true,
-            show_tasks: false,
         }
     }
 }

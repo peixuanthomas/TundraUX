@@ -94,14 +94,12 @@ pub struct ShellFrameLayout {
     pub title: Rect,
     pub back_button: Option<Rect>,
     pub help_button: Option<Rect>,
-    pub tasks_button: Option<Rect>,
     pub status_message: Option<Rect>,
     pub status_alignment: HorizontalAlignment,
     pub workspace_taskbar: Option<Rect>,
     pub time_button: Option<Rect>,
     pub keyboard_launcher: Option<Rect>,
     help_width: u16,
-    tasks_width: u16,
     time_width: u16,
     keyboard_width: u16,
 }
@@ -123,14 +121,12 @@ impl ShellFrameLayout {
             title: Rect::default(),
             back_button: None,
             help_button: None,
-            tasks_button: None,
             status_message: None,
             status_alignment: HorizontalAlignment::Center,
             workspace_taskbar: None,
             time_button: None,
             keyboard_launcher: None,
             help_width: 0,
-            tasks_width: 0,
             time_width: time_label
                 .filter(|label| !label.is_empty())
                 .map_or(0, |label| {
@@ -138,7 +134,7 @@ impl ShellFrameLayout {
                 }),
             keyboard_width: 0,
         }
-        .with_back_shortcut(Some("Esc"))
+        .with_back_label(None)
     }
 
     pub fn is_compact(self) -> bool {
@@ -196,15 +192,19 @@ impl ShellFrameLayout {
         self
     }
 
-    /// Size the button from its displayed shortcut, or release its space when hidden.
-    pub fn with_back_shortcut(mut self, shortcut: Option<&str>) -> Self {
-        self.back_button = shortcut
+    pub fn with_back_label(mut self, label: Option<&str>) -> Self {
+        self.back_button = label
             .filter(|_| !self.bounds.is_empty())
-            .map(|shortcut| {
-                let width =
-                    usize_to_u16(terminal_width(shortcut).saturating_add(4)).min(self.bounds.width);
+            .map(|label| {
+                let icon = terminal_width(crate::assets::BACK_ICON.trim());
+                let width = usize_to_u16(terminal_width(label).saturating_add(icon + 3)).min(
+                    self.bounds
+                        .width
+                        .saturating_sub(usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title")))),
+                );
                 Rect::new(self.bounds.right() - width, self.bounds.y, width, 1)
-            });
+            })
+            .filter(|area| !area.is_empty());
         self.layout_header();
         self
     }
@@ -215,14 +215,6 @@ impl ShellFrameLayout {
         } else {
             0
         };
-        self.layout_header();
-        self
-    }
-
-    pub fn with_tasks_button(mut self, label: Option<&str>) -> Self {
-        self.tasks_width = label.map_or(0, |label| {
-            usize_to_u16(terminal_width(label).saturating_add(2))
-        });
         self.layout_header();
         self
     }
@@ -251,28 +243,22 @@ impl ShellFrameLayout {
             right - self.bounds.x,
             self.bounds.height.min(1),
         );
-        let ShellLayout::Full { bottom, .. } = self.shell else {
-            self.tasks_button = take_header_button(&mut area, self.tasks_width);
-            self.title = area;
-            return;
-        };
         let title_width =
             usize_to_u16(terminal_width(&i18n::tr!("ui-shell-title"))).min(area.width);
         self.title = Rect::new(area.x, area.y, title_width, area.height);
         let title_space = title_width.saturating_add(1).min(area.width);
         area.x += title_space;
         area.width -= title_space;
+        let ShellLayout::Full { bottom, .. } = self.shell else {
+            self.status_message = (!area.is_empty()).then_some(area);
+            return;
+        };
 
         let time_width = self
             .time_width
             .min(area.width.saturating_sub(MIN_STATUS_MESSAGE_WIDTH + 1));
         self.time_button = take_header_button(&mut area, time_width);
         self.help_button = take_header_button(&mut area, self.help_width);
-        let reserved = MIN_STATUS_MESSAGE_WIDTH
-            .saturating_add(self.keyboard_width)
-            .saturating_add(u16::from(self.keyboard_width > 0) + 1);
-        let tasks_width = self.tasks_width.min(area.width.saturating_sub(reserved));
-        self.tasks_button = take_header_button(&mut area, tasks_width);
         self.keyboard_launcher = if bottom.is_empty() {
             None
         } else {

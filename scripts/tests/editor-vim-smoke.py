@@ -132,12 +132,6 @@ class ShellPty:
     def ex(self, command: str):
         self.keys("<Esc>" + ":" + command + "<Enter>")
 
-    def terminal_area(self):
-        snapshot = self.snapshot()
-        terminals = [node for node in snapshot["nodes"] if node["role"] == "terminal"]
-        assert len(terminals) == 1, terminals
-        return terminals[0]["rect"]
-
     def snapshot(self):
         return shell_smoke.control_snapshot(
             self.master, self.output, self.child, self.cli, self.env, timeout=15,
@@ -392,11 +386,20 @@ def main():
             shell.ex("set mouse=a nonumber norelativenumber nowrap")
             for columns, rows in [(108, 20), (140, 45)]:
                 shell.resize(columns, rows)
-                shell.drain(0.3)
-                area = shell.terminal_area()
-                assert (area["x"], area["y"], area["width"], area["height"]) == (
-                    1, 3, columns - 2, rows - 5,
-                ), area
+                frame = shell.until_snapshot(lambda frame: (
+                    (frame["width"], frame["height"], frame["page"]) == (columns, rows, "Editor")
+                    and any(node["id"] == "page/terminal" and node["actionable"]
+                            for node in frame["nodes"])
+                ))
+                area = next(node["rect"] for node in frame["nodes"] if node["id"] == "page/terminal")
+                if (columns, rows) == (108, 20):
+                    expected = (1, 3, 106, 15)
+                else:
+                    assert any(node["id"].endswith(f"workspace.title.{explorer_id}")
+                               for node in frame["nodes"]), "Explorer split did not return"
+                    editor = next(node["rect"] for node in frame["nodes"] if node["id"] == "page")
+                    expected = (editor["x"], editor["y"] + 1, editor["width"], editor["height"] - 1)
+                assert (area["x"], area["y"], area["width"], area["height"]) == expected, (area, expected)
                 shell.ex("call writefile([printf('%d %d', &columns, &lines)], "
                          + vim_string(probe) + ")")
                 assert_file(shell, probe, f"{area['width']} {area['height']}\n")

@@ -430,8 +430,8 @@ fn running_task_cannot_be_closed_or_hidden_before_it_finishes() {
     assert!(rx.try_recv().is_err(), "F12 must not reach the child");
 
     for input in [
-        InputEvent::mouse_down(PointerButton::Left, (0, 0)),
-        InputEvent::mouse_up(PointerButton::Left, (0, 0)),
+        InputEvent::mouse_down(PointerButton::Left, (0, 1)),
+        InputEvent::mouse_up(PointerButton::Left, (0, 1)),
         InputEvent::FocusLost,
         InputEvent::FocusGained,
         InputEvent::key(InputKey::Escape),
@@ -888,20 +888,8 @@ fn running_auto_admin_f12_reaches_page_close_choices_and_stay_restores_its_input
         "close-choice keys must not reach the operation"
     );
     state.refresh_hit_map();
-    let area = state
-        .hit_map()
-        .regions()
-        .iter()
-        .find(|region| region.component == ShellComponent::BackButton)
-        .unwrap()
-        .area;
-    let point = (area.x + area.width / 2, area.y + area.height / 2);
-    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
-    assert!(
-        state.auto_admin_visible(),
-        "press alone must not request page close"
-    );
-    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert!(state.frame_layout.unwrap().back_button.is_none());
+    state.apply_input(InputEvent::key(InputKey::F(12)));
     assert!(!state.auto_admin_visible());
     assert_eq!(
         state.app.notification_center().active_modal_action_count(),

@@ -331,7 +331,6 @@ fn cached_time_sync_replays_into_recreated_shell_state() {
 #[test]
 fn clock_button_routes_before_explorer_popup_and_app_forms() {
     let mut explorer = explorer_routing_test_state();
-    let clock = hit_region_center(&explorer, ShellComponent::ClockButton);
     explorer.pages.common.active_popup = Some(ShellPopup {
         owner: Some(ShellComponent::Explorer),
         anchor: (10, 10),
@@ -339,6 +338,7 @@ fn clock_button_routes_before_explorer_popup_and_app_forms() {
     explorer.pages.explorer.explorer_overlay_mode =
         Some(ExplorerOverlayMode::ContextMenu { anchor: (10, 10) });
     explorer.refresh_hit_map();
+    let clock = hit_region_center(&explorer, ShellComponent::ClockButton);
 
     let routed = explorer.route_input_at(
         InputEvent::mouse_down(PointerButton::Left, clock),
@@ -354,6 +354,7 @@ fn clock_button_routes_before_explorer_popup_and_app_forms() {
     explorer.pages.explorer.explorer_overlay_mode = None;
     explorer.pages.explorer.explorer_input_mode = ExplorerInputMode::NewFolder;
     explorer.refresh_hit_map();
+    let clock = hit_region_center(&explorer, ShellComponent::ClockButton);
     let routed = explorer.route_input_at(
         InputEvent::mouse_down(PointerButton::Left, clock),
         Instant::now(),

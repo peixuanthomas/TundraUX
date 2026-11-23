@@ -680,7 +680,9 @@ fn logs_navigation_restores_covered_filters_and_new_pages_start_clean() {
         cfg!(target_os = "linux")
     );
     key(&mut state, "Esc");
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert_eq!(state.active_page_id(), first);
+    assert!(state.header_back_label().is_none());
+    state.return_from_screen(ShellScreen::Logs);
     state.open_logs();
     assert_eq!(state.pages.logs.logs_state.category, ui::LogsCategory::Ux);
     assert_eq!(state.pages.logs.logs_state.query.min_level, None);

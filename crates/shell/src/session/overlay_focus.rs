@@ -94,8 +94,6 @@ impl ShellSession {
         }
         if changed {
             self.cancel_pointer_gestures_for_modal();
-            self.pages.system_status.system_status_widget_drag = None;
-            self.pages.editor.editor_drag_anchor = None;
             self.button_regions.clear();
             self.hovered_component = None;
             self.last_click = None;
@@ -131,6 +129,7 @@ impl ShellSession {
         self.notification_history.pressed = None;
         self.help_scrollbar_drag = None;
         self.pages.diagnostics.diagnostics_detail_drag = None;
+        self.pages.system_status.system_status_widget_drag = None;
         self.scrollbar_drag = None;
         self.pages.home.drag = None;
         self.pages.launcher.launcher_drag = None;
@@ -148,6 +147,7 @@ impl ShellSession {
         }
         self.drag_tracker = None;
         self.pages.editor.editor_table_resize = None;
+        self.pages.editor.editor_drag_anchor = None;
         self.pages.editor.script.pointer = None;
         self.pages.editor.script.drag = None;
         self.cancel_auto_admin_pointer();

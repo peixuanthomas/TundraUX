@@ -292,7 +292,11 @@ fn explorer_address_and_search_keep_non_overlay_text_input_routing() {
         );
         assert_eq!(
             state.route_key_input(&KeyInput::from_label("Esc")).1,
-            ShellCommand::CancelExplorerInput
+            if mode == ExplorerInputMode::Search {
+                ShellCommand::ExplorerClearFilter
+            } else {
+                ShellCommand::CancelExplorerInput
+            }
         );
         for (label, expected, cursor) in [
             ("Backspace", "界", 1),
@@ -326,6 +330,7 @@ fn explorer_address_and_search_keep_non_overlay_text_input_routing() {
             ExplorerInputMode::Browse
         );
         assert!(state.pages.explorer.explorer_input.is_empty());
+        assert!(state.app.explorer_state().unwrap().query.is_empty());
     }
 }
 

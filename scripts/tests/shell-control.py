@@ -88,6 +88,14 @@ def main():
         def node_by(current, predicate):
             return next(node for node in current["nodes"] if predicate(node))
 
+        def window_action(action):
+            frame = snapshot()
+            focused = node_by(frame, lambda node: "workspace.taskbar." in node["id"]
+                and node["selected"] and not node["id"].endswith(".close"))
+            window_id = focused["id"].rsplit(".", 1)[-1]
+            button = node_by(frame, lambda node: node["id"].endswith(f"workspace.{action}.{window_id}"))
+            return click(button["id"])
+
         batch_children = []
         try:
             if os.geteuid() == 0:
@@ -154,7 +162,8 @@ def main():
             assert "Shift+Enter" in "\n".join(current["lines"])
             key("Escape")
             until(lambda current: not any(node["id"].startswith("modal/") for node in current["nodes"]))
-            key("Escape")
+            close = node_by(snapshot(), lambda node: "workspace.close." in node["id"] and node["actionable"])
+            click(close["id"])
             current = until(lambda current: current["page"] == "Home")
             print("PASS: real Shift+click and Shift+Enter toggled package selection; F1 showed the controls")
             process_filter = f"tundra-selection-{child.pid}"
@@ -197,7 +206,8 @@ def main():
                 process.kill()
                 process.wait(timeout=5)
             batch_children = []
-            key("Escape")
+            close = node_by(snapshot(), lambda node: "workspace.close." in node["id"] and node["actionable"])
+            click(close["id"])
             current = until(lambda current: current["page"] == "Home")
             print("PASS: one reviewed batch paused and continued both owned test processes")
             assert current["width"] == 140 and current["height"] == 40
@@ -248,7 +258,7 @@ def main():
             os.write(master, b"\x1b")
             until(lambda current: not any(node["id"].startswith("modal/") for node in current["nodes"]))
             print("PASS: configured idle weather and keyboard wake preserved Settings and its help dialog")
-            click("chrome/shell.back")
+            window_action("close")
             until(lambda current: current["page"] == "Home")
             key("Home")
             key("Enter")
@@ -294,19 +304,20 @@ def main():
             assert refused["error"]["code"] == "stale_snapshot", refused
             assert len(current["lines"]) == 41
             print("PASS: drag, scroll, modal blocking and real terminal resize")
-            click("chrome/shell.back")
+            assert not any(node["id"] == "chrome/shell.back" for node in current["nodes"])
+            window_action("close")
+            until(lambda current: current["page"] == "Explorer")
+            window_action("minimize")
             until(lambda current: current["page"] == "Home")
             click(explorer_taskbar)
             until(lambda current: current["page"] == "Explorer")
-            click("chrome/shell.back")
+            window_action("minimize")
             until(lambda current: current["page"] == "Home")
             key("End")
             key("Left")
             key("Left")
             key("Enter")
             current = until(lambda current: current["page"] == "Launcher")
-            launcher_taskbar = node_by(current, lambda node: "workspace.taskbar." in node["id"]
-                and node["selected"] and not node["id"].endswith(".close"))["id"]
             command = node_by(current, lambda node: node["role"] == "button" and "Command Line" in node["name"])
             click(command["id"], double=True)
             until(lambda current: current["page"] == "CommandLine")
@@ -327,7 +338,8 @@ def main():
             ui("text", "exit")
             key("Enter")
             until(lambda current: current["page"] == "Home")
-            click(launcher_taskbar)
+            launcher = node_by(snapshot(), lambda node: "home.entry." in node["id"] and node["name"] == "Launcher")
+            click(launcher["id"], double=True)
             until(lambda current: current["page"] == "Launcher")
             print("PASS: external input reached the embedded terminal and its output appeared in snapshots")
             click("chrome/shell.back")

@@ -153,7 +153,8 @@ fn task_output_returns_to_the_list_with_escape_or_the_back_button() {
         );
         assert_eq!(session.pages.management.management_state.selected, 0);
         session.apply_input(InputEvent::key(InputKey::Escape));
-        assert_ne!(session.active_page_id(), page);
+        assert_eq!(session.active_page_id(), page);
+        assert!(session.header_back_label().is_none());
     }
 }
 

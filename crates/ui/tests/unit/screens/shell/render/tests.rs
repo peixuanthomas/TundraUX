@@ -30,12 +30,10 @@ fn status_message_uses_shared_hover_pressed_and_keyboard_colors() {
         terminal_size: (80, 24),
         back_button_hovered: false,
         help_available: false,
-        tasks_label: None,
-        tasks_button_focused: false,
-        tasks_button_hovered: false,
+        title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_shortcut: "Esc",
+        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Complete status message".into(),
             toast: None,
@@ -105,7 +103,7 @@ fn clock_sits_between_help_and_back_and_help_hides_in_compact() {
     use ratatui::layout::Rect;
     let context = RenderContext::default();
     let layout = ShellFrameLayout::new(Rect::new(0, 0, 80, 24), Some("12:00"), &context)
-        .with_back_shortcut(Some("Esc"))
+        .with_back_label(Some("Esc"))
         .with_help_button(true);
     let back = layout.back_button.unwrap();
     let help = layout.help_button.unwrap();

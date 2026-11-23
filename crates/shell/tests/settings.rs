@@ -438,7 +438,7 @@ fn linux_personal_settings_work_without_system_account_service() {
         .appearance
         .clone();
     assert_ne!(saved.border_shape, before);
-    press(&mut state, &platform, "Esc");
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     assert_eq!(state.active_screen(), ShellScreen::Settings);
     assert_eq!(
@@ -544,7 +544,7 @@ fn linux_update_mode_saves_keyboard_and_mouse_choices_across_reopen() {
         manager.load_config().unwrap().linux_update_mode,
         storage::LinuxUpdateMode::Beta
     );
-    press(&mut state, &platform, "Esc");
+    let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
     select_category(&mut state, &platform, SettingsCategory::Update);
     let model = state.to_settings_view_model().unwrap();
@@ -1005,11 +1005,6 @@ fn top_bar_settings_save_alignment_and_apply_checkbox_visibility() {
             shell::ShellComponent::BackButton,
             &mut expected.show_esc,
         ),
-        (
-            SettingsField::TopBarTasks,
-            shell::ShellComponent::TasksButton,
-            &mut expected.show_tasks,
-        ),
     ] {
         select_field(&mut state, &platform, field);
         let model = state.to_settings_view_model().unwrap();
@@ -1034,11 +1029,10 @@ fn top_bar_settings_save_alignment_and_apply_checkbox_visibility() {
     assert_eq!(manager.load_config().unwrap().top_bar, expected);
     let reopened = start_as_system_user(&platform, "AdminUser");
     let chrome = reopened.to_shell_chrome_view_model();
-    assert!(chrome.tasks_label.is_some());
     assert!(chrome.status.time_button_label.is_none());
     assert!(!chrome.help_available);
     press(&mut state, &platform, "Esc");
-    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert_eq!(state.active_screen(), ShellScreen::Settings);
     press(&mut state, &platform, "F1");
     assert!(
         state

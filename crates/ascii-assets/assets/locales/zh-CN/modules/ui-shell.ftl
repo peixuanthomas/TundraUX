@@ -4,6 +4,10 @@ ui-shell-title = TundraUX
 
 ui-shell-minimum-terminal-size = TundraUX 至少需要 { $width }x{ $height } 个终端单元格。
 ui-shell-help-button = F1 帮助
+ui-shell-back-cancel = 取消
+ui-shell-back-location = 返回上个位置
+ui-shell-back-page = 返回上个页面
+ui-shell-back-home = 返回主页
 ui-shell-time-sync = 时间同步
 ui-shell-home = 主页
 ui-shell-status = 状态
@@ -16,5 +20,3 @@ ui-shell-n-esc-cancel = N / Esc：取消
 ui-shell-time-sync-failed = 联网校准时间失败
 shell-component-help-button = 帮助按钮
 shell-component-help-dialog = 帮助弹窗
-
-ui-shell-tasks-button = 任务

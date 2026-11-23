@@ -153,7 +153,9 @@ impl ShellSession {
                         self.pages.explorer.explorer_purpose,
                         ExplorerPurpose::EditorSaveAs { .. }
                     ) {
-                        self.set_explorer_focus(ui::ExplorerFocus::SavePicker(ui::ExplorerSaveFocus::Filename));
+                        self.set_explorer_focus(ui::ExplorerFocus::SavePicker(
+                            ui::ExplorerSaveFocus::Filename,
+                        ));
                     } else {
                         self.begin_explorer_input(ExplorerInputMode::Search);
                     }

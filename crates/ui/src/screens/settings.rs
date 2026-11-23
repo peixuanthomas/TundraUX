@@ -103,7 +103,6 @@ pub enum SettingsField {
     TopBarHelp,
     TopBarTime,
     TopBarEsc,
-    TopBarTasks,
     SoundOutputDevice,
     SoundOutputVolume,
     SoundOutputMute,

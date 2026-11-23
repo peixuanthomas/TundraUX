@@ -1,4 +1,14 @@
 use super::*;
+use workspace_protocol::BackAction;
+
+pub(in crate::session) fn back_label(action: BackAction) -> String {
+    match action {
+        BackAction::Cancel => i18n::tr!("ui-shell-back-cancel"),
+        BackAction::PreviousLocation => i18n::tr!("ui-shell-back-location"),
+        BackAction::PreviousPage => i18n::tr!("ui-shell-back-page"),
+        BackAction::Home => i18n::tr!("ui-shell-back-home"),
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NavigationEntry {
@@ -243,10 +253,6 @@ impl ShellSession {
             self.refresh_hit_map();
         }
     }
-    /// Ordinary pages map the Back button to Escape. Command Line routes the
-    /// button separately so it can ask before terminating its child processes.
-    /// The shared pointer capture delivers this press only after release
-    /// and leaves keyboard focus with the page being returned to.
     pub(in crate::session) fn initialize_root_page(&mut self) {
         let id = self.active_page_id();
         let screen = self.active_screen();
@@ -573,76 +579,194 @@ impl ShellSession {
         }
     }
 
-    /// Esc and the shared Back button reach this policy before page key routing.
-    /// Pages may cancel forms or request confirmation; only navigation changes the path.
+    fn back_navigation(&self) -> Option<(BackAction, (RoutedTarget, ShellCommand))> {
+        let screen = self.active_screen();
+        let escape = KeyInput::new(InputKey::Escape);
+        let cancel = |route| Some((BackAction::Cancel, route));
+        if self.auto_admin_visible() {
+            return self.auto_admin_can_go_back().then_some((
+                BackAction::Cancel,
+                (RoutedTarget::Global, ShellCommand::CaptureOverlayInput),
+            ));
+        }
+        if let Some(overlay) = self.interactive_overlays().last() {
+            return match overlay.component() {
+                Some(ShellComponent::Explorer) => self.explorer_back(),
+                Some(ShellComponent::Launcher) => self.launcher_back(),
+                _ => self.route_overlay_key(&escape).and_then(|route| {
+                    (!matches!(
+                        route.1,
+                        ShellCommand::CaptureOverlayInput | ShellCommand::Noop
+                    ))
+                    .then_some((BackAction::Cancel, route))
+                }),
+            };
+        }
+
+        let command = |command| (RoutedTarget::Global, command);
+        match screen {
+            ShellScreen::Explorer => {
+                if let Some(back) = self.explorer_back() {
+                    return Some(back);
+                }
+            }
+            ShellScreen::Launcher => {
+                if let Some(back) = self.launcher_back() {
+                    return Some(back);
+                }
+            }
+            ShellScreen::Home if self.pages.home.drag.is_some() => {
+                return cancel(command(ShellCommand::HomeCancelDrag));
+            }
+            ShellScreen::Home if self.pages.home.editing => {
+                return cancel(command(ShellCommand::HomeEdit));
+            }
+            _ => {}
+        }
+
+        if self.back_cancels_pointer_gesture() {
+            return cancel(command(ShellCommand::CancelPointerGesture));
+        }
+        let local = match screen {
+            ShellScreen::FirstRunSetup
+                if self.pages.setup.setup_step != ui::SetupStep::Language =>
+            {
+                Some((
+                    BackAction::PreviousPage,
+                    command(ShellCommand::SetupPreviousStep),
+                ))
+            }
+            ShellScreen::SystemStatus => {
+                let route = self.route_system_status_key(&escape);
+                match route.1 {
+                    ShellCommand::SystemStatusBack => Some((BackAction::PreviousPage, route)),
+                    ShellCommand::SystemStatusRequestCancelEdit => {
+                        Some((BackAction::Cancel, route))
+                    }
+                    _ => None,
+                }
+            }
+            ShellScreen::Editor => self.editor_local_back(&escape),
+            ShellScreen::Management => self.management_local_back(&escape),
+            ShellScreen::Logs => self.logs_local_back(&escape),
+            _ => None,
+        };
+        if local.is_some() {
+            return local;
+        }
+        self.parent_page_back(&escape)
+    }
+
+    fn parent_page_back(
+        &self,
+        escape: &KeyInput,
+    ) -> Option<(BackAction, (RoutedTarget, ShellCommand))> {
+        let screen = self.active_screen();
+        let [.., parent, _] = self.screen_stack() else {
+            return None;
+        };
+        if screen == ShellScreen::Launcher {
+            let action = if *parent == ShellScreen::Home {
+                BackAction::Home
+            } else {
+                BackAction::PreviousPage
+            };
+            return Some((action, (RoutedTarget::Global, ShellCommand::CloseLauncher)));
+        }
+        if matches!(parent, ShellScreen::Home | ShellScreen::Launcher) {
+            return None;
+        }
+        let route = match screen {
+            ShellScreen::Clock => self.route_clock_key(escape),
+            ShellScreen::Diagnostics => self.route_diagnostics_key(escape),
+            ShellScreen::SystemStatus => self.route_system_status_key(escape),
+            ShellScreen::Explorer => (RoutedTarget::Global, ShellCommand::CloseExplorer),
+            ShellScreen::Editor => (
+                RoutedTarget::Component(ShellComponent::Editor),
+                ShellCommand::EditorKey(escape.clone()),
+            ),
+            ShellScreen::Settings => (
+                RoutedTarget::Component(ShellComponent::Settings),
+                ShellCommand::SettingsKey(escape.clone()),
+            ),
+            ShellScreen::Logs => (
+                RoutedTarget::Component(ShellComponent::Logs),
+                ShellCommand::LogsKey(escape.clone()),
+            ),
+            ShellScreen::Management => (
+                RoutedTarget::Component(ShellComponent::Management),
+                ShellCommand::ManagementKey(escape.clone()),
+            ),
+            _ => return None,
+        };
+        Some((BackAction::PreviousPage, route))
+    }
+
+    fn back_cancels_pointer_gesture(&self) -> bool {
+        // Explorer and Launcher decide how to cancel their own drags.
+        !matches!(
+            self.active_screen(),
+            ShellScreen::Explorer | ShellScreen::Launcher
+        ) && (self.scrollbar_drag.is_some()
+            || self.touch_pages_pointer_drag_active()
+            || self.pages.system_status.system_status_widget_drag.is_some()
+            || self.pages.diagnostics.diagnostics_detail_drag.is_some()
+            || self.pages.editor.editor_table_resize.is_some()
+            || self.pages.editor.editor_drag_anchor.is_some()
+            || self.pages.editor.script.drag.is_some()
+            || self.management_pointer_drag_active()
+            || self.logs_pointer_drag_active())
+    }
+
+    pub(super) fn back_action(&self) -> Option<BackAction> {
+        self.back_navigation().map(|(action, _)| action)
+    }
+
+    pub(in crate::session) fn route_back_button(&self) -> (RoutedTarget, ShellCommand) {
+        self.back_navigation()
+            .map_or((RoutedTarget::Global, ShellCommand::Noop), |(_, route)| {
+                route
+            })
+    }
+
     pub(in crate::session) fn route_back_key(
         &self,
         key: &KeyInput,
     ) -> (RoutedTarget, ShellCommand) {
-        if self.notification_has_active_modal() {
-            return self.route_notification_key(key);
+        if key.phase == InputPhase::Press && !key.has_non_shift_modifier() {
+            if let Some((_, route)) = self.back_navigation() {
+                return route;
+            }
+            if self.active_screen() == ShellScreen::Home
+                && !self.window_owner.is_app()
+                && self.interactive_overlays().is_empty()
+            {
+                return (RoutedTarget::Global, ShellCommand::RequestExit);
+            }
         }
-        if self.help_open {
-            return self.route_help_key(key);
+        if self.interactive_overlays().is_empty() {
+            match self.active_screen() {
+                ShellScreen::CommandLine => {
+                    return (
+                        RoutedTarget::Component(ShellComponent::CommandLine),
+                        ShellCommand::CommandLineKey(key.clone()),
+                    );
+                }
+                ShellScreen::Management if self.management_native_escape() => {
+                    return (
+                        RoutedTarget::Component(ShellComponent::Management),
+                        ShellCommand::ManagementKey(key.clone()),
+                    );
+                }
+                _ => {}
+            }
         }
-        if key.phase != InputPhase::Press {
-            return (RoutedTarget::Global, ShellCommand::Noop);
-        }
-        if self.time_sync_dialog_visible {
-            return self.route_time_sync_dialog_key(key);
-        }
-        if self.active_screen() == ShellScreen::ExitConfirm {
-            return self.route_exit_confirm_key(key);
-        }
-        if self.resolved_overlay_owner() == Some(ShellComponent::Explorer) {
-            return self.route_explorer_key(key);
-        }
-        if self.pages.common.active_popup.is_some() {
-            return self.route_popup_key(key);
-        }
-        if self.active_screen() == ShellScreen::CommandLine {
-            return (
-                RoutedTarget::Component(ShellComponent::CommandLine),
-                ShellCommand::CommandLineKey(key.clone()),
-            );
-        }
-        match self.active_screen() {
-            ShellScreen::FirstRunSetup => self.route_setup_key(key),
-            ShellScreen::Home => (
-                RoutedTarget::Global,
-                if key.has_non_shift_modifier() {
-                    ShellCommand::RecordInput
-                } else if self.pages.home.drag.is_some() {
-                    ShellCommand::HomeCancelDrag
-                } else if self.pages.home.editing {
-                    ShellCommand::HomeEdit
-                } else {
-                    ShellCommand::RequestExit
-                },
-            ),
-            ShellScreen::Clock => self.route_clock_key(key),
-            ShellScreen::Diagnostics => self.route_diagnostics_key(key),
-            ShellScreen::SystemStatus => self.route_system_status_key(key),
-            ShellScreen::Explorer => self.route_explorer_key(key),
-            ShellScreen::Launcher => self.route_launcher_key(key),
-            ShellScreen::Editor => (
-                RoutedTarget::Component(ShellComponent::Editor),
-                ShellCommand::EditorKey(key.clone()),
-            ),
-            ShellScreen::Settings => (
-                RoutedTarget::Component(ShellComponent::Settings),
-                ShellCommand::SettingsKey(key.clone()),
-            ),
-            ShellScreen::Logs => (
-                RoutedTarget::Component(ShellComponent::Logs),
-                ShellCommand::LogsKey(key.clone()),
-            ),
-            ShellScreen::Management => (
-                RoutedTarget::Component(ShellComponent::Management),
-                ShellCommand::ManagementKey(key.clone()),
-            ),
-            ShellScreen::CommandLine | ShellScreen::ExitConfirm => unreachable!("handled above"),
-        }
+        (RoutedTarget::Global, ShellCommand::Noop)
+    }
+
+    pub(super) fn escape_cancels_action(&self, input: &InputEvent) -> bool {
+        matches!(input, InputEvent::Key(key) if key.key == InputKey::Escape && !key.has_non_shift_modifier())
+            && self.back_action() == Some(BackAction::Cancel)
     }
 
     #[cfg(test)]

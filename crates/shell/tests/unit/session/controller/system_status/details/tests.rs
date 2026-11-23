@@ -168,11 +168,11 @@ fn status_details_capture_command_line_keys_paste_and_the_back_button() {
     assert_eq!(routed.command, ShellCommand::CaptureOverlayInput);
     let back = state.frame_layout.unwrap().back_button.unwrap();
     assert_eq!(
-        state.normalize_shell_navigation_input(InputEvent::mouse_down(
-            PointerButton::Left,
-            (back.x, back.y)
-        )),
-        InputEvent::key(InputKey::Escape)
+        state.route_input_at(
+            InputEvent::mouse_down(PointerButton::Left, (back.x, back.y)),
+            Instant::now()
+        ),
+        state.route_input_at(InputEvent::key(InputKey::Escape), Instant::now())
     );
     state.apply_input(InputEvent::key(InputKey::Escape));
     assert!(!state.notification_has_active_modal());

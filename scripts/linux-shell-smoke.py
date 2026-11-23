@@ -498,7 +498,7 @@ def check_management_menu(master: int, slave: int, output: bytearray, child: sub
     if not wait_for_output(master, output, first_interface.encode(), child, 10.0, offset, ignore_spaces=True):
         raise SystemExit("clearing the combined search did not restore network rows")
     offset = len(output)
-    os.write(master, b"\x1b")
+    os.write(master, b"\x17b")
     if not wait_for_output(master, output, b"Explorer", child, 5.0, offset):
         raise SystemExit("Network did not return to Home")
     if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
@@ -560,7 +560,7 @@ def check_package_and_log_views(master: int, slave: int, output: bytearray, chil
         step(b"\x1b[B\r", title,
              "Package auxiliary view did not open", timeout=45.0)
         step(b"\x1b[18~", b"Installed packages", "Auxiliary view could not return to packages")
-    step(b"\x1b", b"Explorer", "Packages did not return to Home")
+    step(b"\x17b", b"Explorer", "Packages did not return to Home")
     open_home_entry(master, output, child, cli, env, "Logs", "Logs")
     step(b"", b"UX log", "Logs did not open")
     step(b"f", b"Service scope", "Visible log filter shortcut did not open its form")
@@ -572,7 +572,7 @@ def check_package_and_log_views(master: int, slave: int, output: bytearray, chil
     # Clicking outside the centered menu closes it without opening a covered
     # category or toolbar control. The layout tests check exact bounds/colors.
     step(b"\x1b[<0;3;6M\x1b[<0;3;6m", b"UX log", "Log menu outside click did not close it")
-    step(b"\x1b", b"Explorer", "Logs did not return to Home")
+    step(b"\x17b", b"Explorer", "Logs did not return to Home")
     print("PASS: all six package views, detail return, visible log filters, and log menu keyboard/outside-click dismissal")
 
 
@@ -788,7 +788,7 @@ def check_permission_draft(master, slave, output, child, path, cli, env, explore
                                                         "modal/notification."))
                                   for item in frame["nodes"]))
     offset = len(output)
-    os.write(master, b"\x1b")
+    os.write(master, b"\x17b")
     wait_for_snapshot(master, output, child, cli, env, "Permissions did not move to the background",
                       lambda frame: frame["page"] == "Home" and any(
                           item["id"].endswith(f"workspace.taskbar.{permissions_window}")
@@ -921,7 +921,7 @@ def check_animation_settings(master, output, child, cli, env):
     open_draft()
     expect_phases(defaults)
     close_draft()
-    os.write(master, b"\x1b")
+    os.write(master, b"\x17b")
     wait_frame("Animation settings did not return to Home", lambda frame: frame["page"] == "Home")
     print("PASS: keyboard numeric input and nine animation phases save, cancel, validate, and reset together")
 
@@ -962,7 +962,7 @@ def check_system_settings_environment(master, output, child, cli, env):
     os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
     frame = wait_page("Settings")
     ready_control_position(master, output, child, cli, env, frame, "page/settings.operating-system")
-    os.write(master, b"\x1b")
+    os.write(master, b"\x17b")
     wait_page("Home")
     print("PASS: unsupported OS settings shows an environment limit and F4 explains systemd requirements without authorization")
 
@@ -1190,7 +1190,7 @@ def check_editor_resize(master, slave, output, child, isolated, cli, env):
         raise SystemExit("Explorer did not settle after renaming")
     check_permission_draft(master, slave, output, child, renamed, cli, env, explorer_window)
     offset = len(output)
-    os.write(master, b"\x1b")
+    os.write(master, b"\x17b")
     if not wait_for_output(master, output, b"Launcher", child, 5.0, offset):
         raise SystemExit("resize workflow did not return to Home")
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 140, 0, 0))
@@ -1503,7 +1503,7 @@ def main() -> int:
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Explorer did not settle after terminal exit")
         home_offset = len(output)
-        os.write(master, b"\x1b")
+        os.write(master, b"\x17b")
         if not wait_for_output(master, output, b"Launcher", child, 5.0, home_offset):
             raise SystemExit("Explorer did not return to Home after terminal verification")
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 140, 0, 0))
@@ -1520,14 +1520,15 @@ def main() -> int:
                 raise SystemExit("Explorer did not open before Escape/mouse regression")
             if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
                 raise SystemExit("Explorer did not settle")
-            home_offset = len(output)
+            mouse_offset = len(output)
             os.write(master, b"\x1b" + report)
-            if not wait_for_output(master, output, b"Launcher", child, 5.0, home_offset):
-                raise SystemExit("Escape/mouse did not return to Home")
-            if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
-                raise SystemExit("Escape/mouse did not settle at Home")
-            if b"Dashboard" in output[home_offset:]:
-                raise SystemExit("mouse report tail activated System Status")
+            wait_for_output_quiet(master, output, child, quiet_period=0.2)
+            frame = control_snapshot(master, output, child, cli, env)
+            if frame["page"] != "Explorer" or b"Dashboard" in output[mouse_offset:]:
+                raise SystemExit("Escape/mouse changed the active application")
+            os.write(master, b"\x17b")
+            wait_for_snapshot(master, output, child, cli, env, "Explorer did not minimize",
+                              lambda frame: frame["page"] == "Home")
 
         invalid_offset = len(output)
         # Allow an incomplete report to expire, then deliver its late M. Also
@@ -1567,7 +1568,7 @@ def main() -> int:
         while time.monotonic() < deadline:
             read_available(master, output, 0.05)
         home_offset = len(output)
-        os.write(master, b"\x1b")
+        os.write(master, b"\x17b")
         if not wait_for_output(master, output, b"Launcher", child, 5.0, home_offset):
             raise SystemExit("System Status did not return to Home")
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):

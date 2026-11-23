@@ -169,50 +169,30 @@ pub fn render_shell_chrome_with_status_focus(
         }
     };
     Surface::new().render_frame(frame, top, context);
-    if !layout.title.is_empty() {
-        let (title, style) = if layout.is_compact()
-            && (chrome.status.error.is_some() || chrome.status.toast.is_some())
-        {
-            status_presentation(&chrome.status, &theme)
-        } else {
-            (i18n::tr!("ui-shell-title"), theme.title_style())
-        };
-        frame.render_widget(
-            Paragraph::new(Line::styled(
-                truncate_status_text(&title, layout.title.width),
-                style,
-            )),
-            layout.title,
-        );
-    }
-    if let Some(area) = layout.back_button {
-        let mut button = Button::new(
-            "shell.back",
-            format!(
-                "{} {}",
-                crate::assets::BACK_ICON.trim(),
-                chrome.back_shortcut
-            ),
-        )
-        .with_bracketed_label(false)
-        .with_centered_label(true);
-        button.state.hovered = chrome.back_button_hovered;
-        button.render_borderless_frame(frame, area, &theme);
-    }
+    crate::automation::with_unblocked_controls(|| {
+        if !layout.title.is_empty() {
+            let mut title =
+                Button::new("shell.power", i18n::tr!("ui-shell-title")).with_bracketed_label(false);
+            title.state.focused = chrome.title_focused;
+            title.render_borderless_frame(frame, layout.title, &theme);
+        }
+        if let (Some(area), Some(label)) = (layout.back_button, &chrome.back_label) {
+            let mut button = Button::new(
+                "shell.back",
+                format!("{} {label}", crate::assets::BACK_ICON.trim()),
+            )
+            .with_bracketed_label(false)
+            .with_centered_label(true);
+            button.state.hovered = chrome.back_button_hovered;
+            button.render_borderless_frame(frame, area, &theme);
+        }
+    });
     if let Some(area) = layout.help_button {
         let mut button = Button::new("shell.help", i18n::tr!("ui-shell-help-button"))
             .with_bracketed_label(false)
             .with_centered_label(true);
         button.state.hovered = chrome.help_button_hovered;
         button.state.focused = chrome.help_button_focused;
-        button.render_borderless_frame(frame, area, &theme);
-    }
-    if let (Some(area), Some(label)) = (layout.tasks_button, &chrome.tasks_label) {
-        let mut button = Button::new("shell.tasks", label)
-            .with_bracketed_label(false)
-            .with_centered_label(true);
-        button.state.focused = chrome.tasks_button_focused;
-        button.state.hovered = chrome.tasks_button_hovered;
         button.render_borderless_frame(frame, area, &theme);
     }
     if let ShellLayout::Full { bottom, .. } = layout.shell
@@ -222,13 +202,20 @@ pub fn render_shell_chrome_with_status_focus(
     }
     if let Some(message) = layout.status_message {
         let (text, style) = status_presentation(&chrome.status, &theme);
-        let mut message_theme = theme.clone();
-        message_theme.foreground = style.fg.unwrap_or(theme.foreground);
-        let mut button = Button::new("shell.status", truncate_status_text(&text, message.width))
-            .with_bracketed_label(false)
-            .with_label_alignment(layout.status_alignment);
-        button.set_focused(status_focused);
-        button.render_borderless_frame(frame, message, &message_theme);
+        let text = truncate_status_text(&text, message.width);
+        if layout.is_compact() {
+            if chrome.status.error.is_some() || chrome.status.toast.is_some() {
+                frame.render_widget(Paragraph::new(Line::styled(text, style)), message);
+            }
+        } else {
+            let mut message_theme = theme.clone();
+            message_theme.foreground = style.fg.unwrap_or(theme.foreground);
+            let mut button = Button::new("shell.status", text)
+                .with_bracketed_label(false)
+                .with_label_alignment(layout.status_alignment);
+            button.set_focused(status_focused);
+            button.render_borderless_frame(frame, message, &message_theme);
+        }
     }
     if let (Some(label), Some(area)) = (&chrome.status.time_button_label, layout.time_button) {
         let mut button = Button::new("shell.status.time", label)

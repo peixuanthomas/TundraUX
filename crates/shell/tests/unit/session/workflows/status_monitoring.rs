@@ -305,8 +305,8 @@ fn diagnostics_is_integrated_into_system_status_tabs() {
             ui::SystemStatusRoute::Dashboard
         );
         state.apply_input(InputEvent::from_key_label("Esc"));
-        assert_eq!(state.active_screen(), ShellScreen::Home);
-        assert_eq!(state.focused_component(), ShellComponent::Home);
+        assert_eq!(state.active_screen(), ShellScreen::SystemStatus);
+        assert!(state.header_back_label().is_none());
     }
 }
 
@@ -1166,6 +1166,8 @@ fn system_status_live_service_home_open_refresh_and_background_close() {
     );
     assert!(state.app.system_status_snapshot().unwrap().revision > opened_revision);
     state.apply_input(InputEvent::from_key_label("Esc"));
+    assert_eq!(state.active_screen(), ShellScreen::SystemStatus);
+    state.return_from_screen(ShellScreen::SystemStatus);
     assert_eq!(state.active_screen(), ShellScreen::Home);
 
     state.open_settings();

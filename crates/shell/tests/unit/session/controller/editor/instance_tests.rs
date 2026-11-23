@@ -73,7 +73,6 @@ fn cancelling_save_as_cancels_the_window_close_and_keeps_the_draft() {
     state.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
         snapshot: Some(snapshot),
         input: ui::components::TextInput::new("save.filename"),
-        focus: ui::ExplorerSaveFocus::Filename,
     };
 
     state.apply_input_with_platform(
@@ -122,7 +121,6 @@ fn a_busy_save_picker_registers_the_save_to_its_original_editor() {
     state.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
         snapshot: Some(snapshot.clone()),
         input: ui::components::TextInput::new("save.filename"),
-        focus: ui::ExplorerSaveFocus::Filename,
     };
     state.register_page_task(
         TaskDomain::Explorer,

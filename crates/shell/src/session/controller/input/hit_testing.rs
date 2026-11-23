@@ -81,11 +81,6 @@ pub(in crate::session) fn build_shell_hit_map(
             });
         }
         ui::ShellLayout::Full { main, .. } => {
-            regions.push(ShellHitRegion {
-                component: ShellComponent::TopBar,
-                area: frame_layout.title,
-                layer: ShellHitLayer::ShellChrome,
-            });
             match content_screen {
                 ShellScreen::FirstRunSetup => {
                     if let Some(model) = setup_model {
@@ -299,10 +294,10 @@ pub(in crate::session) fn build_shell_hit_map(
         });
     }
 
-    if let Some(area) = frame_layout.tasks_button {
+    if !frame_layout.title.is_empty() {
         regions.push(ShellHitRegion {
-            component: ShellComponent::TasksButton,
-            area,
+            component: ShellComponent::TopBar,
+            area: frame_layout.title,
             layer: ShellHitLayer::ShellChrome,
         });
     }

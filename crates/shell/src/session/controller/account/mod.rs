@@ -101,14 +101,28 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn setup_previous_step(&mut self) {
-        if self.pages.setup.setup_custom_color_target.is_some()
-            || self.pages.setup.setup_step != ui::SetupStep::Timezone
-        {
+        if self.pages.setup.setup_custom_color_target.is_some() {
             return;
         }
-        self.pages.setup.setup_step = ui::SetupStep::Language;
-        self.pages.setup.setup_focused_field = ui::SetupField::LanguageList;
-        self.pages.common.focused_component = ShellComponent::SetupLanguage;
+        let (step, field, component) = match self.pages.setup.setup_step {
+            ui::SetupStep::Language => return,
+            ui::SetupStep::Appearance if self.platform_kind != PlatformKind::Linux => (
+                ui::SetupStep::Timezone,
+                ui::SetupField::TimezoneList,
+                ShellComponent::SetupTimezone,
+            ),
+            _ => (
+                ui::SetupStep::Language,
+                ui::SetupField::LanguageList,
+                ShellComponent::SetupLanguage,
+            ),
+        };
+        self.pages.setup.setup_step = step;
+        self.pages.setup.setup_focused_field = field;
+        self.pages.common.focused_component = component;
+        if step == ui::SetupStep::Timezone {
+            self.sync_setup_timezone_window();
+        }
         self.pages.common.page_touch.setup_scroll = 0;
         self.pages.common.error_message = None;
         self.refresh_hit_map();

@@ -491,7 +491,11 @@ impl ShellSession {
         let mut app_notification = notification.to_app_notification();
         app_notification.page = owner;
         let previous_modal = self.notification_active_modal_id();
-        let id = self.app.push_notification_modal(app_notification);
+        let id = if notification.key.as_deref() == Some(EXIT_CONFIRM_NOTIFICATION_KEY) {
+            self.app.push_critical_notification_modal(app_notification)
+        } else {
+            self.app.push_notification_modal(app_notification)
+        };
         self.collect_desktop_reports();
         self.ui.notification_bindings.bind(id, &notification);
         if !visible {

@@ -78,7 +78,12 @@ impl ShellSession {
         let _language = i18n::enter_snapshot(self.language.clone());
         self.synchronize_overlay_focus();
         self.update_click_record(&input, received_at);
-        let input = self.normalize_shell_navigation_input(input);
+        let back_button = self.is_back_button_press(&input);
+        let input = if back_button {
+            InputEvent::key(InputKey::Escape)
+        } else {
+            self.normalize_shell_navigation_input(input)
+        };
         let (target, command) = match &input {
             InputEvent::Shutdown => (RoutedTarget::Global, ShellCommand::Shutdown),
             InputEvent::Tick => (RoutedTarget::Global, ShellCommand::Tick),
@@ -89,6 +94,7 @@ impl ShellSession {
                     height: *height,
                 },
             ),
+            InputEvent::Key(_) if back_button => self.route_back_button(),
             InputEvent::Key(key) => {
                 let (target, command) = self.route_key_input(key);
                 (target, command)
@@ -353,6 +359,12 @@ impl ShellSession {
                 self.pages.common.active_popup = None;
                 self.notify_status(i18n::LocalizedText::from(i18n::msg!("shell-confirm-exit")));
                 self.show_exit_confirmation_modal(platform);
+                if routed.target == RoutedTarget::Component(ShellComponent::TopBar)
+                    && routed.input.is_keyboard()
+                    && let Some(index) = self.notification_explicit_cancel_action_index()
+                {
+                    self.notification_select_action(index);
+                }
                 self.refresh_hit_map();
                 self.app
                     .dispatch_at(app::AppCommand::RequestExit, received_at)
@@ -418,7 +430,6 @@ impl ShellSession {
             ShellCommand::CancelExit => {
                 self.notification_dismiss_modal_by_key(EXIT_CONFIRM_NOTIFICATION_KEY);
                 self.cancel_exit_confirmation();
-                self.pages.common.active_popup = None;
                 self.notify_status(i18n::LocalizedText::from(i18n::msg!("shell-ready")));
                 self.refresh_hit_map();
                 self.app
@@ -622,7 +633,12 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::HomeCancelDrag => {
-                self.pages.home.drag = None;
+                self.cancel_pointer_gestures_for_modal();
+                ShellAction::Redraw
+            }
+            ShellCommand::CancelPointerGesture => {
+                self.cancel_pointer_gestures_for_modal();
+                self.refresh_hit_map();
                 ShellAction::Redraw
             }
             ShellCommand::HomeDragUpdate(coordinates) => {
@@ -684,6 +700,12 @@ impl ShellSession {
             }
             ShellCommand::OpenPageHelp => self.open_page_help(),
             ShellCommand::ToggleTasks => {
+                if self.active_screen() == ShellScreen::ExitConfirm {
+                    self.notification_dismiss_modal_by_key(EXIT_CONFIRM_NOTIFICATION_KEY);
+                    self.cancel_exit_confirmation();
+                    self.app
+                        .dispatch_at(app::AppCommand::CancelExit, received_at);
+                }
                 self.toggle_tasks();
                 ShellAction::Redraw
             }
@@ -846,7 +868,7 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::LauncherCancelDrag => {
-                self.pages.launcher.launcher_drag = None;
+                self.cancel_pointer_gestures_for_modal();
                 ShellAction::Redraw
             }
             ShellCommand::LauncherScroll(delta) => {
@@ -1039,7 +1061,11 @@ impl ShellSession {
             }
             ShellCommand::ExplorerClearFilter => {
                 self.cancel_explorer_input();
-                if self.app.explorer_state().is_some_and(|state| !state.query.is_empty()) {
+                if self
+                    .app
+                    .explorer_state()
+                    .is_some_and(|state| !state.query.is_empty())
+                {
                     self.apply_explorer_command(ExplorerCommand::Search(String::new()), platform);
                 }
                 ShellAction::Redraw
@@ -2128,6 +2154,12 @@ impl ShellSession {
                 )
                 .with_shortcut(InputKey::Char('p'))
                 .with_follow_up(ShellCommand::PowerOff),
+            );
+        }
+        if self.tasks_available() {
+            actions.push(
+                ShellNotificationAction::new("tasks", i18n::msg!("tasks-title"))
+                    .with_follow_up(ShellCommand::ToggleTasks),
             );
         }
         actions.push(

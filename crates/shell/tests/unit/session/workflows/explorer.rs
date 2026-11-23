@@ -526,7 +526,11 @@ fn explorer_blank_context_opens_terminal_at_directory_and_returns_without_reusin
                 &platform,
             );
         } else {
-            for _ in 0..index {
+            let steps = menu.items[..index]
+                .iter()
+                .filter(|item| item.enabled)
+                .count();
+            for _ in 0..steps {
                 state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
             }
             assert_eq!(
@@ -610,14 +614,13 @@ fn explorer_terminal_action_cannot_bypass_permissions_size_or_trash_location() {
         &platform,
     );
     state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, point), &platform);
-    for _ in 0..index {
+    for _ in 0..menu.items.len() {
         state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
+        assert_ne!(
+            explorer_test_context_menu(&state).selected_index,
+            Some(index)
+        );
     }
-    assert_eq!(
-        explorer_test_context_menu(&state).selected_index,
-        Some(index)
-    );
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
     state.activate_explorer_overlay_control(
         ui::ExplorerOverlayControl::ContextItem(index),
         &platform,
@@ -648,12 +651,17 @@ fn explorer_terminal_action_cannot_bypass_permissions_size_or_trash_location() {
     state.terminal_size = (107, 22);
     state.refresh_hit_map();
     open_explorer_blank_context_for_test(&mut state, &platform);
-    let index = explorer_test_context_menu(&state)
+    let menu = explorer_test_context_menu(&state);
+    let index = menu
         .items
         .iter()
         .position(|item| item.id == "open-terminal")
         .unwrap();
-    for _ in 0..index {
+    let steps = menu.items[..index]
+        .iter()
+        .filter(|item| item.enabled)
+        .count();
+    for _ in 0..steps {
         state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
     }
     state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);

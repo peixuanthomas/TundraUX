@@ -265,8 +265,6 @@ impl Workspace {
         global_modal: bool,
     ) {
         if global_modal {
-            self.close_split_menu();
-            self.taskbar_menu = None;
             return;
         }
         let available = self.layout.available;

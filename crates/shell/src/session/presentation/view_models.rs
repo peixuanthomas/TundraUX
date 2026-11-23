@@ -1956,14 +1956,11 @@ impl ShellSession {
         };
         ui::ShellChromeViewModel {
             back_button_hovered: self.hovered_component == Some(ShellComponent::BackButton),
+            title_focused: self.pages.common.focused_component == ShellComponent::TopBar,
             help_available: self.help_button_visible(),
-            tasks_label: self.tasks_button_label(),
-            tasks_button_focused: self.pages.common.focused_component
-                == ShellComponent::TasksButton,
-            tasks_button_hovered: self.hovered_component == Some(ShellComponent::TasksButton),
             help_button_hovered: self.hovered_component == Some(ShellComponent::HelpButton),
             help_button_focused: self.pages.common.focused_component == ShellComponent::HelpButton,
-            back_shortcut: self.shell_back_shortcut(),
+            back_label: self.header_back_label(),
             build_mode: build_mode_label().to_string(),
             display_mode: self.home_display_mode(),
             terminal_size: self.terminal_size,

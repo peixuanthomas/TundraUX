@@ -242,6 +242,10 @@ pub(super) enum WindowShortcut {
 pub(super) struct WindowPrefix(Option<KeyInput>);
 
 impl WindowPrefix {
+    pub(super) fn pending(&self) -> bool {
+        self.0.is_some()
+    }
+
     pub(super) fn clear(&mut self) {
         self.0 = None;
     }

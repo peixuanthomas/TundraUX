@@ -114,12 +114,9 @@ fn motion_dispatch_consumes_weather_wakeup_and_leaves_entering_surfaces_interact
         &platform,
         now,
     );
-    assert!(motion_blocked);
+    assert!(!motion_blocked);
     assert_eq!(active.screen_saver.last_activity, now);
-    assert!(active_motion.deferred_close.is_some());
-    active_motion.finish_before_input(&InputEvent::from_key_label("Tab"));
-    let close = active_motion.take_deferred_close(&active).unwrap();
-    active.apply_routed_event(close, &platform, now);
+    assert!(active_motion.deferred_close.is_none());
     assert_ne!(active.active_screen(), ShellScreen::ExitConfirm);
 
     let (mut clicked, mut clicked_motion) = login_exit_fixture(now);
@@ -137,9 +134,10 @@ fn motion_dispatch_consumes_weather_wakeup_and_leaves_entering_surfaces_interact
         &platform,
         now,
     );
-    assert!(motion_blocked);
+    assert!(!motion_blocked);
     assert_eq!(clicked.screen_saver.last_activity, now);
-    assert!(clicked_motion.deferred_close.is_some());
+    assert!(clicked_motion.deferred_close.is_none());
+    assert_eq!(clicked.active_screen(), ShellScreen::FirstRunSetup);
 
     active_motion.deferred_close = None;
     active_motion.exiting = false;

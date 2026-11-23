@@ -8,12 +8,10 @@ fn chrome(width: u16, height: u16) -> ShellChromeViewModel {
         terminal_size: (width, height),
         back_button_hovered: false,
         help_available: false,
-        tasks_label: None,
-        tasks_button_focused: false,
-        tasks_button_hovered: false,
+        title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_shortcut: "Esc",
+        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "系统状态消息很长但不应覆盖时钟".repeat(8),
             toast: None,
@@ -34,8 +32,9 @@ fn row(terminal: &Terminal<TestBackend>, y: u16) -> String {
 fn header_keeps_help_and_back_without_a_tasks_entry() {
     let model = chrome(120, 40);
     let context = RenderContext::default();
-    let layout =
-        ShellFrameLayout::new(Rect::new(0, 0, 120, 40), None, &context).with_help_button(true);
+    let layout = ShellFrameLayout::new(Rect::new(0, 0, 120, 40), None, &context)
+        .with_back_label(model.back_label.as_deref())
+        .with_help_button(true);
     assert!(layout.help_button.unwrap().right() < layout.back_button.unwrap().x);
     let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
     terminal
@@ -57,7 +56,7 @@ fn render(
         model.status.time_button_label.as_deref(),
         context,
     )
-    .with_back_shortcut(Some(model.back_shortcut));
+    .with_back_label(model.back_label.as_deref());
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal
         .draw(|frame| {
@@ -79,7 +78,7 @@ fn compact_threshold_keeps_escape_above_the_content() {
         assert_eq!(layout.is_compact(), compact);
         assert_eq!(layout.time_button.is_none(), compact);
         assert!(layout.back_button.is_some());
-        assert_eq!(layout.status_message.is_none(), compact);
+        assert!(layout.status_message.is_some());
         if compact {
             assert_eq!(layout.main.y, 1);
             assert_eq!(layout.main.height, height - 1);
@@ -397,33 +396,33 @@ fn all_pages_and_page_overlays_leave_global_chrome_to_the_compositor() {
 }
 
 #[test]
-fn tasks_entry_stays_separate_from_help_back_and_keyboard_content() {
+fn header_navigation_stays_separate_from_keyboard_content() {
     for size in [(108, 20), (140, 40)] {
         let mut model = chrome(size.0, size.1);
-        model.tasks_label = Some("任务".into());
+        model.back_label = Some("返回上个位置".into());
         let context = RenderContext::default();
         let layout = ShellFrameLayout::new(Rect::new(0, 0, size.0, size.1), None, &context)
             .with_help_button(true)
-            .with_tasks_button(model.tasks_label.as_deref());
-        assert!(layout.tasks_button.unwrap().right() < layout.help_button.unwrap().x);
+            .with_back_label(model.back_label.as_deref());
+        assert!(layout.help_button.unwrap().right() <= layout.back_button.unwrap().x);
         let mut terminal = Terminal::new(TestBackend::new(size.0, size.1)).unwrap();
         terminal
             .draw(|frame| render_shell_chrome(frame, &layout, &model, &context))
             .unwrap();
-        assert!(row(&terminal, 0).replace(' ', "").contains("任务"));
+        assert!(row(&terminal, 0).replace(' ', "").contains("返回上个位置"));
         let collapsed =
             layout.with_input_keyboard(Rect::new(0, size.1 / 2, size.0, size.1 / 2), 1000);
-        assert_eq!(collapsed.tasks_button.unwrap().height, 1);
-        assert!(collapsed.tasks_button.unwrap().bottom() <= collapsed.main.y);
+        assert_eq!(collapsed.back_button.unwrap().height, 1);
+        assert!(collapsed.back_button.unwrap().bottom() <= collapsed.main.y);
     }
 }
 
 #[test]
 fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
-        for tasks in ["任务".to_string(), "任务列表".repeat(60)] {
+        for label in ["取消", "返回上个位置"] {
             let mut model = chrome(width, height);
-            model.tasks_label = Some(tasks);
+            model.back_label = Some(label.into());
             let theme = TundraTheme::default();
             let buttons = components::ButtonFrame::new(None, None, &theme);
             let mut context =
@@ -435,7 +434,7 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                 &context,
             )
             .with_help_button(true)
-            .with_tasks_button(model.tasks_label.as_deref());
+            .with_back_label(model.back_label.as_deref());
             assert_eq!(layout.main, Rect::new(0, 1, width, height - 2));
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal
@@ -443,7 +442,7 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                 .unwrap();
             let regions = buttons.regions();
             let areas = [
-                ("shell.tasks", layout.tasks_button.unwrap()),
+                ("shell.power", layout.title),
                 ("shell.help", layout.help_button.unwrap()),
                 ("shell.back", layout.back_button.unwrap()),
                 ("shell.status", layout.status_message.unwrap()),
@@ -462,7 +461,7 @@ fn single_line_bars_leave_the_full_main_and_keep_control_regions_separate() {
                     assert!(area.intersection(*other).is_empty());
                 }
             }
-            assert!(row(&terminal, 0).contains("Esc"));
+            assert!(row(&terminal, 0).replace(' ', "").contains(label));
             assert!(row(&terminal, 0).contains("09:30"));
         }
     }
@@ -515,7 +514,6 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
     for (width, height) in [(108, 20), (120, 36), (180, 50)] {
         for error in [false, true] {
             let mut model = chrome(width, height);
-            model.tasks_label = Some("任务".into());
             model.status.status = "就绪 e\u{301}".into();
             model.status.error = error.then(|| "出错 e\u{301}".into());
             let context = RenderContext::default();
@@ -525,7 +523,7 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
                 &context,
             )
             .with_help_button(true)
-            .with_tasks_button(model.tasks_label.as_deref())
+            .with_back_label(model.back_label.as_deref())
             .with_keyboard_launcher(true);
             let layout = original.with_workspace_taskbar(true);
             assert_eq!(layout.main, original.main);
@@ -536,11 +534,10 @@ fn running_windows_leave_the_top_status_visible_and_use_the_full_bottom_row() {
             assert_eq!(layout.status_message, original.status_message);
             let message = layout.status_message.unwrap();
             let keyboard = layout.keyboard_launcher.unwrap();
-            let tasks = layout.tasks_button.unwrap();
             let help = layout.help_button.unwrap();
             let time = layout.time_button.unwrap();
             let back = layout.back_button.unwrap();
-            let controls = [layout.title, message, keyboard, tasks, help, time, back];
+            let controls = [layout.title, message, keyboard, help, time, back];
             assert!(controls.iter().all(|area| area.y == 0 && area.height == 1));
             assert!(controls.windows(2).all(|pair| pair[0].right() <= pair[1].x));
             assert_eq!(message.right(), keyboard.x);

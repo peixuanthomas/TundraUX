@@ -2,6 +2,31 @@ use super::*;
 use crate::session::*;
 
 impl ShellSession {
+    pub(in crate::session) fn editor_local_back(
+        &self,
+        escape: &KeyInput,
+    ) -> Option<(workspace_protocol::BackAction, (RoutedTarget, ShellCommand))> {
+        use workspace_protocol::BackAction;
+        let editor = &self.pages.editor;
+        let action = if editor.editor_search_bar.is_some()
+            || editor.editor_load_state.is_some()
+            || editor.editor_focus == ui::EditorFocus::MenuBar
+        {
+            BackAction::Cancel
+        } else if editor.script.source_view.is_some() {
+            BackAction::PreviousPage
+        } else {
+            return None;
+        };
+        Some((
+            action,
+            (
+                RoutedTarget::Component(ShellComponent::Editor),
+                ShellCommand::EditorKey(escape.clone()),
+            ),
+        ))
+    }
+
     #[cfg(test)]
     pub(in crate::session) fn handle_editor_key(&mut self, key: KeyInput, platform: &dyn Platform) {
         self.handle_editor_key_at(key, platform, Instant::now());

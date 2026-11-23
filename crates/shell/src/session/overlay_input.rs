@@ -9,7 +9,9 @@ impl ShellSession {
     ) -> Option<(RoutedTarget, ShellCommand)> {
         let overlay = self.interactive_overlays().pop()?;
         let target = overlay.target?;
-        if !key.phase.is_press_like() || !self.overlay_interaction_ready {
+        if !key.phase.is_press_like()
+            || (!self.overlay_interaction_ready && key.key != InputKey::Escape)
+        {
             return Some((target, ShellCommand::Noop));
         }
         if self.auto_admin_visible() {

@@ -314,7 +314,6 @@ settings-field-name =
         [TopBarHelp] { settings-top-bar-show-help }
         [TopBarTime] { settings-top-bar-show-time }
         [TopBarEsc] { settings-top-bar-show-esc }
-        [TopBarTasks] { settings-top-bar-show-tasks }
         [CommandLineShell] { settings-command-line-shell }
         [RestoreDefaults] { settings-defaults }
         [InstalledVersion] { settings-installed-version }
@@ -491,5 +490,4 @@ settings-top-bar-align-center = Center
 settings-top-bar-align-right = Right
 settings-top-bar-show-help = Show Help button
 settings-top-bar-show-time = Show time
-settings-top-bar-show-esc = Show Esc button
-settings-top-bar-show-tasks = Show Tasks button
+settings-top-bar-show-esc = Show Back button

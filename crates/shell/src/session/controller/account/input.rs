@@ -86,10 +86,6 @@ impl ShellSession {
             };
         }
 
-        if matches!(&key.key, InputKey::Escape) {
-            return (RoutedTarget::Global, ShellCommand::RequestExit);
-        }
-
         match self.pages.setup.setup_step {
             ui::SetupStep::Language => match &key.key {
                 InputKey::Up | InputKey::Left => (target, ShellCommand::SetupPreviousLanguage),

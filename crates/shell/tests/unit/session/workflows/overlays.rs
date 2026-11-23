@@ -50,7 +50,11 @@ fn exit_confirmation_keeps_setup_as_the_content_screen() {
     state.pages.common.focused_component = ShellComponent::SetupLanguage;
     state.refresh_hit_map();
 
-    let action = state.apply_input(InputEvent::from_key_label("Esc"));
+    state.apply_input(InputEvent::from_key_label("Esc"));
+    assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
+    let point = hit_region_center(&state, ShellComponent::TopBar);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    let action = state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
 
     assert_eq!(action, ShellAction::Redraw);
     assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
@@ -102,9 +106,8 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
         state.status_time_button_label().as_deref(),
         &ui::RenderContext::default(),
     )
-    .with_back_shortcut(Some(state.shell_back_shortcut()))
-    .with_help_button(state.help_button_available())
-    .with_tasks_button(state.tasks_button_label().as_deref());
+    .with_back_label(state.header_back_label().as_deref())
+    .with_help_button(state.help_button_available());
     let settled = state.input_keyboard_content_layout(settled);
     for progress in [0, 250, 499, 500, 1_000] {
         state.refresh_hit_map_with_motion(ui::MotionTransitions {
@@ -158,7 +161,7 @@ fn motion_keeps_page_and_overlay_hit_regions_fixed_and_immediately_available() {
                     Instant::now()
                 )
                 .command,
-            ShellCommand::CaptureOverlayInput
+            ShellCommand::CancelExit
         );
     }
 }
@@ -221,7 +224,11 @@ fn entering_overlays_accept_input_immediately_and_keep_modal_focus_isolated() {
                         Instant::now()
                     )
                     .command,
-                ShellCommand::CaptureOverlayInput
+                if popup {
+                    ShellCommand::RequestExit
+                } else {
+                    ShellCommand::CancelExit
+                }
             );
         }
     }

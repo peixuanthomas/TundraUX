@@ -824,7 +824,7 @@ fn plain_text_editor_omits_markdown_controls_and_preserves_markdown_syntax() {
 }
 
 #[test]
-fn escape_closes_an_open_menu_before_closing_the_document() {
+fn escape_closes_an_open_menu_and_keeps_the_editor_at_its_root() {
     let fixture = FixtureRoot::new("escape-menu");
     let platform = mock_platform(fixture.path());
     let mut state = new_user_home_state(&platform);
@@ -849,7 +849,7 @@ fn escape_closes_an_open_menu_before_closing_the_document() {
     assert_eq!(state.to_editor_view_model().open_menu, None);
 
     state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
-    assert_eq!(state.active_screen(), ShellScreen::Launcher);
+    assert_eq!(state.active_screen(), ShellScreen::Editor);
 }
 #[test]
 fn held_direction_keys_accelerate_non_linearly_with_slower_vertical_shift_selection() {
@@ -1086,7 +1086,7 @@ fn dirty_editor_close_can_be_cancelled_or_discarded() {
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "unsaved");
 
-    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    state.apply_input_with_platform(ctrl('w'), &platform);
     let modal = state
         .to_notification_view_model()
         .expect("dirty-close modal");
@@ -1105,7 +1105,7 @@ fn dirty_editor_close_can_be_cancelled_or_discarded() {
     assert!(state.to_notification_view_model().is_none());
     assert!(state.to_editor_view_model().dirty);
 
-    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    state.apply_input_with_platform(ctrl('w'), &platform);
     state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
     state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
 
@@ -1564,7 +1564,7 @@ fn log_name_variants_open_read_only_at_the_document_bottom() {
 
         state.apply_input_with_platform(ctrl('w'), &platform);
         assert_eq!(state.active_screen(), ShellScreen::Explorer);
-        state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+        state.close_page_instance(state.active_page_id());
         assert_eq!(state.active_screen(), ShellScreen::Home);
         fs::remove_file(path).unwrap();
     }
@@ -2193,7 +2193,7 @@ fn saving_and_discarding_recovery_only_clear_the_owning_editor() {
         second.to_editor_view_model().source_lines.join("\n"),
         "second draft"
     );
-    second.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    second.apply_input_with_platform(ctrl('w'), &platform);
     second.apply_input_with_platform(InputEvent::from_key_label("d"), &platform);
     assert_eq!(second.active_screen(), ShellScreen::Launcher);
     assert!(
@@ -2227,7 +2227,7 @@ fn failed_recovery_cleanup_keeps_the_editor_open_until_retry_succeeds() {
     // A directory at the owned JSON path makes file deletion fail on both OSes.
     fs::remove_file(&recovery_path).unwrap();
     fs::create_dir(&recovery_path).unwrap();
-    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    state.apply_input_with_platform(ctrl('w'), &platform);
     state.apply_input_with_platform(InputEvent::from_key_label("d"), &platform);
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     assert_eq!(
@@ -2243,7 +2243,7 @@ fn failed_recovery_cleanup_keeps_the_editor_open_until_retry_succeeds() {
             .is_none(),
         "failed cleanup must keep the original lease"
     );
-    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    state.apply_input_with_platform(ctrl('w'), &platform);
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     assert!(state.to_notification_view_model().is_some());
     assert_eq!(
@@ -2471,6 +2471,7 @@ fn click_editor_setting(
 fn open_editor_from_home(state: &mut ShellSession, platform: &MockPlatform) {
     open_home_entry(state, platform, "launcher");
     assert_eq!(state.active_screen(), ShellScreen::Launcher);
+    state.apply_input_with_platform(InputEvent::from_key_label("Down"), platform);
     let editor_index = state
         .to_launcher_view_model()
         .items

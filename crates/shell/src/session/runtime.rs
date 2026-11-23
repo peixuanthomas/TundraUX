@@ -1525,9 +1525,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         continue;
                     };
                     let command_line_captures = command_line_captures_input(&state, &input);
-                    if script_hosts.handle_input(&state, &input) {
+                    let cancel = state.escape_cancels_action(&input);
+                    if !cancel && script_hosts.handle_input(&state, &input) {
                         action = Some(ShellAction::Redraw);
-                    } else if editor_vim.captures_input(&state, &input) {
+                    } else if !cancel && editor_vim.captures_input(&state, &input) {
                         if let Err(error) = editor_vim.handle_input(&state, &input) {
                             state.report_editor_error(i18n::msg!(
                                 "shell-vim-runtime-error",
@@ -1535,7 +1536,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                             ));
                         }
                         action = Some(ShellAction::Redraw);
-                    } else if command_line_captures {
+                    } else if !cancel && command_line_captures {
                         let terminal_area = state.command_line_input_area();
                         match command_line_hosts.handle_input(&state, &input, terminal_area) {
                             CommandLineHostEvent::None => {}
@@ -1809,7 +1810,7 @@ pub(super) fn dispatch_motion_aware_input(
             return (ShellAction::Redraw, false);
         }
     }
-    if state.handle_auto_admin_input_at(&input, received_at) {
+    if !state.power_title_pointer(&input) && state.handle_auto_admin_input_at(&input, received_at) {
         return (ShellAction::Redraw, false);
     }
     let input = state.normalize_shell_navigation_input(input);

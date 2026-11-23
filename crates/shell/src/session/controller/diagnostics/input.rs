@@ -21,16 +21,16 @@ impl ShellSession {
         {
             return (target, ShellCommand::Noop);
         }
-        let area = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        if matches!(self.shell_layout_for(area), ui::ShellLayout::Compact(_)) {
-            return if matches!(&key.key, InputKey::Escape) {
-                (RoutedTarget::Global, ShellCommand::CloseDiagnostics)
-            } else {
-                (
-                    RoutedTarget::Component(ShellComponent::CompactHome),
-                    ShellCommand::CaptureOverlayInput,
-                )
-            };
+        if key.key != InputKey::Escape
+            && matches!(
+                self.shell_layout_for(Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1)),
+                ui::ShellLayout::Compact(_)
+            )
+        {
+            return (
+                RoutedTarget::Component(ShellComponent::CompactHome),
+                ShellCommand::CaptureOverlayInput,
+            );
         }
 
         if !self.pages.diagnostics.diagnostics_repair_preview.is_empty() {

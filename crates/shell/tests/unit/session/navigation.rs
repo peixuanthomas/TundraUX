@@ -56,11 +56,7 @@ fn prepare_page(state: &mut ShellSession, screen: ShellScreen) {
 
 #[test]
 fn every_page_returns_to_actual_caller_for_escape_and_back_button() {
-    for parent in [
-        ShellScreen::Launcher,
-        ShellScreen::Explorer,
-        ShellScreen::Logs,
-    ] {
+    for parent in [ShellScreen::Clock, ShellScreen::Explorer, ShellScreen::Logs] {
         for page in [
             ShellScreen::Clock,
             ShellScreen::Diagnostics,
@@ -131,7 +127,10 @@ fn nested_visits_restore_each_callers_focus_and_ignore_held_escape() {
         )));
         assert_eq!(state.active_screen(), ShellScreen::Clock);
     }
-    back(&mut state, true);
+    assert!(state.header_back_label().is_none());
+    back(&mut state, false);
+    assert_eq!(state.active_screen(), ShellScreen::Clock);
+    state.close_clock();
     assert_eq!(state.active_screen(), ShellScreen::Home);
     assert_eq!(
         state.pages.common.focused_component,
@@ -208,7 +207,7 @@ fn editor_rollback_restores_picker_beneath_overlay_and_rejects_stale_results() {
 }
 
 #[test]
-fn command_line_terminal_keys_are_forwarded_and_back_requests_close_confirmation() {
+fn command_line_terminal_keys_are_forwarded_without_a_back_button() {
     let mut state = state();
     state.enter_screen(ShellScreen::Explorer);
     state.enter_screen(ShellScreen::CommandLine);
@@ -225,30 +224,128 @@ fn command_line_terminal_keys_are_forwarded_and_back_requests_close_confirmation
         let (_, command) = state.route_key_input(&key);
         assert_eq!(command, ShellCommand::CommandLineKey(key));
     }
-    let area = state
-        .hit_map()
-        .regions()
-        .iter()
-        .find(|region| region.component == ShellComponent::BackButton)
-        .unwrap()
-        .area;
-    let input = InputEvent::mouse_down(PointerButton::Left, (area.x, area.y));
-    assert_eq!(state.normalize_shell_navigation_input(input.clone()), input);
-    assert_eq!(
-        state.route_input_at(input, Instant::now()).command,
-        ShellCommand::RequestCommandLineClose
-    );
-    state.apply_input(InputEvent::mouse_down(
-        PointerButton::Left,
-        (area.x, area.y),
-    ));
+    assert!(state.frame_layout.unwrap().back_button.is_none());
+    state.apply_input(escape);
     assert!(state.command_line_close_request.is_none());
-    state.apply_input(InputEvent::mouse_up(PointerButton::Left, (area.x, area.y)));
-    assert_eq!(
-        state.command_line_close_request,
-        Some((state.active_page_id(), false))
-    );
     assert_eq!(state.active_screen(), ShellScreen::CommandLine);
     state.close_command_line();
     assert_eq!(state.active_screen(), ShellScreen::Explorer);
+}
+
+#[test]
+fn tool_roots_keep_the_same_page_open_with_escape() {
+    for screen in [
+        ShellScreen::Clock,
+        ShellScreen::Diagnostics,
+        ShellScreen::Editor,
+        ShellScreen::Explorer,
+        ShellScreen::Logs,
+        ShellScreen::Management,
+        ShellScreen::Settings,
+        ShellScreen::SystemStatus,
+    ] {
+        for caller in [ShellScreen::Home, ShellScreen::Launcher] {
+            let mut state = state();
+            state.enter_screen(caller);
+            prepare_page(&mut state, screen);
+            let page = state.active_page_id();
+            assert!(
+                state.frame_layout.unwrap().back_button.is_none(),
+                "{screen:?}"
+            );
+            back(&mut state, false);
+            assert_eq!(state.active_page_id(), page);
+            assert!(!state.notification_has_active_modal());
+        }
+    }
+}
+
+#[test]
+fn power_title_supports_keyboard_and_keeps_a_covered_popup_after_cancel() {
+    let mut state = state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    state.refresh_hit_map();
+    state.apply_input(InputEvent::from_key_label("Shift+Tab"));
+    assert_eq!(state.focused_component(), ShellComponent::TopBar);
+    state.apply_input(InputEvent::key(InputKey::Enter));
+    assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+    let menu = state.to_notification_view_model().unwrap();
+    assert!(
+        menu.actions
+            .iter()
+            .any(|action| action.id == "cancel" && action.selected)
+    );
+    back(&mut state, false);
+    assert_eq!(state.focused_component(), ShellComponent::TopBar);
+
+    state.enter_screen(ShellScreen::Launcher);
+    let launcher = state.active_page_id();
+    let popup = ShellPopup {
+        owner: None,
+        anchor: (5, 5),
+    };
+    state.pages.common.active_popup = Some(popup);
+    state.refresh_hit_map();
+    let title = state.frame_layout.unwrap().title;
+    let point = (title.x + 1, title.y);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    assert_eq!(state.active_page_id(), launcher);
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
+    back(&mut state, true);
+    assert_eq!(state.active_page_id(), launcher);
+    assert_eq!(state.active_popup(), Some(popup));
+    back(&mut state, false);
+    assert!(state.active_popup().is_none());
+    assert_eq!(state.active_page_id(), launcher);
+
+    let critical = state.notify_critical_modal("Session notice", "Keep this open", vec![]);
+    assert_eq!(state.notification_active_modal_id(), Some(critical));
+    let title = state.frame_layout.unwrap().title;
+    let point = (title.x + 1, title.y);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert_eq!(
+        state.notification_active_modal_component(),
+        Some(ShellComponent::ExitDialog)
+    );
+    back(&mut state, false);
+    assert_eq!(state.active_page_id(), launcher);
+    assert_eq!(state.notification_active_modal_id(), Some(critical));
+}
+
+#[test]
+fn setup_goes_to_each_previous_step_and_stays_on_language() {
+    for platform in [PlatformKind::Linux, PlatformKind::Windows] {
+        let mut state = state();
+        while state.notification_dismiss_active_modal_without_response() {}
+        state.platform_kind = platform;
+        state.reset_navigation(ShellScreen::FirstRunSetup);
+        state.pages.setup.setup_step = ui::SetupStep::Appearance;
+        back(&mut state, true);
+        if platform == PlatformKind::Windows {
+            assert_eq!(state.pages.setup.setup_step, ui::SetupStep::Timezone);
+            back(&mut state, false);
+        }
+        assert_eq!(state.pages.setup.setup_step, ui::SetupStep::Language);
+        assert!(state.header_back_label().is_none());
+        back(&mut state, false);
+        assert_eq!(state.active_screen(), ShellScreen::FirstRunSetup);
+    }
+}
+
+#[test]
+fn stale_back_region_cannot_activate_the_power_menu() {
+    let mut state = state();
+    while state.notification_dismiss_active_modal_without_response() {}
+    state.pages.home.editing = true;
+    state.refresh_hit_map();
+    let area = state.frame_layout.unwrap().back_button.unwrap();
+    state.pages.home.editing = false;
+    let point = (area.x, area.y);
+    state.apply_input(InputEvent::mouse_down(PointerButton::Left, point));
+    state.apply_input(InputEvent::mouse_up(PointerButton::Left, point));
+    assert_eq!(state.active_screen(), ShellScreen::Home);
+    back(&mut state, false);
+    assert_eq!(state.active_screen(), ShellScreen::ExitConfirm);
 }

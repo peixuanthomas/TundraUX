@@ -1034,7 +1034,7 @@ fn clock_button_click_toggles_clock_placeholder() {
 }
 
 #[test]
-fn keyboard_activation_opens_clock_and_escape_closes_it() {
+fn keyboard_activation_opens_clock_and_escape_stays_at_the_root() {
     let mut state =
         ShellSession::new_for_home_mode(build_default_config(), (120, 40), ShellHomeMode::User);
 
@@ -1049,8 +1049,9 @@ fn keyboard_activation_opens_clock_and_escape_closes_it() {
     assert_eq!(state.last_command(), Some(&ShellCommand::OpenClock));
 
     state.apply_input(InputEvent::from_key_label("Esc"));
-    assert_eq!(state.active_screen(), ShellScreen::Home);
-    assert_eq!(state.last_command(), Some(&ShellCommand::CloseClock));
+    assert_eq!(state.active_screen(), ShellScreen::Clock);
+    assert!(state.to_shell_chrome_view_model().back_label.is_none());
+    assert_eq!(state.last_command(), Some(&ShellCommand::Noop));
 }
 
 #[test]

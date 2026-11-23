@@ -18,14 +18,38 @@ impl Workspace {
             self.pointer_hovered = false;
             return Ok(false);
         }
+        if state.power_title_pointer(input) {
+            self.cancel_capture();
+            return Ok(false);
+        }
         if state.content_screen() == ShellScreen::Launcher
             || !state.interactive_overlays().is_empty()
         {
             self.cancel_capture();
-            self.close_split_menu();
-            self.taskbar_menu = None;
             self.prefix.clear();
             return Ok(false);
+        }
+        if let InputEvent::Key(key) = input
+            && key.key == InputKey::Escape
+            && !key.has_non_shift_modifier()
+            && (self.has_overlay() || self.prefix.pending())
+        {
+            if key.phase == InputPhase::Press {
+                self.cancel_back_action()?;
+            }
+            return Ok(true);
+        }
+        if let InputEvent::Mouse(mouse) = input
+            && (self.has_overlay()
+                && matches!(
+                    self.target(mouse.coordinates()),
+                    Some(PointerTarget::Chrome(ChromeAction::Back(_)))
+                )
+                || self.capture.is_some_and(|capture| {
+                    matches!(capture.target, PointerTarget::Chrome(ChromeAction::Back(_)))
+                }))
+        {
+            return self.mouse(*mouse, state);
         }
         if self.chooser.is_some() {
             self.chooser_input(input, state)?;
@@ -120,6 +144,9 @@ impl Workspace {
                 }
                 return Ok(true);
             }
+            if key.key == InputKey::Escape && self.hides_home() {
+                return Ok(true);
+            }
         }
         if let InputEvent::Mouse(mouse) = input {
             if self
@@ -144,6 +171,23 @@ impl Workspace {
             return Ok(true);
         }
         Ok(self.has_overlay() || self.layout.blocked)
+    }
+
+    fn cancel_back_action(&mut self) -> io::Result<bool> {
+        if self.chooser.is_some() {
+            self.cancel_chooser();
+        } else if self.taskbar_menu.take().is_some() {
+            self.cancel_capture();
+        } else if self.panel.is_some() || self.wait_for.is_some() {
+            self.apply_action(Action::Dismiss)?;
+        } else if self.split_window.is_some() {
+            self.close_split_menu();
+        } else if self.prefix.pending() {
+            self.prefix.clear();
+        } else {
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     fn shortcut(&mut self, shortcut: WindowShortcut, state: &mut ShellSession) -> io::Result<()> {
@@ -268,6 +312,14 @@ impl Workspace {
         {
             return None;
         }
+        if self
+            .chrome_layout
+            .and_then(|layout| layout.back_button)
+            .is_some_and(|area| area.contains(point.into()))
+            && let Some(action) = self.back_action()
+        {
+            return Some(PointerTarget::Chrome(ChromeAction::Back(action)));
+        }
         if self.panel.is_some() || self.wait_for.is_some() {
             return self
                 .panel_hits
@@ -292,9 +344,7 @@ impl Workspace {
         if let Some(layout) = self.chrome_layout {
             if !self.layout.blocked && self.hides_home() {
                 for (area, action) in [
-                    (layout.back_button, ChromeAction::Back),
                     (layout.help_button, ChromeAction::Help),
-                    (layout.tasks_button, ChromeAction::Tasks),
                     (layout.keyboard_launcher, ChromeAction::Keyboard),
                 ] {
                     if area.is_some_and(|area| area.contains(point.into())) {
@@ -372,9 +422,12 @@ impl Workspace {
             return Ok(true);
         }
         let hit = self.target(point);
+        let back = matches!(hit, Some(PointerTarget::Chrome(ChromeAction::Back(_))));
         match mouse.kind {
             ui::MouseEventKind::Down(button) => {
-                self.prefix.clear();
+                if !back {
+                    self.prefix.clear();
+                }
                 self.cancel_capture();
                 self.suppress_release = None;
                 if button == PointerButton::Right
@@ -385,7 +438,8 @@ impl Workspace {
                     self.open_taskbar_menu(id, point, state);
                     return Ok(true);
                 }
-                if self.split_window.is_some()
+                if !back
+                    && self.split_window.is_some()
                     && self
                         .split_menu
                         .as_ref()
@@ -576,15 +630,26 @@ impl Workspace {
                     self.apply_action(action)?;
                 }
             }
-            PointerTarget::Chrome(ChromeAction::Tasks) => self.toggle_tasks_requested = true,
+            PointerTarget::Chrome(ChromeAction::Back(action)) => {
+                if !self.cancel_back_action()?
+                    && let Some(id) = self.input_focus
+                {
+                    self.enqueue(
+                        id,
+                        ShellToApp::Back {
+                            layout: self.generation,
+                            action,
+                        },
+                    );
+                }
+            }
             PointerTarget::Chrome(action) => {
                 if let Some(id) = self.input_focus {
                     let layout = self.generation;
                     let message = match action {
-                        ChromeAction::Back => ShellToApp::Back { layout },
+                        ChromeAction::Back(_) => unreachable!(),
                         ChromeAction::Help => ShellToApp::Help { layout },
                         ChromeAction::Keyboard => ShellToApp::Keyboard { layout },
-                        ChromeAction::Tasks => unreachable!(),
                     };
                     self.enqueue(id, message);
                 }

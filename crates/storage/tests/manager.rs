@@ -140,11 +140,12 @@ fn missing_top_bar_preferences_use_current_defaults() {
             show_help: true,
             show_time: true,
             show_esc: true,
-            show_tasks: false,
         }
     );
-    let partial: StorageConfig =
-        toml::from_str(&format!("{legacy}\n[top_bar]\nshow_time = false")).unwrap();
+    let partial: StorageConfig = toml::from_str(&format!(
+        "{legacy}\n[top_bar]\nshow_time = false\nshow_tasks = true"
+    ))
+    .unwrap();
     assert_eq!(
         partial.top_bar,
         storage::TopBarConfig {
@@ -184,7 +185,6 @@ fn toml_and_json_documents_round_trip() {
             show_help: false,
             show_time: false,
             show_esc: false,
-            show_tasks: true,
         },
         automation: storage::AutomationConfig { enabled: true },
         linux_update_mode: storage::LinuxUpdateMode::Beta,

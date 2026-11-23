@@ -674,7 +674,11 @@ impl ShellMotionEffects {
         {
             return MotionInputDisposition::Apply;
         }
-        let escape = matches!(input, InputEvent::Key(key) if key.label() == "Esc");
+        let escape = matches!(input, InputEvent::Key(key)
+            if key.key == InputKey::Escape && key.phase == InputPhase::Press && !key.has_non_shift_modifier());
+        if self.exit_confirmation && (escape || routed.command == ShellCommand::CancelExit) {
+            return MotionInputDisposition::Apply;
+        }
         if (escape || routed.command.is_overlay_cancel_or_close())
             && let Some(overlay) = self.overlay.as_ref()
             && overlay.kind != ui::MotionOverlayKind::Toast
@@ -705,7 +709,7 @@ impl ShellMotionEffects {
     }
 
     pub(super) fn take_deferred_close(&mut self, state: &ShellSession) -> Option<RoutedEvent> {
-        if self.overlay_gate > Duration::ZERO {
+        if self.overlay_gate > Duration::ZERO && self.is_running() {
             return None;
         }
         let deferred = self.deferred_close.as_ref()?;

@@ -137,7 +137,9 @@ fn short_home_cards_show_names_without_clipping_ascii_or_image_icons_after_resiz
                 .map(|(key, label)| ShellEntry::new(label, "DESCRIPTION").with_icon_key(key))
                 .collect(),
         );
-        for graphical in [false, true] {
+        for (graphical, editing) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut home = home.clone();
+            home.editing = editing;
             let images = ImageRenderer(std::cell::Cell::new(0));
             let mut terminal = Terminal::new(TestBackend::new(108, 9)).unwrap();
             for tile_height in [6, 5, 4, 3, 2, 1, 5, 6] {
@@ -174,6 +176,10 @@ fn short_home_cards_show_names_without_clipping_ascii_or_image_icons_after_resiz
                         .join("\n");
                     assert!(text.replace(' ', "").contains(&entry.label));
                     assert!(!text.contains("DESCRIPTION"));
+                    assert_eq!(
+                        text.replace(' ', "").contains(&format!("#{}", entry.label)),
+                        editing
+                    );
                     let buffer = terminal.backend().buffer();
                     let underlined: String = tile
                         .positions()
@@ -302,7 +308,7 @@ fn compact_home_and_clock_show_highest_priority_notification() {
 }
 
 #[test]
-fn extremely_small_compact_layout_keeps_escape_above_borderless_notification() {
+fn extremely_small_compact_layout_keeps_title_above_borderless_notification() {
     let home = HomeViewModel::user("User", "Now", Vec::new());
     let chrome = compact_alert_chrome();
     let mut terminal = Terminal::new(TestBackend::new(2, 2)).expect("test terminal");
@@ -319,7 +325,7 @@ fn extremely_small_compact_layout_keeps_escape_above_borderless_notification() {
         })
         .expect("render tiny compact notification");
 
-    assert!(buffer_row_text(&terminal, 0, 0, 2).contains('◀'));
+    assert_eq!(buffer_row_text(&terminal, 0, 0, 2), "Tu");
     assert_eq!(buffer_row_text(&terminal, 0, 1, 2), "[E");
 }
 
@@ -569,12 +575,10 @@ fn chrome() -> ShellChromeViewModel {
         terminal_size: (80, 24),
         back_button_hovered: false,
         help_available: false,
-        tasks_label: None,
-        tasks_button_focused: false,
-        tasks_button_hovered: false,
+        title_focused: false,
         help_button_hovered: false,
         help_button_focused: false,
-        back_shortcut: "Esc",
+        back_label: Some("Esc".into()),
         status: StatusViewModel {
             status: "Ready".to_string(),
             toast: None,

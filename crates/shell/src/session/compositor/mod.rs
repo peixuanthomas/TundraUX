@@ -318,6 +318,7 @@ impl ScreenCompositor {
         let mut frame_context = prepared.context.clone();
         frame_context.motion = state.interaction_motion_frame(frame_context.motion);
         let mut chrome = prepared.chrome.clone();
+        chrome.back_label = state.header_back_label();
         let launcher_visible = state.content_screen() == ShellScreen::Launcher;
         let mut displayed_report = state
             .app
@@ -350,7 +351,7 @@ impl ScreenCompositor {
                 .as_ref()
                 .is_some_and(|windows| windows.keyboard_available())
             && overlays.is_empty();
-        let layout = state
+        let mut layout = state
             .input_keyboard_content_layout(layout)
             .with_keyboard_launcher(workspace_keyboard)
             .with_workspace_taskbar(
@@ -372,6 +373,24 @@ impl ScreenCompositor {
             && workspace
                 .as_ref()
                 .is_some_and(|windows| windows.has_overlay());
+        if state.app.storage_config().top_bar.show_esc
+            && let Some(windows) = workspace.as_ref()
+        {
+            if !launcher_visible && overlays.is_empty() {
+                let back = windows.back_action();
+                if workspace_content || back.is_some() {
+                    chrome.back_label = back.map(navigation::back_label);
+                }
+            } else if launcher_visible
+                && windows.hides_home()
+                && state.back_action() == Some(workspace_protocol::BackAction::Home)
+            {
+                chrome.back_label = Some(navigation::back_label(
+                    workspace_protocol::BackAction::PreviousPage,
+                ));
+            }
+            layout = layout.with_back_label(chrome.back_label.as_deref());
+        }
         let mut capture = self.capture_enabled.then(|| {
             let page = workspace
                 .as_ref()
