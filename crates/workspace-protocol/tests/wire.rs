@@ -37,6 +37,7 @@ fn initialization_tracks_the_latest_viewport_before_session_construction() {
         focused: false,
         image_cell_size: None,
         text_sizing: false,
+        ansi_colors: true,
     };
     init.update_viewport(&ShellToApp::Viewport {
         layout: LayoutGeneration(3),
@@ -61,6 +62,7 @@ fn initialization_tracks_the_latest_viewport_before_session_construction() {
     });
     assert_eq!(init.size, Size::new(215, 35));
     assert!(!init.focused);
+    assert!(init.ansi_colors);
 }
 
 #[test]
@@ -80,6 +82,7 @@ fn initialization_shares_language_data_without_changing_its_json_object() {
         focused: true,
         image_cell_size: None,
         text_sizing: false,
+        ansi_colors: true,
     };
     assert!(Arc::ptr_eq(
         init.language.as_ref().unwrap(),
@@ -87,9 +90,20 @@ fn initialization_shares_language_data_without_changing_its_json_object() {
     ));
     let wire = serde_json::to_value(ShellToApp::Init(init)).unwrap();
     assert_eq!(wire["init"]["language"], language);
+    assert_eq!(wire["init"]["ansi_colors"], true);
+    let mut legacy_wire = wire.clone();
+    legacy_wire["init"]
+        .as_object_mut()
+        .unwrap()
+        .remove("ansi_colors");
+    let ShellToApp::Init(legacy_init) = serde_json::from_value(legacy_wire).unwrap() else {
+        panic!("legacy initialization expected");
+    };
+    assert!(!legacy_init.ansi_colors);
     let ShellToApp::Init(received) = serde_json::from_value(wire).unwrap() else {
         panic!("initialization expected");
     };
+    assert!(received.ansi_colors);
     let received = Arc::try_unwrap(received.language.unwrap()).unwrap();
     assert_eq!(received, language);
 }

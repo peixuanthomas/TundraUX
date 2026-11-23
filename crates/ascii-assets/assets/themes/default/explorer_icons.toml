@@ -119,7 +119,7 @@ lines = ["r"]
 
 [items.delete]
 label = "Delete"
-lines = ["-"]
+lines = ['\_/']
 
 [items.search]
 label = "Search"

@@ -108,7 +108,8 @@ fn default_explorer_icons_are_complete_and_dimensioned_by_role() {
         let icon = store
             .explorer_icon(key)
             .unwrap_or_else(|error| panic!("missing Explorer icon {key}: {error}"));
-        assert_eq!((icon.width(), icon.height()), (1, 1), "icon {key}");
+        let width = if *key == "delete" { 3 } else { 1 };
+        assert_eq!((icon.width(), icon.height()), (width, 1), "icon {key}");
     }
     assert_eq!(
         store.explorer_icons().count(),
@@ -219,6 +220,18 @@ fn explorer_icon_loading_rejects_invalid_role_dimensions() {
     let error = AsciiAssetStore::load_with_root(&root.path, DEFAULT_THEME_ID)
         .expect_err("wrong-sized icon must fail startup asset loading");
     assert!(error.to_string().contains("folder must be exactly 3x1"));
+}
+
+#[test]
+fn old_default_explorer_icons_show_the_new_delete_outline() {
+    let root = TemporaryAssetRoot::copy_of(Path::new(CANONICAL_ASSETS_DIR));
+    let path = root.path.join("themes/default/explorer_icons.toml");
+    let source = fs::read_to_string(&path)
+        .unwrap()
+        .replace(r"lines = ['\_/']", "lines = [\"-\"]");
+    fs::write(path, source).unwrap();
+    let store = AsciiAssetStore::load_with_root(&root.path, DEFAULT_THEME_ID).unwrap();
+    assert_eq!(store.explorer_icon("delete").unwrap().lines(), [r"\_/"]);
 }
 
 #[test]

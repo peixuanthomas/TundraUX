@@ -536,10 +536,11 @@ impl Button {
         if state.disabled {
             return theme.disabled_style();
         }
+        if self.emphasis == ButtonEmphasis::Danger {
+            let style = self.style_for_state(state, theme, false);
+            return theme.border_style().fg(style.fg.unwrap());
+        }
         if state.active {
-            if self.emphasis == ButtonEmphasis::Danger {
-                return theme.border_style().fg(theme.error);
-            }
             if self.pressed_fill {
                 return theme
                     .border_style()
@@ -549,15 +550,12 @@ impl Button {
             return theme.border_style().fg(theme.button_pressed_color());
         }
         if state.hovered || state.focused || (state.selected && !self.current) {
-            if self.emphasis == ButtonEmphasis::Danger {
-                return theme.border_style().fg(theme.error);
-            }
             return theme.border_style().fg(theme.button_accent_color());
         }
-        match self.emphasis {
-            ButtonEmphasis::Primary => theme.border_style().fg(theme.button_accent_color()),
-            ButtonEmphasis::Danger => theme.border_style().fg(theme.error),
-            ButtonEmphasis::Normal => theme.border_style(),
+        if self.emphasis == ButtonEmphasis::Primary {
+            theme.border_style().fg(theme.button_accent_color())
+        } else {
+            theme.border_style()
         }
     }
 
@@ -600,14 +598,40 @@ impl Button {
                 };
                 tokens.filled_style(fill).add_modifier(Modifier::BOLD)
             }
-            ButtonEmphasis::Danger if self.pressed_fill && state.active => {
-                tokens.filled_style(tokens.danger)
+            ButtonEmphasis::Danger => {
+                let brightness = if state.active {
+                    25
+                } else if state.hovered {
+                    12
+                } else {
+                    0
+                };
+                if theme.color_capability == crate::ColorCapability::Ansi && brightness > 0 {
+                    let fill = if state.active {
+                        tokens.danger
+                    } else {
+                        Color::Red
+                    };
+                    tokens.filled_style(fill)
+                } else {
+                    let red = if brightness > 0 {
+                        crate::theme::lighten(tokens.danger, brightness)
+                    } else {
+                        tokens.danger
+                    };
+                    let neutral = if focused {
+                        self.focus_fill.unwrap_or(base)
+                    } else {
+                        base
+                    };
+                    let neutral = if crate::theme::readable_foreground(red, neutral) == red {
+                        neutral
+                    } else {
+                        tokens.filled_style(red).fg.unwrap()
+                    };
+                    Style::default().bg(neutral).fg(red)
+                }
             }
-            ButtonEmphasis::Danger => Style::default().bg(background).fg(if state.active {
-                crate::theme::lighten(tokens.danger, 25)
-            } else {
-                tokens.danger
-            }),
             ButtonEmphasis::Normal if self.pressed_fill && state.active => {
                 tokens.filled_style(pressed)
             }
@@ -625,7 +649,10 @@ impl Button {
         if focused {
             style = style.add_modifier(Modifier::UNDERLINED);
         }
-        if (state.active || state.hovered) && !self.pressed_fill {
+        if (state.active || state.hovered)
+            && !self.pressed_fill
+            && self.emphasis != ButtonEmphasis::Danger
+        {
             style = style.fg(crate::theme::readable_foreground(
                 style.fg.unwrap(),
                 style.bg.unwrap(),

@@ -4,6 +4,7 @@ use std::path::{Component, Path};
 
 use serde::Deserialize;
 
+use crate::DEFAULT_THEME_ID;
 use crate::asset_error::AssetError;
 use crate::asset_resolver::AssetResolver;
 use crate::embedded_defaults::embedded_default_theme_file;
@@ -292,7 +293,15 @@ pub(crate) fn load_explorer_icons(
     resolver: &AssetResolver,
     theme_id: &str,
 ) -> Result<ArtSet, AssetError> {
-    let icons = load_art_set(resolver, theme_id, "explorer_icons", "explorer_icons.toml")?;
+    let mut icons = load_art_set(resolver, theme_id, "explorer_icons", "explorer_icons.toml")?;
+    if theme_id == DEFAULT_THEME_ID
+        && let Some(icon) = icons.items.get_mut("delete")
+        && icon.lines == ["-"]
+    {
+        // Older copies of the default theme still carry the dash.
+        icon.lines[0] = r"\_/".into();
+        icon.width = 3;
+    }
     for key in EXPLORER_ENTRY_AND_LOCATION_ICON_KEYS {
         let icon = icons.get(key).ok_or_else(|| AssetError::InvalidAsset {
             asset: "explorer_icons".to_string(),
@@ -310,10 +319,16 @@ pub(crate) fn load_explorer_icons(
             asset: "explorer_icons".to_string(),
             message: format!("missing required Explorer action icon {key}"),
         })?;
-        if icon.width() != 1 || icon.height() != 1 {
+        let valid_width = icon.width() == 1 || (*key == "delete" && icon.width() == 3);
+        if !valid_width || icon.height() != 1 {
+            let size = if *key == "delete" {
+                "1x1 or 3x1"
+            } else {
+                "1x1"
+            };
             return Err(AssetError::InvalidAsset {
                 asset: "explorer_icons".to_string(),
-                message: format!("Explorer action icon {key} must be exactly 1x1"),
+                message: format!("Explorer action icon {key} must be {size}"),
             });
         }
     }

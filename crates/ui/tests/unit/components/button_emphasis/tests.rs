@@ -38,6 +38,41 @@ fn danger_normal_uses_error_label_and_border() {
 }
 
 #[test]
+fn danger_outline_stays_readable_and_stable_through_hover_and_press() {
+    use crate::ColorCapability;
+    use ratatui::style::Color;
+
+    let area = Rect::new(0, 0, 6, 1);
+    for capability in [ColorCapability::TrueColor, ColorCapability::Ansi] {
+        let mut theme = TundraTheme::default_dark();
+        theme.color_capability = capability;
+        let mut button = Button::new("delete", r"\_/").with_emphasis(ButtonEmphasis::Danger);
+        let mut colors = Vec::new();
+        for (hovered, active) in [(false, false), (true, false), (true, true)] {
+            button.state.hovered = hovered;
+            button.state.active = active;
+            let mut buffer = Buffer::empty(area);
+            button.render_borderless(area, &mut buffer, &theme);
+            let label = buffer
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert_eq!(label.trim(), r"\_/");
+            let cell = &buffer[(1, 0)];
+            assert_eq!(crate::theme::readable_foreground(cell.fg, cell.bg), cell.fg);
+            colors.push((cell.fg, cell.bg));
+        }
+        assert!(colors.windows(2).all(|pair| pair[0] != pair[1]));
+        if capability == ColorCapability::Ansi {
+            assert_eq!(colors[0].0, Color::LightRed);
+            assert_eq!(colors[1].1, Color::Red);
+            assert_eq!(colors[2].1, Color::LightRed);
+        }
+    }
+}
+
+#[test]
 fn focus_fill_changes_background_but_keeps_danger_text() {
     let theme = TundraTheme::default_dark();
     let mut button = Button::new("delete", "Delete")

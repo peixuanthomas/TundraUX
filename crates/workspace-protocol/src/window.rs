@@ -153,6 +153,8 @@ pub struct WindowInit {
     pub image_cell_size: Option<[u16; 2]>,
     #[serde(default)]
     pub text_sizing: bool,
+    #[serde(default)]
+    pub ansi_colors: bool,
 }
 
 impl WindowInit {

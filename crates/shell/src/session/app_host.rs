@@ -94,6 +94,7 @@ struct AppHostSession {
     scripts: script_host::ScriptHosts,
     terminal: Terminal<TestBackend>,
     theme: ui::TundraTheme,
+    color_capability: ui::ColorCapability,
     theme_reloader: UserThemeReloader,
     redraw: RedrawScheduler,
     next_service_sync: Instant,
@@ -258,6 +259,11 @@ impl AppHostSession {
             terminal: Terminal::new(TestBackend::new(terminal_size.0, terminal_size.1))
                 .unwrap_or_else(|error| match error {}),
             theme: ui::TundraTheme::default_dark(),
+            color_capability: if init.ansi_colors {
+                ui::ColorCapability::Ansi
+            } else {
+                ui::ColorCapability::TrueColor
+            },
             theme_reloader: UserThemeReloader::new(storage, now),
             redraw,
             watchdog,
@@ -854,7 +860,10 @@ impl AppHostSession {
             &self.theme,
             self.redraw.frame(now, animation_speed_percent(&self.state)),
             self.redraw.transitions(now),
-            ui::RenderCapabilities::default(),
+            ui::RenderCapabilities {
+                color: self.color_capability,
+                ..ui::RenderCapabilities::default()
+            },
         )
     }
 

@@ -340,6 +340,7 @@ impl Workspace {
             focused: false,
             image_cell_size: self.image_cell_size,
             text_sizing: self.text_sizing,
+            ansi_colors: !platform::terminal_supports_true_color(),
         };
         let requested = Instant::now();
         WorkerConnection::current()
