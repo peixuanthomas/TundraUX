@@ -19,14 +19,19 @@ ui-help-home-move = Move between entries
 
 ui-help-explorer-title = File Explorer
 ui-help-explorer-open = Open selected
-ui-help-explorer-new = New folder or file
+ui-help-explorer-new = New folder / new text file
 ui-help-explorer-rename = Rename
 ui-help-explorer-delete = Delete
 ui-help-explorer-menu = More actions
-ui-help-explorer-clipboard = Copy, cut, paste
+ui-help-explorer-clipboard = Copy, cut, paste. Ctrl/Cmd also works with each key.
 ui-help-explorer-select-all = Select all
 ui-help-explorer-refresh = Refresh
 ui-help-explorer-search = Search
+ui-help-explorer-focus = Move focus between controls
+ui-help-explorer-rows = Move between files or quick locations
+ui-help-explorer-history = Previous / next location
+ui-help-explorer-escape = Cancel the current action or return to the previous location. Cancel a file picker when browsing.
+ui-help-explorer-save = Save from the Save As picker
 
 ui-help-launcher-title = Launcher
 ui-help-launcher-open = Open selected

@@ -1834,12 +1834,11 @@ fn save_picker_keeps_filename_visible_while_browsing_and_saves_to_the_chosen_dir
         assert_eq!(state.active_screen(), ShellScreen::Explorer);
         assert!(state.to_explorer_view_model().overlay.is_none());
         type_text(&mut state, &platform, "chosen.txt");
-        state.apply_input_with_platform(InputEvent::key(InputKey::BackTab), &platform);
+        for _ in 0..3 {
+            state.apply_input_with_platform(InputEvent::key(InputKey::BackTab), &platform);
+        }
         let model = state.to_explorer_view_model();
-        assert_eq!(
-            model.save_picker.unwrap().focus,
-            ui::ExplorerSaveFocus::Browse
-        );
+        assert_eq!(model.focus, ui::ExplorerFocus::Files);
         state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
         let model = state.to_explorer_view_model();
         assert_eq!(Path::new(&model.current_path), folder);
@@ -1858,7 +1857,7 @@ fn save_picker_keeps_filename_visible_while_browsing_and_saves_to_the_chosen_dir
             assert!(area.bottom() <= main.bottom());
             assert!(area.right() <= main.right());
         }
-        let point = (layout.save_button.x + 1, layout.save_button.y + 1);
+        let point = (layout.save_button.x + 1, layout.save_button.y);
         state.apply_input_with_platform(
             InputEvent::mouse_down(PointerButton::Left, point),
             &platform,
@@ -1914,11 +1913,24 @@ fn save_picker_cancel_preserves_the_unsaved_document() {
     let fixture = FixtureRoot::new("save-picker-cancel");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
+    let nested = fixture.path().join("Documents/nested");
+    fs::create_dir(&nested).unwrap();
     let mut state = system_home(&platform);
     open_editor_from_home(&mut state, &platform);
     type_text(&mut state, &platform, "keep this draft");
     state.apply_input_with_platform(ctrl('s'), &platform);
     type_text(&mut state, &platform, "cancelled.txt");
+    for focus in [ui::ExplorerSaveFocus::Save, ui::ExplorerSaveFocus::Cancel] {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Tab), &platform);
+        assert_eq!(
+            state.to_explorer_view_model().focus,
+            ui::ExplorerFocus::SavePicker(focus)
+        );
+    }
+    state.apply_input_with_platform(ctrl('l'), &platform);
+    state.apply_input_with_platform(InputEvent::Paste(nested.display().to_string()), &platform);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    assert!(state.to_explorer_view_model().can_go_back);
     state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     assert!(state.to_editor_view_model().dirty);
@@ -1927,6 +1939,7 @@ fn save_picker_cancel_preserves_the_unsaved_document() {
         ["keep this draft"]
     );
     assert!(!fixture.path().join("Documents/cancelled.txt").exists());
+    assert!(!nested.join("cancelled.txt").exists());
 }
 
 #[test]

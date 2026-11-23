@@ -221,6 +221,14 @@ pub struct AppStartupTimings {
     pub first_draw_us: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BackAction {
+    Cancel,
+    PreviousLocation,
+    PreviousPage,
+    Home,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowFrame {
     pub sequence: u64,

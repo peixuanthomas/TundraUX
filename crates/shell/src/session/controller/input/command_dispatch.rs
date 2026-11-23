@@ -124,13 +124,8 @@ impl ShellSession {
             InputEvent::Paste(_)
                 if self.active_screen() == ShellScreen::Explorer
                     && self.pages.explorer.explorer_input_mode == ExplorerInputMode::Browse
-                    && matches!(
-                        self.pages.explorer.explorer_purpose,
-                        ExplorerPurpose::EditorSaveAs {
-                            focus: ui::ExplorerSaveFocus::Filename,
-                            ..
-                        }
-                    ) =>
+                    && self.pages.explorer.explorer_focus
+                        == ui::ExplorerFocus::SavePicker(ui::ExplorerSaveFocus::Filename) =>
             {
                 (
                     RoutedTarget::Component(ShellComponent::Explorer),
@@ -1023,12 +1018,30 @@ impl ShellSession {
                 );
                 ShellAction::Redraw
             }
-            ShellCommand::ExplorerNextQuickLocation => {
-                self.cycle_explorer_quick_location(true, platform);
+            ShellCommand::ExplorerMoveFocus(reverse) => {
+                self.move_explorer_focus(reverse);
                 ShellAction::Redraw
             }
-            ShellCommand::ExplorerPreviousQuickLocation => {
-                self.cycle_explorer_quick_location(false, platform);
+            ShellCommand::ExplorerActivateFocus => {
+                self.activate_explorer_focus(platform);
+                ShellAction::Redraw
+            }
+            ShellCommand::ExplorerMoveQuickLocation(key) => {
+                self.move_explorer_location_focus(key);
+                ShellAction::Redraw
+            }
+            ShellCommand::ExplorerCancelSelection => {
+                let _ = self.update_explorer_state(|state| {
+                    state.selection_mode = false;
+                    state.clear_selection();
+                });
+                ShellAction::Redraw
+            }
+            ShellCommand::ExplorerClearFilter => {
+                self.cancel_explorer_input();
+                if self.app.explorer_state().is_some_and(|state| !state.query.is_empty()) {
+                    self.apply_explorer_command(ExplorerCommand::Search(String::new()), platform);
+                }
                 ShellAction::Redraw
             }
             ShellCommand::ExplorerNextExtend => {
@@ -1338,7 +1351,7 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::ExplorerCancelDrag => {
-                self.apply_explorer_command(ExplorerCommand::CancelDrag, platform);
+                self.clear_explorer_pointer_capture();
                 ShellAction::Redraw
             }
             ShellCommand::ExplorerScroll(delta) => {

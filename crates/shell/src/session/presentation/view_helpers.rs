@@ -228,6 +228,7 @@ pub(in crate::session) fn explorer_breadcrumb_view_models(
 
 pub(in crate::session) struct ExplorerContextMenuInput {
     pub(in crate::session) anchor: CellPosition,
+    pub(in crate::session) centered: bool,
     pub(in crate::session) selected_count: usize,
     pub(in crate::session) entry_count: usize,
     pub(in crate::session) clipboard_available: bool,
@@ -245,6 +246,7 @@ pub(in crate::session) fn explorer_context_menu_view_model(
 ) -> ui::ExplorerOverlayViewModel {
     let ExplorerContextMenuInput {
         anchor,
+        centered,
         selected_count,
         entry_count,
         clipboard_available,
@@ -260,26 +262,7 @@ pub(in crate::session) fn explorer_context_menu_view_model(
         ui::ExplorerContextMenuItemViewModel {
             id: id.to_string(),
             label: label.to_string(),
-            shortcut: match id {
-                "new-folder" => Some("N"),
-                "new-text" => Some("T"),
-                "add-to-launcher" => Some("A"),
-                "refresh" => Some("F5"),
-                "restore" => Some("R"),
-                "sort" => Some("F6"),
-                "options" => Some("O"),
-                "cut" => Some("X"),
-                "copy" => Some("C"),
-                "paste" => Some("V"),
-                "rename" => Some("F2"),
-                "undo" => Some(ui::ExplorerToolbarAction::Undo.shortcut_label()),
-                "delete" => Some("Del"),
-                "select-all" => Some("Ctrl+A"),
-                "invert-selection" => Some("Ctrl+I"),
-                "clear-selection" => Some("Ctrl+Shift+A"),
-                _ => None,
-            }
-            .map(str::to_string),
+            shortcut: None,
             enabled,
             dangerous,
         }
@@ -319,14 +302,12 @@ pub(in crate::session) fn explorer_context_menu_view_model(
             false,
         )];
         if can_manage_launcher && launcher_eligible_count > 0 {
-            let mut add_to_launcher = item(
+            items.push(item(
                 "add-to-launcher",
                 i18n::tr!("shell-add-to-launcher"),
                 true,
                 false,
-            );
-            add_to_launcher.shortcut = Some("A".to_string());
-            items.push(add_to_launcher);
+            ));
         }
         items.extend([
             item("cut", i18n::tr!("shell-cut"), true, false),
@@ -387,6 +368,17 @@ pub(in crate::session) fn explorer_context_menu_view_model(
             item("options", i18n::tr!("shell-advanced-options"), true, false),
         ]);
     }
+    if centered {
+        if selected_count == 0 {
+            items.push(item("properties", i18n::tr!("shell-properties"), false, false));
+        }
+        items.sort_by_key(|item| match item.id.as_str() {
+            "sort" => 0,
+            "properties" => 1,
+            "options" => 2,
+            _ => 3,
+        });
+    }
     items.extend([
         item(
             "select-all",
@@ -407,11 +399,18 @@ pub(in crate::session) fn explorer_context_menu_view_model(
             false,
         ),
     ]);
-    let selected_index = (!items.is_empty()).then_some(focused_index.min(items.len() - 1));
+    let selected_index = if items.get(focused_index).is_some_and(|item| item.enabled) {
+        Some(focused_index)
+    } else {
+        items.iter().position(|item| item.enabled)
+    };
     ui::ExplorerOverlayViewModel::ContextMenu(ui::ExplorerContextMenuViewModel {
         x: anchor.0,
         y: anchor.1,
-        title: if selected_count > 0 {
+        centered,
+        title: if centered {
+            i18n::tr!("ui-explorer-actions-menu")
+        } else if selected_count > 0 {
             i18n::tr!("shell-selection")
         } else {
             i18n::tr!("shell-explorer")
@@ -449,6 +448,7 @@ pub(in crate::session) fn explorer_sort_menu_view_model(
     ui::ExplorerOverlayViewModel::ContextMenu(ui::ExplorerContextMenuViewModel {
         x: anchor.0,
         y: anchor.1,
+        centered: false,
         title: i18n::tr!("shell-sort-by"),
         items,
         selected_index: Some(focused_index.min(ui::ExplorerSortColumn::ALL.len() - 1)),
@@ -676,28 +676,6 @@ pub(in crate::session) fn explorer_input_prompt(mode: ExplorerInputMode) -> Stri
     }
 }
 
-pub(in crate::session) fn user_home_entries() -> Vec<ui::ShellEntry> {
-    vec![
-        ui::ShellEntry::new(i18n::tr!("shell-explorer"), i18n::tr!("shell-browse-files"))
-            .with_icon_key("explorer"),
-        ui::ShellEntry::new(
-            i18n::tr!("shell-launcher"),
-            i18n::tr!("shell-open-apps-and-commands"),
-        )
-        .with_icon_key("launcher"),
-        ui::ShellEntry::new(
-            i18n::tr!("shell-settings"),
-            i18n::tr!("shell-adjust-tundraux"),
-        )
-        .with_icon_key("settings"),
-        ui::ShellEntry::new(
-            i18n::tr!("shell-system-status"),
-            i18n::tr!("shell-view-storage-and-network-health"),
-        )
-        .with_icon_key("system_status"),
-    ]
-}
-
 pub(in crate::session) fn terminal_flag_labels(flags: ShellTerminalFlags) -> Vec<String> {
     let mut labels = Vec::new();
 
@@ -776,7 +754,6 @@ pub(in crate::session) fn component_message(component: ShellComponent) -> i18n::
         ShellComponent::TopBar => i18n::msg!("shell-component-top-bar"),
         ShellComponent::BackButton => i18n::msg!("shell-component-back-button"),
         ShellComponent::HelpButton => i18n::msg!("shell-component-help-button"),
-        ShellComponent::TasksButton => i18n::msg!("tasks-title"),
         ShellComponent::HelpDialog => i18n::msg!("shell-component-help-dialog"),
         ShellComponent::Home => i18n::msg!("shell-component-home"),
         ShellComponent::ClockButton => i18n::msg!("shell-component-clock-button"),

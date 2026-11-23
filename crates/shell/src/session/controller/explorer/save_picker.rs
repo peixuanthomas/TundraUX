@@ -1,19 +1,7 @@
 use crate::session::*;
-use ui::ExplorerSaveFocus;
+use ui::{ExplorerFocus, ExplorerSaveFocus};
 
 impl ShellSession {
-    pub(in crate::session) fn focus_explorer_save_picker(&mut self, next: ExplorerSaveFocus) {
-        if let ExplorerPurpose::EditorSaveAs { input, focus, .. } =
-            &mut self.pages.explorer.explorer_purpose
-        {
-            *focus = next;
-            input.set_focused(next == ExplorerSaveFocus::Filename);
-            if next != ExplorerSaveFocus::Browse {
-                self.pages.explorer.explorer_input_mode = ExplorerInputMode::Browse;
-            }
-        }
-    }
-
     pub(in crate::session) fn select_explorer_save_filename(&mut self) -> bool {
         let Some(entry) = self
             .app
@@ -41,53 +29,37 @@ impl ShellSession {
         mut event: InputEvent,
         platform: &dyn Platform,
     ) {
-        let ExplorerPurpose::EditorSaveAs { focus, .. } = self.pages.explorer.explorer_purpose
-        else {
+        if !matches!(
+            self.pages.explorer.explorer_purpose,
+            ExplorerPurpose::EditorSaveAs { .. }
+        ) {
             return;
-        };
+        }
+        let focus = self.pages.explorer.explorer_focus;
+        let filename = focus == ExplorerFocus::SavePicker(ExplorerSaveFocus::Filename);
         if let InputEvent::Key(key) = &event {
             if key.phase == InputPhase::Release {
                 return;
             }
-            if !key.has_non_shift_modifier() {
+            if key.phase == InputPhase::Press && key.is_unmodified_action_key() {
                 match key.key {
-                    InputKey::Tab | InputKey::BackTab => {
-                        let order = [
-                            ExplorerSaveFocus::Browse,
-                            ExplorerSaveFocus::Filename,
-                            ExplorerSaveFocus::Save,
-                            ExplorerSaveFocus::Cancel,
-                        ];
-                        let index = order.iter().position(|item| *item == focus).unwrap();
-                        let reverse = key.key == InputKey::BackTab || key.modifiers.shift;
-                        self.focus_explorer_save_picker(
-                            order[(index + if reverse { 3 } else { 1 }) % 4],
-                        );
+                    InputKey::F(10) => {
+                        self.submit_editor_save_as_from_explorer(platform);
                         return;
                     }
-                    InputKey::Escape if key.phase == InputPhase::Press => {
-                        self.close_explorer();
+                    InputKey::Enter if filename => {
+                        self.submit_editor_save_as_from_explorer(platform);
                         return;
                     }
-                    InputKey::F(10) | InputKey::Enter
-                        if key.phase == InputPhase::Press
-                            && (key.key != InputKey::F(10) || !key.modifiers.shift) =>
-                    {
-                        if focus == ExplorerSaveFocus::Cancel && key.key != InputKey::F(10) {
-                            self.close_explorer();
-                        } else {
-                            self.submit_editor_save_as_from_explorer(platform);
-                        }
-                        return;
-                    }
-                    InputKey::Space | InputKey::Char(' ')
-                        if focus != ExplorerSaveFocus::Filename
-                            && key.phase == InputPhase::Press =>
-                    {
-                        if focus == ExplorerSaveFocus::Cancel {
-                            self.close_explorer();
-                        } else if focus == ExplorerSaveFocus::Save {
-                            self.submit_editor_save_as_from_explorer(platform);
+                    InputKey::Enter | InputKey::Space | InputKey::Char(' ') if !filename => {
+                        match focus {
+                            ExplorerFocus::SavePicker(ExplorerSaveFocus::Cancel) => {
+                                self.close_explorer()
+                            }
+                            ExplorerFocus::SavePicker(ExplorerSaveFocus::Save) => {
+                                self.submit_editor_save_as_from_explorer(platform);
+                            }
+                            _ => {}
                         }
                         return;
                     }
@@ -95,7 +67,7 @@ impl ShellSession {
                 }
             }
         }
-        if focus != ExplorerSaveFocus::Filename {
+        if !filename {
             return;
         }
         let layout = ui::explorer_layout(self.touch_main(), &self.to_explorer_view_model());

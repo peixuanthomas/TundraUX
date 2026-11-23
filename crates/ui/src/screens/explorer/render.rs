@@ -4,9 +4,10 @@ use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 
 use super::{
-    ExplorerConflictChoice, ExplorerEntryViewModel, ExplorerLayout, ExplorerLayoutMode,
-    ExplorerOverlayControl, ExplorerOverlayLayout, ExplorerOverlayViewModel,
-    ExplorerSearchViewModel, ExplorerSortColumn, ExplorerViewModel, explorer_layout,
+    ExplorerConflictChoice, ExplorerEntryViewModel, ExplorerFocus, ExplorerLayout,
+    ExplorerLayoutMode, ExplorerOverlayControl, ExplorerOverlayLayout, ExplorerOverlayViewModel,
+    ExplorerSaveFocus, ExplorerSearchViewModel, ExplorerSortColumn, ExplorerToolbarAction,
+    ExplorerToolbarButtonViewModel, ExplorerViewModel, explorer_layout,
 };
 use crate::components::{
     Button, ButtonEmphasis, ComponentTone, DataTable, DialogLayout, List, ListItem, PageAction,
@@ -48,8 +49,8 @@ pub fn render_explorer_content(
         return;
     };
 
-    render_explorer_toolbar(frame, &layout, model, theme);
     Surface::new().render_frame(frame, layout.path_bar, context);
+    render_explorer_toolbar(frame, &layout, model, assets, theme);
     render_explorer_path_bar(frame, &layout, model, &DialogLayout::body_theme(context));
     render_explorer_sidebar(frame, &layout, model, assets, context, theme);
     render_explorer_table(frame, &layout, model, assets, context);
@@ -60,7 +61,7 @@ pub fn render_explorer_content(
             layout.save_name_label.union(layout.save_cancel),
             context,
         );
-        let focused = picker.focus == super::ExplorerSaveFocus::Filename;
+        let focused = model.focus == ExplorerFocus::SavePicker(ExplorerSaveFocus::Filename);
         frame.render_widget(
             Paragraph::new(i18n::tr!("ui-explorer-save-filename")).style(if focused {
                 theme.title_style().fg(theme.accent_color)
@@ -82,20 +83,20 @@ pub fn render_explorer_content(
                 layout.save_button,
                 "explorer.save",
                 i18n::tr!("ui-explorer-save-confirm"),
-                super::ExplorerSaveFocus::Save,
+                ExplorerSaveFocus::Save,
             ),
             (
                 layout.save_cancel,
                 "explorer.save.cancel",
                 i18n::tr!("ui-explorer-save-cancel"),
-                super::ExplorerSaveFocus::Cancel,
+                ExplorerSaveFocus::Cancel,
             ),
         ] {
             let mut button = Button::new(id, label);
-            if focus == super::ExplorerSaveFocus::Save {
-                button = button.with_emphasis(crate::components::ButtonEmphasis::Primary);
+            if focus == ExplorerSaveFocus::Save {
+                button = button.with_emphasis(ButtonEmphasis::Primary);
             }
-            button.set_focused(picker.focus == focus);
+            button.set_focused(model.focus == ExplorerFocus::SavePicker(focus));
             button.render_inline_frame(frame, area, theme);
         }
     }
@@ -105,6 +106,7 @@ fn render_explorer_toolbar(
     frame: &mut Frame<'_>,
     layout: &ExplorerLayout,
     model: &ExplorerViewModel,
+    assets: &RuntimeAsciiAssets,
     theme: &TundraTheme,
 ) {
     for button_layout in &layout.toolbar_buttons {
@@ -116,17 +118,15 @@ fn render_explorer_toolbar(
         else {
             continue;
         };
-        let shortcut = button.action.shortcut_label();
-        let text = if button_layout.show_label {
-            format!("{shortcut} {}", button.label)
+        let text = if ExplorerToolbarAction::PATH_ACTIONS.contains(&button.action) {
+            explorer_icon_line(assets, &button.icon_key)
         } else {
-            shortcut.to_string()
+            explorer_action_label(button, assets)
         };
-        let mut action = Button::new(
-            format!("explorer.toolbar.{:?}", button.action),
-            fit_cell(&text, usize::from(button_layout.area.width)),
-        )
-        .with_latched(button.active);
+        let mut action = Button::new(format!("explorer.toolbar.{:?}", button.action), text)
+            .with_capture_name(&button.label)
+            .with_latched(button.active);
+        action.set_focused(model.focus == ExplorerFocus::Toolbar(button.action) && button.enabled);
         action.set_disabled(!button.enabled);
         action.render_inline_frame(frame, button_layout.area, theme);
     }
@@ -146,12 +146,13 @@ fn render_explorer_path_bar(
             &i18n::tr!("ui-explorer-edit-button"),
             usize::from(layout.address_button.width),
         ),
-        model.address_editing,
+        model.focus == ExplorerFocus::Address && !model.address_editing,
         true,
         theme,
     );
-    if model.address_editing || model.breadcrumbs.is_empty() {
+    if model.address_editing {
         let mut input = TextInput::new("explorer.address.input")
+            .with_capture_name(i18n::tr!("ui-explorer-edit-button"))
             .with_cursor_symbol("_")
             .with_horizontal_scroll(true);
         input.set_value(&model.address_value);
@@ -159,13 +160,12 @@ fn render_explorer_path_bar(
             input.set_cursor(cursor);
         }
         input.set_selection_anchor(model.address_selection_anchor);
-        input.set_focused(model.address_editing);
-        input.state.hovered = model.address_editing;
-        input.render_borderless_frame_with_prefix(
-            frame,
+        input.set_focused(true);
+        input.render_borderless_frame_with_prefix(frame, layout.address_input, theme, "");
+    } else if model.breadcrumbs.is_empty() {
+        frame.render_widget(
+            Paragraph::new(model.address_value.as_str()),
             layout.address_input,
-            theme,
-            if model.address_editing { "> " } else { "" },
         );
     }
     for crumb_layout in &layout.breadcrumbs {
@@ -177,18 +177,17 @@ fn render_explorer_path_bar(
         } else {
             ""
         };
-        render_explorer_button(
-            frame,
-            crumb_layout.area,
+        let mut button = Button::new(
             format!("explorer.breadcrumb.{}", crumb.id),
             fit_cell(
                 &format!("{}{suffix}", crumb.label),
                 usize::from(crumb_layout.area.width),
             ),
-            crumb.drop_target,
-            crumb.enabled,
-            theme,
-        );
+        )
+        .with_current(crumb.drop_target);
+        button.set_focused(model.focus == ExplorerFocus::Breadcrumb(crumb_layout.index));
+        button.set_disabled(!crumb.enabled);
+        button.render_inline_frame(frame, crumb_layout.area, theme);
     }
 
     render_explorer_search(frame, layout.search, model.search.as_ref(), theme);
@@ -230,6 +229,10 @@ fn render_explorer_sidebar(
         let icon = explorer_icon_line(assets, &location.icon_key);
         let label = format!("{icon} {}", location.label);
         let mut button = Button::new(format!("explorer.quick.{}", location_layout.index), label);
+        button.set_focused(
+            model.focus == ExplorerFocus::Sidebar
+                && model.quick_location_focus == Some(location_layout.index),
+        );
         button.set_disabled(!location.enabled);
         SidebarWorkspaceLayout::render_navigation_button(
             frame,
@@ -379,11 +382,15 @@ fn render_explorer_table(
         // File selection persists in mouse mode and can contain several rows;
         // the keyboard cursor alone must not paint an unselected file as selected.
         table.selected = None;
-        table.capture_focused_row = layout.rows.iter().position(|row| {
-            model
-                .entry_presentation(row.index)
-                .is_some_and(|entry| entry.focused)
-        });
+        if model.focus == ExplorerFocus::Files {
+            table.capture_focused_row = layout.rows.iter().position(|row| {
+                model
+                    .entry_presentation(row.index)
+                    .map_or(model.selected_index == Some(row.index), |entry| {
+                        entry.focused
+                    })
+            });
+        }
         table.row_ids = layout
             .rows
             .iter()
@@ -409,14 +416,32 @@ fn render_explorer_table(
     }
 
     if model.entries.is_empty() && layout.table_body.height > 0 {
+        let label = if model.is_trash {
+            i18n::tr!("ui-explorer-trash-is-empty")
+        } else {
+            i18n::tr!("ui-explorer-empty-directory")
+        };
+        let focused = model.focus == ExplorerFocus::Files;
+        let theme = context.compatibility_theme();
+        crate::automation::control(
+            "explorer.table.empty",
+            "status",
+            &label,
+            layout.table_body,
+            crate::components::ComponentState {
+                focused,
+                ..Default::default()
+            },
+            &[],
+        );
         frame.render_widget(
-            Paragraph::new(if model.is_trash {
-                i18n::tr!("ui-explorer-trash-is-empty")
-            } else {
-                i18n::tr!("ui-explorer-empty-directory")
-            })
-            .style(ratatui::style::Style::default().fg(context.theme.muted))
-            .alignment(HorizontalAlignment::Center),
+            Paragraph::new(label)
+                .style(if focused && theme.keyboard_focus_visible() {
+                    theme.title_style().fg(theme.accent_color)
+                } else {
+                    theme.muted_style()
+                })
+                .alignment(HorizontalAlignment::Center),
             layout.table_body,
         );
     }
@@ -435,15 +460,17 @@ pub(super) fn explorer_action_bar(
     model: &ExplorerViewModel,
     mode: ExplorerLayoutMode,
 ) -> PageActionBar {
-    let actions = super::layout::explorer_page_action_buttons(model)
+    let actions: Vec<_> = super::layout::explorer_page_action_buttons(model)
         .into_iter()
         .map(|button| {
             let action = button.action;
-            let page = PageAction::new(
-                format!("toolbar.{action:?}"),
-                format!("{} {}", action.shortcut_label(), button.label),
-            )
-            .disabled(!button.enabled);
+            let label = model.ascii_assets.as_ref().map_or_else(
+                || button.label.clone(),
+                |assets| explorer_action_label(&button, assets),
+            );
+            let page = PageAction::new(format!("toolbar.{action:?}"), label)
+                .disabled(!button.enabled)
+                .latched(button.active);
             if matches!(
                 action,
                 super::ExplorerToolbarAction::Delete | super::ExplorerToolbarAction::DumpTrash
@@ -461,12 +488,7 @@ pub(super) fn explorer_action_bar(
         })
         .collect();
     let mut status = Vec::new();
-    if let Some(error) = &model.error {
-        status.push(PageActionStatus {
-            text: i18n::tr!("ui-explorer-error", error = error),
-            tone: ComponentTone::Danger,
-        });
-    } else if let Some(operation) = &model.operation {
+    if let Some(operation) = &model.operation {
         let text = operation.percent().map_or_else(
             || {
                 i18n::tr!(
@@ -480,6 +502,12 @@ pub(super) fn explorer_action_bar(
         status.push(PageActionStatus {
             text,
             tone: ComponentTone::Accent,
+        });
+    }
+    if let Some(error) = &model.error {
+        status.push(PageActionStatus {
+            text: i18n::tr!("ui-explorer-error", error = error),
+            tone: ComponentTone::Danger,
         });
     } else if model.listing_warning_count > 0 {
         status.push(PageActionStatus {
@@ -504,11 +532,12 @@ pub(super) fn explorer_action_bar(
             selected.then_some(entry)
         })
     {
-        status.push(PageActionStatus {
-            text: entry.name.clone(),
-            tone: ComponentTone::Muted,
-        });
         let mut metadata = Vec::new();
+        if model.is_trash
+            && let Some(message) = &model.message
+        {
+            metadata.push(message.clone());
+        }
         if !mode.shows_all_columns() {
             if let Some(size) = entry.size.as_deref().filter(|size| !size.is_empty()) {
                 metadata.push(i18n::tr!("ui-explorer-entry-size", size = size));
@@ -530,9 +559,31 @@ pub(super) fn explorer_action_bar(
             });
         }
     }
+    let selected = match model.focus {
+        ExplorerFocus::Toolbar(action) => {
+            let id = format!("toolbar.{action:?}");
+            actions
+                .iter()
+                .find(|button| button.enabled && button.id.as_str() == id)
+                .map(|button| button.id.clone())
+        }
+        _ => None,
+    };
     PageActionBar::new("explorer")
         .with_status(status)
         .with_actions(actions)
+        .with_selected(selected)
+}
+
+fn explorer_action_label(
+    button: &ExplorerToolbarButtonViewModel,
+    assets: &RuntimeAsciiAssets,
+) -> String {
+    format!(
+        "{} {}",
+        explorer_icon_line(assets, &button.icon_key),
+        button.label
+    )
 }
 
 fn render_explorer_footer(
@@ -542,7 +593,7 @@ fn render_explorer_footer(
     assets: &RuntimeAsciiAssets,
     context: &crate::RenderContext,
 ) {
-    explorer_action_bar(model, layout.mode).render(frame, layout.footer, context);
+    explorer_action_bar(model, layout.mode).render_layout(frame, &layout.action_bar, context);
     if let (Some(cancel), Some(operation)) = (layout.cancel_operation, model.operation.as_ref()) {
         let icon = explorer_icon_line(assets, "cancel");
         render_explorer_button(
@@ -553,7 +604,7 @@ fn render_explorer_footer(
                 &format!("{icon} {}", operation.cancel_label),
                 usize::from(cancel.width),
             ),
-            true,
+            model.focus == ExplorerFocus::CancelOperation,
             true,
             &context.compatibility_theme(),
         );
@@ -844,42 +895,28 @@ fn render_explorer_search(
     search: Option<&ExplorerSearchViewModel>,
     theme: &TundraTheme,
 ) {
-    let Some(search) = search else {
-        frame.render_widget(
-            Paragraph::new(fit_cell(
-                &i18n::tr!("ui-explorer-search"),
-                usize::from(area.width),
-            ))
-            .alignment(HorizontalAlignment::Left)
-            .style(theme.muted_style()),
-            area,
-        );
-        return;
-    };
-
     let mut input = TextInput::new("explorer.search.input")
+        .with_capture_name(i18n::tr!("ui-explorer-search"))
         .with_horizontal_scroll(true)
-        .with_placeholder(i18n::tr!("ui-explorer-empty"))
-        .with_placeholder_when_focused(true)
         .with_cursor_symbol("_");
-    input.set_value(&search.query);
-    input.set_cursor(search.cursor);
-    input.set_selection_anchor(search.selection_anchor);
-    input.set_focused(search.active);
-    input.state.hovered = search.active;
-
-    let mut input_theme = theme.clone();
-    if !search.active {
-        input_theme.foreground = theme.muted;
+    if let Some(search) = search {
+        input.set_value(&search.query);
+        input.set_cursor(search.cursor);
+        input.set_selection_anchor(search.selection_anchor);
+        input.set_focused(search.active);
     }
     let prefix = i18n::tr!("ui-explorer-search-padded");
-    input.render_borderless_frame_with_prefix(frame, area, &input_theme, &prefix);
+    input.render_borderless_frame_with_prefix(frame, area, theme, &prefix);
 
-    let visible_input_width = terminal_width(&prefix).saturating_add(if search.query.is_empty() {
-        terminal_width(&i18n::tr!("ui-explorer-empty"))
-    } else {
-        terminal_width(&search.query).saturating_add(usize::from(search.active))
-    });
+    let Some(search) = search.filter(|search| !search.query.is_empty()) else {
+        return;
+    };
+    let Some(count) = search.match_count else {
+        return;
+    };
+    let visible_input_width = terminal_width(&prefix)
+        .saturating_add(terminal_width(&search.query))
+        .saturating_add(usize::from(search.active));
     let visible_input_width = visible_input_width.min(usize::from(area.width));
     let suffix_x = area
         .x
@@ -891,7 +928,7 @@ fn render_explorer_search(
         area.height,
     );
     frame.render_widget(
-        Paragraph::new(explorer_search_suffix(search))
+        Paragraph::new(i18n::tr!("ui-explorer-filter-matches", count = count))
             .alignment(HorizontalAlignment::Left)
             .style(if search.active {
                 theme.title_style()

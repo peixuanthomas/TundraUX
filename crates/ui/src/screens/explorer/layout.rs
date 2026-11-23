@@ -39,7 +39,6 @@ impl ExplorerLayoutMode {
 pub struct ExplorerToolbarButtonLayout {
     pub action: ExplorerToolbarAction,
     pub area: Rect,
-    pub show_label: bool,
     pub enabled: bool,
 }
 
@@ -122,7 +121,6 @@ pub struct ExplorerLayout {
     pub save_cancel: Rect,
     pub mode: ExplorerLayoutMode,
     pub panel: Rect,
-    pub toolbar: Rect,
     pub toolbar_buttons: Vec<ExplorerToolbarButtonLayout>,
     pub page_actions: Vec<ExplorerToolbarButtonLayout>,
     pub action_bar: crate::components::PageActionBarLayout,
@@ -151,6 +149,59 @@ pub struct ExplorerLayout {
 }
 
 impl ExplorerLayout {
+    pub fn focus_targets(&self, model: &ExplorerViewModel) -> Vec<(ExplorerFocus, Rect)> {
+        let mut targets = self
+            .toolbar_buttons
+            .iter()
+            .chain(&self.page_actions)
+            .filter(|button| button.enabled)
+            .map(|button| (ExplorerFocus::Toolbar(button.action), button.area))
+            .collect::<Vec<_>>();
+        targets.extend(self.breadcrumbs.iter().filter_map(|crumb| {
+            model.breadcrumbs[crumb.index]
+                .enabled
+                .then_some((ExplorerFocus::Breadcrumb(crumb.index), crumb.area))
+        }));
+        let address = if model.address_editing {
+            self.address_input
+        } else {
+            self.address_button
+        };
+        targets.extend([
+            (ExplorerFocus::Address, address),
+            (ExplorerFocus::Search, self.search),
+            (ExplorerFocus::Files, self.table_body),
+            (
+                ExplorerFocus::SavePicker(ExplorerSaveFocus::Filename),
+                self.save_name,
+            ),
+            (
+                ExplorerFocus::SavePicker(ExplorerSaveFocus::Save),
+                self.save_button,
+            ),
+            (
+                ExplorerFocus::SavePicker(ExplorerSaveFocus::Cancel),
+                self.save_cancel,
+            ),
+        ]);
+        if let (Some(sidebar), true) = (
+            self.sidebar,
+            model
+                .quick_locations
+                .iter()
+                .any(|location| location.enabled),
+        ) && self.quick_location_visible_capacity > 0
+        {
+            targets.push((ExplorerFocus::Sidebar, sidebar));
+        }
+        if let Some(cancel) = self.cancel_operation {
+            targets.push((ExplorerFocus::CancelOperation, cancel));
+        }
+        targets.retain(|(_, area)| !area.is_empty());
+        targets.sort_by_key(|(_, area)| (area.y, area.x));
+        targets
+    }
+
     pub fn hit_test(&self, x: u16, y: u16) -> Option<ExplorerHitTarget> {
         if let Some(overlay) = &self.overlay {
             if let Some(control) = overlay
@@ -266,7 +317,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
     inner.x += side;
     inner.width -= side * 2;
     let (save_name_label, save_name, save_button, save_cancel) = if model.save_picker.is_some() {
-        let height = 3.min(inner.height);
+        let height = inner.height.min(1);
         inner.height = inner.height.saturating_sub(height);
         let row = Rect::new(inner.x, inner.bottom(), inner.width, height);
         let cancel_width =
@@ -287,12 +338,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         );
         let label_width = (terminal_width(&i18n::tr!("ui-explorer-save-filename")) as u16 + 1)
             .min(save.x.saturating_sub(row.x));
-        let label = Rect::new(
-            row.x,
-            row.y + u16::from(height > 1),
-            label_width,
-            u16::from(height > 0),
-        );
+        let label = Rect::new(row.x, row.y, label_width, u16::from(height > 0));
         let input = Rect::new(
             label.right(),
             label.y,
@@ -308,14 +354,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
             Rect::default(),
         )
     };
-    let toolbar_rows = explorer_toolbar_rows(inner.width, model);
-    let mut toolbar = Rect::new(
-        inner.x,
-        inner.y,
-        inner.width,
-        toolbar_rows.min(inner.height.saturating_sub(3).max(1)),
-    );
-    let remaining_height = inner.height.saturating_sub(toolbar.height + 2);
+    let remaining_height = inner.height.saturating_sub(4);
     let bar = super::render::explorer_action_bar(model, mode);
     let footer_height = bar.height(inner.width).min(remaining_height);
     let footer = Rect::new(
@@ -324,10 +363,25 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         inner.width,
         footer_height,
     );
-    toolbar.y = inner.y.saturating_add(2).min(inner.bottom());
     let path_bar = line_in_rect(inner, inner.y);
-    let address_button_width =
-        usize_to_u16(terminal_width(&i18n::tr!("ui-explorer-edit-button"))).min(path_bar.width);
+    let mut toolbar_buttons = Vec::new();
+    let mut address_x = path_bar.x;
+    for action in ExplorerToolbarAction::PATH_ACTIONS {
+        if let Some(button) = model.toolbar.buttons.iter().find(|b| b.action == action) {
+            let width = path_bar.right().saturating_sub(address_x).min(3);
+            toolbar_buttons.push(ExplorerToolbarButtonLayout {
+                action,
+                area: Rect::new(address_x, path_bar.y, width, path_bar.height),
+                enabled: button.enabled,
+            });
+            address_x = address_x
+                .saturating_add(width)
+                .saturating_add(1)
+                .min(path_bar.right());
+        }
+    }
+    let address_button_width = (i18n::tr!("ui-explorer-edit-button").cell_width() + 2)
+        .min(path_bar.right().saturating_sub(address_x));
     let address_button = Rect::new(
         path_bar.right().saturating_sub(address_button_width),
         path_bar.y,
@@ -335,9 +389,9 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         path_bar.height,
     );
     let address_input = Rect::new(
-        path_bar.x,
+        address_x,
         path_bar.y,
-        path_bar.width.saturating_sub(address_button_width + 1),
+        address_button.x.saturating_sub(address_x.saturating_add(1)),
         path_bar.height,
     );
     let breadcrumbs = if model.address_editing {
@@ -350,38 +404,25 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         .buttons
         .iter()
         .find(|b| b.action == ExplorerToolbarAction::Refresh)
-        .map_or(0, |b| {
-            (b.label.cell_width() + b.action.shortcut_label().cell_width() + 3).min(inner.width)
-        });
+        .map_or(0, |b| (b.label.cell_width() + 4).min(inner.width));
     let search_x = inner
         .x
         .saturating_add(refresh_width)
-        .saturating_add(1)
+        .saturating_add(u16::from(refresh_width > 0))
         .min(inner.right());
+    let search_row = line_in_rect(inner, path_bar.bottom());
     let search = Rect::new(
         search_x,
-        path_bar.bottom(),
+        search_row.y,
         inner.right().saturating_sub(search_x),
-        u16::from(inner.height > 0),
+        search_row.height,
     );
     let body = Rect::new(
         inner.x,
-        toolbar.bottom(),
+        search.bottom(),
         inner.width,
-        footer.y.saturating_sub(toolbar.bottom()),
+        footer.y.saturating_sub(search.bottom()),
     );
-    let mut toolbar_buttons = explorer_toolbar_button_layouts(toolbar, model, mode);
-    for y in toolbar.y..toolbar.bottom() {
-        let right = toolbar_buttons
-            .iter()
-            .filter(|b| b.area.y == y)
-            .map(|b| b.area.right())
-            .max()
-            .unwrap_or(toolbar.right());
-        for button in toolbar_buttons.iter_mut().filter(|b| b.area.y == y) {
-            button.area.x += toolbar.right().saturating_sub(right);
-        }
-    }
     if let Some(button) = model
         .toolbar
         .buttons
@@ -390,14 +431,7 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
     {
         toolbar_buttons.push(ExplorerToolbarButtonLayout {
             action: button.action,
-            area: Rect::new(
-                inner.x,
-                search.y,
-                (button.label.cell_width() + button.action.shortcut_label().cell_width() + 3)
-                    .min(inner.width),
-                u16::from(inner.height > 0),
-            ),
-            show_label: true,
+            area: Rect::new(inner.x, search.y, refresh_width, search.height),
             enabled: button.enabled,
         });
     }
@@ -515,25 +549,18 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         mode,
     );
 
-    let cancel_operation = model.operation.as_ref().and_then(|operation| {
-        if !operation.cancellable || footer.width == 0 || footer.height == 0 {
-            return None;
-        }
-        let desired = operation
-            .cancel_label
-            .cell_width()
-            .saturating_add(4)
-            .min(footer.width);
-        Some(Rect::new(
-            footer
-                .x
-                .saturating_add(footer.width.saturating_sub(desired)),
-            footer.y,
-            desired,
-            1,
-        ))
-    });
-    let action_bar = bar.layout(footer);
+    let mut action_bar = bar.layout(footer);
+    let cancel_operation = model
+        .operation
+        .as_ref()
+        .filter(|operation| operation.cancellable)
+        .and_then(|operation| {
+            let status = action_bar.status.first_mut()?;
+            let width = (operation.cancel_label.cell_width() + 4).min(status.width);
+            let button = Rect::new(status.right() - width, status.y, width, 1);
+            status.width = status.width.saturating_sub(width + 1);
+            Some(button)
+        });
     let page_buttons = explorer_page_action_buttons(model);
     let page_actions = action_bar
         .actions
@@ -541,7 +568,6 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         .map(|action| ExplorerToolbarButtonLayout {
             action: page_buttons[action.index].action,
             area: action.area,
-            show_label: true,
             enabled: action.enabled,
         })
         .collect();
@@ -555,7 +581,6 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         save_cancel,
         mode,
         panel,
-        toolbar,
         toolbar_buttons,
         page_actions,
         action_bar,
@@ -593,9 +618,13 @@ fn explorer_quick_location_visible_start(model: &ExplorerViewModel, capacity: us
         return offset.min(max_start);
     }
     model
-        .quick_locations
-        .iter()
-        .position(|location| location.current)
+        .quick_location_focus
+        .or_else(|| {
+            model
+                .quick_locations
+                .iter()
+                .position(|location| location.current)
+        })
         .map(|current| current.saturating_add(1).saturating_sub(capacity))
         .unwrap_or_default()
         .min(max_start)
@@ -608,79 +637,6 @@ pub fn explorer_hit_test(
     layout.hit_test(coordinates.0, coordinates.1)
 }
 
-fn explorer_toolbar_rows(width: u16, model: &ExplorerViewModel) -> u16 {
-    if width == 0 || model.toolbar.buttons.is_empty() {
-        return 0;
-    }
-    let mut rows = 1u16;
-    let mut used = 0u16;
-    for button in model.toolbar.buttons.iter().filter(|b| {
-        matches!(
-            b.action,
-            ExplorerToolbarAction::Back
-                | ExplorerToolbarAction::Forward
-                | ExplorerToolbarAction::Up
-        )
-    }) {
-        let length = button
-            .label
-            .cell_width()
-            .saturating_add(button.action.shortcut_label().cell_width())
-            .saturating_add(3)
-            .min(width);
-        if used > 0 && used.saturating_add(length) > width {
-            rows = rows.saturating_add(1);
-            used = 0;
-        }
-        used = used.saturating_add(length).saturating_add(1);
-    }
-    rows
-}
-
-fn explorer_toolbar_button_layouts(
-    area: Rect,
-    model: &ExplorerViewModel,
-    _mode: ExplorerLayoutMode,
-) -> Vec<ExplorerToolbarButtonLayout> {
-    let mut x = area.x;
-    let mut y = area.y;
-    model
-        .toolbar
-        .buttons
-        .iter()
-        .filter(|b| {
-            matches!(
-                b.action,
-                ExplorerToolbarAction::Back
-                    | ExplorerToolbarAction::Forward
-                    | ExplorerToolbarAction::Up
-            )
-        })
-        .filter_map(|button| {
-            let width = button
-                .label
-                .cell_width()
-                .saturating_add(button.action.shortcut_label().cell_width())
-                .saturating_add(3)
-                .min(area.width);
-            if x > area.x && x.saturating_add(width) > area.right() {
-                x = area.x;
-                y = y.saturating_add(1);
-            }
-            if width == 0 || y >= area.bottom() {
-                return None;
-            }
-            let layout = ExplorerToolbarButtonLayout {
-                action: button.action,
-                area: Rect::new(x, y, width, 1),
-                show_label: true,
-                enabled: button.enabled,
-            };
-            x = x.saturating_add(width).saturating_add(1);
-            Some(layout)
-        })
-        .collect()
-}
 fn explorer_breadcrumb_layouts(
     area: Rect,
     model: &ExplorerViewModel,
@@ -792,13 +748,17 @@ fn explorer_overlay_layout(area: Rect, model: &ExplorerViewModel) -> Option<Expl
             let height = usize_to_u16(menu.items.len())
                 .saturating_add(5)
                 .min(area.height);
-            let x = menu
-                .x
-                .min(area.x.saturating_add(area.width.saturating_sub(width)));
-            let y = menu
-                .y
-                .min(area.y.saturating_add(area.height.saturating_sub(height)));
-            let dialog = Rect::new(x, y, width.min(area.width), height);
+            let dialog = if menu.centered {
+                centered_rect(area, width, height)
+            } else {
+                let x = menu
+                    .x
+                    .clamp(area.x, area.right().saturating_sub(width).max(area.x));
+                let y = menu
+                    .y
+                    .clamp(area.y, area.bottom().saturating_sub(height).max(area.y));
+                Rect::new(x, y, width.min(area.width), height)
+            };
             let content = explorer_overlay_chrome(dialog, overlay).body;
             let visible_count = usize::from(content.height);
             let first = menu

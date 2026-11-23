@@ -56,12 +56,7 @@ pub enum ExplorerToolbarAction {
 }
 
 impl ExplorerToolbarAction {
-    pub const fn is_page_action(self) -> bool {
-        matches!(
-            self,
-            Self::Open | Self::New | Self::SelectionMode | Self::Delete | Self::Menu
-        )
-    }
+    pub const PATH_ACTIONS: [Self; 3] = [Self::Back, Self::Up, Self::Forward];
 
     pub const ALL: [Self; 18] = [
         Self::SelectionMode,
@@ -103,11 +98,12 @@ impl ExplorerToolbarAction {
         Self::Options,
     ];
 
-    pub const TRASH: [Self; 9] = [
+    pub const TRASH: [Self; 10] = [
         Self::SelectionMode,
         Self::Menu,
         Self::Back,
         Self::Forward,
+        Self::Up,
         Self::Refresh,
         Self::Restore,
         Self::DumpTrash,
@@ -117,7 +113,7 @@ impl ExplorerToolbarAction {
 
     pub fn label(self) -> String {
         match self {
-            Self::SelectionMode => i18n::tr!("selection-start"),
+            Self::SelectionMode => i18n::tr!("ui-explorer-select"),
             Self::Open => i18n::tr!("ui-explorer-open-selected"),
             Self::Menu => i18n::tr!("ui-explorer-actions-menu"),
             Self::Back => i18n::tr!("ui-explorer-back"),
@@ -129,7 +125,7 @@ impl ExplorerToolbarAction {
             Self::Copy => i18n::tr!("ui-explorer-copy"),
             Self::Paste => i18n::tr!("ui-explorer-paste"),
             Self::Rename => i18n::tr!("ui-explorer-rename"),
-            Self::Undo => i18n::tr!("ui-explorer-undo-move"),
+            Self::Undo => i18n::tr!("ui-explorer-undo"),
             Self::Delete => i18n::tr!("ui-explorer-delete"),
             Self::Restore => i18n::tr!("ui-explorer-restore"),
             Self::DumpTrash => i18n::tr!("ui-explorer-dump-trash"),
@@ -265,6 +261,7 @@ impl ExplorerToolbarViewModel {
                     let enabled = match action {
                         ExplorerToolbarAction::Back => can_go_back,
                         ExplorerToolbarAction::Forward => can_go_forward,
+                        ExplorerToolbarAction::Up => false,
                         ExplorerToolbarAction::Restore => can_restore,
                         ExplorerToolbarAction::DumpTrash => can_dump,
                         _ => true,
@@ -446,6 +443,7 @@ pub struct ExplorerContextMenuItemViewModel {
 pub struct ExplorerContextMenuViewModel {
     pub x: u16,
     pub y: u16,
+    pub centered: bool,
     pub title: String,
     pub items: Vec<ExplorerContextMenuItemViewModel>,
     pub selected_index: Option<usize>,
@@ -588,22 +586,34 @@ impl ExplorerSearchViewModel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplorerSaveFocus {
-    Browse,
     Filename,
     Save,
     Cancel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExplorerFocus {
+    Toolbar(ExplorerToolbarAction),
+    Breadcrumb(usize),
+    Address,
+    Search,
+    Sidebar,
+    #[default]
+    Files,
+    CancelOperation,
+    SavePicker(ExplorerSaveFocus),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerSavePickerViewModel {
     pub input: crate::components::TextInput,
-    pub focus: ExplorerSaveFocus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerViewModel {
     pub browse_title_id: Option<&'static str>,
     pub save_picker: Option<ExplorerSavePickerViewModel>,
+    pub focus: ExplorerFocus,
     pub current_path: String,
     pub address_value: String,
     pub address_editing: bool,
@@ -620,6 +630,7 @@ pub struct ExplorerViewModel {
     pub entry_presentations: Vec<ExplorerEntryPresentationViewModel>,
     pub toolbar: ExplorerToolbarViewModel,
     pub quick_locations: Vec<ExplorerQuickLocationViewModel>,
+    pub quick_location_focus: Option<usize>,
     pub quick_location_viewport_offset: Option<usize>,
     pub breadcrumbs: Vec<ExplorerBreadcrumbViewModel>,
     pub sort_column: ExplorerSortColumn,
@@ -673,6 +684,7 @@ impl ExplorerViewModel {
         Self {
             browse_title_id: Some(i18n::ids::SHELL_EXPLORER),
             save_picker: None,
+            focus: ExplorerFocus::default(),
             address_value: current_path.clone(),
             current_path,
             address_editing: false,
@@ -689,6 +701,7 @@ impl ExplorerViewModel {
             entry_presentations: Vec::new(),
             toolbar: ExplorerToolbarViewModel::standard(false, false),
             quick_locations: Vec::new(),
+            quick_location_focus: None,
             quick_location_viewport_offset: None,
             breadcrumbs: Vec::new(),
             sort_column: ExplorerSortColumn::Name,

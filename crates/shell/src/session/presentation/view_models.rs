@@ -1547,14 +1547,10 @@ impl ShellSession {
         );
         model.browse_title_id = browse_title_id;
         model.is_trash = is_trash;
-        if let ExplorerPurpose::EditorSaveAs { input, focus, .. } = purpose {
+        model.focus = self.pages.explorer.explorer_focus;
+        if let ExplorerPurpose::EditorSaveAs { input, .. } = purpose {
             model.save_picker = Some(ui::ExplorerSavePickerViewModel {
                 input: input.clone(),
-                focus: if self.pages.explorer.explorer_input_mode == ExplorerInputMode::Browse {
-                    *focus
-                } else {
-                    ui::ExplorerSaveFocus::Browse
-                },
             });
         }
         model.quick_location_viewport_offset = self.pages.explorer.explorer_locations_scroll;
@@ -1631,6 +1627,13 @@ impl ShellSession {
                 model
             })
             .collect();
+        if model.focus == ui::ExplorerFocus::Sidebar {
+            let focused = self.pages.explorer.explorer_location_focus.as_deref();
+            model.quick_location_focus = model.quick_locations.iter()
+                .position(|location| location.enabled && Some(location.id.as_str()) == focused)
+                .or_else(|| model.quick_locations.iter().position(|location| location.enabled && location.current))
+                .or_else(|| model.quick_locations.iter().position(|location| location.enabled));
+        }
         model.breadcrumbs = if is_trash {
             Vec::new()
         } else {
@@ -1664,17 +1667,16 @@ impl ShellSession {
         }
         for button in &mut model.toolbar.buttons {
             if button.action == ui::ExplorerToolbarAction::SelectionMode {
-                button.label = i18n::tr!(if state.selection_mode {
-                    "selection-finish"
-                } else {
-                    "selection-start"
-                });
+                if state.selection_mode {
+                    button.label = i18n::tr!("ui-explorer-select-done");
+                }
                 button.active = state.selection_mode;
             }
             button.enabled = match button.action {
                 ui::ExplorerToolbarAction::Back => !state.back_history.is_empty(),
                 ui::ExplorerToolbarAction::Forward => !state.forward_history.is_empty(),
                 ui::ExplorerToolbarAction::Up => !is_trash && state.current_path.parent().is_some(),
+                ui::ExplorerToolbarAction::Open => !is_trash && model.selected_count == 1,
                 ui::ExplorerToolbarAction::New => !is_trash && !busy,
                 ui::ExplorerToolbarAction::Cut
                 | ui::ExplorerToolbarAction::Copy
@@ -1860,9 +1862,15 @@ impl ShellSession {
             ))
         } else if let Some(overlay_mode) = self.pages.explorer.explorer_overlay_mode {
             Some(match overlay_mode {
-                ExplorerOverlayMode::ContextMenu { anchor } => {
+                ExplorerOverlayMode::ContextMenu { .. } | ExplorerOverlayMode::MoreActions => {
+                    let (anchor, centered) = if let ExplorerOverlayMode::ContextMenu { anchor } = overlay_mode {
+                        (anchor, false)
+                    } else {
+                        ((0, 0), true)
+                    };
                     explorer_context_menu_view_model(ExplorerContextMenuInput {
                         anchor,
+                        centered,
                         selected_count: model.selected_count,
                         entry_count: state.entries.len(),
                         clipboard_available: state.clipboard.is_some(),

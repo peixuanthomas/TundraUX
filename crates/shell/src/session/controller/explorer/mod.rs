@@ -1,3 +1,4 @@
+mod focus;
 mod input;
 mod save_picker;
 pub(in crate::session) mod tasks;
@@ -428,17 +429,6 @@ impl ShellSession {
         self.resolve_page_alert(EXPLORER_ALERT_KEY);
     }
 
-    pub(in crate::session) fn cycle_explorer_quick_location(
-        &mut self,
-        forward: bool,
-        platform: &dyn Platform,
-    ) {
-        let model = self.to_explorer_view_model();
-        if let Some(index) = explorer_quick_location_index(&model, forward) {
-            self.activate_explorer_quick_location(index, platform);
-        }
-    }
-
     fn activate_explorer_quick_location(&mut self, index: usize, platform: &dyn Platform) {
         self.pages.explorer.explorer_locations_scroll = None;
         let model = self.to_explorer_view_model();
@@ -450,6 +440,14 @@ impl ShellSession {
             return;
         };
         self.apply_explorer_command(command, platform);
+    }
+
+    fn activate_explorer_breadcrumb(&mut self, index: usize, platform: &dyn Platform) {
+        let model = self.to_explorer_view_model();
+        if let Some(crumb) = model.breadcrumbs.get(index).filter(|crumb| crumb.enabled) {
+            let path = std::path::PathBuf::from(&crumb.path);
+            self.apply_explorer_command(ExplorerCommand::Navigate(path), platform);
+        }
     }
 
     pub(in crate::session) fn refresh_explorers_containing(
@@ -505,15 +503,6 @@ impl ShellSession {
         ) {
             if matches!(command, ExplorerCommand::NavigateTrash) {
                 return;
-            }
-            if matches!(
-                command,
-                ExplorerCommand::Navigate(_)
-                    | ExplorerCommand::OpenParent
-                    | ExplorerCommand::OpenBack
-                    | ExplorerCommand::OpenForward
-            ) {
-                self.focus_explorer_save_picker(ui::ExplorerSaveFocus::Browse);
             }
         }
         if matches!(command, ExplorerCommand::OpenSelected) && self.select_explorer_save_filename()
@@ -845,7 +834,19 @@ impl ShellSession {
         }
     }
     pub(in crate::session) fn begin_explorer_input(&mut self, mode: ExplorerInputMode) {
-        self.focus_explorer_save_picker(ui::ExplorerSaveFocus::Browse);
+        self.prepare_explorer_input(mode);
+        let _ = self.update_explorer_state(|state| {
+            state.error = None;
+        });
+        self.notify_status(explorer_input_prompt(mode));
+    }
+
+    fn prepare_explorer_input(&mut self, mode: ExplorerInputMode) {
+        match mode {
+            ExplorerInputMode::Address => self.set_explorer_focus(ui::ExplorerFocus::Address),
+            ExplorerInputMode::Search => self.set_explorer_focus(ui::ExplorerFocus::Search),
+            _ => {}
+        }
         self.pages.explorer.explorer_overlay_selection = 0;
         self.pages.explorer.explorer_input_mode = mode;
         self.pages.explorer.explorer_input = match mode {
@@ -860,8 +861,12 @@ impl ShellSession {
                 .and_then(|state| state.single_selected_entry())
                 .map(|entry| entry.name.clone())
                 .unwrap_or_default(),
+            ExplorerInputMode::Search => self
+                .app
+                .explorer_state()
+                .map(|state| state.query.clone())
+                .unwrap_or_default(),
             ExplorerInputMode::Browse
-            | ExplorerInputMode::Search
             | ExplorerInputMode::NewFolder
             | ExplorerInputMode::NewTextFile
             | ExplorerInputMode::RestoreDestination => String::new(),
@@ -885,10 +890,6 @@ impl ShellSession {
             self.pages.explorer.explorer_address_cursor = basename.chars().count();
             self.pages.explorer.explorer_address_selection_anchor = Some(0);
         }
-        let _ = self.update_explorer_state(|state| {
-            state.error = None;
-        });
-        self.notify_status(explorer_input_prompt(mode));
     }
 
     pub(in crate::session) fn append_explorer_char(
@@ -1033,9 +1034,14 @@ impl ShellSession {
         {
             return;
         }
-        self.pages.explorer.explorer_input_mode = ExplorerInputMode::Browse;
-        self.pages.explorer.explorer_input.clear();
-        self.pages.explorer.explorer_input_replace_all = false;
+        if matches!(
+            self.pages.explorer.explorer_input_mode,
+            ExplorerInputMode::Address | ExplorerInputMode::Search
+        ) {
+            self.set_explorer_focus(ui::ExplorerFocus::Files);
+        } else {
+            self.finish_explorer_input();
+        }
     }
 
     pub(in crate::session) fn restore_selected_explorer_item(&mut self, platform: &dyn Platform) {
@@ -1066,10 +1072,21 @@ impl ShellSession {
             self.notify_status(i18n::LocalizedText::from(i18n::msg!("shell-cancelled")));
             return;
         }
+        if matches!(
+            self.pages.explorer.explorer_input_mode,
+            ExplorerInputMode::Address | ExplorerInputMode::Search
+        ) {
+            self.set_explorer_focus(ui::ExplorerFocus::Files);
+        } else {
+            self.finish_explorer_input();
+        }
+        self.notify_status(i18n::LocalizedText::from(i18n::msg!("shell-explorer")));
+    }
+
+    fn finish_explorer_input(&mut self) {
         self.pages.explorer.explorer_input_mode = ExplorerInputMode::Browse;
         self.pages.explorer.explorer_input.clear();
         self.pages.explorer.explorer_input_replace_all = false;
-        self.notify_status(i18n::LocalizedText::from(i18n::msg!("shell-explorer")));
     }
 
     pub(in crate::session) fn select_explorer_at(
@@ -1100,7 +1117,7 @@ impl ShellSession {
         }
         let index = match hit_target {
             ui::ExplorerHitTarget::SavePicker(focus) => {
-                self.focus_explorer_save_picker(focus);
+                self.set_explorer_focus(ui::ExplorerFocus::SavePicker(focus));
                 if focus == ui::ExplorerSaveFocus::Filename {
                     self.handle_explorer_save_picker_input(
                         InputEvent::mouse_down(PointerButton::Left, coordinates),
@@ -1116,6 +1133,7 @@ impl ShellSession {
             }
             ui::ExplorerHitTarget::Entry(index) => index,
             ui::ExplorerHitTarget::Toolbar(action) | ui::ExplorerHitTarget::PageAction(action) => {
+                self.set_explorer_focus(ui::ExplorerFocus::Toolbar(action));
                 self.activate_explorer_toolbar(action, coordinates, platform);
                 return;
             }
@@ -1124,22 +1142,18 @@ impl ShellSession {
                 return;
             }
             ui::ExplorerHitTarget::Breadcrumb(index) => {
-                let destination = self
-                    .to_explorer_view_model()
-                    .breadcrumbs
-                    .get(index)
-                    .filter(|breadcrumb| breadcrumb.enabled)
-                    .map(|breadcrumb| std::path::PathBuf::from(&breadcrumb.path));
-                if let Some(destination) = destination {
-                    self.apply_explorer_command(ExplorerCommand::Navigate(destination), platform);
-                }
+                self.set_explorer_focus(ui::ExplorerFocus::Breadcrumb(index));
+                self.activate_explorer_breadcrumb(index, platform);
                 return;
             }
             ui::ExplorerHitTarget::QuickLocation(index) => {
+                self.set_explorer_focus(ui::ExplorerFocus::Sidebar);
+                self.remember_explorer_location(index);
                 self.activate_explorer_quick_location(index, platform);
                 return;
             }
             ui::ExplorerHitTarget::Column(column) => {
+                self.set_explorer_focus(ui::ExplorerFocus::Files);
                 self.apply_explorer_command(
                     ExplorerCommand::SetSort(explorer_sort_field(column)),
                     platform,
@@ -1151,6 +1165,7 @@ impl ShellSession {
                 return;
             }
             ui::ExplorerHitTarget::CancelOperation => {
+                self.set_explorer_focus(ui::ExplorerFocus::CancelOperation);
                 self.apply_explorer_command(ExplorerCommand::CancelOperation, platform);
                 return;
             }
@@ -1159,6 +1174,7 @@ impl ShellSession {
                 return;
             }
             ui::ExplorerHitTarget::EmptyTable => {
+                self.set_explorer_focus(ui::ExplorerFocus::Files);
                 let _ = self.update_explorer_state(|state| {
                     state.clear_selection();
                 });
@@ -1170,7 +1186,7 @@ impl ShellSession {
             }
             ui::ExplorerHitTarget::OverlaySurface => return,
         };
-        self.focus_explorer_save_picker(ui::ExplorerSaveFocus::Browse);
+        self.set_explorer_focus(ui::ExplorerFocus::Files);
         let selecting = self
             .app
             .explorer_state()
@@ -1241,7 +1257,9 @@ impl ShellSession {
             ExplorerToolbarAction::Open => {
                 self.apply_explorer_command(ExplorerCommand::OpenSelected, platform)
             }
-            ExplorerToolbarAction::Menu => self.open_explorer_keyboard_context_menu(),
+            ExplorerToolbarAction::Menu => {
+                self.open_explorer_popup(ExplorerOverlayMode::MoreActions, anchor)
+            }
             ExplorerToolbarAction::Back => {
                 self.apply_explorer_command(ExplorerCommand::OpenBack, platform)
             }
@@ -1319,7 +1337,8 @@ impl ShellSession {
                 let anchor = match self.pages.explorer.explorer_overlay_mode {
                     Some(ExplorerOverlayMode::ContextMenu { anchor })
                     | Some(ExplorerOverlayMode::Sort { anchor }) => anchor,
-                    Some(ExplorerOverlayMode::Options)
+                    Some(ExplorerOverlayMode::MoreActions)
+                    | Some(ExplorerOverlayMode::Options)
                     | Some(ExplorerOverlayMode::Properties)
                     | None => (0, 0),
                 };
@@ -1534,6 +1553,7 @@ impl ShellSession {
                 })
                 .unwrap_or(0),
             ExplorerOverlayMode::ContextMenu { .. }
+            | ExplorerOverlayMode::MoreActions
             | ExplorerOverlayMode::Options
             | ExplorerOverlayMode::Properties => 0,
         };
@@ -1556,7 +1576,31 @@ impl ShellSession {
 
     pub(in crate::session) fn move_explorer_overlay_selection(&mut self, delta: isize) {
         let count = match self.to_explorer_view_model().overlay {
-            Some(ui::ExplorerOverlayViewModel::ContextMenu(menu)) => menu.items.len(),
+            Some(ui::ExplorerOverlayViewModel::ContextMenu(menu)) => {
+                let current = menu.selected_index.unwrap_or(0);
+                let enabled = menu
+                    .items
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, item)| item.enabled);
+                let next = if delta < 0 {
+                    enabled
+                        .clone()
+                        .rev()
+                        .find(|(index, _)| *index < current)
+                        .or_else(|| enabled.last())
+                } else {
+                    enabled
+                        .clone()
+                        .find(|(index, _)| *index > current)
+                        .or_else(|| enabled.into_iter().next())
+                };
+                if let Some((index, _)) = next {
+                    self.pages.explorer.explorer_overlay_selection = index;
+                    self.refresh_hit_map();
+                }
+                return;
+            }
             Some(ui::ExplorerOverlayViewModel::Options(options)) => options.options.len() + 1,
             Some(ui::ExplorerOverlayViewModel::Name(_)) => 3,
             Some(ui::ExplorerOverlayViewModel::Conflict(conflict)) => {
@@ -1593,14 +1637,8 @@ impl ShellSession {
     ) {
         let control = match self.to_explorer_view_model().overlay {
             Some(ui::ExplorerOverlayViewModel::ContextMenu(menu)) => menu
-                .items
-                .get(self.pages.explorer.explorer_overlay_selection)
-                .filter(|item| item.enabled)
-                .map(|_| {
-                    ui::ExplorerOverlayControl::ContextItem(
-                        self.pages.explorer.explorer_overlay_selection,
-                    )
-                }),
+                .selected_index
+                .map(ui::ExplorerOverlayControl::ContextItem),
             Some(ui::ExplorerOverlayViewModel::Options(options))
                 if self.pages.explorer.explorer_overlay_selection == options.options.len() =>
             {
@@ -1664,7 +1702,9 @@ impl ShellSession {
     ) {
         if matches!(
             self.scrollbar_drag,
-            Some(ScrollbarDragState::Explorer { .. })
+            Some(
+                ScrollbarDragState::Explorer { .. } | ScrollbarDragState::ExplorerLocations { .. }
+            )
         ) {
             self.drag_explorer_scrollbar(coordinates);
             return;
@@ -1919,23 +1959,26 @@ impl ShellSession {
     }
 }
 
-fn explorer_quick_location_index(model: &ui::ExplorerViewModel, forward: bool) -> Option<usize> {
+fn explorer_quick_location_index(model: &ui::ExplorerViewModel, key: InputKey) -> Option<usize> {
     let enabled = model
         .quick_locations
         .iter()
         .enumerate()
         .filter_map(|(index, location)| location.enabled.then_some(index))
         .collect::<Vec<_>>();
-    let current = enabled
-        .iter()
-        .position(|index| model.quick_locations[*index].current);
-    match (current, forward) {
-        (Some(position), true) => Some(enabled[(position + 1) % enabled.len()]),
-        (Some(position), false) => {
+    let current = enabled.iter().position(|&index| {
+        model
+            .quick_location_focus
+            .map_or(model.quick_locations[index].current, |focus| focus == index)
+    });
+    match (key, current) {
+        (InputKey::Down, Some(position)) => Some(enabled[(position + 1) % enabled.len()]),
+        (InputKey::Up, Some(position)) => {
             Some(enabled[position.checked_sub(1).unwrap_or(enabled.len() - 1)])
         }
-        (None, true) => enabled.first().copied(),
-        (None, false) => enabled.last().copied(),
+        (InputKey::Home | InputKey::Down, _) => enabled.first().copied(),
+        (InputKey::End | InputKey::Up, _) => enabled.last().copied(),
+        _ => None,
     }
 }
 

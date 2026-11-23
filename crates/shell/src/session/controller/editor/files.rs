@@ -853,8 +853,8 @@ impl ShellSession {
         self.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
             snapshot,
             input,
-            focus: ui::ExplorerSaveFocus::Filename,
         };
+        self.set_explorer_focus(ui::ExplorerFocus::SavePicker(ui::ExplorerSaveFocus::Filename));
         self.notify_status(i18n::LocalizedText::from(i18n::msg!(
             "shell-save-as-enter-a-file-name-in-the-current-directory"
         )));

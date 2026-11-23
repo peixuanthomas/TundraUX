@@ -2,7 +2,7 @@
 
 ui-explorer-open-terminal-here = Open Terminal Here
 ui-explorer-explorer-ascii-assets-are-unavailable = Explorer ASCII assets are unavailable
-ui-explorer-edit-button = { "[" }Ctrl+L Edit]
+ui-explorer-edit-button = Edit path
 ui-explorer-quick-access = Quick access
 ui-explorer-trash-is-empty = (Trash is empty)
 ui-explorer-empty-directory = (empty directory)
@@ -12,7 +12,7 @@ ui-explorer-hidden = hidden
 ui-explorer-an-item-with-this-name-already-exists = An item with this name already exists.
 ui-explorer-on = On
 ui-explorer-off = Off
-ui-explorer-search = [/] Search
+ui-explorer-search = Search
 ui-explorer-empty = <empty>
 ui-explorer-search-padded = Search:{ " " }
 ui-explorer-entries = Entries
@@ -27,6 +27,8 @@ ui-explorer-forward = Forward
 ui-explorer-up = Up
 ui-explorer-refresh = Refresh
 ui-explorer-new = New
+ui-explorer-select = Select
+ui-explorer-select-done = Done
 ui-explorer-cut = Cut
 ui-explorer-copy = Copy
 ui-explorer-paste = Paste
@@ -85,10 +87,16 @@ ui-explorer-search-matches = { " " }({ $count ->
 
 
 ui-explorer-open-selected = Open
-ui-explorer-actions-menu = Actions
+ui-explorer-actions-menu = More
 ui-explorer-open-title = Open document
 ui-explorer-save-title = Save document
 ui-explorer-save-filename = File name
-ui-explorer-save-confirm = F10 Save
-ui-explorer-save-cancel = Esc Cancel
+ui-explorer-save-confirm = Save
+ui-explorer-save-cancel = Cancel
+ui-explorer-undo = Undo
 ui-explorer-undo-move = Undo move/rename
+
+ui-explorer-filter-matches = { " " }({ $count ->
+    [one] { $count } match
+   *[other] { $count } matches
+    })

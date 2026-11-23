@@ -469,6 +469,7 @@ pub(super) enum ExplorerInputMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ExplorerOverlayMode {
     ContextMenu { anchor: CellPosition },
+    MoreActions,
     Sort { anchor: CellPosition },
     Options,
     Properties,
@@ -483,7 +484,6 @@ pub(super) enum ExplorerPurpose {
     EditorSaveAs {
         snapshot: Option<app::editor::SaveSnapshot>,
         input: ui::components::TextInput,
-        focus: ui::ExplorerSaveFocus,
     },
 }
 

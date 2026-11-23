@@ -51,10 +51,8 @@ fn save_picker_shows_browsable_rows_filename_and_actions_together() {
         let mut input =
             ui::components::TextInput::new("save.filename").with_horizontal_scroll(true);
         input.set_value("中文文档.txt");
-        model.save_picker = Some(ui::ExplorerSavePickerViewModel {
-            input,
-            focus: ui::ExplorerSaveFocus::Filename,
-        });
+        model.save_picker = Some(ui::ExplorerSavePickerViewModel { input });
+        model.focus = ui::ExplorerFocus::SavePicker(ui::ExplorerSaveFocus::Filename);
         let bounds = Rect::new(0, 0, width, height);
         let ShellLayout::Full { main, .. } = compute_shell_layout(bounds) else {
             panic!("full layout")
@@ -82,8 +80,9 @@ fn save_picker_shows_browsable_rows_filename_and_actions_together() {
             })
             .unwrap();
         let screen = terminal_output(&terminal);
-        assert!(screen.contains("F10 Save"));
-        assert!(screen.contains("Esc Cancel"));
+        assert!(screen.contains("Save"));
+        assert!(screen.contains("Cancel"));
+        assert!(!screen.contains("F10 Save"));
         assert!(screen.contains("File name"));
     }
 }
@@ -372,23 +371,17 @@ fn explorer_toolbar_keeps_every_action_at_supported_widths() {
                 .collect::<Vec<_>>(),
             vec![
                 ExplorerToolbarAction::Back,
-                ExplorerToolbarAction::Forward,
                 ExplorerToolbarAction::Up,
+                ExplorerToolbarAction::Forward,
                 ExplorerToolbarAction::Refresh
             ],
             "toolbar actions at width {width}"
-        );
-        assert!(
-            layout
-                .toolbar_buttons
-                .iter()
-                .all(|button| button.show_label)
         );
         assert!(layout.toolbar_buttons.iter().all(|button| {
             if button.action == ExplorerToolbarAction::Refresh {
                 button.area.y == layout.search.y && button.area.right() < layout.search.x
             } else {
-                button.area.y >= layout.search.bottom() && button.area.bottom() <= layout.table.y
+                button.area.y == layout.path_bar.y && button.area.right() < layout.address_input.x
             }
         }));
     }
@@ -422,11 +415,12 @@ fn explorer_context_menu_is_modal_and_hit_testable() {
         ExplorerContextMenuViewModel {
             x: 20,
             y: 8,
+            centered: false,
             title: "File".to_string(),
             items: vec![ExplorerContextMenuItemViewModel {
                 id: "open".to_string(),
                 label: "Open".to_string(),
-                shortcut: Some("Enter".to_string()),
+                shortcut: None,
                 enabled: true,
                 dangerous: false,
             }],
@@ -448,7 +442,7 @@ fn explorer_context_menu_is_modal_and_hit_testable() {
     let output = render_output(&model);
     assert!(output.contains("File"));
     assert!(output.contains("Open"));
-    assert!(output.contains("Enter"));
+    assert!(!output.contains("Enter Open"));
 }
 
 #[test]
@@ -460,6 +454,7 @@ fn explorer_context_menu_background_stands_out_from_the_file_list() {
         ExplorerContextMenuViewModel {
             x: table.x + 4,
             y: table.y + 3,
+            centered: false,
             title: "文件管理器".into(),
             items: [
                 ("new-folder", "新建文件夹", true),
@@ -536,6 +531,7 @@ fn explorer_wide_context_labels_and_shortcuts_use_cell_width_hit_geometry() {
         ExplorerContextMenuViewModel {
             x: 1,
             y: 1,
+            centered: false,
             title: "Wide".to_string(),
             items: vec![ExplorerContextMenuItemViewModel {
                 id: "wide".to_string(),
@@ -566,6 +562,7 @@ fn short_context_menu_keeps_last_keyboard_action_visible_and_clickable() {
         ExplorerContextMenuViewModel {
             x: 20,
             y: 8,
+            centered: true,
             title: "Selection".into(),
             items: (0..12)
                 .map(|index| ExplorerContextMenuItemViewModel {
@@ -844,5 +841,86 @@ fn file_actions_keep_the_same_positions_in_empty_and_nonempty_directories() {
             );
         }
         assert!(populated.visible_capacity > 0);
+    }
+}
+
+#[test]
+fn minimum_explorer_frame_keeps_both_languages_on_one_action_row() {
+    use ui::ExplorerToolbarAction as Action;
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    let area = Rect::new(1, 2, 106, 16);
+    let bounds = Rect::new(0, 0, 108, 20);
+    for language in ["en-US", "zh-CN"] {
+        let language = i18n::LanguageSnapshot::load(&assets, language, 1)
+            .unwrap()
+            .snapshot;
+        let _language = i18n::enter_snapshot(std::sync::Arc::new(language));
+        let mut model = sample_model();
+        model.browse_title_id = None;
+        model.focus = ui::ExplorerFocus::Toolbar(Action::Copy);
+        model.set_history_availability(true, true);
+        let layout = explorer_layout(area, &model);
+        for caps in [
+            ui::RenderCapabilities::default(),
+            ui::RenderCapabilities::ansi(),
+        ] {
+            let context = RenderContext::from_theme(
+                &TundraTheme::default(),
+                ui::MotionFrame::default(),
+                caps,
+            );
+            let mut terminal =
+                Terminal::new(TestBackend::new(bounds.width, bounds.height)).unwrap();
+            let capture = ui::automation::FrameCapture::begin(bounds, "Explorer");
+            terminal
+                .draw(|frame| ui::render_explorer_content(frame, area, &model, &context))
+                .unwrap();
+            let snapshot = capture.finish(terminal.backend().buffer());
+            assert_eq!(
+                snapshot
+                    .lines
+                    .iter()
+                    .map(|line| line.matches("README.md").count())
+                    .sum::<usize>(),
+                1
+            );
+            for action in [
+                Action::Open,
+                Action::New,
+                Action::Copy,
+                Action::Cut,
+                Action::Paste,
+                Action::Rename,
+                Action::Undo,
+                Action::SelectionMode,
+                Action::Delete,
+                Action::Menu,
+            ] {
+                let id = format!("screen/explorer.toolbar.{action:?}");
+                let node = snapshot.nodes.iter().find(|node| node.id == id).unwrap();
+                let button = layout
+                    .page_actions
+                    .iter()
+                    .find(|button| button.action == action)
+                    .unwrap();
+                assert_eq!(button.area.y, area.bottom() - 1, "{}", node.text);
+                assert_eq!(node.rect.y, button.area.y);
+                assert!(node.text.contains(&action.label()));
+                assert_eq!(node.focused, action == Action::Copy);
+                if action == Action::Delete {
+                    assert!(node.text.contains(r"\_/"));
+                }
+            }
+            for (action, symbol) in [
+                (Action::Back, "<"),
+                (Action::Up, "^"),
+                (Action::Forward, ">"),
+            ] {
+                let id = format!("screen/explorer.toolbar.{action:?}");
+                let node = snapshot.nodes.iter().find(|node| node.id == id).unwrap();
+                assert_eq!(node.rect.y, layout.path_bar.y);
+                assert_eq!(node.text.trim(), symbol);
+            }
+        }
     }
 }

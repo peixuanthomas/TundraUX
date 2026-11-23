@@ -171,6 +171,16 @@ impl PageActionBar {
         context: &RenderContext,
     ) -> PageActionBarLayout {
         let layout = self.layout(area);
+        self.render_layout(frame, &layout, context);
+        layout
+    }
+
+    pub(crate) fn render_layout(
+        &self,
+        frame: &mut Frame<'_>,
+        layout: &PageActionBarLayout,
+        context: &RenderContext,
+    ) {
         let theme = context.compatibility_theme();
         frame.render_widget(Clear, layout.area);
         frame.render_widget(Paragraph::new("").style(theme.raised_style()), layout.area);
@@ -203,7 +213,6 @@ impl PageActionBar {
             button.state.selected = self.selected.as_ref() == Some(&action.id);
             button.render_borderless_frame(frame, action_layout.area, &theme);
         }
-        layout
     }
 
     pub fn hit(&self, layout: &PageActionBarLayout, x: u16, y: u16) -> Option<PageActionHit> {

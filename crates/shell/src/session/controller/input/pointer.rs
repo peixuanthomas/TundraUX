@@ -168,7 +168,7 @@ impl ShellSession {
             && matches!(
                 self.resolved_explorer_overlay(),
                 Some(ResolvedExplorerOverlay::Semantic(
-                    ExplorerOverlayMode::ContextMenu { .. }
+                    ExplorerOverlayMode::ContextMenu { .. } | ExplorerOverlayMode::MoreActions
                 ))
             )
             && self.explorer_hit_target_at(point).is_none()

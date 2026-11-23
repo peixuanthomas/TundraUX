@@ -1,7 +1,52 @@
 use crate::session::overlays::ResolvedExplorerOverlay;
 use crate::session::*;
+use ui::ExplorerFocus;
+use workspace_protocol::BackAction;
 
 impl ShellSession {
+    pub(in crate::session) fn explorer_back(
+        &self,
+    ) -> Option<(BackAction, (RoutedTarget, ShellCommand))> {
+        if self.resolved_explorer_overlay().is_some() {
+            return Some((
+                BackAction::Cancel,
+                self.route_explorer_key(&KeyInput::new(InputKey::Escape)),
+            ));
+        }
+        let state = self.app.explorer_state()?;
+        let (action, command) = if state.drag.is_some()
+            || matches!(
+                self.scrollbar_drag,
+                Some(
+                    ScrollbarDragState::Explorer { .. }
+                        | ScrollbarDragState::ExplorerLocations { .. }
+                )
+            ) {
+            (BackAction::Cancel, ShellCommand::ExplorerCancelDrag)
+        } else if self.pages.explorer.explorer_input_mode == ExplorerInputMode::Address {
+            (BackAction::Cancel, ShellCommand::CancelExplorerInput)
+        } else if self.pages.explorer.explorer_input_mode == ExplorerInputMode::Search {
+            (BackAction::Cancel, ShellCommand::ExplorerClearFilter)
+        } else if state.selection_mode || state.selected_paths.len() > 1 {
+            (BackAction::Cancel, ShellCommand::ExplorerCancelSelection)
+        } else if !state.query.is_empty() {
+            (BackAction::Cancel, ShellCommand::ExplorerClearFilter)
+        } else if matches!(
+            self.pages.explorer.explorer_purpose,
+            ExplorerPurpose::EditorOpen | ExplorerPurpose::EditorSaveAs { .. }
+        ) {
+            (BackAction::PreviousPage, ShellCommand::CloseExplorer)
+        } else if !state.back_history.is_empty() {
+            (BackAction::PreviousLocation, ShellCommand::ExplorerOpenBack)
+        } else {
+            return None;
+        };
+        Some((
+            action,
+            (RoutedTarget::Component(ShellComponent::Explorer), command),
+        ))
+    }
+
     pub(in crate::session) fn route_explorer_key(
         &self,
         key: &KeyInput,
@@ -102,13 +147,25 @@ impl ShellSession {
             None => {}
         }
 
-        if let ExplorerPurpose::EditorSaveAs { focus, .. } = self.pages.explorer.explorer_purpose
-            && self.pages.explorer.explorer_input_mode == ExplorerInputMode::Browse
-            && (focus != ui::ExplorerSaveFocus::Browse
-                || matches!(
-                    key.key,
-                    InputKey::Tab | InputKey::BackTab | InputKey::Escape
-                )
+        if key.key == InputKey::Escape {
+            return self
+                .explorer_back()
+                .map_or((target, ShellCommand::Noop), |(_, route)| route);
+        }
+        if matches!(key.key, InputKey::Tab | InputKey::BackTab) && !key.has_non_shift_modifier() {
+            return (
+                target,
+                ShellCommand::ExplorerMoveFocus(
+                    key.key == InputKey::BackTab || key.modifiers.shift,
+                ),
+            );
+        }
+        let focus = self.pages.explorer.explorer_focus;
+        if matches!(
+            self.pages.explorer.explorer_purpose,
+            ExplorerPurpose::EditorSaveAs { .. }
+        ) && self.pages.explorer.explorer_input_mode == ExplorerInputMode::Browse
+            && (matches!(focus, ExplorerFocus::SavePicker(_))
                 || (key.key == InputKey::F(10) && key.is_unmodified_action_key()))
             && !(matches!(key.key, InputKey::Char('l' | 'L'))
                 && (key.modifiers.control || key.modifiers.super_key))
@@ -124,7 +181,6 @@ impl ShellSession {
             ExplorerInputMode::Address | ExplorerInputMode::Search
         ) {
             return match &key.key {
-                InputKey::Escape => (target, ShellCommand::CancelExplorerInput),
                 InputKey::Enter => (target, ShellCommand::SubmitExplorerInput),
                 InputKey::Left
                 | InputKey::Right
@@ -141,14 +197,44 @@ impl ShellSession {
             };
         }
 
+        if focus == ExplorerFocus::Sidebar
+            && key.is_unmodified_action_key()
+            && matches!(
+                key.key,
+                InputKey::Up | InputKey::Down | InputKey::Home | InputKey::End
+            )
+        {
+            return (
+                target,
+                ShellCommand::ExplorerMoveQuickLocation(key.key.clone()),
+            );
+        }
+        if focus != ExplorerFocus::Files
+            && key.is_unmodified_action_key()
+            && matches!(
+                key.key,
+                InputKey::Enter | InputKey::Space | InputKey::Char(' ')
+            )
+        {
+            return (
+                target,
+                if key.phase == InputPhase::Press {
+                    ShellCommand::ExplorerActivateFocus
+                } else {
+                    ShellCommand::Noop
+                },
+            );
+        }
+
         let is_trash = self
             .app
             .explorer_state()
             .is_some_and(|state| state.current_location.is_trash());
-        if self
-            .app
-            .explorer_state()
-            .is_some_and(|state| state.selection_mode)
+        if focus == ExplorerFocus::Files
+            && self
+                .app
+                .explorer_state()
+                .is_some_and(|state| state.selection_mode)
             && key.is_unmodified_action_key()
             && matches!(
                 key.key,
@@ -164,30 +250,7 @@ impl ShellSession {
                 },
             );
         }
-        let quick_locations_visible = || {
-            let area = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-            let ui::ShellLayout::Full { main, .. } = self.shell_layout_for(area) else {
-                return false;
-            };
-            ui::explorer_layout(main, &self.to_explorer_view_model())
-                .mode
-                .shows_sidebar()
-        };
         match &key.key {
-            InputKey::Escape => (RoutedTarget::Global, ShellCommand::CloseExplorer),
-            InputKey::BackTab if !key.has_non_shift_modifier() && quick_locations_visible() => {
-                (target, ShellCommand::ExplorerPreviousQuickLocation)
-            }
-            InputKey::Tab
-                if !key.has_non_shift_modifier()
-                    && key.modifiers.shift
-                    && quick_locations_visible() =>
-            {
-                (target, ShellCommand::ExplorerPreviousQuickLocation)
-            }
-            InputKey::Tab if !key.has_non_shift_modifier() && quick_locations_visible() => {
-                (target, ShellCommand::ExplorerNextQuickLocation)
-            }
             InputKey::Char('l' | 'L') if key.modifiers.control || key.modifiers.super_key => {
                 (target, ShellCommand::BeginExplorerAddress)
             }
@@ -203,7 +266,8 @@ impl ShellSession {
             | InputKey::End
             | InputKey::PageUp
             | InputKey::PageDown
-                if !key.modifiers.alt
+                if focus == ExplorerFocus::Files
+                    && !key.modifiers.alt
                     && (key.modifiers.control
                         || key.modifiers.super_key
                         || matches!(
@@ -228,11 +292,26 @@ impl ShellSession {
                 (target, ShellCommand::ExplorerContextMenu)
             }
             InputKey::Up if key.modifiers.alt => (target, ShellCommand::ExplorerOpenParent),
-            InputKey::Up if key.modifiers.shift => (target, ShellCommand::ExplorerPreviousExtend),
-            InputKey::Down if key.modifiers.shift => (target, ShellCommand::ExplorerNextExtend),
-            InputKey::Up => (target, ShellCommand::ExplorerPrevious),
-            InputKey::Down => (target, ShellCommand::ExplorerNext),
-            InputKey::Enter if !is_trash => (target, ShellCommand::ExplorerOpenSelected),
+            InputKey::Up if focus == ExplorerFocus::Files && key.modifiers.shift => {
+                (target, ShellCommand::ExplorerPreviousExtend)
+            }
+            InputKey::Down if focus == ExplorerFocus::Files && key.modifiers.shift => {
+                (target, ShellCommand::ExplorerNextExtend)
+            }
+            InputKey::Up if focus == ExplorerFocus::Files => {
+                (target, ShellCommand::ExplorerPrevious)
+            }
+            InputKey::Down if focus == ExplorerFocus::Files => (target, ShellCommand::ExplorerNext),
+            InputKey::Enter
+                if focus == ExplorerFocus::Files
+                    && key.modifiers.shift
+                    && !key.has_non_shift_modifier() =>
+            {
+                (target, ShellCommand::ExplorerToggleFocused)
+            }
+            InputKey::Enter if focus == ExplorerFocus::Files && !is_trash => {
+                (target, ShellCommand::ExplorerOpenSelected)
+            }
             InputKey::Backspace => (target, ShellCommand::ExplorerOpenParent),
             InputKey::Delete if !is_trash => (target, ShellCommand::ExplorerDelete),
             InputKey::F(2) if !is_trash => (target, ShellCommand::BeginExplorerRename),
@@ -271,7 +350,9 @@ impl ShellSession {
             {
                 (target, ShellCommand::ExplorerAddToLauncher)
             }
-            InputKey::Char(' ') => (target, ShellCommand::ExplorerToggleFocused),
+            InputKey::Char(' ') | InputKey::Space if focus == ExplorerFocus::Files => {
+                (target, ShellCommand::ExplorerToggleFocused)
+            }
             InputKey::Char('f' | 'F') if key.modifiers.control || key.modifiers.super_key => {
                 (target, ShellCommand::BeginExplorerSearch)
             }
@@ -421,7 +502,7 @@ impl ShellSession {
             && matches!(
                 self.resolved_explorer_overlay(),
                 Some(ResolvedExplorerOverlay::Semantic(
-                    ExplorerOverlayMode::ContextMenu { .. }
+                    ExplorerOverlayMode::ContextMenu { .. } | ExplorerOverlayMode::MoreActions
                 ))
             )
             && self.explorer_hit_target_at(coordinates).is_none()

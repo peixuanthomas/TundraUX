@@ -114,10 +114,7 @@ fn explorer_undo_is_visible_and_buttons_menu_and_shortcuts_restore_the_same_file
                     .position(|item| item.id == "undo")
                     .unwrap();
                 assert!(menu.items[index].enabled);
-                assert_eq!(
-                    menu.items[index].shortcut.as_deref(),
-                    Some(ui::ExplorerToolbarAction::Undo.shortcut_label())
-                );
+                assert!(menu.items[index].shortcut.is_none());
                 layout
                     .overlay
                     .as_ref()
@@ -203,7 +200,7 @@ fn rename_uses_shared_selection_clipboard_and_cursor_editing() {
 }
 
 #[test]
-fn context_menu_shortcut_labels_activate_the_named_actions() {
+fn context_menu_shortcuts_work_without_repeating_the_labels() {
     let fixture = FixtureRoot::new("context-shortcut-labels");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
@@ -233,14 +230,10 @@ fn context_menu_shortcut_labels_activate_the_named_actions() {
                 state.to_notification_view_model()
             );
         };
-        assert_eq!(
+        assert!(
             menu.items
                 .iter()
-                .find(|item| item.id == id)
-                .unwrap()
-                .shortcut
-                .as_deref(),
-            Some(key)
+                .any(|item| item.id == id && item.shortcut.is_none())
         );
         state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
         let overlay = state.to_explorer_view_model().overlay;
@@ -535,102 +528,136 @@ fn login_can_open_explorer_and_search_current_directory() {
 }
 
 #[test]
-fn tab_cycles_explorer_quick_locations_in_both_directions_and_wraps() {
-    let fixture = FixtureRoot::new("quick-location-tab-cycle");
+fn escape_clears_explorer_transient_actions_before_location_history() {
+    let fixture = FixtureRoot::new("explorer-escape-priority");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
+    let documents = fixture.path().join("Documents");
+    let nested = documents.join("nested");
+    fs::create_dir(&nested).unwrap();
+    for file in ["alpha.txt", "beta.txt", "office.txt"] {
+        fs::write(nested.join(file), "file").unwrap();
+    }
     let mut state = system_home(&platform);
     open_home_entry(&mut state, &platform, "explorer");
-
-    let locations = state
-        .to_explorer_view_model()
-        .quick_locations
-        .into_iter()
-        .filter(|location| location.enabled)
-        .collect::<Vec<_>>();
-    let documents = locations
-        .iter()
-        .position(|location| location.path == fixture.path().join("Documents").to_string_lossy())
-        .expect("Documents quick location");
-    let next = (documents + 1) % locations.len();
-
-    state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
-    assert_eq!(
-        state.last_command(),
-        Some(&ShellCommand::ExplorerNextQuickLocation)
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    let first = first_entry_coordinates(&state);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Left, first),
+        &platform,
     );
-    let explorer = state.to_explorer_view_model();
-    if locations[next].kind == app::explorer::ExplorerQuickLocationKind::Trash {
-        assert!(explorer.is_trash);
-    } else {
-        assert_eq!(explorer.current_path, locations[next].path);
+    assert!(state.app_state().explorer_state().unwrap().drag.is_some());
+    state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+    assert!(state.app_state().explorer_state().unwrap().drag.is_none());
+    assert_eq!(
+        Path::new(&state.to_explorer_view_model().current_path),
+        nested
+    );
+    state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, first), &platform);
+    for key in ["/", "a", "Enter"] {
+        state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
     }
-
-    state.apply_input_with_platform(InputEvent::from_key_label("Shift+Tab"), &platform);
+    state.apply_input_with_platform(ctrl_key('a'), &platform);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Tab), &platform);
     assert_eq!(
-        state.last_command(),
-        Some(&ShellCommand::ExplorerPreviousQuickLocation)
+        state.to_explorer_view_model().focus,
+        ui::ExplorerFocus::Toolbar(ui::ExplorerToolbarAction::Menu)
     );
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    let Some(ui::ExplorerOverlayViewModel::ContextMenu(menu)) =
+        state.to_explorer_view_model().overlay
+    else {
+        panic!("More menu");
+    };
+    assert!(menu.centered);
     assert_eq!(
-        state.to_explorer_view_model().current_path,
-        locations[documents].path
+        menu.items[..3]
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["sort", "properties", "options"]
     );
-
-    for _ in 0..locations.len() - documents - 1 {
-        state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
+    for (selected, searched, files) in [(2, true, 2), (0, true, 2), (0, false, 3)] {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+        let model = state.to_explorer_view_model();
+        assert_eq!(Path::new(&model.current_path), nested);
+        assert!(model.overlay.is_none());
+        assert_eq!(model.selected_count, selected);
+        assert_eq!(model.search.is_some(), searched);
+        assert_eq!(model.entries.len(), files);
     }
-    assert!(state.to_explorer_view_model().is_trash);
-    state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
-    assert_eq!(
-        state.to_explorer_view_model().current_path,
-        locations[0].path
-    );
+    for _ in 0..2 {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+        assert_eq!(state.active_screen(), ShellScreen::Explorer);
+        assert_eq!(
+            Path::new(&state.to_explorer_view_model().current_path),
+            documents
+        );
+    }
 }
 
 #[test]
-fn tab_from_non_quick_location_starts_at_the_directional_edge() {
-    let fixture = FixtureRoot::new("quick-location-tab-edge");
+fn tab_visits_each_visible_control_without_changing_directory_or_selection() {
+    let fixture = FixtureRoot::new("explorer-tab-order");
     let platform = mock_platform(fixture.path());
     initialize_system_profile(&platform);
-    let nested = fixture.path().join("Documents").join("nested");
-    fs::create_dir(&nested).expect("nested folder");
+    fs::write(
+        fixture.path().join("Documents/selected.txt"),
+        "keep selection",
+    )
+    .unwrap();
     let mut state = system_home(&platform);
     open_home_entry(&mut state, &platform, "explorer");
-    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
-    assert_eq!(
-        state.to_explorer_view_model().current_path,
-        nested.to_string_lossy()
-    );
+    let model = state.to_explorer_view_model();
+    let area = Rect::new(0, 0, state.terminal_size().0, state.terminal_size().1);
+    let ui::ShellLayout::Full { main, .. } = ui::compute_shell_layout(area) else {
+        panic!("Explorer layout");
+    };
+    let targets = ui::explorer_layout(main, &model).focus_targets(&model);
+    let files = targets
+        .iter()
+        .position(|(focus, _)| *focus == ui::ExplorerFocus::Files)
+        .unwrap();
+    assert_eq!(targets[files - 1].0, ui::ExplorerFocus::Sidebar);
+    assert_eq!(model.focus, ui::ExplorerFocus::Files);
+    for (label, reverse) in [("Tab", false), ("Shift+Tab", true)] {
+        for step in 1..=targets.len() {
+            state.apply_input_with_platform(InputEvent::from_key_label(label), &platform);
+            let next = if reverse {
+                files + targets.len() - step
+            } else {
+                files + step
+            };
+            let current = state.to_explorer_view_model();
+            assert_eq!(current.focus, targets[next % targets.len()].0);
+            assert_eq!(current.current_path, model.current_path);
+            assert_eq!(current.entries, model.entries);
+        }
+    }
+}
 
-    let locations = state
-        .to_explorer_view_model()
-        .quick_locations
-        .into_iter()
-        .filter(|location| location.enabled)
-        .collect::<Vec<_>>();
-    state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
-    assert_eq!(
-        state.to_explorer_view_model().current_path,
-        locations.first().expect("first quick location").path
-    );
-
-    state.apply_input_with_platform(
-        InputEvent::Key(KeyInput::with_phase(
-            InputKey::Left,
-            InputModifiers {
-                alt: true,
-                ..InputModifiers::none()
-            },
-            InputPhase::Press,
-        )),
-        &platform,
-    );
-    assert_eq!(
-        state.to_explorer_view_model().current_path,
-        nested.to_string_lossy()
-    );
+#[test]
+fn sidebar_arrows_leave_the_directory_open_until_enter() {
+    let fixture = FixtureRoot::new("quick-location-keyboard");
+    let platform = mock_platform(fixture.path());
+    initialize_system_profile(&platform);
+    let mut state = system_home(&platform);
+    open_home_entry(&mut state, &platform, "explorer");
+    let initial = state.to_explorer_view_model().current_path;
     state.apply_input_with_platform(InputEvent::from_key_label("Shift+Tab"), &platform);
+    state.apply_input_with_platform(InputEvent::from_key_label("End"), &platform);
+    let explorer = state.to_explorer_view_model();
+    assert_eq!(explorer.focus, ui::ExplorerFocus::Sidebar);
+    let location = &explorer.quick_locations[explorer.quick_location_focus.unwrap()];
+    assert_eq!(
+        location.kind,
+        app::explorer::ExplorerQuickLocationKind::Trash
+    );
+    assert_eq!(explorer.current_path, initial);
+    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
     assert!(state.to_explorer_view_model().is_trash);
+    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    assert_eq!(state.to_explorer_view_model().current_path, initial);
 }
 
 #[test]
@@ -651,7 +678,10 @@ fn tab_does_not_navigate_when_explorer_sidebar_is_not_rendered() {
     );
     state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
 
-    assert_eq!(state.last_command(), Some(&ShellCommand::RecordInput));
+    assert_ne!(
+        state.to_explorer_view_model().focus,
+        ui::ExplorerFocus::Sidebar
+    );
     assert_eq!(state.to_explorer_view_model().current_path, initial);
 }
 
@@ -678,7 +708,15 @@ fn disabled_quick_location_is_skipped_and_mouse_activation_is_ignored() {
         .to_string_lossy()
         .into_owned();
 
-    state.apply_input_with_platform(InputEvent::from_key_label("Tab"), &platform);
+    state.apply_input_with_platform(InputEvent::from_key_label("Shift+Tab"), &platform);
+    state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
+    let model = state.to_explorer_view_model();
+    assert_eq!(
+        model.quick_locations[model.quick_location_focus.unwrap()].path,
+        pictures
+    );
+    assert_ne!(model.current_path, pictures);
+    state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
     assert_eq!(state.to_explorer_view_model().current_path, pictures);
 
     let area = Rect::new(0, 0, state.terminal_size().0, state.terminal_size().1);
@@ -694,6 +732,10 @@ fn disabled_quick_location_is_skipped_and_mouse_activation_is_ignored() {
     let coordinates = (disabled.area.x.saturating_add(1), disabled.area.y);
     state.apply_input_with_platform(
         InputEvent::mouse_down(PointerButton::Left, coordinates),
+        &platform,
+    );
+    state.apply_input_with_platform(
+        InputEvent::mouse_up(PointerButton::Left, coordinates),
         &platform,
     );
     assert_eq!(state.to_explorer_view_model().current_path, pictures);
@@ -1101,7 +1143,7 @@ fn admin_batch_adds_launcher_targets_and_high_risk_launch_requires_confirmation(
     assert!(menu.items.iter().any(|item| {
         item.id == "add-to-launcher"
             && item.label == "Add to Launcher"
-            && item.shortcut.as_deref() == Some("A")
+            && item.shortcut.is_none()
             && item.enabled
     }));
 
@@ -1120,10 +1162,11 @@ fn admin_batch_adds_launcher_targets_and_high_risk_launch_requires_confirmation(
     );
     assert_eq!(state.active_screen(), ShellScreen::Explorer);
 
-    state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    state.close_page_instance(state.active_page_id());
     open_home_entry(&mut state, &platform, "launcher");
     assert_eq!(state.active_screen(), ShellScreen::Launcher);
     assert_eq!(state.focused_component(), ShellComponent::Launcher);
+    state.apply_input_with_platform(InputEvent::from_key_label("Down"), &platform);
     state.apply_input_with_platform(InputEvent::from_key_label("End"), &platform);
 
     let launcher = state.to_launcher_view_model();
@@ -1538,6 +1581,8 @@ fn explorer_alert_survives_selection_and_resolves_on_success_or_close() {
     );
 
     state.apply_input_with_platform(InputEvent::from_key_label("Esc"), &platform);
+    assert_eq!(state.active_screen(), ShellScreen::Explorer);
+    state.close_page_instance(state.active_page_id());
     let closed = state.to_shell_chrome_view_model();
     assert_eq!(state.active_screen(), ShellScreen::Home);
     assert_eq!(closed.status.error.as_deref(), Some("Unrelated warning"));
@@ -1631,8 +1676,16 @@ fn keyboard_selection_supports_pages_focus_invert_and_clear() {
     let model = state.to_explorer_view_model();
     assert!(model.selected_count > 2 && model.selected_count < 80);
     assert_eq!(model.selected_count, model.selected_index.unwrap() + 1);
+    let area = Rect::new(0, 0, state.terminal_size().0, state.terminal_size().1);
+    let ui::ShellLayout::Full { main, .. } = ui::compute_shell_layout(area) else {
+        panic!("Explorer layout");
+    };
+    let expected = model
+        .selected_count
+        .saturating_sub(ui::explorer_layout(main, &model).visible_capacity)
+        .max(1);
     state.apply_input_with_platform(modified_key(InputKey::PageUp, false, true), &platform);
-    assert_eq!(state.to_explorer_view_model().selected_count, 1);
+    assert_eq!(state.to_explorer_view_model().selected_count, expected);
     state.apply_input_with_platform(modified_key(InputKey::F(10), false, true), &platform);
     assert!(state.to_explorer_view_model().overlay.is_some());
     state.apply_input_with_platform(ctrl_key('a'), &platform);

@@ -81,11 +81,7 @@ impl ShellSession {
         }
         match self.active_screen() {
             ShellScreen::Explorer => {
-                if let ExplorerPurpose::EditorSaveAs { focus, .. } =
-                    self.pages.explorer.explorer_purpose
-                {
-                    target.push_str(&format!(":save:{focus:?}"));
-                }
+                target.push_str(&format!(":{:?}", self.pages.explorer.explorer_focus));
             }
             ShellScreen::Launcher => {
                 if self.pages.launcher.search.state.focused {
@@ -157,7 +153,7 @@ impl ShellSession {
                         self.pages.explorer.explorer_purpose,
                         ExplorerPurpose::EditorSaveAs { .. }
                     ) {
-                        self.focus_explorer_save_picker(ui::ExplorerSaveFocus::Filename);
+                        self.set_explorer_focus(ui::ExplorerFocus::SavePicker(ui::ExplorerSaveFocus::Filename));
                     } else {
                         self.begin_explorer_input(ExplorerInputMode::Search);
                     }

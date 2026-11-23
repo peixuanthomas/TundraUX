@@ -26,6 +26,7 @@ fn linux_explorer_selection_modifiers_use_control() {
 #[test]
 fn quick_location_helpers_preserve_raw_non_utf8_paths() {
     use super::{explorer_quick_location_command, explorer_quick_location_index};
+    use crate::InputKey;
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
@@ -54,8 +55,11 @@ fn quick_location_helpers_preserve_raw_non_utf8_paths() {
         .collect();
     model.quick_locations[1].current = true;
 
-    assert_eq!(explorer_quick_location_index(&model, true), Some(2));
-    assert_eq!(explorer_quick_location_index(&model, false), Some(0));
+    assert_eq!(
+        explorer_quick_location_index(&model, InputKey::Down),
+        Some(2)
+    );
+    assert_eq!(explorer_quick_location_index(&model, InputKey::Up), Some(0));
     assert_eq!(
         explorer_quick_location_command(&model, &state, 1),
         Some(app::explorer::ExplorerCommand::Navigate(raw_path))

@@ -19,14 +19,19 @@ ui-help-home-move = 在入口之间移动
 
 ui-help-explorer-title = 文件浏览器
 ui-help-explorer-open = 打开选中项
-ui-help-explorer-new = 新建文件夹或文件
+ui-help-explorer-new = 新建文件夹 / 新建文本文件
 ui-help-explorer-rename = 重命名
 ui-help-explorer-delete = 删除
 ui-help-explorer-menu = 更多操作
-ui-help-explorer-clipboard = 复制、剪切、粘贴
+ui-help-explorer-clipboard = 复制、剪切、粘贴。每个按键也可搭配 Ctrl 或 Cmd。
 ui-help-explorer-select-all = 全选
 ui-help-explorer-refresh = 刷新
 ui-help-explorer-search = 搜索
+ui-help-explorer-focus = 在控件之间移动焦点
+ui-help-explorer-rows = 在文件或快速访问列表中移动
+ui-help-explorer-history = 后退 / 前进到访问过的位置
+ui-help-explorer-escape = 取消当前操作或退回上一处。浏览文件选择器时返回调用页面。
+ui-help-explorer-save = 在另存为窗口中保存
 
 ui-help-launcher-title = 启动器
 ui-help-launcher-open = 打开选中项

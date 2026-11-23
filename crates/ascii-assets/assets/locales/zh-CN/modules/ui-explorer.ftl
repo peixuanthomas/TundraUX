@@ -2,7 +2,7 @@
 
 ui-explorer-open-terminal-here = 在此处打开终端
 ui-explorer-explorer-ascii-assets-are-unavailable = 文件管理器 ASCII 资源不可用
-ui-explorer-edit-button = { "[" }Ctrl+L 编辑]
+ui-explorer-edit-button = 编辑路径
 ui-explorer-quick-access = 快速访问
 ui-explorer-trash-is-empty = （回收站为空）
 ui-explorer-empty-directory = （空文件夹）
@@ -12,7 +12,7 @@ ui-explorer-hidden = 隐藏
 ui-explorer-an-item-with-this-name-already-exists = 已存在同名项目。
 ui-explorer-on = 开
 ui-explorer-off = 关
-ui-explorer-search = [/] 搜索
+ui-explorer-search = 搜索
 ui-explorer-empty = <空>
 ui-explorer-search-padded = 搜索：{ " " }
 ui-explorer-entries = 条目
@@ -27,6 +27,8 @@ ui-explorer-forward = 前进
 ui-explorer-up = 上级
 ui-explorer-refresh = 刷新
 ui-explorer-new = 新建
+ui-explorer-select = 多选
+ui-explorer-select-done = 完成
 ui-explorer-cut = 剪切
 ui-explorer-copy = 复制
 ui-explorer-paste = 粘贴
@@ -76,10 +78,13 @@ ui-explorer-search-matches = { " " }（{ $count } 个匹配，{ $mode }）
 
 
 ui-explorer-open-selected = 打开
-ui-explorer-actions-menu = 更多操作
+ui-explorer-actions-menu = 更多
 ui-explorer-open-title = 打开文档
 ui-explorer-save-title = 保存文档
 ui-explorer-save-filename = 文件名
-ui-explorer-save-confirm = F10 保存
-ui-explorer-save-cancel = Esc 取消
+ui-explorer-save-confirm = 保存
+ui-explorer-save-cancel = 取消
+ui-explorer-undo = 撤销
 ui-explorer-undo-move = 撤销移动/重命名
+
+ui-explorer-filter-matches = { " " }（{ $count } 个匹配）
