@@ -57,6 +57,70 @@ fn built_in_launcher_tiles_render_theme_art_and_supply_terminal_images() {
 }
 
 #[test]
+fn launcher_marks_only_draggable_tiles_without_using_icon_cells() {
+    struct Image;
+
+    impl ui::LauncherIconRenderer for Image {
+        fn render_icon(&self, _: &str, frame: &mut ratatui::Frame<'_>, area: Rect) -> bool {
+            frame.buffer_mut()[(area.x + area.width / 2, area.y)].set_symbol("@");
+            true
+        }
+    }
+
+    let mut draggable = item(0, LauncherItemStatus::Ready);
+    draggable.name = "设置".into();
+    let mut fixed = item(1, LauncherItemStatus::Ready);
+    fixed.capabilities.reorderable = false;
+    let mut model = LauncherViewModel::new(
+        vec![draggable, fixed],
+        None,
+        LauncherViewMode::LargeIcons,
+        true,
+    );
+    let context = ui::RenderContext::default();
+    for width in [108, 22, 3] {
+        let main = Rect::new(0, 0, width, 30);
+        let mut terminal = Terminal::new(TestBackend::new(main.width, main.height)).unwrap();
+        for organizing in [false, true] {
+            model.set_organizing(organizing, true);
+            model.drop_target = (organizing && width > 3).then_some(LauncherDropTarget {
+                item_index: 0,
+                side: LauncherDropSide::Before,
+            });
+            let layout = launcher_layout(main, &model);
+            assert_eq!(layout.items.len(), 2);
+            for icons in [None, Some(&Image as &dyn ui::LauncherIconRenderer)] {
+                terminal
+                    .draw(|frame| ui::render_launcher_content(frame, main, &model, &context, icons))
+                    .unwrap();
+                let buffer = terminal.backend().buffer();
+                if let Some(indicator) = layout.drop_indicator {
+                    assert_eq!(buffer[(indicator.x, indicator.bottom() - 1)].symbol(), "┃");
+                }
+                for tile in &layout.items {
+                    let y = tile.icon_area.bottom();
+                    let marker =
+                        (tile.area.x..tile.area.right()).find(|&x| buffer[(x, y)].symbol() == "#");
+                    assert_eq!(marker.is_some(), organizing && tile.index == 0);
+                    if let Some(x) = marker {
+                        assert_eq!(
+                            layout.hit_test(x, y),
+                            Some(LauncherHitTarget::Item(tile.index))
+                        );
+                    }
+                    if icons.is_some() {
+                        assert_eq!(
+                            buffer[(tile.icon_area.x + tile.icon_area.width / 2, tile.icon_area.y)].symbol(),
+                            "@"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn launcher_context_menu_fits_complete_button_labels_in_both_languages() {
     let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
     for language in ["en-US", "zh-CN"] {

@@ -7,8 +7,8 @@ use ratatui::widgets::{Paragraph, Wrap};
 
 use super::{HomeDisplayMode, HomeViewModel};
 use crate::components::{
-    Button, GridDropTarget, PageAction, PageActionBar, Scrollbar, Surface, grid_drop_target,
-    render_grid_drop_indicator,
+    Button, GridDropTarget, PageAction, PageActionBar, Scrollbar, Surface, grid_drag_label,
+    grid_drop_target, render_grid_drop_indicator,
 };
 use crate::{RenderContext, TundraTheme};
 
@@ -112,6 +112,7 @@ fn render_user_main(
     let layout = home_layout(area, home);
     render_home_account_summary(frame, summary, home, theme);
 
+    let reorderable = home.editing && home.entries().len() > 1;
     for item in &layout.items {
         let index = item.index;
         let entry = &home.entries()[index];
@@ -125,20 +126,8 @@ fn render_user_main(
         let label_style = surface.surface_style(tile, theme);
         let content_width = usize::from(tile.width);
         let icon_area = home_entry_icon_area(tile);
-        if icon_area.is_empty() {
-            frame.render_widget(
-                Paragraph::new(centered_home_tile_text(
-                    &entry.label,
-                    content_width,
-                    label_style,
-                )),
-                Rect::new(tile.x, tile.y + (tile.height - 1) / 2, tile.width, 1),
-            );
-            continue;
-        }
         let style = label_style.remove_modifier(Modifier::UNDERLINED);
-        let rendered_graphic = icon_area.width > 0
-            && icon_area.height > 0
+        let rendered_graphic = !icon_area.is_empty()
             && icons
                 .is_some_and(|icons| icons.render_icon(entry.icon_identity(), frame, icon_area));
         if !rendered_graphic && let Some(icon) = home.home_icon_for_label(entry.icon_identity()) {
@@ -168,19 +157,20 @@ fn render_user_main(
             }
         }
 
-        let inner = tile;
-        let label_y = icon_area.bottom();
-        if label_y < inner.bottom() {
-            frame.render_widget(
-                Paragraph::new(centered_home_tile_text(
-                    &entry.label,
-                    content_width,
-                    label_style,
-                ))
-                .alignment(HorizontalAlignment::Left),
-                Rect::new(inner.x, label_y, inner.width, 1),
-            );
-        }
+        let label_y = if icon_area.is_empty() {
+            tile.y + (tile.height - 1) / 2
+        } else {
+            icon_area.bottom()
+        };
+        let label = if reorderable {
+            grid_drag_label(&entry.label, tile.width, label_style)
+        } else {
+            centered_home_tile_text(&entry.label, content_width, label_style)
+        };
+        frame.render_widget(
+            Paragraph::new(label),
+            Rect::new(tile.x, label_y, tile.width, 1),
+        );
     }
 
     if home.editing

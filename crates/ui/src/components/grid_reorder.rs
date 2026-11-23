@@ -1,6 +1,12 @@
-use ratatui::{Frame, layout::Rect, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Rect,
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 
-use super::{ScrollbarOrientation, contains_point};
+use super::{ScrollbarOrientation, contains_point, truncate_to_terminal_width};
 use crate::TundraTheme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,4 +89,17 @@ pub(crate) fn render_grid_drop_indicator(frame: &mut Frame<'_>, area: Rect, them
             Rect::new(area.x, y, area.width, 1),
         );
     }
+}
+
+pub(crate) fn grid_drag_label(label: &str, width: u16, style: Style) -> Line<'static> {
+    // Leave the tile edges available for the insertion line when the label fits.
+    let label_width = width - 2 * u16::from(width > 4);
+    let marker = if label_width > 3 { "# " } else { "#" };
+    let label =
+        truncate_to_terminal_width(label, usize::from(label_width).saturating_sub(marker.len()));
+    Line::from(vec![
+        Span::styled(marker, style.remove_modifier(Modifier::UNDERLINED)),
+        Span::styled(label, style),
+    ])
+    .centered()
 }

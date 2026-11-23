@@ -55,7 +55,7 @@ pub use foundation::{
     KeyModifiers, MouseButton, MouseInput, MouseKind, contains_point,
 };
 pub use grid_reorder::{GridDropSide, GridDropTarget};
-pub(crate) use grid_reorder::{grid_drop_target, render_grid_drop_indicator};
+pub(crate) use grid_reorder::{grid_drag_label, grid_drop_target, render_grid_drop_indicator};
 pub use list::{List, ListItem};
 pub use metric_card::MetricCard;
 pub use nav_rail::{NavRail, NavRailItem};

@@ -140,6 +140,19 @@ fn home_edit_controls_and_indicator_render_in_both_languages_without_covering_ic
                         == "┃",
                     editing
                 );
+                for item in layout.items.iter().skip(1) {
+                    let tile = item.area;
+                    let icon = ui::home_entry_icon_area(tile);
+                    let y = if icon.is_empty() {
+                        tile.y + (tile.height - 1) / 2
+                    } else {
+                        icon.bottom()
+                    };
+                    let label: String = (tile.x..tile.right())
+                        .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                        .collect();
+                    assert_eq!(label.trim().starts_with('#'), editing);
+                }
             }
         }
     }

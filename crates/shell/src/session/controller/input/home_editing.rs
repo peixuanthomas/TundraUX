@@ -178,13 +178,13 @@ impl ShellSession {
         if let Some(capture) = &mut self.interaction.button_capture {
             capture.activate_on_release = false;
         }
-        self.pages.home.drag = self
-            .user_home_entries()
-            .get(index)
-            .map(|entry| HomeDragState {
+        let entries = self.user_home_entries();
+        if entries.len() > 1 {
+            self.pages.home.drag = entries.get(index).map(|entry| HomeDragState {
                 entry_id: entry.icon_identity().to_owned(),
                 target: None,
             });
+        }
     }
 
     pub(in crate::session) fn update_home_drag(&mut self, coordinates: CellPosition) {

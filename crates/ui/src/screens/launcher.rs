@@ -1036,9 +1036,13 @@ fn render_launcher_grid(
         }
         let area = item_layout.area;
         let name_y = item_layout.icon_area.bottom();
+        let label = if model.organizing && item.capabilities.reorderable {
+            crate::components::grid_drag_label(&item.name, area.width, label_style)
+        } else {
+            Line::styled(fit_text(&item.name, area.width), label_style).centered()
+        };
         frame.render_widget(
-            Paragraph::new(Line::styled(fit_text(&item.name, area.width), label_style))
-                .alignment(HorizontalAlignment::Center),
+            Paragraph::new(label),
             Rect::new(area.x, name_y, area.width, 1),
         );
         let status_y = name_y.saturating_add(1);
