@@ -198,7 +198,13 @@ fn reset_storage_and_restart(
     let paths = platform
         .app_paths()
         .map_err(|error| std::io::Error::other(error.to_string()))?;
-    storage::reset_saved_content(&paths)?;
+    let report = storage::reset_saved_content(&paths)?;
+    if report.cell_icon_font == platform::CellIconFontRemoval::Preserved {
+        eprintln!(
+            "{}",
+            i18n::render_diagnostic(&i18n::msg!("cell-icon-font-preserved"))
+        );
+    }
 
     restart_current_executable(executable)
 }

@@ -50,6 +50,7 @@ fn reset_removes_owned_content_and_recreates_defaults() {
 
     let report = reset_saved_content(&paths).expect("reset");
 
+    assert_eq!(report.cell_icon_font, CellIconFontRemoval::Missing);
     assert!(
         report
             .removed_paths

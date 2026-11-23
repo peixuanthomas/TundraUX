@@ -9,6 +9,7 @@
 | [`platform`](src/platform.rs), [`mock`](src/mock.rs) | Common interface for current username, paths, files, volumes, trash, desktop integration and other capabilities. The mock supports tests without native writes. |
 | [`linux/`](src/linux/), [`macos/`](src/macos/), [`windows/`](src/windows/) | Implement the trait for each OS. Linux also provides NSS identity, AccountsService, polkit and authorization sessions, D-Bus, power, and XDG integration. |
 | [`paths`](src/paths.rs), [`installation`](src/installation.rs) | Resolve configuration, data, state, cache, logs and temporary paths; classify the installed program for diagnostics and updates. |
+| [`cell_icon_font`](src/cell_icon_font.rs) | Installs the bundled terminal icon font for the current account and removes copies owned by TundraUX during reset. |
 | [`document`](src/document.rs), [`file_operations`](src/file_operations.rs) | Check and read regular files, fingerprint and save documents, identify objects, and rename without replacing an existing destination. |
 | [`process`](src/process.rs), [`managed_process`](src/managed_process.rs), [`command_session`](src/command_session.rs) | Describe and run programs, own cancellation/reaping, and maintain the REPL's working directory, environment and executable lookup. |
 | [`pty_exec`](src/pty_exec.rs), [`terminal`](src/terminal.rs) | Gate Unix PTY launches on guardian registration; describe terminal capabilities, colors, and fullscreen sequences. |
@@ -19,6 +20,10 @@
 | [`task_events`](src/task_events.rs), [`diagnostics`](src/diagnostics.rs), [`error_details`](src/error_details.rs) | Deliver results and wake host loops; diagnose runtime capabilities and retain native error information. |
 
 Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
+
+The icon font is installed under `$XDG_DATA_HOME/fonts` on Linux or `~/Library/Fonts` on macOS. Windows installs it under `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, registers it for the current user, and announces the change to running windows. WSL sessions with a recognized Windows terminal use the same Windows installer and ownership record as native Windows. If Windows interop is disabled, a WSL reset can clear the Linux installation and the Windows record stays available to the native Windows reset. An SSH session asks the user to install the font on the terminal's computer.
+
+The ownership record identifies the installed file and its SHA-256 fingerprint. Linux retries a failed font cache refresh on the next installation attempt. A reset removes only a matching owned copy and, on Windows, its matching registry value. Manually installed copies are reused when the file matches. A different version or a file replaced after installation is preserved and reported to the caller.
 
 Hosts can install one process-local `task_events` notifier. Result channels notify only after successful delivery; shared result slots and PTY readers notify after publishing and releasing their locks. Libraries retain ordinary channel behavior when no host notifier is installed.
 

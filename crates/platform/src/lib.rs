@@ -1,3 +1,4 @@
+mod cell_icon_font;
 mod command_session;
 mod diagnostics;
 pub mod installation;
@@ -32,6 +33,9 @@ mod terminal;
 #[cfg(windows)]
 pub mod windows;
 
+pub use cell_icon_font::{
+    CellIconFontInstall, CellIconFontRemoval, install_cell_icon_font, uninstall_cell_icon_font,
+};
 pub use command_session::{
     ExecutableSearchPath, SystemCommandResult, SystemCommandSession, SystemCommandShell,
 };

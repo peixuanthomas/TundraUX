@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use platform::AppPaths;
+use platform::{AppPaths, CellIconFontRemoval, uninstall_cell_icon_font};
 
 use crate::StorageManager;
 
@@ -11,6 +11,7 @@ use crate::StorageManager;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageResetReport {
     pub removed_paths: Vec<PathBuf>,
+    pub cell_icon_font: CellIconFontRemoval,
 }
 
 /// Removes only the paths explicitly owned by `AppPaths`, then recreates an
@@ -28,6 +29,7 @@ pub fn reset_saved_content(paths: &AppPaths) -> Result<StorageResetReport, io::E
     ];
 
     validate_candidates(&candidates)?;
+    let cell_icon_font = uninstall_cell_icon_font(paths)?;
 
     let mut removed_paths = Vec::new();
     for path in candidates {
@@ -39,7 +41,10 @@ pub fn reset_saved_content(paths: &AppPaths) -> Result<StorageResetReport, io::E
 
     StorageManager::open(paths.clone()).map_err(|error| io::Error::other(error.to_string()))?;
 
-    Ok(StorageResetReport { removed_paths })
+    Ok(StorageResetReport {
+        removed_paths,
+        cell_icon_font,
+    })
 }
 
 fn validate_candidates(candidates: &[&Path]) -> Result<(), io::Error> {

@@ -104,6 +104,8 @@ startup-cli-screen-keyboard-help = Usage: tundra-cli debug screen-keyboard
     Tab/arrow keys select; Enter/Space activate; Esc exits.
 startup-brand-doctor = TundraUX doctor
 startup-brand-storage-reset = TundraUX storage reset
+cell-icon-font-removed = Removed the Tundra Cell Atlas font installed by TundraUX.
+cell-icon-font-preserved = The installed Tundra Cell Atlas font or its registration was changed. Your copy was kept.
 startup-brand-config-saved = Saved. Restart TundraUX to apply settings to an already running UI.
 startup-brand-launcher-restart = Restart TundraUX to refresh an already running Launcher.
 startup-brand-explain = TundraUX startup and boundary model

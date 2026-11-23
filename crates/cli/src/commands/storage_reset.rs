@@ -14,6 +14,15 @@ pub(crate) fn run_new<Stdout: Write, Stderr: Write>(
         Ok(paths) => match reset_saved_content(&paths) {
             Ok(report) => {
                 let _ = writeln!(stdout, "{}", i18n::tr!("startup-brand-storage-reset"));
+                match report.cell_icon_font {
+                    platform::CellIconFontRemoval::Removed => {
+                        let _ = writeln!(stdout, "{}", i18n::tr!("cell-icon-font-removed"));
+                    }
+                    platform::CellIconFontRemoval::Preserved => {
+                        let _ = writeln!(stdout, "{}", i18n::tr!("cell-icon-font-preserved"));
+                    }
+                    platform::CellIconFontRemoval::Missing => {}
+                }
                 let _ = writeln!(stdout, "Removed paths:");
                 for path in &report.removed_paths {
                     let _ = writeln!(stdout, "  {}", path.display());

@@ -53,7 +53,7 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 - The default border is Glacier Night `#29434E`, and the accent is `#63D3E5`. Missing preferences use current defaults and explicit colors remain supported.
 - Launcher's `order` stores a unified ID order, `custom` stores names, icons, commands, and exit options, and `terminal` stores argument arrays and working directories.
 
-`reset_saved_content` clears saved data. The caller is responsible for backup, confirmation, and restart workflows.
+`reset_saved_content` validates the storage paths, removes the account's TundraUX-owned icon font, and clears saved data. A font removal error leaves the ownership record and saved data available for a retry. The reset report identifies cases where an externally changed font or Windows registry value was preserved. The caller is responsible for backup, confirmation, and restart workflows.
 
 ## Validation
 

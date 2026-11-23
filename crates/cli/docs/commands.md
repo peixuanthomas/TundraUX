@@ -131,4 +131,6 @@ Standard output contains one JSON result. `list` returns `runs`, which is empty 
 
 `tundra-cli new` deletes saved configuration and state immediately. Close the running workspace and use `tundra-cli debug paths` to identify and back up the directories before running it.
 
+Reset also removes the current user's icon font if TundraUX installed it. A font you installed or replaced is preserved. Native Windows and WSL share the Windows installation, so resetting either can remove it. The next completed setup or existing desktop session startup can install it again.
+
 In a REPL or the built-in Command Line, `/new` asks you to enter exactly `RESET` before proceeding. In Command Line, the CLI uses exit code 75 to ask Shell to finish tasks, restore the terminal, reset storage, and restart. The `repl --embedded` entry point is intended for Shell.

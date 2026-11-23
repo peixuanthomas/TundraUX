@@ -103,6 +103,8 @@ startup-cli-screen-keyboard-help = 用法：tundra-cli debug screen-keyboard
     Tab/方向键选择，Enter/空格执行，Esc 退出。
 startup-brand-doctor = TundraUX 诊断
 startup-brand-storage-reset = TundraUX 存储重置
+cell-icon-font-removed = 已卸载由 TundraUX 安装的 Tundra Cell Atlas 字体。
+cell-icon-font-preserved = Tundra Cell Atlas 字体文件或注册信息已被更改，已保留你的副本。
 startup-brand-config-saved = 已保存。请重启正在运行的 TundraUX 界面以应用设置。
 startup-brand-launcher-restart = 请重启 TundraUX 以刷新正在运行的启动器。
 startup-brand-explain = TundraUX 启动流程和模块边界
