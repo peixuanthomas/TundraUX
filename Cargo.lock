@@ -215,8 +215,10 @@ name = "ascii-assets"
 version = "2.0.1"
 dependencies = [
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "toml",
+ "ttf-parser",
 ]
 
 [[package]]
