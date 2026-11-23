@@ -53,6 +53,8 @@ Each identifiable terminal configuration stores its own choice. Windows Terminal
 
 AppHost runs recovery and task cleanup once on normal close, supervisor shutdown, or an IPC error. Explicitly discarded drafts remain discarded. The guardian can terminate an unresponsive window and clean up its children independently. If the Windows Shell stops during an inline image, the guardian releases the terminal display before restoring the original cursor. The embedded Command Line's explicit `/debug test-watchdog-panic` request reaches Shell's fullscreen panic boundary; ordinary command exit codes and AppHost failures stay within their window.
 
+After `/new` is confirmed, the Command Line closes its completed session before forwarding the reset request. Shell still checks the remaining windows for drafts and active work before clearing saved data and restarting into first-time setup.
+
 SessionServices shares configuration, profile, clock, system status, and file operation state. It checks the profile revision and saves appearance and dashboard changes before publication. A background connection owns the I/O. AppHosts initialize from one coherent snapshot and reuse an immutable cached snapshot for reads.
 
 Interactive saves deliver completion to the original session, page, and draft. Pending saves participate in the close check. A failure cancels an ordinary close and keeps its error visible. An explicit **Stop and close** applies to the current request. Dropping a shared operation's task owner cancels and wakes the worker without blocking the UI thread; the process waits for managed work after its event loop ends.

@@ -866,12 +866,12 @@ impl CommandLineHosts {
                 CommandLineHostEvent::PanicRequested => {
                     shell_event = CommandLineHostEvent::PanicRequested;
                 }
-                CommandLineHostEvent::ResetRequested
-                    if shell_event != CommandLineHostEvent::PanicRequested =>
-                {
-                    shell_event = CommandLineHostEvent::ResetRequested;
+                CommandLineHostEvent::ResetRequested => {
+                    completed.push(*id);
+                    if shell_event != CommandLineHostEvent::PanicRequested {
+                        shell_event = CommandLineHostEvent::ResetRequested;
+                    }
                 }
-                CommandLineHostEvent::ResetRequested => {}
             }
         }
         for id in completed {

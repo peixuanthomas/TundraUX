@@ -515,6 +515,52 @@ fn terminal_close_also_stops_descendants_that_create_their_own_session() {
 #[cfg(any(windows, unix))]
 #[test]
 #[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
+fn reset_exit_removes_requesting_terminal_without_restarting_it() {
+    let fixture = PtyFixture::new("reset-terminal");
+    let platform = platform::mock::UnsupportedPlatform;
+    let mut hosts = CommandLineHosts::new(fixture.app.clone());
+    let mut state = crate::ShellSession::new(crate::ShellLaunchConfig::default(), (120, 40));
+    state.set_navigation_path(vec![
+        crate::ShellScreen::Home,
+        crate::ShellScreen::CommandLine,
+    ]);
+    let covered = state.active_page_id();
+    hosts.hosts.insert(covered, fixture.shell());
+    state.enter_new_page(crate::ShellScreen::CommandLine);
+    let requester = state.active_page_id();
+    hosts.hosts.insert(requester, fixture.shell());
+    hosts.sync_tasks(&mut state);
+
+    let exit = format!("exit {EMBEDDED_RESET_EXIT_CODE}\r");
+    running_pty(&hosts.hosts[&requester])
+        .write(exit.as_bytes())
+        .unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let (_, event) = hosts.poll(&mut state, &platform, ratatui::style::Color::Cyan);
+        if event == CommandLineHostEvent::ResetRequested {
+            break;
+        }
+        assert_eq!(event, CommandLineHostEvent::None);
+        assert!(
+            std::time::Instant::now() < deadline,
+            "reset request never reached Shell"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (_, event) = hosts.poll(&mut state, &platform, ratatui::style::Color::Cyan);
+    assert_eq!(event, CommandLineHostEvent::None);
+    assert_eq!(state.active_page_id(), covered);
+    assert!(state.page_screen(requester).is_none());
+    assert!(!hosts.hosts.contains_key(&requester));
+    assert!(!hosts.tasks.contains_key(&requester));
+    assert!(hosts.hosts[&covered].is_running());
+    assert!(hosts.tasks.contains_key(&covered));
+}
+
+#[cfg(any(windows, unix))]
+#[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
 fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
     let fixture = PtyFixture::new("close-confirmation");
     let platform = platform::native_platform();
