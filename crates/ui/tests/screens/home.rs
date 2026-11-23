@@ -5,6 +5,7 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
+use ratatui::text::Line;
 use ui::{
     ClockViewModel, ExitConfirmViewModel, HomeDisplayMode, HomeViewModel,
     NotificationActionViewModel, NotificationLayout, NotificationLevel, NotificationTone,
@@ -330,53 +331,118 @@ fn extremely_small_compact_layout_keeps_title_above_borderless_notification() {
 }
 
 #[test]
-fn exit_menu_actions_remain_separate_and_visible_after_resize() {
-    let labels = [
-        "Exit TundraUX",
-        "Restart TundraUX",
-        "Restart computer",
-        "Shut down computer",
-        "Cancel",
-    ];
-    let mut model = NotificationViewModel::new(
-        "exit",
-        NotificationLevel::Modal,
-        NotificationTone::Warning,
-        "Exit & power",
-        "Choose an action. Esc returns to TundraUX.",
-        labels
-            .iter()
-            .zip(["Y", "R", "B", "P", "N"])
-            .map(|(label, key)| NotificationActionViewModel::new(*label, *label).with_shortcut(key))
-            .collect(),
-    );
-    model.stacked_actions = true;
-    for (width, height) in [(120, 40), (80, 24), (50, 12)] {
-        let area = Rect::new(0, 0, width, height);
-        let NotificationLayout::Dialog(layout) = notification_layout(area, &model) else {
-            panic!("exit actions must fit {width}x{height}");
-        };
-        assert_eq!(layout.actions.len(), labels.len());
-        for pair in layout.actions.windows(2) {
-            assert_eq!(pair[0].area.x, pair[1].area.x);
-            assert_eq!(pair[0].area.width, pair[1].area.width);
-            assert!(pair[0].area.bottom() <= pair[1].area.y);
-        }
-        assert!(
-            layout
-                .actions
-                .iter()
-                .all(|action| action.area.bottom() < layout.dialog.bottom())
+fn exit_menu_actions_stay_centered_and_separate_after_resize() {
+    for (title, message, labels) in [
+        (
+            "Exit & power",
+            "Choose an action. Esc returns to TundraUX.",
+            [
+                "Exit TundraUX",
+                "Restart TundraUX",
+                "Restart computer",
+                "Shut down computer",
+                "Tasks",
+                "Cancel",
+            ],
+        ),
+        (
+            "退出与电源",
+            "请选择操作。按 Esc 返回 TundraUX。",
+            [
+                "退出 TundraUX",
+                "重启 TundraUX",
+                "重启计算机",
+                "关闭计算机",
+                "任务",
+                "取消",
+            ],
+        ),
+    ] {
+        let actions = [
+            ("restore-terminal", "Y"),
+            ("restart", "R"),
+            ("reboot", "B"),
+            ("poweroff", "P"),
+            ("tasks", ""),
+            ("cancel", "N"),
+        ];
+        let mut model = NotificationViewModel::new(
+            "exit",
+            NotificationLevel::Modal,
+            NotificationTone::Warning,
+            title,
+            message,
+            actions
+                .into_iter()
+                .zip(labels)
+                .map(|((id, key), label)| {
+                    let action = NotificationActionViewModel::new(id, label).cancel(id == "cancel");
+                    if key.is_empty() {
+                        action
+                    } else {
+                        action.with_shortcut(key)
+                    }
+                })
+                .collect(),
         );
-        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal
-            .draw(|frame| {
-                render_notification_overlay(frame, area, &model, &TundraTheme::default_dark())
-            })
-            .unwrap();
-        let output = terminal_output(&terminal);
-        for label in labels {
-            assert!(output.contains(label), "{width}x{height}: {label}");
+        model.stacked_actions = true;
+        for (width, height) in [(108, 20), (40, 12)] {
+            if width == 40 {
+                model.actions[4].label = format!("{title} {message}");
+            }
+            let area = Rect::new(0, 0, width, height);
+            let NotificationLayout::Dialog(layout) = notification_layout(area, &model) else {
+                panic!("exit actions must fit {width}x{height}");
+            };
+            assert_eq!(layout.actions.len(), actions.len());
+            let (close, footer) = layout.actions.split_last().unwrap();
+            assert!(close.area.bottom() <= layout.message.y);
+            for pair in footer.windows(2) {
+                assert_eq!(pair[0].area.x, pair[1].area.x);
+                assert_eq!(pair[0].area.width, pair[1].area.width);
+                assert!(pair[0].area.bottom() <= pair[1].area.y);
+            }
+            if width == 40 {
+                assert!(footer.last().unwrap().area.height > 1);
+            }
+
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal
+                .draw(|frame| {
+                    render_notification_overlay(frame, area, &model, &TundraTheme::default_dark())
+                })
+                .unwrap();
+            for button in footer {
+                let button_area = button.area;
+                assert_eq!(button_area.intersection(layout.dialog), button_area);
+                assert!(
+                    (button_area.x + button_area.right())
+                        .abs_diff(layout.dialog.x + layout.dialog.right())
+                        <= 1,
+                    "{title}, {width}x{height}: {button_area:?} is off center in {:?}",
+                    layout.dialog,
+                );
+                let action = &model.actions[button.index];
+                let label = match &action.shortcut {
+                    Some(key) => format!("{} {key}", action.label),
+                    None => action.label.clone(),
+                };
+                let lines = ui::management_wrapped_lines(&label, button_area.width);
+                assert_eq!(lines.len(), usize::from(button_area.height));
+                for (row, text) in (button_area.y..button_area.bottom()).zip(lines) {
+                    let label_width = Line::from(text.as_str()).width() as u16;
+                    let padding = button_area.width - label_width;
+                    let expected = visible_text_without_spaces(&text);
+                    assert!(
+                        (padding / 2..=padding.div_ceil(2)).any(|left| {
+                            let rendered =
+                                buffer_row_text(&terminal, button_area.x + left, row, label_width);
+                            visible_text_without_spaces(&rendered) == expected
+                        }),
+                        "{title}, {width}x{height}: {text:?} is off center in {button_area:?}",
+                    );
+                }
+            }
         }
     }
 }

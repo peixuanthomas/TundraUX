@@ -310,7 +310,7 @@ fn stacked_action_layouts(
             .max(1);
             let area = Rect::new(
                 if uniform_width {
-                    inner.x
+                    inner.x + (inner.width - width) / 2
                 } else {
                     inner.right() - width
                 },
