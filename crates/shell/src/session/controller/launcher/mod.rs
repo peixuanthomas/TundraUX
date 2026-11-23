@@ -230,7 +230,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn move_launcher_item(&mut self, delta: isize, platform: &dyn Platform) {
-        if !self.pages.launcher.organizing || !self.pages.launcher.search.value().is_empty() {
+        if !self.launcher_icons_reorderable() {
             return;
         }
         let model = self.to_launcher_view_model();
@@ -273,7 +273,16 @@ impl ShellSession {
         self.pages.common.table_sorts.remove("launcher");
         if self.pages.launcher.organizing {
             self.pages.launcher.launcher_view_mode = app::launcher::LauncherViewMode::LargeIcons;
+            self.pages.launcher.search.set_focused(false);
         }
+    }
+
+    fn launcher_icons_reorderable(&self) -> bool {
+        self.pages.launcher.organizing
+            && self.pages.launcher.launcher_view_mode == app::launcher::LauncherViewMode::LargeIcons
+            && self.pages.launcher.search.value().is_empty()
+            && !self.pages.common.table_sorts.contains_key("launcher")
+            && self.can_manage_launcher()
     }
 
     pub(in crate::session) fn toggle_launcher_view(&mut self) {
@@ -726,16 +735,27 @@ impl ShellSession {
 
     fn open_selected_launcher_item(&mut self, platform: &dyn Platform, new_session: bool) {
         if let Some(application) = self.selected_built_in_launcher_application() {
-            if let Some(launch) =
-                WindowLaunch::for_builtin(application.id.trim_start_matches("builtin."))
-                && (!new_session || !self.route_window_request(launch.clone(), true))
-            {
-                launch.activate(self, platform);
-            }
-            return;
-        }
-        if let Some(id) = self.selected_launcher_id() {
+            self.open_built_in_application(application.id, platform, new_session);
+        } else if let Some(id) = self.selected_launcher_id() {
             self.launch_saved_application(id, platform, new_session);
+        }
+    }
+
+    pub(in crate::session) fn open_built_in_application(
+        &mut self,
+        id: &str,
+        platform: &dyn Platform,
+        new_session: bool,
+    ) {
+        let launch = if id == "builtin.tasks" {
+            Some(WindowLaunch::Management(self.tasks_query()))
+        } else {
+            WindowLaunch::for_builtin(id)
+        };
+        if let Some(launch) = launch
+            && (!new_session || !self.route_window_request(launch.clone(), true))
+        {
+            launch.activate(self, platform);
         }
     }
 
@@ -890,16 +910,13 @@ impl ShellSession {
                 if let Some(capture) = &mut self.interaction.button_capture {
                     capture.activate_on_release = !organizing;
                 }
-                if self.pages.launcher.launcher_view_mode
-                    == app::launcher::LauncherViewMode::LargeIcons
-                    && self.pages.launcher.organizing
-                    && self.can_manage_launcher()
-                    && !self.pages.common.table_sorts.contains_key("launcher")
-                    && self.pages.launcher.search.value().is_empty()
-                    && let Some(item_id) = model.items.get(index).map(|item| item.id.clone())
+                if let Some(item) = model
+                    .items
+                    .get(index)
+                    .filter(|item| item.capabilities.reorderable)
                 {
                     self.pages.launcher.launcher_drag = Some(LauncherDragState {
-                        item_id,
+                        item_id: item.id.clone(),
                         target: None,
                     });
                 }
@@ -1081,10 +1098,7 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn update_launcher_drag(&mut self, coordinates: CellPosition) {
-        if !self.pages.launcher.organizing
-            || self.pages.common.table_sorts.contains_key("launcher")
-            || self.pages.launcher.launcher_view_mode != app::launcher::LauncherViewMode::LargeIcons
-        {
+        if !self.launcher_icons_reorderable() {
             self.pages.launcher.launcher_drag = None;
             return;
         }
@@ -1112,10 +1126,7 @@ impl ShellSession {
         if drag.target.is_none() {
             return;
         }
-        if !self.pages.launcher.organizing
-            || self.pages.common.table_sorts.contains_key("launcher")
-            || self.pages.launcher.launcher_view_mode != app::launcher::LauncherViewMode::LargeIcons
-        {
+        if !self.launcher_icons_reorderable() {
             return;
         }
         let area = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
@@ -1156,9 +1167,6 @@ impl ShellSession {
             .enumerate()
             .map(|(index, descriptor)| {
                 let mut item = ui::LauncherItemViewModel::built_in(descriptor);
-                item.name = descriptor.localized_name().render_current();
-                item.path = descriptor.localized_description().render_current();
-                item.type_label = descriptor.localized_type_label().render_current();
                 item.selected = self.pages.launcher.launcher_selected_index == index;
                 item
             })
@@ -1220,9 +1228,9 @@ impl ShellSession {
                 .position(|id| id == &item.id)
                 .unwrap_or(usize::MAX)
         });
+        let reorderable = self.launcher_icons_reorderable();
         for item in &mut items {
-            item.capabilities.reorderable =
-                self.pages.launcher.organizing && self.pages.launcher.search.value().is_empty();
+            item.capabilities.reorderable = reorderable;
         }
         let sort = self.pages.common.table_sorts.get("launcher").copied();
         if let Some(sort) = sort {
@@ -1235,16 +1243,13 @@ impl ShellSession {
                 };
                 sort.compare(&field(a), &field(b))
             });
-            for item in &mut items {
-                item.capabilities.reorderable = false;
-            }
         }
         let query = self.pages.launcher.search.value().trim().to_lowercase();
         if !query.is_empty() {
             items.retain(|item| {
-                [&item.name, &item.path, &item.type_label]
-                    .iter()
-                    .any(|value| value.to_lowercase().contains(&query))
+                item.name.to_lowercase().contains(&query)
+                    || item.path.to_lowercase().contains(&query)
+                    || (!item.is_builtin() && item.type_label.to_lowercase().contains(&query))
             });
         }
         let selected = items.iter().position(|item| item.selected);

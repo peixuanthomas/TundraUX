@@ -212,6 +212,7 @@ fn launcher_arrow_keys_follow_grid_rows_and_columns() {
                 if sorted {
                     state.sort_active_table(0);
                 }
+                state.apply_input(InputEvent::key(InputKey::Down));
                 let columns = layout(&state).columns;
                 let last = state.launcher_item_count() - 1;
                 for (start, key, expected) in [

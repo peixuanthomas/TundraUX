@@ -150,6 +150,9 @@ def main():
             click(settings["id"])
             until(lambda current: current["page"] == "Settings")
             key("Escape")
+            assert snapshot()["page"] == "Settings"
+            close = node_by(snapshot(), lambda node: "workspace.close." in node["id"] and node["actionable"])
+            click(close["id"])
             until(lambda current: current["page"] == "Home")
             assert [node["name"] for node in home_items()] == original_home
             print("PASS: Home edit button, touch drag, saved order, keyboard reorder, and normal activation")
@@ -170,6 +173,14 @@ def main():
                 return current
 
             current = open_launcher()
+            ui("text", "Settings")
+            until(lambda frame: any(node["id"].endswith("launcher.item.builtin.settings")
+                  and node["selected"] for node in frame["nodes"]))
+            key("Enter")
+            current = until(lambda frame: frame["page"] == "Settings")
+            click(node_by(current, lambda node: "workspace.close." in node["id"] and node["actionable"])["id"])
+            open_launcher()
+            key("Down")
 
             def toolbar(label):
                 current = snapshot()
@@ -309,6 +320,7 @@ def main():
                 assert marker.read_text() == "done"
                 current = open_launcher()
             print("PASS: default custom commands exit without Enter after success and failure")
+            key("Down")
             key("End")
             context_action("Add to Home")
             key("Escape")
@@ -324,6 +336,7 @@ def main():
             click(node_by(current, lambda node: node["name"] == "Remove from Home")["id"])
             assert any(entry["id"] == custom_id for entry in tomllib.loads(config_file.read_text())["launcher"]["entries"])
             open_launcher()
+            key("Down")
             key("End")
             print("PASS: a custom app launches from Home and remains installed after removing its shortcut")
             context_action("Delete")

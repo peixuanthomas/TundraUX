@@ -53,4 +53,4 @@ app-launcher-entry-saved = 启动项已保存。
 
 ui-launcher-search = 搜索（Ctrl/Cmd+F）：
 ui-launcher-no-matches = 没有匹配的应用，请修改或清空搜索。
-ui-launcher-search-help = 搜索应用；Enter 打开结果，下键进入列表，Esc 清空搜索
+ui-launcher-search-help = 聚焦搜索框，按下键进入结果。Esc 先清空搜索，再返回打开启动器前的界面。

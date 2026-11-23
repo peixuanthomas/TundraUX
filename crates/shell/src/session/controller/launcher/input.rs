@@ -42,6 +42,18 @@ impl ShellSession {
                 _ => (target, ShellCommand::CaptureOverlayInput),
             };
         }
+        if key.phase == InputPhase::Press && !key.has_non_shift_modifier() {
+            let command = match key.key {
+                InputKey::F(2) => Some(ShellCommand::LauncherOrganize),
+                InputKey::Insert => Some(ShellCommand::LauncherAdd),
+                InputKey::F(4) => Some(ShellCommand::LauncherRunSettings),
+                InputKey::F(5) => Some(ShellCommand::LauncherRefresh),
+                _ => None,
+            };
+            if let Some(command) = command {
+                return (target, command);
+            }
+        }
         if self.pages.launcher.search.state.focused
             || matches!(key.key, InputKey::Tab | InputKey::BackTab)
             || matches!(key.key, InputKey::Char('f' | 'F'))
@@ -53,23 +65,10 @@ impl ShellSession {
                 ShellCommand::LauncherSearchInput(InputEvent::Key(key.clone())),
             );
         }
-        if self.pages.launcher.launcher_drag.is_some() && matches!(key.key, InputKey::Escape) {
-            return (target, ShellCommand::LauncherCancelDrag);
-        }
         if key.has_non_shift_modifier() {
             return (target, ShellCommand::RecordInput);
         }
         match key.key {
-            InputKey::F(2) if key.phase == InputPhase::Press => {
-                (target, ShellCommand::LauncherOrganize)
-            }
-            InputKey::Insert if key.phase == InputPhase::Press => {
-                (target, ShellCommand::LauncherAdd)
-            }
-            InputKey::Escape if self.pages.launcher.organizing => {
-                (target, ShellCommand::LauncherOrganize)
-            }
-            InputKey::Escape => (RoutedTarget::Global, ShellCommand::CloseLauncher),
             InputKey::Left if self.pages.launcher.organizing && key.modifiers.shift => {
                 (target, ShellCommand::LauncherMove(-1))
             }
@@ -97,13 +96,10 @@ impl ShellSession {
             InputKey::Delete if key.phase == InputPhase::Press => {
                 (target, ShellCommand::LauncherRemove)
             }
-            InputKey::F(4) if key.phase == InputPhase::Press => {
-                (target, ShellCommand::LauncherRunSettings)
-            }
             InputKey::Char('v' | 'V') if key.phase == InputPhase::Press => {
                 (target, ShellCommand::LauncherToggleView)
             }
-            InputKey::Char('r' | 'R') | InputKey::F(5) if key.phase == InputPhase::Press => {
+            InputKey::Char('r' | 'R') if key.phase == InputPhase::Press => {
                 (target, ShellCommand::LauncherRefresh)
             }
             _ => (target, ShellCommand::RecordInput),
@@ -197,9 +193,6 @@ impl ShellSession {
         input: InputEvent,
         platform: &dyn Platform,
     ) {
-        let Some(layout) = self.launcher_content_layout() else {
-            return;
-        };
         if let InputEvent::Key(key) = &input {
             if !key.phase.is_press_like() {
                 return;
@@ -217,22 +210,21 @@ impl ShellSession {
                         self.pages.launcher.search.set_focused(focused);
                         return;
                     }
-                    InputKey::Enter | InputKey::Down => {
-                        self.pages.launcher.search.set_focused(false);
-                        if let Some(index) = self.to_launcher_view_model().selected_index {
-                            self.select_launcher_index(index);
-                            if key.key == InputKey::Enter && key.phase == InputPhase::Press {
-                                self.request_launcher_launch(platform);
-                            }
+                    InputKey::Down => {
+                        if self.to_launcher_view_model().selected_index.is_some() {
+                            self.pages.launcher.search.set_focused(false);
+                        }
+                        return;
+                    }
+                    InputKey::Enter => {
+                        if key.phase == InputPhase::Press {
+                            self.request_launcher_launch(platform);
                         }
                         return;
                     }
                     InputKey::Escape => {
-                        if self.pages.launcher.search.value().is_empty() {
-                            self.pages.launcher.search.set_focused(false);
-                            return;
-                        }
                         self.pages.launcher.search.set_value("");
+                        self.pages.launcher.search.set_focused(true);
                         self.pages.launcher.launcher_viewport_offset = 0;
                         return;
                     }
@@ -267,6 +259,9 @@ impl ShellSession {
                 return;
             }
         }
+        let Some(layout) = self.launcher_content_layout() else {
+            return;
+        };
         let before = self.pages.launcher.search.value().to_owned();
         self.pages.launcher.search.set_focused(true);
         let prefix = ratatui::text::Line::from(format!("{} ", i18n::tr!("ui-launcher-search")))
@@ -287,7 +282,18 @@ impl ShellSession {
         if before != self.pages.launcher.search.value() {
             self.pages.launcher.launcher_viewport_offset = 0;
             self.pages.launcher.launcher_drag = None;
-            if let Some(index) = self.to_launcher_view_model().selected_index {
+            let model = self.to_launcher_view_model();
+            let query = model.search.value().trim().to_lowercase();
+            let index = if query.is_empty() {
+                model.selected_index
+            } else {
+                model
+                    .items
+                    .iter()
+                    .position(|item| item.name.to_lowercase() == query)
+                    .or_else(|| (!model.items.is_empty()).then_some(0))
+            };
+            if let Some(index) = index {
                 self.select_launcher_index(index);
             }
         }

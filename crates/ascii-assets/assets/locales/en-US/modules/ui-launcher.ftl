@@ -56,4 +56,4 @@ app-launcher-entry-saved = Launcher entry saved.
 
 ui-launcher-search = Search (Ctrl/Cmd+F):
 ui-launcher-no-matches = No matching applications. Change or clear the search.
-ui-launcher-search-help = Search applications; Enter opens the result, Down selects results, Esc clears the search
+ui-launcher-search-help = Focus search. Down moves to the results. Esc clears the search, then returns to the previous screen.

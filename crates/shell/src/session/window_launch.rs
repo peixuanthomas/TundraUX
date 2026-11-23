@@ -94,6 +94,7 @@ impl WindowLaunch {
     }
 
     pub(super) fn for_builtin(key: &str) -> Option<Self> {
+        let key = key.strip_prefix("builtin.").unwrap_or(key);
         Some(match key {
             "explorer" => Self::Explorer,
             "settings" => Self::Settings,

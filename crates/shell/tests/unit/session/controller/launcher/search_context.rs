@@ -1,12 +1,78 @@
 use super::*;
 
 #[test]
+fn launcher_starts_in_search_and_prefers_the_current_languages_exact_name() {
+    let mut fixture = Fixture::new();
+    fixture.state.close_launcher();
+    fixture.state.platform_kind = PlatformKind::Windows;
+    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    fixture.state.language = Arc::new(
+        i18n::LanguageSnapshot::load(assets, "zh-CN", 1)
+            .unwrap()
+            .snapshot,
+    );
+    fixture.state.set_home_shortcut("settings".into(), false);
+    assert!(
+        fixture
+            .state
+            .user_home_entries()
+            .iter()
+            .all(|entry| entry.icon_identity() != "settings")
+    );
+    fixture.input(InputEvent::Resize {
+        width: 108,
+        height: 20,
+    });
+    fixture.state.open_clock();
+    let opener = fixture.state.active_page_id();
+    fixture.state.open_launcher(&fixture.platform);
+    fixture.state.pages.launcher.order = vec!["builtin.clock".into(), "builtin.settings".into()];
+
+    assert!(fixture.state.to_launcher_view_model().search.state.focused);
+    for ch in "设置".chars() {
+        fixture.input(InputEvent::key(InputKey::Char(ch)));
+    }
+    let model = fixture.state.to_launcher_view_model();
+    assert_eq!(model.search.value(), "设置");
+    assert_eq!(
+        model
+            .items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["builtin.clock", "builtin.settings"]
+    );
+    assert_eq!(model.selected_item().unwrap().id, "builtin.settings");
+
+    fixture.input(InputEvent::key(InputKey::Down));
+    assert!(!fixture.state.to_launcher_view_model().search.state.focused);
+    fixture.input(InputEvent::key(InputKey::Left));
+    assert_eq!(
+        fixture
+            .state
+            .to_launcher_view_model()
+            .selected_item()
+            .unwrap()
+            .id,
+        "builtin.clock"
+    );
+    fixture.input(InputEvent::key(InputKey::Escape));
+    let cleared = fixture.state.to_launcher_view_model();
+    assert!(cleared.search.state.focused);
+    assert!(cleared.search.value().is_empty());
+    assert_eq!(fixture.state.active_screen(), ShellScreen::Launcher);
+    fixture.input(InputEvent::key(InputKey::Escape));
+    assert_eq!(fixture.state.active_page_id(), opener);
+
+    fixture.state.open_launcher(&fixture.platform);
+    fixture.input(InputEvent::Paste("设置".into()));
+    fixture.input(InputEvent::key(InputKey::Enter));
+    assert_eq!(fixture.state.active_screen(), ShellScreen::Settings);
+}
+
+#[test]
 fn launcher_search_filters_real_targets_and_zero_results_cannot_launch_hidden_items() {
     let mut fixture = Fixture::new();
-    fixture.input(InputEvent::Key(KeyInput::with_modifiers(
-        InputKey::Char('f'),
-        InputModifiers::CTRL,
-    )));
     fixture.input(InputEvent::Paste("PROGRAM.EXE".into()));
     let model = fixture.state.to_launcher_view_model();
     assert_eq!(model.items.len(), 1);
@@ -138,6 +204,12 @@ fn launcher_filtered_organize_never_overwrites_the_full_order() {
         !fixture.state.to_launcher_view_model().items[0]
             .capabilities
             .reorderable
+    );
+    fixture.input(InputEvent::key(InputKey::Escape));
+    assert!(!fixture.state.pages.launcher.organizing);
+    assert_eq!(
+        fixture.state.to_launcher_view_model().search.value(),
+        "program.exe"
     );
 }
 

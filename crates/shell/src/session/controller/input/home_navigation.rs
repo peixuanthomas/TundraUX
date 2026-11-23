@@ -4,6 +4,33 @@ use crate::session::*;
 #[path = "../../../../tests/unit/session/controller/home_navigation/touch_tests.rs"]
 mod touch_tests;
 
+const DEFAULT_HOME_APPLICATIONS: &[&str] = &[
+    "builtin.explorer",
+    "builtin.packages",
+    "builtin.services",
+    "builtin.processes",
+    "builtin.network",
+    "builtin.disks",
+    "builtin.firewall",
+    "builtin.ssh",
+    "builtin.users",
+    "builtin.scheduled-tasks",
+    "builtin.tasks",
+    "builtin.logs",
+    "builtin.backups",
+    "launcher",
+    "builtin.settings",
+    "builtin.system-status",
+];
+
+fn home_application_entry(application: app::BuiltInApplicationDescriptor) -> ui::ShellEntry {
+    ui::ShellEntry::new(
+        application.localized_name().render_current(),
+        application.localized_description().render_current(),
+    )
+    .with_icon_key(ShellSession::home_shortcut_key(application.id))
+}
+
 impl ShellSession {
     pub(in crate::session) fn user_home_entries(&self) -> Vec<ui::ShellEntry> {
         let _language = i18n::enter_snapshot(self.language.clone());
@@ -21,13 +48,7 @@ impl ShellSession {
                 if shortcuts.contains(&key)
                     && !entries.iter().any(|entry| entry.icon_identity() == key)
                 {
-                    entries.push(
-                        ui::ShellEntry::new(
-                            application.localized_name().render_current(),
-                            application.localized_description().render_current(),
-                        )
-                        .with_icon_key(key),
-                    );
+                    entries.push(home_application_entry(application));
                 }
             }
             for record in &self.app.storage_config().launcher.entries {
@@ -73,37 +94,27 @@ impl ShellSession {
 
     pub(in crate::session) fn default_home_entries(&self) -> Vec<ui::ShellEntry> {
         let _language = i18n::enter_snapshot(self.language.clone());
-        let mut entries = user_home_entries();
         let applications = self.available_built_in_applications();
-        let tasks = [
-            "packages",
-            "services",
-            "processes",
-            "network",
-            "disks",
-            "firewall",
-            "ssh",
-            "users",
-            "scheduled-tasks",
-            "tasks",
-            "logs",
-            "backups",
-        ]
-        .into_iter()
-        .filter_map(|key| {
-            let application = applications
-                .iter()
-                .find(|application| application.id.strip_prefix("builtin.") == Some(key))?;
-            Some(
-                ui::ShellEntry::new(
-                    application.localized_name().render_current(),
-                    application.localized_description().render_current(),
-                )
-                .with_icon_key(key),
-            )
-        });
-        entries.splice(1..1, tasks);
-        entries
+        DEFAULT_HOME_APPLICATIONS
+            .iter()
+            .filter_map(|&id| {
+                if id == "launcher" {
+                    Some(
+                        ui::ShellEntry::new(
+                            i18n::tr!("shell-launcher"),
+                            i18n::tr!("shell-open-apps-and-commands"),
+                        )
+                        .with_icon_key(id),
+                    )
+                } else {
+                    applications
+                        .iter()
+                        .copied()
+                        .find(|application| application.id == id)
+                        .map(home_application_entry)
+                }
+            })
+            .collect()
     }
 
     pub(in crate::session) fn is_strict_guest(&self) -> bool {
@@ -174,17 +185,17 @@ impl ShellSession {
         };
 
         self.pages.home.selected_home_entry_index = index;
-        match entry.icon_identity() {
-            "launcher" => self.open_launcher(platform),
-            "users" => self.open_user_management(),
-            "tasks" => self.toggle_tasks(),
-            key => {
-                if let Some(launch) = WindowLaunch::for_builtin(key) {
-                    launch.activate(self, platform);
-                } else if let Some(id) = key.strip_prefix("launcher.") {
-                    self.launch_saved_application(id.to_owned(), platform, false);
-                }
-            }
+        let key = entry.icon_identity();
+        if key == "launcher" {
+            self.open_launcher(platform);
+        } else if let Some(id) = key.strip_prefix("launcher.") {
+            self.launch_saved_application(id.to_owned(), platform, false);
+        } else if let Some(application) = self
+            .available_built_in_applications()
+            .into_iter()
+            .find(|application| Self::home_shortcut_key(application.id) == key)
+        {
+            self.open_built_in_application(application.id, platform, false);
         }
     }
 

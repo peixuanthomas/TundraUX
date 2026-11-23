@@ -202,8 +202,11 @@ pub(super) struct LauncherPageState {
 }
 impl Default for LauncherPageState {
     fn default() -> Self {
+        let mut search =
+            ui::components::TextInput::new("launcher.search").with_horizontal_scroll(true);
+        search.set_focused(true);
         Self {
-            search: ui::components::TextInput::new("launcher.search").with_horizontal_scroll(true),
+            search,
             context_menu: None,
             entry_editor: None,
             organizing: false,
