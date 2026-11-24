@@ -64,7 +64,11 @@ pub fn auto_admin_preview_layout(
         Constraint::Length(1),
     ])
     .split(inner);
-    let count = if model.confirming { 2 } else { 1 };
+    let count = if model.confirming || (model.finished && model.add_to_launcher) {
+        2
+    } else {
+        1
+    };
     let buttons = Layout::horizontal(vec![Constraint::Ratio(1, count); count as usize])
         .spacing(u16::from(width >= 50))
         .split(rows[5]);

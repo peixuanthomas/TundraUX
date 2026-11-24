@@ -609,6 +609,9 @@ impl AppHostSession {
             changed |= background_changed;
             self.last_background_poll = now;
         }
+        if self.focused && self.visible && !self.frozen {
+            changed |= self.state.poll_package_launcher();
+        }
         changed |= self.state.poll_input_keyboard(now);
         changed |= self
             .theme_reloader

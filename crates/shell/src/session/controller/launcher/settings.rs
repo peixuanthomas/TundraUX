@@ -6,6 +6,25 @@ use ui::components::{FormAction, FormEvent, TextInput};
 mod tests;
 
 impl ShellSession {
+    pub(in crate::session) fn open_package_launcher_form(&mut self, name: String, command: String) {
+        if !self.can_manage_launcher() || !self.can_execute_command_line() {
+            return;
+        }
+        if self.window_owner.is_app() {
+            self.window_launches
+                .push_back(WindowRequest::AddLauncherCommand { name, command });
+            return;
+        }
+        self.open_launcher(platform::native_platform().as_ref());
+        if self.active_screen() == ShellScreen::Launcher {
+            self.open_launcher_add();
+            if let Some(form) = &mut self.pages.launcher.launcher_run_settings {
+                form.name.set_value(name);
+                form.arguments.set_value(command);
+            }
+        }
+    }
+
     pub(in crate::session) fn open_launcher_add(&mut self) {
         if !self.can_manage_launcher() {
             return;

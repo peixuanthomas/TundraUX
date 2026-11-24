@@ -37,6 +37,76 @@ fn batch_commands_group_formulae_and_casks_and_validate_before_writing() {
     assert!(!fixture.operation().exists());
 }
 
+#[test]
+fn installed_formula_commands_only_include_executable_files_from_its_prefix() {
+    let fixture = Fixture::new(r#"test "$*" = "--prefix --installed demo" && pwd"#);
+    let root = fixture.0.path();
+    fs::create_dir(root.join("bin")).unwrap();
+    fs::create_dir(root.join("sbin")).unwrap();
+    fs::write(root.join("bin/notes"), "").unwrap();
+    let commands = || {
+        let paths =
+            launch::paths_with_program(&fixture.program(), "formula:demo", &AtomicBool::new(false))
+                .unwrap();
+        paths
+            .iter()
+            .filter_map(|path| crate::management::package_launch::command_for_path(path))
+            .map(|command| shell_words::split(&command).unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert!(commands().is_empty());
+    for (count, name) in ["bin/one tool", "sbin/two's tool"].iter().enumerate() {
+        let path = root.join(name);
+        fs::write(&path, "").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        let commands = commands();
+        assert_eq!(commands.len(), count + 1);
+        assert!(commands.contains(&vec![path.to_string_lossy().into_owned()]));
+    }
+    assert!(matches!(
+        launch::paths_with_program(&fixture.program(), "formula:demo", &AtomicBool::new(true)),
+        Err(ManagementError::Cancelled)
+    ));
+}
+
+#[test]
+fn cask_launch_commands_use_installed_app_and_binary_artifacts() {
+    let fixture = Fixture::new(r#"test "$*" = "list --cask -- demo" && /bin/cat files"#);
+    let root = fixture.0.path();
+    let app = root.join("Demo Tools.app");
+    let binary = root.join("demo-cli");
+    fs::create_dir(&app).unwrap();
+    fs::write(&binary, "").unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+    let staged = root.join("Old.app");
+    std::os::unix::fs::symlink(&app, &staged).unwrap();
+    fs::write(root.join("files"), format!("{}\n", staged.display())).unwrap();
+    let info = serde_json::json!({"casks":[{"full_token":"demo","installed":"2","artifacts":[
+        {"app":["Demo Tools.app"],"target":app}, {"binary":["demo"],"target":binary},
+        {"app":["Old.app"]}, {"pkg":["setup.pkg"],"target":fixture.program()}
+    ]}]});
+    fs::write(root.join("info.json"), info.to_string()).unwrap();
+    let paths =
+        launch::paths_with_program(&fixture.program(), "cask:demo", &AtomicBool::new(false))
+            .unwrap();
+    let commands = paths
+        .iter()
+        .filter_map(|path| crate::management::package_launch::command_for_path(path))
+        .map(|command| shell_words::split(&command).unwrap())
+        .collect::<Vec<_>>();
+    assert!(commands.contains(&vec![
+        "/usr/bin/open".into(),
+        app.to_string_lossy().into_owned()
+    ]));
+    assert!(commands.contains(&vec![binary.to_string_lossy().into_owned()]));
+    assert_eq!(paths.len(), 3);
+    assert!(
+        launch::paths_with_program(&fixture.program(), "cask:other", &AtomicBool::new(false))
+            .unwrap()
+            .is_empty()
+    );
+}
+
 const INFO: &str = r#"{
     "formulae":[{"full_name":"demo","versions":{"stable":"1.1"},"revision":1,
         "installed":[{"version":"1.0"}],"desc":"命令行工具","tap":"homebrew/core"}],

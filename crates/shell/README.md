@@ -29,6 +29,8 @@
 | Dialog and motion state | `overlays`, `overlay_focus`, `overlay_input`, `motion_effects`, `panel_motion`, `spring_progress` | Order dialogs, intercept input, restore focus, and track visual transitions |
 | Special surfaces | `screen_keyboard`, `screen_saver` | Own the visible keyboard target and track idle weather and wake state |
 
+Packages offers Add to Launcher after a successful install and for selected packages in Installed. A batch lets the user pick a package. Multiple commands open a searchable list. A single command fills the existing custom Launcher form, and an empty result leaves the command editable. The Shell saves the entry when the user confirms.
+
 ### Page controllers
 
 | Modules under [`session/controller/`](src/session/controller/) | Responsibility |

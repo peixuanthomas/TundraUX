@@ -651,6 +651,7 @@ impl AutoAdminJob {
             status: stop::status(&d),
             confirming: self.phase() == WAITING,
             finished,
+            add_to_launcher: false,
             approve_selected,
             button_focus,
             scroll,

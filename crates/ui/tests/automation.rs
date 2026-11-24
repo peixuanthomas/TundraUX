@@ -286,6 +286,7 @@ fn aa_secret_is_hidden_while_real_terminal_text_and_wide_characters_remain_visib
         status: "Waiting".into(),
         confirming: false,
         finished: false,
+        add_to_launcher: false,
         approve_selected: false,
         button_focus: None,
         scroll: 0,

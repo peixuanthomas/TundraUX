@@ -44,6 +44,44 @@ impl PackageBackend {
     }
 }
 
+pub(super) fn launch_paths(
+    target: &str,
+    cancelled: &AtomicBool,
+) -> Result<Vec<PathBuf>, ManagementError> {
+    let backend = detect_backend(cancelled)?;
+    validate_target(target, backend)?;
+    let (program, flag) = match backend {
+        PackageBackend::Apt => ("/usr/bin/dpkg-query", "-L"),
+        PackageBackend::Dnf4 | PackageBackend::Dnf5 => ("/usr/bin/rpm", "-ql"),
+        PackageBackend::Pacman => ("/usr/bin/pacman", "-Qlq"),
+    };
+    let files = query::run_read_command(
+        program,
+        &[flag.into(), "--".into(), target.into()],
+        cancelled,
+    )?;
+    Ok(files
+        .lines()
+        .map(Path::new)
+        .filter(|path| {
+            matches!(
+                path.parent().and_then(Path::to_str),
+                Some(
+                    "/bin"
+                        | "/sbin"
+                        | "/usr/bin"
+                        | "/usr/sbin"
+                        | "/usr/games"
+                        | "/usr/local/bin"
+                        | "/usr/local/sbin"
+                )
+            ) || (path.starts_with("/usr/share/applications")
+                && path.extension().is_some_and(|ext| ext == "desktop"))
+        })
+        .map(Path::to_owned)
+        .collect())
+}
+
 /// Backend choice comes from installed tools, never from caller-supplied executable paths.
 pub fn detect_backend(cancelled: &AtomicBool) -> Result<PackageBackend, ManagementError> {
     if cancelled.load(Ordering::Acquire) {

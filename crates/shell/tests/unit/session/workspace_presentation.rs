@@ -24,6 +24,58 @@ fn workspace(width: u16, height: u16) -> (Workspace, SessionId) {
     (workspace, id)
 }
 
+#[test]
+fn focused_package_window_opens_an_editable_draft_in_the_shell() {
+    let (mut workspace, id) = workspace(108, 20);
+    let mut shell = shell_state();
+    shell.app.dispatch_at(
+        app::AppCommand::SetAuthSession(Some(AuthSession {
+            source: identity::IdentitySource::SystemCurrentProcess,
+            session_id: "package".into(),
+            username: "alice".into(),
+            user_id: "alice".into(),
+            role: UserRole::User,
+            started_at_epoch_ms: 1,
+        })),
+        Instant::now(),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    shell.storage_manager = Some(
+        StorageManager::open(platform::build_binary_dir_app_paths(dir.path()).unwrap())
+            .unwrap()
+            .manager,
+    );
+    let mut package = shell.clone();
+    package.window_owner = super::super::window_launch::WindowOwner::App(
+        super::super::window_launch::WindowApplication::Management(ManagementKind::Packages),
+    );
+    package.open_package_launcher_form("Demo".into(), "/usr/bin/demo".into());
+    let request = serde_json::to_value(package.window_launches.pop_front().unwrap()).unwrap();
+    workspace
+        .receive(id, AppToShell::OpenApp(request.clone()), &mut shell)
+        .unwrap();
+    assert!(shell.pages.launcher.launcher_run_settings.is_none());
+    workspace.windows.get_mut(&id).unwrap().launch =
+        WindowLaunch::Management(WindowLaunch::management_query(ManagementKind::Packages));
+    workspace
+        .receive(id, AppToShell::OpenApp(request), &mut shell)
+        .unwrap();
+    let form = shell.pages.launcher.launcher_run_settings.as_ref().unwrap();
+    assert_eq!(form.name.value(), "Demo");
+    assert_eq!(form.arguments.value(), "/usr/bin/demo");
+    assert!(
+        shell
+            .storage_manager
+            .as_ref()
+            .unwrap()
+            .load_config()
+            .unwrap()
+            .launcher
+            .entries
+            .is_empty()
+    );
+}
+
 fn relayout(workspace: &mut Workspace, width: u16, height: u16) {
     workspace.relayout(
         Rect::new(0, 0, width, height),

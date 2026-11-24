@@ -1,5 +1,7 @@
 //! Homebrew packages use the invoking macOS account, including native Cask prompts.
 pub(super) mod client;
+mod launch;
+pub(super) use launch::launch_paths;
 mod metadata;
 mod process;
 

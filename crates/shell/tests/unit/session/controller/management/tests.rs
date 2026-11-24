@@ -28,6 +28,10 @@ fn process_confirmation_enter_cancels_without_starting_an_operation() {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[path = "package_launcher.rs"]
+mod package_launcher;
+
 #[path = "package_workspace.rs"]
 mod package_workspace;
 #[path = "selection.rs"]

@@ -483,6 +483,15 @@ impl ShellSession {
                 !self.pages.management.management_state.expert_open;
             return;
         }
+        if matches!(
+            action.id.as_str(),
+            "package_launcher" | "installed_result_launcher"
+        ) {
+            if self.management_action_enabled(&action) {
+                self.add_package_to_launcher(action.id == "installed_result_launcher");
+            }
+            return;
+        }
         if action.id == "package_advanced" {
             self.pages.management.management_state.package_advanced_open =
                 !self.pages.management.management_state.package_advanced_open;
@@ -1035,6 +1044,7 @@ impl ShellSession {
                 .as_ref()
                 .is_some_and(|action| action.id == command.action)
         });
+        let installing = self.package_install_targets(command.as_ref());
         let configuration_operation = command
             .as_ref()
             .is_some_and(|c| c.kind == ManagementKind::SystemConfig);
@@ -1075,7 +1085,10 @@ impl ShellSession {
         ) else {
             return;
         };
-        self.pages.management.management_state.auto_admin_job = Some(aa.clone());
+        let state = &mut self.pages.management.management_state;
+        state.installing.clear();
+        state.just_installed.clear();
+        state.auto_admin_job = Some(aa.clone());
         #[cfg(target_os = "linux")]
         if let Some(command) = &mut command {
             if let Some(id) = aa.history_id() {
@@ -1181,6 +1194,7 @@ impl ShellSession {
                 self.pages.management.management_state.problem = None;
                 *job.0.worker.lock().unwrap_or_else(|e| e.into_inner()) = Some(worker);
                 self.register_management_job(&job, TaskDomain::ManagementOperation, task_class);
+                self.pages.management.management_state.installing = installing;
                 self.pages.management.management_state.operation_job = Some(job);
                 self.pages.management.management_state.outcome = None;
                 if !configuration_operation {
@@ -1229,6 +1243,14 @@ impl ShellSession {
             return;
         }
         match form.purpose {
+            FormPurpose::PackageLookup(_) => {
+                self.pages.management.management_state.form = Some(form)
+            }
+            FormPurpose::PackageChoice(choice) => {
+                let value = &form.fields[0].value;
+                self.reset_management_form_view();
+                self.submit_package_choice(choice, value);
+            }
             FormPurpose::Scheduled(wizard) => self.submit_scheduled_step(wizard, form.fields),
             FormPurpose::Configuration(action) => self.submit_config_form(&action, form.fields),
             FormPurpose::Menu(items) => {
@@ -1273,6 +1295,13 @@ impl ShellSession {
         }
         if let Some(mut form) = self.pages.management.management_state.form.take() {
             use zeroize::Zeroize;
+            if matches!(form.purpose, FormPurpose::PackageLookup(_)) {
+                self.pages
+                    .management
+                    .management_state
+                    .package_lookup
+                    .cancel();
+            }
             for field in &mut form.fields {
                 if field.secret {
                     field.value.zeroize();

@@ -32,6 +32,8 @@ flowchart LR
     Interaction --> Result[Completed, failed, or outcome unknown]
 ```
 
+Shell can attach Add to Launcher to the finished result for a successful package install. The package page supplies the installed targets, and Launcher handles editing and saving the command.
+
 AA policies are `manual`, `automatic`, and `deny`. Automatic approval skips only AA confirmation; system authorization and the program's own prompts still require responses. Passwords are used only for the current input and are not written to logs, arguments, or configuration.
 
 Approval, execution, cancellation, and results are synchronized to the shared task history. Output is archived in chunks; secret input is not archived. Pages and helpers use stable IDs, and read-only queries and previews are not registered as modification tasks.

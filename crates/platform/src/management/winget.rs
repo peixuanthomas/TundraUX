@@ -61,6 +61,54 @@ fn spec(program: &Path, verb: &str) -> ProcessSpec {
     ])
 }
 
+#[cfg(windows)]
+pub(super) fn launch_paths(
+    id: &str,
+    cancelled: &AtomicBool,
+) -> Result<Vec<PathBuf>, ManagementError> {
+    use winreg::{RegKey, enums::*};
+    validate_id(id)?;
+    let mut paths = Vec::new();
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+            let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(
+                r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+                KEY_READ | view,
+            ) else {
+                continue;
+            };
+            for name in uninstall.enum_keys().flatten() {
+                if cancelled.load(Ordering::Acquire) {
+                    return Err(ManagementError::Cancelled);
+                }
+                let Ok(key) = uninstall.open_subkey_with_flags(name, KEY_READ | view) else {
+                    continue;
+                };
+                if !key
+                    .get_value::<String, _>("WinGetPackageIdentifier")
+                    .is_ok_and(|value| value.eq_ignore_ascii_case(id))
+                    || !key
+                        .get_value::<String, _>("WinGetSourceIdentifier")
+                        .is_ok_and(|value| {
+                            value.eq_ignore_ascii_case("Microsoft.Winget.Source_8wekyb3d8bbwe")
+                        })
+                {
+                    continue;
+                }
+                if let Some(path) = ["TargetFullPath", "SymlinkFullPath"]
+                    .iter()
+                    .filter_map(|field| key.get_value::<std::ffi::OsString, _>(field).ok())
+                    .map(PathBuf::from)
+                    .find(|path| super::package_launch::command_for_path(path).is_some())
+                {
+                    paths.push(path);
+                }
+            }
+        }
+    }
+    Ok(paths)
+}
+
 fn validate_id(id: &str) -> Result<(), ManagementError> {
     if id.is_empty()
         || id.len() > 256

@@ -128,11 +128,9 @@ impl ShellSession {
         state.revision = state.revision.wrapping_add(1);
     }
 
-    pub(super) fn selected_management_actions(
-        &self,
-    ) -> Vec<(ManagementAction, Option<ManagementRow>)> {
+    pub(super) fn selected_management_rows(&self) -> Vec<&ManagementRow> {
         let state = &self.pages.management.management_state;
-        let rows = state
+        state
             .snapshot
             .rows
             .iter()
@@ -146,7 +144,14 @@ impl ShellSession {
                     })
             })
             .map(|(_, row)| row)
-            .collect::<Vec<_>>();
+            .collect()
+    }
+
+    pub(super) fn selected_management_actions(
+        &self,
+    ) -> Vec<(ManagementAction, Option<ManagementRow>)> {
+        let state = &self.pages.management.management_state;
+        let rows = self.selected_management_rows();
         if rows.len() <= 1 {
             return rows
                 .first()

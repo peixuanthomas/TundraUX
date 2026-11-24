@@ -59,6 +59,7 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp"] }
 
 [dev-dependencies]
+tempfile = "3.27"
 auto-admin = { path = "../auto-admin", features = ["test-support"] }
 watchdog = { path = "../watchdog", features = ["test-support", "tokio"] }
 

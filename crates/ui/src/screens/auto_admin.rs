@@ -25,6 +25,7 @@ pub struct AutoAdminViewModel {
     pub status: String,
     pub confirming: bool,
     pub finished: bool,
+    pub add_to_launcher: bool,
     pub approve_selected: bool,
     pub button_focus: Option<usize>,
     pub scroll: u16,
@@ -171,7 +172,11 @@ fn authorization_layout(
         Constraint::Length(hint_height),
     ])
     .split(inner);
-    let count = if model.confirming || stopping { 2 } else { 1 };
+    let count = if model.confirming || stopping || (model.finished && model.add_to_launcher) {
+        2
+    } else {
+        1
+    };
     let button_gap = if inner.width >= 40 { 2 } else { 0 };
     let button_width = inner.width.saturating_sub(button_gap * (count - 1)) / count;
     let button_areas = Layout::horizontal(vec![
@@ -245,7 +250,9 @@ fn auto_admin_hint(model: &AutoAdminViewModel) -> String {
         return i18n::tr!("aa-stop-warning-hint");
     }
     model.input.clone().unwrap_or_else(|| {
-        if model.finished {
+        if model.finished && model.add_to_launcher {
+            i18n::tr!("aa-finished-launcher-hint")
+        } else if model.finished {
             i18n::tr!("aa-finished-hint")
         } else {
             String::new()
@@ -400,7 +407,16 @@ pub(super) fn render_auto_admin_contents(
             ("aa.deny", i18n::tr!("aa-deny"), !model.approve_selected),
         ]
     } else if model.finished {
-        vec![("aa.close", i18n::tr!("aa-close"), true)]
+        let add_focused = model.add_to_launcher && model.button_focus == Some(1);
+        let mut labels = vec![("aa.close", i18n::tr!("aa-close"), !add_focused)];
+        if model.add_to_launcher {
+            labels.push((
+                "aa.add-to-launcher",
+                i18n::tr!("shell-add-to-launcher"),
+                add_focused,
+            ));
+        }
+        labels
     } else {
         let mut labels = vec![];
         if model.can_stop {

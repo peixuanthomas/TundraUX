@@ -383,6 +383,7 @@ impl ShellSession {
         let completed = finished && self.auto_admin.task_request.is_some();
         if finished && let Some(request) = self.auto_admin.task_request.take() {
             self.tasks.complete(TaskDomain::AutoAdmin, request);
+            self.auto_admin.button_focus = None;
         }
         stopped || changed || show || completed
     }
@@ -465,11 +466,13 @@ impl ShellSession {
     }
     fn auto_admin_model(&self) -> Option<ui::AutoAdminViewModel> {
         let job = self.auto_admin.job.as_ref()?;
-        Some(job.view_model(
+        let mut model = job.view_model(
             self.auto_admin.approve_selected,
             self.auto_admin.button_focus,
             self.auto_admin.scroll,
-        ))
+        );
+        model.add_to_launcher = model.finished && self.has_package_launcher_result(job);
+        Some(model)
     }
     #[cfg(test)]
     pub(in crate::session) fn handle_auto_admin_input(&mut self, input: &InputEvent) -> bool {
@@ -633,6 +636,19 @@ impl ShellSession {
                 }
             }
             InputEvent::Key(key)
+                if job.phase() == FINISHED
+                    && self.has_package_launcher_result(&job)
+                    && matches!(
+                        key.key,
+                        InputKey::Tab | InputKey::BackTab | InputKey::Left | InputKey::Right
+                    ) =>
+            {
+                if key.phase == InputPhase::Press {
+                    self.auto_admin.button_focus =
+                        Some(usize::from(self.auto_admin.button_focus != Some(1)));
+                }
+            }
+            InputEvent::Key(key)
                 if matches!(job.phase(), DENIED | FINISHED)
                     && matches!(
                         key.key,
@@ -640,7 +656,12 @@ impl ShellSession {
                     ) =>
             {
                 if key.phase == InputPhase::Press {
-                    self.close_auto_admin();
+                    let index = if key.key == InputKey::Escape {
+                        0
+                    } else {
+                        self.auto_admin.button_focus.unwrap_or(0)
+                    };
+                    self.activate_auto_admin_button(&job, index);
                     self.auto_admin.action_key = Some((key.key.clone(), received_at));
                 }
             }
@@ -859,7 +880,11 @@ impl ShellSession {
         match job.phase() {
             WAITING if index == 0 => job.decide(true),
             WAITING if index == 1 => self.close_auto_admin(),
-            DENIED | FINISHED if index == 0 => self.close_auto_admin(),
+            FINISHED if index == 1 && self.has_package_launcher_result(job) => {
+                self.close_auto_admin();
+                self.add_package_to_launcher(true);
+            }
+            DENIED | FINISHED => self.close_auto_admin(),
             RUNNING => match index {
                 0 if self.auto_admin_keyboard_job().is_some() => {
                     self.auto_admin.button_focus = None;

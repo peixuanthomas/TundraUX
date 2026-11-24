@@ -16,6 +16,10 @@ pub(super) enum WindowRequest {
     ShowLauncher {
         select: Option<OsString>,
     },
+    AddLauncherCommand {
+        name: String,
+        command: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

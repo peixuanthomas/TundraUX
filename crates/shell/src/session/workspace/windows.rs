@@ -255,7 +255,7 @@ impl Workspace {
                         );
                     }
                 }
-                WindowRequest::ShowLauncher { .. } => {}
+                WindowRequest::ShowLauncher { .. } | WindowRequest::AddLauncherCommand { .. } => {}
             }
         }
         if self
@@ -724,6 +724,14 @@ impl Workspace {
                                 state.auth_session(),
                                 Some(id),
                             )?;
+                        }
+                        WindowRequest::AddLauncherCommand { name, command }
+                            if window.launch.application()
+                                == super::window_launch::WindowApplication::Management(
+                                    ManagementKind::Packages,
+                                ) =>
+                        {
+                            state.open_package_launcher_form(name, command);
                         }
                         WindowRequest::ShowLauncher { select } => {
                             let platform = platform::native_platform();

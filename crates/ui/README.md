@@ -94,6 +94,7 @@ Enter moves to the next field and submits from the last field; Space or a tap to
 - `DataTable` provides a separate header band, full-row selection and pointer feedback, sorting, and column-width calculation.
 - `SidebarWorkspaceLayout` provides a padded navigation surface, list, and detail columns, switching to top navigation and a vertical layout in narrow windows.
 - `ManagementWorkspace` organizes search, details, action bars, and expert areas that stay expanded when the selected object changes.
+- A successful package installation can show an Add to Launcher button beside Close in the AutoAdmin result. The dialog uses the same button areas for rendering and pointer input.
 - The management details scrollbar uses the wrapped line count for both the scroll range and offset clamping.
 - `PageActionBar` supports primary and danger colors, disabled states, and wrapping at the full button-text width in narrow windows, without fixed button-count or three-row limits. Log expert tools reuse the same layout without covering the list.
 - Home and Launcher show a one-cell ASCII `#` beside draggable names in organize mode. The entire tile accepts the drag. Both pages share the insertion line and its geometry, including row gaps, empty tail slots, and scrollbar exclusion.

@@ -59,6 +59,7 @@ impl ShellSession {
                 .filter(|(action, _)| action.id == advanced_scope)
                 .cloned(),
         );
+        actions.extend(self.package_launcher_actions());
         actions.extend(all.into_iter().filter(|(action, _)| {
             !management_view_action(action)
                 && (!matches!(action.id.as_str(), "upgrade_all" | "pacman_upgrade_all")

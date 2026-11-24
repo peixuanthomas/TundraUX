@@ -1,7 +1,9 @@
 mod actions;
 mod forms;
 mod input;
+mod package_launcher;
 mod packages;
+use package_launcher::{PackageChoice, PackageTarget};
 mod scheduled;
 mod selection;
 mod task_center;
@@ -83,6 +85,8 @@ enum FormPurpose {
     Action(ManagementAction, Option<ManagementRow>),
     Answer(String),
     Menu(Vec<(ManagementAction, Option<ManagementRow>)>),
+    PackageLookup(String),
+    PackageChoice(PackageChoice),
     Configuration(String),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -184,6 +188,9 @@ pub(in crate::session) struct ManagementState {
     shortcut_repeat_guard: Option<InputKey>,
     status: String,
     outcome: Option<String>,
+    installing: Vec<PackageTarget>,
+    just_installed: Vec<PackageTarget>,
+    package_lookup: app::background::Latest<Vec<String>>,
     received_snapshot: bool,
     refresh_requested: bool,
     refreshing_authorized: bool,
@@ -424,6 +431,9 @@ fn editor_dialog_title_key(action: &str) -> Option<&'static str> {
 }
 
 fn form_value_text(purpose: &FormPurpose, field: &ManagementField, value: &str) -> String {
+    if matches!(purpose, FormPurpose::PackageChoice(_)) {
+        return value.into();
+    }
     if matches!(purpose, FormPurpose::Scheduled(_))
         && let Some(label) = scheduled::choice_label(&field.id, value)
     {
@@ -803,6 +813,19 @@ impl ShellSession {
     ) -> Duration {
         let mut timeout = self.scheduled_preview_poll_timeout(now, maximum);
         let state = &self.pages.management.management_state;
+        if !self.window_owner.is_app()
+            && self.active_screen() == ShellScreen::Management
+            && state
+                .form
+                .as_ref()
+                .is_some_and(|form| matches!(form.purpose, FormPurpose::PackageLookup(_)))
+            && state.package_lookup.busy()
+        {
+            if state.package_lookup.ready() {
+                return Duration::ZERO;
+            }
+            timeout = timeout.min(Duration::from_millis(250));
+        }
         if self.active_screen() == ShellScreen::Management
             && matches!(
                 state.kind,
@@ -1157,6 +1180,10 @@ impl ShellSession {
         changed |= !events.is_empty();
         let mut completed = false;
         for event in events {
+            if matches!(event, OperationEvent::Completed { .. }) {
+                let state = &mut self.pages.management.management_state;
+                state.just_installed = std::mem::take(&mut state.installing);
+            }
             if cfg!(windows)
                 && self.pages.management.management_state.kind == Some(ManagementKind::Packages)
                 && !self
@@ -1172,6 +1199,12 @@ impl ShellSession {
                 &event,
                 OperationEvent::Failed { .. } | OperationEvent::Disconnected { .. }
             ) {
+                self.pages.management.management_state.installing.clear();
+                self.pages
+                    .management
+                    .management_state
+                    .just_installed
+                    .clear();
                 self.pages.management.management_state.refresh_requested = false;
             }
             self.pages.management.management_state.revision = self
@@ -1931,7 +1964,7 @@ impl ShellSession {
                         })),
                         _=>i18n::tr!("management-form-submit"),
                     }),
-                    submit_disabled: matches!(&f.purpose,FormPurpose::Configuration(action) if action=="check" && self.config_save_disabled(&f.fields)) || matches!(&f.purpose,FormPurpose::Scheduled(wizard) if wizard.submit_disabled()),
+                    submit_disabled: matches!(&f.purpose, FormPurpose::PackageLookup(_)) || matches!(&f.purpose,FormPurpose::Configuration(action) if action=="check" && self.config_save_disabled(&f.fields)) || matches!(&f.purpose,FormPurpose::Scheduled(wizard) if wizard.submit_disabled()),
                     identity: format!("{}.{}",f.instance,match &f.purpose {
                         FormPurpose::Scheduled(_)=>"scheduled-task".into(),
                         FormPurpose::Action(action, row) => format!(
@@ -1941,6 +1974,7 @@ impl ShellSession {
                         ),
                         FormPurpose::Answer(id) => id.clone(),
                         FormPurpose::Menu(_) => "more-actions".into(),
+                        FormPurpose::PackageLookup(_) | FormPurpose::PackageChoice(_) => "package-launcher".into(),
                         FormPurpose::Configuration(action) => format!("config-{action}"),
                     }),
                     field_scroll: s.form_field_scroll,

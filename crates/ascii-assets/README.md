@@ -43,7 +43,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, and Tab focus navigation with arrows in the focused region |
 | `management-common.ftl` | Persistent expert areas on management pages |
-| `management.ftl` | Management prompts and the AutoAdmin dialog title, including returning to waiting applications through Tasks in Launcher |
+| `management.ftl` | Management prompts, package and command choices for adding an installed program to Launcher, and the AutoAdmin dialog title |
 | `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |

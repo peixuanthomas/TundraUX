@@ -21,6 +21,9 @@ impl ShellSession {
         } else {
             changed |= self.poll_logs_tasks();
             changed |= self.poll_management();
+            if !self.window_owner.is_app() {
+                changed |= self.poll_package_launcher();
+            }
         }
         changed |= self.poll_auto_admin();
         changed |= self.poll_editor_background_tasks(platform);

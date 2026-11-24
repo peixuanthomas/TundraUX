@@ -156,6 +156,7 @@ fn preview_model() -> AutoAdminViewModel {
         status: i18n::tr!("aa-request"),
         confirming: true,
         finished: false,
+        add_to_launcher: false,
         stop: Default::default(),
         can_stop: false,
         can_kill: false,
