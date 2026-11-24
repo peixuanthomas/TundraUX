@@ -120,6 +120,12 @@ fn render_explorer_toolbar(
         };
         let text = if ExplorerToolbarAction::PATH_ACTIONS.contains(&button.action) {
             explorer_icon_line(assets, &button.icon_key)
+        } else if button.action == ExplorerToolbarAction::Subfolders {
+            format!(
+                "[{}] {}",
+                if button.active { 'x' } else { ' ' },
+                button.label
+            )
         } else {
             explorer_action_label(button, assets)
         };
@@ -485,6 +491,12 @@ pub(super) fn explorer_action_bar(model: &ExplorerViewModel) -> PageActionBar {
         })
         .collect();
     let mut status = Vec::new();
+    if let Some(text) = &model.search_status {
+        status.push(PageActionStatus {
+            text: text.clone(),
+            tone: ComponentTone::Muted,
+        });
+    }
     if let Some(operation) = &model.operation {
         let text = operation.percent().map_or_else(
             || {

@@ -892,7 +892,7 @@ impl ShellSession {
             .as_ref()
             .map(ShellExplorerTaskRuntime::drain_events)
             .unwrap_or_default();
-        let changed = !events.is_empty();
+        let changed = self.poll_explorer_search() || !events.is_empty();
         for event in events {
             self.apply_explorer_task_event(event, platform);
         }

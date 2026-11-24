@@ -28,7 +28,7 @@ Callers modify state through `AppCommand` and read a consistent view through `Ap
 
 ### Explorer and Launcher
 
-Explorer manages directories, filtering, sorting, multiple selection, the clipboard, and operation progress. `ExplorerTaskEngine` provides cancellation, checkpoints, and recovery for lengthy file tasks; the platform layer performs the actual copy, move, trash, and directory operations.
+Explorer manages directories, filtering, sorting, multiple selection, the clipboard, and operation progress. Optional subfolder searches match names under the current directory and retain each result’s native path. The cancellable scan respects directory read permissions and visibility settings and skips directory links. `ExplorerTaskEngine` provides cancellation, checkpoints, and recovery for lengthy file tasks; the platform layer performs the actual copy, move, trash, and directory operations.
 
 `ExplorerFileService` shares copied and cut files across pages and app processes in the current Shell session. Workers use a bounded shared-operations backend; the services process owns the clipboard, busy state, and undo history and scopes them to that session. It records completed moves and renames within one filesystem for cross-page undo. Undo restores the location while preserving later content edits, checks the object and both parent-directory identities, and rejects replaced objects or an occupied original path without recursively scanning directories. Cross-volume moves, replacements, and directory merges cannot be undone and clear older undo records. Native paths retain their original bytes or UTF-16 units over IPC. The system file clipboard is not connected; the text clipboard does not carry file transfers.
 

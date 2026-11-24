@@ -22,6 +22,9 @@ impl ExplorerState {
             selection_anchor: None,
             selection_cleared: false,
             query: String::new(),
+            include_subfolders: false,
+            subfolder_results: Default::default(),
+            search_revision: 0,
             show_hidden: config.show_hidden,
             show_system: config.show_system,
             show_extensions: config.show_extensions,
@@ -199,6 +202,11 @@ impl ExplorerState {
         let mut entries = self
             .all_entries
             .iter()
+            .chain(
+                self.subfolder_results
+                    .iter()
+                    .flat_map(|result| &result.entries),
+            )
             .filter(|entry| self.show_hidden || !entry.attributes.hidden)
             .filter(|entry| self.show_system || !entry.attributes.system)
             .filter(|entry| query.is_empty() || entry.name.to_lowercase().contains(&query))

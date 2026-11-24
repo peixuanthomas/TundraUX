@@ -42,6 +42,7 @@ pub enum ExplorerToolbarAction {
     Forward,
     Up,
     Refresh,
+    Subfolders,
     New,
     Cut,
     Copy,
@@ -58,7 +59,7 @@ pub enum ExplorerToolbarAction {
 impl ExplorerToolbarAction {
     pub const PATH_ACTIONS: [Self; 3] = [Self::Back, Self::Up, Self::Forward];
 
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::SelectionMode,
         Self::Open,
         Self::Menu,
@@ -66,6 +67,7 @@ impl ExplorerToolbarAction {
         Self::Forward,
         Self::Up,
         Self::Refresh,
+        Self::Subfolders,
         Self::New,
         Self::Cut,
         Self::Copy,
@@ -79,7 +81,7 @@ impl ExplorerToolbarAction {
         Self::Options,
     ];
 
-    pub const REGULAR: [Self; 16] = [
+    pub const REGULAR: [Self; 17] = [
         Self::SelectionMode,
         Self::Open,
         Self::Menu,
@@ -87,6 +89,7 @@ impl ExplorerToolbarAction {
         Self::Forward,
         Self::Up,
         Self::Refresh,
+        Self::Subfolders,
         Self::New,
         Self::Cut,
         Self::Copy,
@@ -120,6 +123,7 @@ impl ExplorerToolbarAction {
             Self::Forward => i18n::tr!("ui-explorer-forward"),
             Self::Up => i18n::tr!("ui-explorer-up"),
             Self::Refresh => i18n::tr!("ui-explorer-refresh"),
+            Self::Subfolders => i18n::tr!("ui-explorer-subfolders"),
             Self::New => i18n::tr!("ui-explorer-new"),
             Self::Cut => i18n::tr!("ui-explorer-cut"),
             Self::Copy => i18n::tr!("ui-explorer-copy"),
@@ -143,6 +147,7 @@ impl ExplorerToolbarAction {
             Self::Forward => "forward",
             Self::Up => "up",
             Self::Refresh => "refresh",
+            Self::Subfolders => "options",
             Self::New => "new",
             Self::Cut => "cut",
             Self::Copy => "copy",
@@ -166,6 +171,7 @@ impl ExplorerToolbarAction {
             Self::Forward => "Right",
             Self::Up => "Backspace",
             Self::Refresh => "F5",
+            Self::Subfolders => "",
             Self::New => "N",
             Self::Cut => {
                 if cfg!(target_os = "macos") {
@@ -623,6 +629,7 @@ pub struct ExplorerViewModel {
     pub entries: Vec<ExplorerEntryViewModel>,
     pub selected_index: Option<usize>,
     pub search: Option<ExplorerSearchViewModel>,
+    pub search_status: Option<String>,
     pub show_hidden: bool,
     pub message: Option<String>,
     pub error: Option<String>,
@@ -694,6 +701,7 @@ impl ExplorerViewModel {
             entries,
             selected_index,
             search: None,
+            search_status: None,
             show_hidden: false,
             message: None,
             error: None,

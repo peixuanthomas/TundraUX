@@ -59,9 +59,13 @@ impl ExplorerController {
             event.source_path = Some(state.current_path.clone());
             event.target_path = match &command {
                 ExplorerCommand::Navigate(path) => Some(path.clone()),
-                ExplorerCommand::NewFolder(name)
-                | ExplorerCommand::NewTextFile(name)
-                | ExplorerCommand::Rename(name) => Some(state.current_path.join(name)),
+                ExplorerCommand::NewFolder(name) | ExplorerCommand::NewTextFile(name) => {
+                    Some(state.current_path.join(name))
+                }
+                ExplorerCommand::Rename(name) => state
+                    .single_selected_entry()
+                    .and_then(|entry| entry.path.parent())
+                    .map(|parent| parent.join(name)),
                 _ => None,
             };
             emit_explorer_event(event.clone());
@@ -163,12 +167,24 @@ impl ExplorerController {
                 ExplorerEffect::None
             }
             ExplorerCommand::Search(query) => {
-                state.query = query;
-                state.apply_projection();
+                if state.query != query {
+                    state.invalidate_subfolder_search();
+                    state.query = query;
+                    state.apply_projection();
+                }
+                ExplorerEffect::None
+            }
+            ExplorerCommand::ToggleSubfolders => {
+                if !state.current_location.is_trash() {
+                    state.include_subfolders = !state.include_subfolders;
+                    state.invalidate_subfolder_search();
+                    state.apply_projection();
+                }
                 ExplorerEffect::None
             }
             ExplorerCommand::ToggleHidden => {
                 state.show_hidden = !state.show_hidden;
+                state.invalidate_subfolder_search();
                 state.apply_projection();
                 state.set_success(if state.show_hidden {
                     msg!("app-explorer-hidden-visible")
@@ -179,6 +195,7 @@ impl ExplorerController {
             }
             ExplorerCommand::ToggleSystem => {
                 state.show_system = !state.show_system;
+                state.invalidate_subfolder_search();
                 state.apply_projection();
                 ExplorerEffect::PersistConfig(state.to_config())
             }

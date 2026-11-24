@@ -1896,6 +1896,11 @@ pub(super) fn synchronize_motion_hit_map_after_input(
 
 pub(super) fn session_has_background_work(state: &ShellSession) -> bool {
     state.tasks.has_work()
+        || state
+            .pages
+            .explorer
+            .iter()
+            .any(|(_, page)| page.search_task.busy())
         || state.auto_admin_running()
         || !state.pending_page_closes.is_empty()
         || state

@@ -1523,7 +1523,21 @@ impl ShellSession {
             .entries
             .iter()
             .map(|entry| ui::ExplorerEntryViewModel {
-                name: explorer_display_name(entry, state.show_extensions),
+                name: {
+                    let name = explorer_display_name(entry, state.show_extensions);
+                    if state.include_subfolders && !state.query.is_empty() {
+                        entry
+                            .path
+                            .strip_prefix(&state.current_path)
+                            .ok()
+                            .and_then(|path| path.parent())
+                            .map_or(name.clone(), |parent| {
+                                parent.join(&name).display().to_string()
+                            })
+                    } else {
+                        name
+                    }
+                },
                 kind: entry.localized_type_label().render_current(),
                 size: (entry.kind == app::explorer::ExplorerEntryKind::File)
                     .then(|| explorer_size_label(entry.size, state.size_format)),
@@ -1684,6 +1698,9 @@ impl ShellSession {
                 }
                 button.active = state.selection_mode;
             }
+            if button.action == ui::ExplorerToolbarAction::Subfolders {
+                button.active = state.include_subfolders;
+            }
             button.enabled = match button.action {
                 ui::ExplorerToolbarAction::Back => !state.back_history.is_empty(),
                 ui::ExplorerToolbarAction::Forward => !state.forward_history.is_empty(),
@@ -1744,6 +1761,18 @@ impl ShellSession {
             }
         });
         model.show_hidden = state.show_hidden;
+        model.search_status = match &state.subfolder_results {
+            Some(result) if result.skipped > 0 => Some(i18n::tr!(
+                "ui-explorer-search-skipped",
+                count = result.skipped
+            )),
+            None if self.pages.explorer.search_task.busy()
+                && self.pages.explorer.search_request.is_some() =>
+            {
+                Some(i18n::tr!("ui-explorer-searching-subfolders"))
+            }
+            _ => None,
+        };
         model.message = if is_trash && model.selected_count > 0 {
             state.selected_entry().map(|entry| {
                 entry.original_path.as_ref().map_or_else(

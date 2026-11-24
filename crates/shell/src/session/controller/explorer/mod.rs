@@ -1,6 +1,7 @@
 mod focus;
 mod input;
 mod save_picker;
+mod search;
 pub(in crate::session) mod tasks;
 use crate::session::overlays::ResolvedExplorerOverlay;
 use crate::session::*;
@@ -460,7 +461,7 @@ impl ShellSession {
                 let matching_directory = session.app.explorer_state().is_some_and(|state| {
                     matches!(&state.current_location,
                         app::explorer::ExplorerLocation::Directory(directory)
-                            if Some(directory.as_path()) == path.parent())
+                            if Some(directory.as_path()) == path.parent() || (state.include_subfolders && !state.query.is_empty() && path.starts_with(directory)))
                 });
                 if matching_directory {
                     session.apply_explorer_command(ExplorerCommand::Refresh, platform);
@@ -477,6 +478,7 @@ impl ShellSession {
         let message = explorer.message.clone();
         let _ = self.update_explorer_state(|current| {
             if current.current_location == explorer.current_location {
+                current.invalidate_subfolder_search();
                 current.all_entries = explorer.all_entries;
                 current.listing_warning_count = explorer.listing_warning_count;
                 current.apply_projection();
@@ -484,6 +486,7 @@ impl ShellSession {
             current.error = explorer.error;
             current.message = explorer.message;
         });
+        self.sync_explorer_search();
         let _ = self.app.refresh_shared_explorer();
         if let Some(error) = error {
             self.report_explorer_task_error(error);
@@ -505,7 +508,8 @@ impl ShellSession {
                 return;
             }
         }
-        if matches!(command, ExplorerCommand::OpenSelected) && self.select_explorer_save_filename()
+        if matches!(command, ExplorerCommand::OpenSelected)
+            && self.select_explorer_save_filename(platform)
         {
             return;
         }
@@ -667,6 +671,7 @@ impl ShellSession {
         let (_, effect) =
             self.app
                 .dispatch_explorer_at(command, platform, &storage, Instant::now());
+        self.sync_explorer_search();
         self.handle_explorer_effect(effect, platform, &storage, can_change_settings);
         let (pending_dialog, pending_conflict, explorer_error, explorer_message) = self
             .app
@@ -1210,8 +1215,7 @@ impl ShellSession {
             self.pages.explorer.explorer_purpose,
             ExplorerPurpose::EditorSaveAs { .. }
         ) {
-            self.select_explorer_save_filename();
-            if click == ClickKind::Double {
+            if !self.select_explorer_save_filename(platform) && click == ClickKind::Double {
                 self.apply_explorer_command(ExplorerCommand::OpenSelected, platform);
             }
             return;
@@ -1242,6 +1246,9 @@ impl ShellSession {
         use ui::ExplorerToolbarAction;
 
         match action {
+            ExplorerToolbarAction::Subfolders => {
+                self.apply_explorer_command(ExplorerCommand::ToggleSubfolders, platform)
+            }
             ExplorerToolbarAction::SelectionMode => {
                 let _ = self.update_explorer_state(|state| {
                     state.selection_mode = !state.selection_mode;

@@ -373,13 +373,16 @@ fn explorer_toolbar_keeps_every_action_at_supported_widths() {
                 ExplorerToolbarAction::Back,
                 ExplorerToolbarAction::Up,
                 ExplorerToolbarAction::Forward,
-                ExplorerToolbarAction::Refresh
+                ExplorerToolbarAction::Refresh,
+                ExplorerToolbarAction::Subfolders,
             ],
             "toolbar actions at width {width}"
         );
         assert!(layout.toolbar_buttons.iter().all(|button| {
             if button.action == ExplorerToolbarAction::Refresh {
                 button.area.y == layout.search.y && button.area.right() < layout.search.x
+            } else if button.action == ExplorerToolbarAction::Subfolders {
+                button.area.y == layout.search.y && button.area.x >= layout.search.right()
             } else {
                 button.area.y == layout.path_bar.y && button.area.right() < layout.address_input.x
             }

@@ -3,7 +3,9 @@ pub use tasks::ExplorerTaskOperation;
 
 use i18n::{LocalizedError, LocalizedText, msg};
 
+mod search;
 mod state;
+pub use search::{ExplorerSearchRequest, ExplorerSearchResults};
 
 mod controller;
 
@@ -74,6 +76,9 @@ pub struct ExplorerState {
     pub selection_anchor: Option<PathBuf>,
     pub selection_cleared: bool,
     pub query: String,
+    pub include_subfolders: bool,
+    pub subfolder_results: Option<ExplorerSearchResults>,
+    search_revision: u64,
     pub show_hidden: bool,
     pub show_system: bool,
     pub show_extensions: bool,
@@ -711,6 +716,7 @@ pub enum ExplorerCommand {
     ClearSelection,
     ToggleFocused,
     Search(String),
+    ToggleSubfolders,
     ToggleHidden,
     ToggleSystem,
     ToggleExtensions,
@@ -999,6 +1005,7 @@ fn commit_location_listing(
         state.current_path = path.clone();
     }
     state.current_location = location;
+    state.invalidate_subfolder_search();
     state.all_entries = entries;
     state.listing_warning_count = warning_count;
     if reset_navigation {
@@ -1022,6 +1029,7 @@ fn commit_location_listing(
 }
 
 fn clear_location_listing(state: &mut ExplorerState) {
+    state.invalidate_subfolder_search();
     state.all_entries.clear();
     state.entries.clear();
     state.clear_selection();

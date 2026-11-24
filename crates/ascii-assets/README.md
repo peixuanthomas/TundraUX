@@ -47,6 +47,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |
+| `ui-explorer.ftl` subfolder search controls | English and Chinese labels for the search scope, search progress and skipped entries |
 | `shell-command-line.ftl` | Command Line startup hint, missing interpreter message, close confirmation, completion candidates, typo suggestions, and Right-key cycling guidance |
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |
 | `settings.ftl` | Top bar contents and alignment, Command Line shell choices, animation phase fields, validation, reset, save, and cancel actions |

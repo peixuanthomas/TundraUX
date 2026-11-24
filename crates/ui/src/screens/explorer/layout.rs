@@ -411,10 +411,21 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         .saturating_add(u16::from(refresh_width > 0))
         .min(inner.right());
     let search_row = line_in_rect(inner, path_bar.bottom());
+    let subfolders = model
+        .toolbar
+        .buttons
+        .iter()
+        .find(|b| b.action == ExplorerToolbarAction::Subfolders);
+    let subfolders_width = subfolders.map_or(0, |button| {
+        (button.label.cell_width() + 6).min(inner.right().saturating_sub(search_x))
+    });
     let search = Rect::new(
         search_x,
         search_row.y,
-        inner.right().saturating_sub(search_x),
+        inner
+            .right()
+            .saturating_sub(search_x + subfolders_width)
+            .saturating_sub(u16::from(subfolders.is_some())),
         search_row.height,
     );
     let body = Rect::new(
@@ -432,6 +443,18 @@ pub fn explorer_layout(area: Rect, model: &ExplorerViewModel) -> ExplorerLayout 
         toolbar_buttons.push(ExplorerToolbarButtonLayout {
             action: button.action,
             area: Rect::new(inner.x, search.y, refresh_width, search.height),
+            enabled: button.enabled,
+        });
+    }
+    if let Some(button) = subfolders {
+        toolbar_buttons.push(ExplorerToolbarButtonLayout {
+            action: button.action,
+            area: Rect::new(
+                inner.right() - subfolders_width,
+                search_row.y,
+                subfolders_width,
+                search_row.height,
+            ),
             enabled: button.enabled,
         });
     }

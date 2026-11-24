@@ -2,7 +2,16 @@ use crate::session::*;
 use ui::{ExplorerFocus, ExplorerSaveFocus};
 
 impl ShellSession {
-    pub(in crate::session) fn select_explorer_save_filename(&mut self) -> bool {
+    pub(in crate::session) fn select_explorer_save_filename(
+        &mut self,
+        platform: &dyn Platform,
+    ) -> bool {
+        if !matches!(
+            self.pages.explorer.explorer_purpose,
+            ExplorerPurpose::EditorSaveAs { .. }
+        ) {
+            return false;
+        }
         let Some(entry) = self
             .app
             .explorer_state()
@@ -14,6 +23,27 @@ impl ShellSession {
             return false;
         }
         let name = entry.name.clone();
+        let path = entry.path.clone();
+        if let Some(parent) = path.parent()
+            && self
+                .app
+                .explorer_state()
+                .is_some_and(|state| state.current_path != parent)
+        {
+            self.apply_explorer_command(ExplorerCommand::Navigate(parent.to_owned()), platform);
+            if self
+                .app
+                .explorer_state()
+                .is_none_or(|state| state.current_path != parent || state.error.is_some())
+            {
+                return true;
+            }
+            self.update_explorer_state(|state| {
+                if let Some(index) = state.entries.iter().position(|entry| entry.path == path) {
+                    state.select_index(index, app::explorer::ExplorerSelectionMode::Replace);
+                }
+            });
+        }
         let ExplorerPurpose::EditorSaveAs { input, .. } = &mut self.pages.explorer.explorer_purpose
         else {
             return false;

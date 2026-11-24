@@ -301,6 +301,146 @@ fn explorer_toolbar_shortcuts_route_without_shifted_symbols() {
 }
 
 #[test]
+fn subfolder_search_at_minimum_size_uses_the_selected_files_real_directory() {
+    use ui::{ExplorerFocus, ExplorerToolbarAction};
+
+    for language in ["en-US", "zh-CN"] {
+        for input in ["keyboard", "mouse", "touch"] {
+            let (mut state, platform, _guard) = explorer_terminal_test_fixture();
+            state.storage_manager = Some(
+                StorageManager::open(platform.app_paths().unwrap())
+                    .unwrap()
+                    .manager,
+            );
+            let assets =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+            state.language = std::sync::Arc::new(
+                i18n::LanguageSnapshot::load(&assets, language, 1)
+                    .unwrap()
+                    .snapshot,
+            );
+            let _language = i18n::enter_snapshot(state.language.clone());
+            state.apply_input_with_platform(
+                InputEvent::Resize {
+                    width: 108,
+                    height: 20,
+                },
+                &platform,
+            );
+            let root = state.app.explorer_state().unwrap().current_path.clone();
+            let nested = root.join("中文/inside");
+            for directory in [&nested, &root.join(".hidden")] {
+                std::fs::create_dir_all(directory).unwrap();
+                std::fs::write(directory.join("first.txt"), "nested").unwrap();
+            }
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&root, nested.join("loop")).unwrap();
+            state.apply_explorer_command(ExplorerCommand::Refresh, &platform);
+            state.apply_explorer_command(ExplorerCommand::Search("FIRST".into()), &platform);
+            let action = ExplorerToolbarAction::Subfolders;
+            assert_eq!(state.app.explorer_state().unwrap().entries.len(), 1);
+            assert!(!state.app.explorer_state().unwrap().include_subfolders);
+            let button = explorer_test_layout(&state)
+                .toolbar_buttons
+                .into_iter()
+                .find(|b| b.action == action)
+                .unwrap();
+            let point = (button.area.x, button.area.y);
+            assert!(button.area.right() <= 108);
+            if input == "keyboard" {
+                state.set_explorer_focus(ExplorerFocus::Search);
+                state.apply_input_with_platform(InputEvent::key(InputKey::Tab), &platform);
+                assert_eq!(
+                    state.pages.explorer.explorer_focus,
+                    ExplorerFocus::Toolbar(action)
+                );
+                state.apply_input_with_platform(InputEvent::key(InputKey::Space), &platform);
+            } else {
+                if input == "mouse" {
+                    state.apply_input_with_platform(InputEvent::mouse_moved(point), &platform);
+                }
+                state.apply_input_with_platform(
+                    InputEvent::mouse_down(PointerButton::Left, point),
+                    &platform,
+                );
+                assert!(!state.app.explorer_state().unwrap().include_subfolders);
+                state.apply_input_with_platform(
+                    InputEvent::mouse_up(PointerButton::Left, point),
+                    &platform,
+                );
+            }
+            assert!(state.app.explorer_state().unwrap().include_subfolders);
+            for query in ["inside", "second", "FIRST"] {
+                state.apply_explorer_command(ExplorerCommand::Search(query.into()), &platform);
+            }
+            let wait_for_search = |state: &mut ShellSession| {
+                let deadline = Instant::now() + Duration::from_secs(4);
+                while !(crate::session::runtime::session_has_background_work(state)
+                    && state.poll_explorer_background_tasks(&platform))
+                {
+                    assert!(Instant::now() < deadline, "missing recursive result");
+                    std::thread::yield_now();
+                }
+            };
+            wait_for_search(&mut state);
+            if input == "keyboard" {
+                state.apply_explorer_command(ExplorerCommand::ToggleHidden, &platform);
+                wait_for_search(&mut state);
+                assert_eq!(state.to_explorer_view_model().entries.len(), 3);
+                state.apply_explorer_command(ExplorerCommand::ToggleHidden, &platform);
+                wait_for_search(&mut state);
+            }
+            let model = state.to_explorer_view_model();
+            assert_eq!(model.entries.len(), 2);
+            let path = nested.join("first.txt");
+            let index = state
+                .app
+                .explorer_state()
+                .unwrap()
+                .entries
+                .iter()
+                .position(|entry| entry.path == path)
+                .unwrap();
+            assert!(model.entries[index].name.contains("inside"));
+            state.apply_explorer_command(ExplorerCommand::SelectIndex(index), &platform);
+            state.apply_explorer_command(ExplorerCommand::Copy, &platform);
+            assert_eq!(
+                state
+                    .app
+                    .explorer_state()
+                    .unwrap()
+                    .clipboard
+                    .as_ref()
+                    .unwrap()
+                    .paths,
+                vec![path.clone()]
+            );
+            if input == "keyboard" {
+                state.apply_explorer_command(
+                    ExplorerCommand::Rename("renamed.txt".into()),
+                    &platform,
+                );
+                assert!(nested.join("renamed.txt").exists());
+                assert!(root.join("first.txt").exists());
+            } else {
+                state.pages.explorer.explorer_purpose = ExplorerPurpose::EditorSaveAs {
+                    snapshot: None,
+                    input: ui::components::TextInput::new("explorer.save.name"),
+                };
+                state.apply_explorer_command(ExplorerCommand::OpenSelected, &platform);
+                let picker = state.to_explorer_view_model();
+                assert_eq!(std::path::Path::new(&picker.current_path), nested);
+                assert_eq!(picker.save_picker.unwrap().input.value(), "first.txt");
+                state.submit_editor_save_as_from_explorer(&platform);
+                assert_eq!(state.window_picked_file, Some(path));
+            }
+            state.apply_explorer_command(ExplorerCommand::Search(String::new()), &platform);
+            assert!(state.pages.explorer.search_request.is_none());
+        }
+    }
+}
+
+#[test]
 fn delayed_explorer_rename_and_undo_keep_new_search_sort_and_selection() {
     use app::explorer::{ExplorerSelectionMode, ExplorerSortDirection, ExplorerSortField};
 

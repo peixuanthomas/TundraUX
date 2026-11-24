@@ -239,6 +239,9 @@ impl Default for CommandLinePageState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ExplorerPageState {
+    pub(super) search_task: app::background::Latest<app::explorer::ExplorerSearchResults>,
+    pub(super) search_request:
+        Option<(app::explorer::ExplorerSearchRequest, identity::AuthSession)>,
     pub(super) explorer_focus: ui::ExplorerFocus,
     pub(super) explorer_location_focus: Option<String>,
     pub(super) explorer_input_mode: ExplorerInputMode,
@@ -257,6 +260,8 @@ pub(super) struct ExplorerPageState {
 impl Default for ExplorerPageState {
     fn default() -> Self {
         Self {
+            search_task: Default::default(),
+            search_request: None,
             explorer_focus: ui::ExplorerFocus::Files,
             explorer_location_focus: None,
             explorer_input_mode: ExplorerInputMode::Browse,
