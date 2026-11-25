@@ -546,11 +546,23 @@ impl ShellSession {
 
     fn edit_launcher_entry_text(
         editor: &mut ui::LauncherEntryEditor,
-        input: InputEvent,
+        mut input: InputEvent,
         area: Rect,
     ) {
         if editor.selected >= editor.inputs.len() {
             return;
+        }
+        if let InputEvent::Key(key) = &input
+            && ui::components::TextClipboardAction::for_key(key)
+                == Some(ui::components::TextClipboardAction::Paste)
+        {
+            if key.phase != InputPhase::Press {
+                return;
+            }
+            let Some(text) = ui::components::read_text_clipboard() else {
+                return;
+            };
+            input = InputEvent::Paste(text);
         }
         let previous = editor.inputs.clone();
         if editor.action == LauncherEntryAction::Icon

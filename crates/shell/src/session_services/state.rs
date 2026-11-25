@@ -18,6 +18,7 @@ pub(super) struct ServiceState {
     system: (u64, Value),
     files: ExplorerFileService,
     files_revision: u64,
+    text_clipboard: String,
     busy: HashSet<WorkerId>,
     system_active: HashSet<WorkerId>,
     system_refresh: bool,
@@ -41,6 +42,7 @@ impl ServiceState {
             system: (0, Value::Null),
             files: ExplorerFileService::default(),
             files_revision: 0,
+            text_clipboard: String::new(),
             busy: HashSet::new(),
             system_active: HashSet::new(),
             system_refresh: false,
@@ -132,6 +134,8 @@ impl ServiceState {
                     ServiceOperation::ReadAuthorization
                         | ServiceOperation::ReadConfig
                         | ServiceOperation::ReadClockTime
+                        | ServiceOperation::ReadTextClipboard
+                        | ServiceOperation::WriteTextClipboard { .. }
                 )
             {
                 return Err(ServiceError::Forbidden);
@@ -181,6 +185,7 @@ impl ServiceState {
                 if next.as_ref().map(|s| &s.session_id) != authorization.map(|s| &s.session_id) {
                     self.files = ExplorerFileService::default();
                     self.files_revision += 1;
+                    self.text_clipboard.clear();
                     self.busy.clear();
                     self.profile = (self.profile.0 + 1, SessionProfile::default());
                     self.system_active.clear();
@@ -261,6 +266,11 @@ impl ServiceState {
                     })?;
                 self.files_revision += 1;
                 value(self.files_revision, snapshot)
+            }
+            ServiceOperation::ReadTextClipboard => value(0, &self.text_clipboard),
+            ServiceOperation::WriteTextClipboard { text } => {
+                self.text_clipboard = text;
+                Ok(ServiceValue::Empty)
             }
             ServiceOperation::ReadSystemSnapshot => value(self.system.0, &self.system.1),
             ServiceOperation::WriteSystemSnapshot { snapshot } => {

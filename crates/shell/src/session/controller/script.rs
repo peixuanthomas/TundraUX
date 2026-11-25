@@ -1,4 +1,5 @@
 //! Connects script controls to the existing document and save workflow.
+use crate::session::terminal_clipboard::TerminalClipboard;
 use crate::session::*;
 use app::script::{ScriptState, ScriptStatus};
 use script_runtime::RuntimeCommand;
@@ -16,6 +17,7 @@ pub(in crate::session) struct ScriptPageState {
     pub motion_area: Rect,
     pub expression: ui::components::TextInput,
     pub output: Option<Arc<ui::CommandLineTerminalSnapshot>>,
+    pub(in crate::session) terminal_clipboard: TerminalClipboard,
     pub selected_variable: usize,
     pub selected_stack: usize,
     pub selected_breakpoint: usize,
@@ -46,6 +48,7 @@ impl Default for ScriptPageState {
             expression: ui::components::TextInput::new("script.expression")
                 .with_horizontal_scroll(true),
             output: None,
+            terminal_clipboard: TerminalClipboard::default(),
             selected_variable: 0,
             selected_stack: 0,
             selected_breakpoint: 0,
@@ -61,6 +64,15 @@ impl Default for ScriptPageState {
             vim_suspended: false,
             source_view: None,
         }
+    }
+}
+
+impl ScriptPageState {
+    pub(in crate::session) fn set_output(&mut self, snapshot: ui::CommandLineTerminalSnapshot) {
+        if let Some(previous) = &self.output {
+            self.terminal_clipboard.update_snapshot(previous, &snapshot);
+        }
+        self.output = Some(Arc::new(snapshot));
     }
 }
 
@@ -220,6 +232,7 @@ impl ShellSession {
             .editor_state()
             .is_some_and(|editor| editor.is_dirty() || editor.document.path.is_none());
         model.output = page.output.clone();
+        model.output_clipboard = page.terminal_clipboard.view();
         model.expression = page.expression.clone();
         model.focus = page.focus;
         model.detail = page.detail;
@@ -796,28 +809,6 @@ impl ShellSession {
                         },
                         platform,
                     );
-                }
-            } else if key.modifiers.control
-                && matches!(key.key, InputKey::Char('c' | 'C' | 'x' | 'X'))
-            {
-                if let Some(text) = self.pages.editor.script.expression.selected_text() {
-                    match platform.write_clipboard_text(&text) {
-                        Ok(()) if matches!(key.key, InputKey::Char('x' | 'X')) => {
-                            self.pages.editor.script.expression.handle_event_borderless(
-                                InputEvent::key(InputKey::Backspace),
-                                Rect::default(),
-                            );
-                        }
-                        Ok(()) => {}
-                        Err(error) => self.notify_status(i18n::msg!(
-                            "screen-keyboard-clipboard-error",
-                            error = error.to_string()
-                        )),
-                    }
-                }
-            } else if key.modifiers.control && matches!(key.key, InputKey::Char('v' | 'V')) {
-                if let Ok(value) = platform.read_clipboard_text() {
-                    self.script_paste(value);
                 }
             } else {
                 self.pages.editor.script.expression.set_focused(true);

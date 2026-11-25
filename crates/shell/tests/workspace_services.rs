@@ -99,6 +99,13 @@ fn managed_services_share_window_state_and_reject_stale_writes_over_real_connect
     let shared: ExplorerSharedSnapshot = serde_json::from_value(shared).unwrap();
     assert_eq!(shared.clipboard, Some(clipboard));
     assert!(shared.busy);
+    let text = "e\u{301} 中文🙂\r\nsecond line";
+    assert_eq!(
+        first_client.request(ServiceOperation::WriteTextClipboard { text: text.into() }),
+        Ok(ServiceValue::Empty)
+    );
+    let (_, shared_text) = versioned(second_client.request(ServiceOperation::ReadTextClipboard));
+    assert_eq!(shared_text, text);
 
     control
         .queue(&SupervisorToWorker::UnregisterWorker { worker: first })

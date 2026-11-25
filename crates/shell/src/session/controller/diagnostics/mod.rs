@@ -1229,7 +1229,7 @@ impl ShellSession {
         false
     }
 
-    pub(in crate::session) fn copy_diagnostics_summary(&mut self, platform: &dyn Platform) {
+    pub(in crate::session) fn copy_diagnostics_summary(&mut self) {
         let Some(snapshot) = self.app.diagnostics_snapshot() else {
             self.notify_status(i18n::LocalizedText::from(i18n::msg!(
                 "shell-no-diagnostics-snapshot-is-available"
@@ -1268,7 +1268,7 @@ impl ShellSession {
             }
         }
         let text = lines.join("\n");
-        match platform.write_clipboard_text(&text) {
+        match self.text_clipboard().write(text) {
             Ok(()) => {
                 self.notify_toast(i18n::LocalizedText::from(i18n::msg!(
                     "shell-copied-diagnostics-summary"

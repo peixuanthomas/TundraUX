@@ -25,14 +25,12 @@ const TEXT: vt100::Color = vt100::Color::Rgb(140, 160, 180);
 // AA controls follow the Glacier Night palette used by ordinary pages.
 const PAGE_TEXT: vt100::Color = vt100::Color::Rgb(230, 241, 244);
 const CANVAS: vt100::Color = vt100::Color::Rgb(7, 17, 22);
-const SEEDED_CLIPBOARD: &str = "Seed中文\nλZ\u{1}";
 const COPIED_TEXT: &str = "Seed中文\nλZ\nΩ\nTail\nPaste汉!";
 
 #[test]
 fn screen_keyboard_accepts_keyboard_and_pointer_input_and_restores_terminal() {
     if let Some(root) = std::env::var_os(CHILD_ROOT) {
         let platform = fixture_platform(Path::new(&root));
-        platform.set_clipboard_text(SEEDED_CLIPBOARD);
         #[cfg(windows)]
         let original_input_mode = console_input_mode();
         println!("{PRIMARY_MARKER}");
@@ -43,7 +41,6 @@ fn screen_keyboard_accepts_keyboard_and_pointer_input_and_restores_terminal() {
             &mut std::io::stdout(),
             &mut std::io::stderr(),
         );
-        assert_eq!(platform.read_clipboard_text().unwrap(), COPIED_TEXT);
         // Windows mouse capture is a console mode, not an output escape code.
         #[cfg(windows)]
         assert_eq!(console_input_mode(), original_input_mode);
@@ -293,12 +290,13 @@ fn screen_keyboard_accepts_keyboard_and_pointer_input_and_restores_terminal() {
         "clear before clipboard test",
         |screen| typed_text(screen, false) == empty_text,
     );
-    terminal.click(
-        ScreenKeyboardAction::Paste,
-        false,
-        "paste from mock clipboard",
-        |screen| typed_text(screen, false) == "Seed中文\nλZ",
-    );
+    #[cfg(not(windows))]
+    terminal.send("\x1b[200~Seed中文\nλZ\x01\x1b[201~".as_bytes());
+    #[cfg(windows)]
+    terminal.send("Seed中文\rλZ".as_bytes());
+    terminal.wait_for("type Unicode before copying", |screen| {
+        typed_text(screen, false) == "Seed中文\nλZ"
+    });
     terminal.click(
         ScreenKeyboardAction::Enter,
         false,

@@ -149,7 +149,9 @@ Launcher focuses search when it opens. It matches localized app names and descri
 
 In Explorer, the path row’s Back and Forward follow visit history, while Parent opens the current directory’s parent. Esc follows history after dismissing any local menu or edit. Tab and Shift+Tab move through enabled controls in screen order. Arrow keys select within the sidebar or file list. Save As adds the filename, Save, and Cancel to this order. F10 submits. Explorer shares copied and cut files within the session. Undo and Ctrl/Cmd+Z can reverse a safe move or rename. Replacements, merges, and cross-volume moves clear undo history. Active tasks, changed objects, or an occupied original path prevent undo.
 
-The standard editor's right-click or Shift+F10 menu preserves the selection and uses existing clipboard commands; read-only text can be copied but not cut or pasted. On macOS, Command moves to line/document boundaries and Option moves or deletes by word. Vim and child terminals keep their own key handling.
+The standard editor's right-click or Shift+F10 menu preserves the selection and uses the workspace clipboard. Copy remains available for read-only text. On macOS, Command moves to line and document boundaries and Option moves or deletes by word. Vim keeps its native shortcuts.
+
+Command Line, Launcher terminals, and script output offer selection, paste, and interrupt through the same terminal context menu. In these terminals Ctrl+C copies a selection, Ctrl+V pastes, and Ctrl+\ sends `0x03` to the foreground program. Menu actions have the same behavior whether activated with keyboard or mouse.
 
 Logs keep F3 expert controls visible across row and filter changes; Tab traverses the controls and Esc leaves their focus. Delete in Trash never empties the whole Trash; its explicit Empty action, clock management, destructive confirmations, and manual AA approval default to Cancel or Deny.
 
@@ -157,7 +159,7 @@ Logs keep F3 expert controls visible across row and filter changes; Tab traverse
 
 The compositor places the on-screen keyboard control in the header. It covers text input in AA, Command Line, management forms, custom setup colors, settings, the editor, file paths, and search.
 
-- Virtual keys and paste enter the normal input flow of the current page or child terminal.
+- Virtual keys enter the normal input flow of the current page or child terminal. The Paste key sends the workspace clipboard text to that same target.
 - Ctrl, Alt, Shift, and CapsLock can be latched by tapping; key combinations continue to be sent to the current program.
 - In app windows, expanding the keyboard clips the page above it and keeps the last key row inside the app content. The frame and window bar stay visible. In AA, only the topmost dialog moves.
 - Keyboard ownership is bound to the page instance and form ID; switching pages, tasks, or dialogs clears old input state.

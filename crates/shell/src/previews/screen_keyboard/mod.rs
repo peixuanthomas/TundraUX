@@ -1,5 +1,4 @@
-//! Standalone debug keyboard. Text stays in this loop unless explicitly copied
-//! to the system clipboard; keys are never injected into another application.
+//! Standalone debug keyboard with a clipboard scoped to the preview.
 use std::{
     io::{self, IsTerminal, Write},
     time::{Duration, Instant},
@@ -14,8 +13,9 @@ use ui::{
     components::{ButtonFrame, ButtonRegion},
 };
 
-use crate::session::ScreenCompositor;
+use crate::session::{ScreenCompositor, text_clipboard::SessionTextClipboard};
 use crate::{ShellAppConfig, TerminalGuard, crossterm_event_to_input};
+use ui::components::TextClipboard;
 
 pub(crate) mod physical;
 use physical::PhysicalKeyboard;
@@ -73,7 +73,6 @@ impl KeyboardMotion {
 pub fn run_screen_keyboard(
     output: &mut impl Write,
     appearance: &storage::AppearanceConfig,
-    platform: &dyn platform::Platform,
 ) -> io::Result<()> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(io::Error::other(i18n::tr!(
@@ -87,6 +86,7 @@ pub fn run_screen_keyboard(
         .with_accent_color(config.accent_color);
     let mut terminal = TerminalGuard::enter(output)?;
     let mut model = ScreenKeyboardState::default();
+    let clipboard = SessionTextClipboard::standalone();
     model.physical.reports_release = terminal.enable_keyboard_reporting()?;
     let mut bounds = Rect::default();
     let mut layout = ui::screen_keyboard_layout(bounds, model.collapsed);
@@ -175,7 +175,7 @@ pub fn run_screen_keyboard(
                     keyboard_motion_frame(appearance, origin.elapsed()),
                 );
             }
-            model.apply_clipboard(platform);
+            model.apply_clipboard(&clipboard);
             dirty = true;
         }
     }
@@ -417,14 +417,12 @@ impl ScreenKeyboardState {
         self.navigating_buttons = false;
     }
 
-    fn apply_clipboard(&mut self, platform: &dyn platform::Platform) {
+    fn apply_clipboard(&mut self, clipboard: &impl TextClipboard) {
         let result = match self.pending_clipboard.take() {
-            Some(ScreenKeyboardAction::Copy) => {
-                platform.write_clipboard_text(&self.text).map(|()| {
-                    self.message = i18n::tr!("screen-keyboard-copied");
-                })
-            }
-            Some(ScreenKeyboardAction::Paste) => platform.read_clipboard_text().map(|text| {
+            Some(ScreenKeyboardAction::Copy) => clipboard.write(self.text.clone()).map(|()| {
+                self.message = i18n::tr!("screen-keyboard-copied");
+            }),
+            Some(ScreenKeyboardAction::Paste) => clipboard.read().map(|text| {
                 self.append_paste(&text);
                 self.message = i18n::tr!("screen-keyboard-pasted");
             }),

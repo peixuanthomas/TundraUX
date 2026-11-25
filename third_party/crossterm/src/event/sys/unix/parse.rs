@@ -107,7 +107,11 @@ pub(crate) fn parse_event(
             KeyCode::Char((c - 0x1 + b'a') as char),
             KeyModifiers::CONTROL,
         ))))),
-        c @ b'\x1C'..=b'\x1F' => Ok(Some(InternalEvent::Event(Event::Key(KeyEvent::new(
+        b'\x1C' => Ok(Some(InternalEvent::Event(Event::Key(KeyEvent::new(
+            KeyCode::Char('\\'),
+            KeyModifiers::CONTROL,
+        ))))),
+        c @ b'\x1D'..=b'\x1F' => Ok(Some(InternalEvent::Event(Event::Key(KeyEvent::new(
             KeyCode::Char((c - 0x1C + b'4') as char),
             KeyModifiers::CONTROL,
         ))))),

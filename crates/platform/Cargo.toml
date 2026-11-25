@@ -49,7 +49,6 @@ croner = "=3.0.1"
 shlex = "2.0"
 chrono-tz = "0.10.4"
 # Keep desktop-only integrations out of the Windows and macOS dependency graph.
-arboard = { version = "3.6", default-features = false, features = ["wayland-data-control"] }
 freedesktop-desktop-entry = "0.8.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 resvg = { version = "0.47", default-features = false, features = ["text"] }

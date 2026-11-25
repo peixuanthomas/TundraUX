@@ -260,33 +260,6 @@ impl ShellSession {
                     _ => {}
                 }
             }
-            if shortcut && matches!(key.key, InputKey::Char('c' | 'C' | 'x' | 'X' | 'v' | 'V')) {
-                if key.phase != InputPhase::Press {
-                    return;
-                }
-                if matches!(key.key, InputKey::Char('v' | 'V')) {
-                    match platform.read_clipboard_text() {
-                        Ok(text) => {
-                            self.handle_launcher_search_input(InputEvent::Paste(text), platform)
-                        }
-                        Err(error) => self.notify_status(error.to_string()),
-                    }
-                    return;
-                }
-                if let Some(text) = self.pages.launcher.search.selected_text() {
-                    match platform.write_clipboard_text(&text) {
-                        Ok(()) if matches!(key.key, InputKey::Char('x' | 'X')) => {
-                            self.handle_launcher_search_input(
-                                InputEvent::key(InputKey::Delete),
-                                platform,
-                            );
-                        }
-                        Err(error) => self.notify_status(error.to_string()),
-                        _ => {}
-                    }
-                }
-                return;
-            }
         }
         let Some(layout) = self.launcher_content_layout() else {
             return;

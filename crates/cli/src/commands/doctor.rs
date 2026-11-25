@@ -168,9 +168,6 @@ trait LinuxDoctorProbe {
     fn session_service_available(&self, _name: &str) -> Option<bool> {
         None
     }
-    fn clipboard_backend_available(&self) -> Option<bool> {
-        None
-    }
 }
 
 struct SystemDoctorProbe;
@@ -227,17 +224,6 @@ impl LinuxDoctorProbe for SystemDoctorProbe {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = name;
-            None
-        }
-    }
-
-    fn clipboard_backend_available(&self) -> Option<bool> {
-        #[cfg(target_os = "linux")]
-        {
-            Some(arboard::Clipboard::new().is_ok())
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
             None
         }
     }
@@ -347,15 +333,11 @@ fn linux_environment_checks(
             CheckStatus::Warning,
             "opening external desktop files needs xdg-utils",
         ));
-        checks.extend([
-            portal_check(probe),
-            clipboard_check(probe),
-            notification_check(probe),
-        ]);
+        checks.extend([portal_check(probe), notification_check(probe)]);
     } else {
         checks.push(EnvironmentCheck {
             id: "linux-desktop", label: "Optional desktop integration".into(), status: CheckStatus::Pass,
-            message: "No graphical display: skipped xdg-open, portal, clipboard, and notifications. Terminal/SSH use is supported; terminal paste remains available.".into(),
+            message: "No graphical display: skipped xdg-open, portal, and notifications. Terminal and SSH use are supported.".into(),
         });
     }
     checks
@@ -433,63 +415,6 @@ fn command_check(
             status: missing_status,
             message: format!("{command} is missing or not executable; {remediation}"),
         }
-    }
-}
-
-fn clipboard_check(probe: &dyn LinuxDoctorProbe) -> EnvironmentCheck {
-    let x11_available = probe.env_var("DISPLAY").is_some();
-    let wayland_available = probe.env_var("WAYLAND_DISPLAY").is_some()
-        || probe
-            .env_var("XDG_SESSION_TYPE")
-            .is_some_and(|value| value.eq_ignore_ascii_case("wayland"));
-
-    if let Some(available) = probe.clipboard_backend_available() {
-        return if available {
-            EnvironmentCheck {
-                id: "clipboard",
-                label: "Linux clipboard".to_string(),
-                status: CheckStatus::Pass,
-                message: match (wayland_available, x11_available) {
-                    (true, true) => {
-                        "connected to a clipboard backend; Wayland and X11/XWayland endpoints are present"
-                    }
-                    (true, false) => {
-                        "connected to the compositor clipboard through the Wayland data-control backend"
-                    }
-                    (false, true) => "connected to the X11 clipboard backend",
-                    (false, false) => "connected to a Linux clipboard backend",
-                }
-                .to_string(),
-            }
-        } else {
-            EnvironmentCheck {
-                id: "clipboard",
-                label: "Linux clipboard".to_string(),
-                status: CheckStatus::Warning,
-                message: "the clipboard backend could not establish a live Wayland or X11 connection; enable compositor data-control or XWayland (Bracketed Paste remains available)".to_string(),
-            }
-        };
-    }
-
-    match (wayland_available, x11_available) {
-        (_, true) => EnvironmentCheck {
-            id: "clipboard",
-            label: "Linux clipboard".to_string(),
-            status: CheckStatus::Pass,
-            message: "X11/XWayland clipboard fallback is available".to_string(),
-        },
-        (true, false) => EnvironmentCheck {
-            id: "clipboard",
-            label: "Linux clipboard".to_string(),
-            status: CheckStatus::Warning,
-            message: "native Wayland session detected without XWayland; clipboard requires compositor data-control support (enable XWayland or use a compositor with ext-data-control/wlr-data-control)".to_string(),
-        },
-        (false, false) => EnvironmentCheck {
-            id: "clipboard",
-            label: "Linux clipboard".to_string(),
-            status: CheckStatus::Warning,
-            message: "no Wayland or X11 display was detected; start from a graphical session to enable clipboard integration (Bracketed Paste remains available in the editor)".to_string(),
-        },
     }
 }
 

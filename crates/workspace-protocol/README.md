@@ -18,7 +18,7 @@ Private IPC messages and framing for the workspace guardian, Shell, app hosts, a
 | --- | --- |
 | Guardian and workers | Identity handshake, event-loop progress, probes, process state, shutdown, and Windows desktop opens |
 | Shell and app host | Window initialization, viewport, input, requests to open apps or show Launcher, file picker results, close, and rendered frames |
-| Worker and shared services | Request IDs, configuration, profile, authorization policy, file operations, and system status |
+| Worker and shared services | Request IDs, configuration, profile, authorization policy, file operations, text clipboard, and system status |
 | Embedded Linux CLI and guardian | Ancestry-checked resource registration and retirement |
 
 `RunId` identifies one guardian invocation. `SessionId` identifies one app opening and is never reused within that run. `WorkerId` includes the process generation so that delayed close and kill requests cannot affect another worker. Window coordinates count terminal cells from the content area's top left. `LayoutGeneration` binds viewport-dependent input and frames to one layout. App minimums are content dimensions, with a baseline of 106 × 16 cells. Shell reserves the outer window frame and global bars separately, preserving the 108 × 20 terminal minimum. Custom-program minimum reports are not reduced by this baseline.
@@ -52,6 +52,8 @@ File Explorer reports a selected path to Shell. After the picker exits, Shell re
 Configuration, profile, and authorization writes include the revision the caller read. File paths carried by `NativePath` use Unix bytes or Windows UTF-16 code units so they round trip even when they cannot be represented as UTF-8.
 
 `ReadSessionSnapshot` returns one coherent view of configuration, authorization, profile, clock, file operations, and system status. Each domain retains its own revision and authorization or read error. An `Authorized` operation also checks the authorization revision before executing a queued write, including writes submitted by Shell.
+
+Workers use `ReadTextClipboard` and `WriteTextClipboard` on demand. SessionServices confirms each write, stores the exact UTF-8 text in memory, and clears it when the login changes.
 
 `transport::read_payload` separates asynchronous I/O from JSON decoding, and `encode_message` produces bounded complete messages for background writers. The synchronous `Framed` path attempts writes immediately after enqueueing.
 

@@ -171,14 +171,6 @@ impl Platform for TestPlatform {
         Err(Self::unsupported("spawn_wait"))
     }
 
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        Err(Self::unsupported("clipboard_text"))
-    }
-
-    fn write_clipboard_text(&self, _text: &str) -> Result<(), PlatformError> {
-        Err(Self::unsupported("clipboard_text"))
-    }
-
     fn move_to_trash(&self, paths: &[PathBuf]) -> Result<(), PlatformError> {
         let root = self
             .system_trash_root

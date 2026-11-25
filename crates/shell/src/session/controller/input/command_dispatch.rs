@@ -169,6 +169,30 @@ impl ShellSession {
         platform: &dyn Platform,
         received_at: Instant,
     ) -> ShellAction {
+        if matches!(&routed.input, InputEvent::Key(key) if ui::components::TextClipboardAction::for_key(key).is_some())
+        {
+            let (action, error) =
+                ui::components::with_text_clipboard(self.text_clipboard(), || {
+                    self.apply_routed_event_inner(routed, platform, received_at)
+                });
+            if let Some(error) = error {
+                self.notify_status(i18n::msg!(
+                    "shell-text-clipboard-error",
+                    error = error.to_string()
+                ));
+            }
+            action
+        } else {
+            self.apply_routed_event_inner(routed, platform, received_at)
+        }
+    }
+
+    fn apply_routed_event_inner(
+        &mut self,
+        routed: RoutedEvent,
+        platform: &dyn Platform,
+        received_at: Instant,
+    ) -> ShellAction {
         let _language = i18n::enter_snapshot(self.language.clone());
         self.synchronize_overlay_focus();
         self.pending_notification_commands.clear();
@@ -481,7 +505,7 @@ impl ShellSession {
                     );
                 } else {
                     match self.latest_watchdog_summary.clone() {
-                        Some(summary) => match platform.write_clipboard_text(&summary) {
+                        Some(summary) => match self.text_clipboard().write(summary) {
                             Ok(()) => {
                                 self.notify_toast(i18n::LocalizedText::from(i18n::msg!(
                                     "shell-copied-watchdog-incident-summary"
@@ -1849,7 +1873,7 @@ impl ShellSession {
                 ShellAction::Redraw
             }
             ShellCommand::DiagnosticsCopySummary => {
-                self.copy_diagnostics_summary(platform);
+                self.copy_diagnostics_summary();
                 ShellAction::Redraw
             }
             ShellCommand::DiagnosticsOpenLogsInExplorer => {

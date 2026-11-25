@@ -89,7 +89,7 @@ impl ShellSession {
         if self.handle_edit_menu_key(&key, platform) {
             return;
         }
-        if self.handle_edit_search_key(&key, platform) {
+        if self.handle_edit_search_key(&key) {
             return;
         }
         if cursor_direction.is_none() {

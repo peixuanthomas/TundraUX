@@ -80,7 +80,6 @@ app-diagnostics-capability-open-with = 使用应用程序打开
 app-diagnostics-capability-open-uri = 打开链接
 app-diagnostics-capability-spawn-detached = 启动后台进程
 app-diagnostics-capability-spawn-wait = 运行前台进程
-app-diagnostics-capability-clipboard-text = 剪贴板文本
 app-diagnostics-capability-user-dirs = 用户目录
 app-diagnostics-capability-app-paths = 应用程序路径
 app-diagnostics-capability-temp = 临时文件

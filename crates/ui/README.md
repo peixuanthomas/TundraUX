@@ -125,6 +125,8 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 
 `TextInput` provides a cursor, selection, scrolling, and password masking. Button hover, pressed, focused, current-item, and disabled styles are calculated centrally by `TundraTheme` and `RenderContext`. See [UI requirements](../../docs/UI-requirements.md) for keyboard, mouse, and touchscreen rules.
 
+Text fields and forms use the host's scoped `TextClipboard` for Ctrl+C, Ctrl+X, and Ctrl+V. Cut waits for a successful write. Password fields accept paste and keep their contents out of copy and cut.
+
 The default Glacier Night palette uses `#071116` for canvas, `#0D1B22` for surfaces, `#13262F` for raised surfaces, `#E6F1F4` for text, `#8EA7B0` for muted text, `#63D3E5` for accent, and `#29434E` for borders. Ordinary buttons have a visible control surface and plain labels. Primary actions use accent fill, while danger actions retain semantic color. Current-item and multi-selection backgrounds remain independent of keyboard focus. Explicit saved appearance settings remain supported.
 
 Compatibility themes retain resolved surface colors and the frame's terminal color capability, so page renderers use the same layered palette and ANSI output remains free of RGB colors. `Surface`, `Button`, and `List` accept an explicit background when embedded in a sidebar, dialog, or action band.
@@ -167,6 +169,8 @@ Text terminals, dialog occlusion, layout transitions, and transparent or overlap
 Inactive rich Markdown headings use the terminal's text-sizing protocol when available. App hosts send heading text, level, style, and location as structured data. Shell generates OSC 66 only when the complete heading fits in the visible pane.
 
 Vim reserves one row for its editor-mode switch and gives the rest to the native terminal. Command Line uses the entire main region. Script output reuses Command Line terminal geometry, reserving a scrollbar column only when history is present.
+
+Command Line and script output reuse the same selection highlight and context menu. Selection uses terminal cell positions and includes a complete wide grapheme when either of its cells is selected.
 
 ## Automation snapshots
 

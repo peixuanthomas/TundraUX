@@ -277,10 +277,6 @@ fn linux_platform_reports_system_time_liveness_and_waited_process_results() {
 fn linux_platform_exposes_desktop_only_capabilities() {
     let platform = platform::linux::LinuxPlatform;
     assert_eq!(
-        platform.capabilities().clipboard_text,
-        CapabilityStatus::Supported
-    );
-    assert_eq!(
         platform.capabilities().local_volumes,
         CapabilityStatus::Supported
     );

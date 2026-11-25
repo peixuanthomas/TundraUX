@@ -95,7 +95,7 @@ Opt-in `tundra-cli ui` uses this same input path. It reads snapshots of actual f
 
 ### Persistent and shared state
 
-The `storage` crate versions application documents; `platform` supplies native paths and file primitives. Managed windows get configuration and profile data through SessionServices, which checks revisions before committing writes and publishes the persisted result. Other processes can use local storage. Search text, a cursor, or an unsaved editor draft is window-local state owned by its page. The file clipboard and safe move/rename history last for the run and are shared by Explorer windows. See [storage](../crates/storage/README.md) and [Explorer's shared operations](../crates/app/README.md).
+The `storage` crate versions application documents and `platform` supplies native paths and file primitives. Managed windows get configuration and profile data through SessionServices, which checks revisions before committing writes and publishes the persisted result. Other processes can use local storage. Search text, a cursor, or an unsaved editor draft is window-local state owned by its page. SessionServices shares the text clipboard across AppHosts for the active login. Explorer windows also share a separate file clipboard and safe move and rename history. See [storage](../crates/storage/README.md) and [Explorer's shared operations](../crates/app/README.md).
 
 Editor saves use a snapshot of one revision. Both the standard editor and Vim go through the application save path, so a successful older save cannot clear newer edits. Recovery drafts stay separate from saved files. Protected OS configuration follows its own validation, authorization, backup, and recovery path. See [editor internals](editor-scalability.md), [Vim runtime](../crates/vim-runtime/README.md), and [system configuration](../crates/platform/docs/system-config.md).
 
@@ -170,4 +170,4 @@ The workspace `[patch.crates-io]` entries list the patched Cargo dependencies. P
 | Paths, permissions, or capabilities differ from expectations | Run `tundra-cli doctor` and `tundra-cli debug paths`. See [platform integration](../crates/platform/docs/integration.md). |
 | Shell or an app stops responding | Use [watchdog commands](../crates/cli/docs/commands.md#watchdog) from a second terminal under the same account. If terminal modes are left incorrect, reset the terminal and inspect the incident report. |
 | Configuration or state is damaged | Review the reported paths and backups. Use [storage recovery](../crates/storage/README.md#safe-saving-and-recovery) before considering [resetting all application data](../crates/cli/docs/commands.md#data-reset). |
-| Graphical opening or clipboard fails on Linux | Check the terminal session and desktop helpers in the [Linux runtime guide](packaging/linux/README-LINUX.txt). |
+| Graphical opening fails on Linux | Check the terminal session and desktop helpers in the [Linux runtime guide](packaging/linux/README-LINUX.txt). |

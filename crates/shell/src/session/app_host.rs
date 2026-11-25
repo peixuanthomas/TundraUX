@@ -367,7 +367,7 @@ impl AppHostSession {
             return;
         };
         let native = !from_back_button && !self.state.escape_cancels_action(&input);
-        let action = if native && self.scripts.handle_input(&self.state, &input) {
+        let action = if native && self.scripts.handle_input(&mut self.state, &input) {
             ShellAction::Redraw
         } else if native && self.vim.captures_input(&self.state, &input) {
             if let Err(error) = self.vim.handle_input(&self.state, &input) {
@@ -381,7 +381,7 @@ impl AppHostSession {
             let terminal_area = self.state.command_line_input_area();
             let event = self
                 .command_lines
-                .handle_input(&self.state, &input, terminal_area);
+                .handle_input(&mut self.state, &input, terminal_area);
             self.command_line_event(event);
             ShellAction::Redraw
         } else {
@@ -907,7 +907,15 @@ impl AppHostSession {
         if !frame.modal {
             let native_area = if self.state.active_screen() == ShellScreen::CommandLine {
                 self.state.command_line_input_area()
-            } else if self.scripts.captures_terminal_input(&self.state) {
+            } else if self.scripts.captures_terminal_input(&self.state)
+                || self
+                    .state
+                    .pages
+                    .editor
+                    .script
+                    .terminal_clipboard
+                    .menu_open()
+            {
                 Some(self.state.script_layout().output_area)
             } else if (self.state.active_screen() == ShellScreen::Management
                 && self.state.management_native_escape())

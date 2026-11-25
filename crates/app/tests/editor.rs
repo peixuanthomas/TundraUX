@@ -692,7 +692,10 @@ fn read_only_editor_keeps_navigation_selection_copy_and_close_available() {
     assert_eq!(editor.selected_text().as_deref(), Some("beta"));
     assert_eq!(
         editor.apply(EditorCommand::Copy),
-        vec![EditorEffect::WriteClipboard("beta".to_owned())]
+        vec![EditorEffect::WriteClipboard {
+            text: "beta".to_owned(),
+            cut: false
+        }]
     );
     assert_eq!(
         editor.apply(EditorCommand::RequestClose),
@@ -868,12 +871,20 @@ fn rich_selection_copy_cut_paste_and_undo_share_the_native_model() {
 
     assert_eq!(
         editor.apply(EditorCommand::Copy),
-        vec![EditorEffect::WriteClipboard("alpha".to_owned())]
+        vec![EditorEffect::WriteClipboard {
+            text: "alpha".to_owned(),
+            cut: false
+        }]
     );
     assert_eq!(
         editor.apply(EditorCommand::Cut),
-        vec![EditorEffect::WriteClipboard("alpha".to_owned())]
+        vec![EditorEffect::WriteClipboard {
+            text: "alpha".to_owned(),
+            cut: true
+        }]
     );
+    assert_eq!(editor.export_text(), "alpha beta");
+    editor.apply(EditorCommand::DeleteSelection);
     assert_eq!(editor.export_text(), " beta");
     editor.apply(EditorCommand::Paste("ALPHA".to_owned()));
     assert_eq!(editor.export_text(), "ALPHA beta");
@@ -2071,7 +2082,10 @@ fn cross_block_rich_selection_uses_logical_endpoints() {
     assert_eq!(editor.selected_text().as_deref(), Some("ne\ntw"));
     assert_eq!(
         editor.apply(EditorCommand::Copy),
-        vec![EditorEffect::WriteClipboard("ne\ntw".to_owned())]
+        vec![EditorEffect::WriteClipboard {
+            text: "ne\ntw".to_owned(),
+            cut: false
+        }]
     );
     editor.apply(EditorCommand::DeleteSelection);
     assert_eq!(editor.export_text(), "o\n\n**o**");

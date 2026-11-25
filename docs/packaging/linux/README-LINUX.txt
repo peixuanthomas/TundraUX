@@ -35,8 +35,8 @@ Vim mode also needs libtinfo.so.6 from the ncurses runtime, usually provided by
 libtinfo6 on Debian/Ubuntu.
 
 For desktop integration, install and run a session D-Bus bus,
-xdg-desktop-portal, and polkit. XWayland may be needed for clipboard access when
-the Wayland compositor does not provide a data-control clipboard.
+xdg-desktop-portal, and polkit. The workspace text clipboard also works in
+headless terminal and SSH sessions.
 
 `tundra-cli doctor` reports missing helpers and the affected integration. Local
 terminal applications can still be used when desktop services are unavailable.

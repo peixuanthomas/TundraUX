@@ -59,6 +59,10 @@ events. CSI navigation reports retain lock state, and `CSI E`/modified `CSI E`
 decode as Keypad Begin with keypad state. The regressions in
 `tests/escape_input.rs` exercise every read boundary.
 
+On Unix, the legacy `0x1c` control byte decodes as Ctrl+\, the terminal
+interrupt shortcut. Enhanced CSI reports preserve the distinct Ctrl+4 key when
+the host terminal sends its number explicitly.
+
 ## Verification
 
 The added parser regressions are in `tests/escape_input.rs`; the original

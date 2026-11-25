@@ -51,11 +51,15 @@ With the default minimum, left/right needs 217 × 20 cells, top/bottom needs 108
 
 Markdown files opened in the standard editor are edited as source text. In Vim, commands such as `:w` and `:wq` go through the workspace's save checks. Linux also has a Script Editor with run and debug actions. See [Editor and script workspace](source-editor.md) for the editing, Vim, and Bash debugger controls.
 
+Use **Ctrl+C**, **Ctrl+X**, and **Ctrl+V** in the ordinary editor, a search box, or an editable form. TundraUX shares copied text between your windows until you sign out or close the workspace. Paste from your terminal emulator to type outside text into the focused field.
+
 ## Launch programs and run commands
 
 Open **Launcher** and type an app’s name in your current interface language. An exact name is selected first. **Enter** opens the selected result and **↓** moves into the results. Search also looks at descriptions, paths, commands and types. **Esc** clears the search, then returns to the screen that opened Launcher. Launcher lists available built-in and user-added apps, including apps removed from Home. Use a tile’s right-click menu to add or remove a Home shortcut. In organize mode, draggable names on both pages show **#**. Drag anywhere on a tile and release at the vertical line. Right-click empty space in Launcher to add a custom entry. **F4** opens Run settings for supported entries.
 
 In **Command Line**, type a normal command such as `pwd` (Unix) or `cd` (Windows) to use the OS command interpreter. Prefix a TundraUX command with a slash, for example `/help` or `/doctor`; from an external terminal, use `tundra-cli help` or `tundra-cli doctor` without the slash. The built-in session keeps its working directory and exported environment. At the end of the input, **Right** cycles completion candidates and **Tab** accepts the gray suggestion. Type `exit` to close that session normally.
+
+Drag over terminal output and press **Ctrl+C** to copy the selection. **Ctrl+V** pastes from TundraUX. Press `Ctrl+\` to interrupt the foreground program. Right-click or press **Shift+F10** for the same actions. Hold **Shift** to select or open the menu when a child program handles mouse reporting. These controls also work in Script Output and Launcher terminal windows.
 
 To choose which shell runs system commands, open **Settings → Applications → Command Line → Shell**. Windows offers CMD, Windows PowerShell, and PowerShell 7 (`pwsh.exe`). macOS and Linux offer sh, Bash, Zsh, and Fish. Start a new Command Line session to apply the change. PowerShell 7 and Fish must be available on PATH when TundraUX starts.
 

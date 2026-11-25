@@ -179,7 +179,7 @@ fn rename_uses_shared_selection_clipboard_and_cursor_editing() {
         &platform,
     );
     state.apply_input_with_platform(ctrl_key('c'), &platform);
-    assert_eq!(platform.read_clipboard_text().unwrap(), "full.txt");
+    assert_eq!(name(&state), "full.txt");
     state.apply_input_with_platform(ctrl_key('x'), &platform);
     assert_eq!(name(&state), "");
     state.apply_input_with_platform(ctrl_key('v'), &platform);

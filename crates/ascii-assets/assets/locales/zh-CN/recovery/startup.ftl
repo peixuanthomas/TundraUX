@@ -15,7 +15,6 @@ resources-fallback = 部分资源修复失败，已使用内置资源。
 startup-theme-reload-title = 主题重载失败
 startup-theme-reload-failed = 无法重载当前用户的主题：{ $reason }。继续使用当前主题。
 startup-lifecycle-failed = 桌面生命周期监控失败：{ $reason }
-startup-session-refresh-failed = 桌面会话刷新失败：{ $reason }
 startup-reboot-failed = 重新启动计算机失败：{ $reason }
 startup-shutdown-failed = 关闭计算机失败：{ $reason }
 startup-storage-recovered = 存储已恢复默认值

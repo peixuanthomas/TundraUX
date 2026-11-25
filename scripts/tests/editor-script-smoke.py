@@ -329,10 +329,12 @@ def main():
             until(lambda current: has_terminal(current, "WAITING_FOR_INPUT") and "Running" in text(current))
             source_focus()
             key("F6")
-            key("c", "ctrl")
+            current = key("c", "ctrl")
+            assert "Running" in text(current), "Ctrl+C with no selection interrupted the script"
+            key("\\", "ctrl")
             until(lambda current: "Finished" in text(current) and "text" in node("editor.document", current)["actions"])
-            assert shell.child.poll() is None, "Ctrl+C exited the host instead of the script"
-            print("PASS: Ctrl+C in Output interrupted the script while keeping Shell alive", flush=True)
+            assert shell.child.poll() is None, "Ctrl+\\ exited the host instead of the script"
+            print("PASS: Ctrl+C kept the script running and Ctrl+\\ interrupted it", flush=True)
 
             if "--skip-vim" in sys.argv:
                 print("SKIP: real Vim handoff was explicitly excluded", flush=True)

@@ -31,6 +31,61 @@ fn text_input_exposes_unicode_selection_without_inserting_clipboard_shortcuts() 
 }
 
 #[test]
+fn cut_requires_a_successful_clipboard_write_and_secrets_cannot_be_copied() {
+    use std::{cell::RefCell, io, rc::Rc};
+    use ui::components::{TextClipboard, with_text_clipboard};
+
+    struct Clipboard(Option<Rc<RefCell<String>>>);
+    impl TextClipboard for Clipboard {
+        fn read(&self) -> io::Result<String> {
+            Ok(self.0.as_ref().unwrap().borrow().clone())
+        }
+        fn write(&self, text: String) -> io::Result<()> {
+            let memory = self.0.as_ref().ok_or(io::ErrorKind::BrokenPipe)?;
+            memory.replace(text);
+            Ok(())
+        }
+    }
+
+    let mut input = TextInput::new("name");
+    input.set_value("e\u{301}中文🙂.txt");
+    input.set_focused(true);
+    input.set_cursor(5);
+    input.set_selection_anchor(Some(0));
+    let shortcut = |character| {
+        InputEvent::Key(ui::KeyInput::with_modifiers(
+            Key::Char(character),
+            KeyModifiers::CTRL,
+        ))
+    };
+    let area = Rect::default();
+    let (_, error) =
+        with_text_clipboard(Clipboard(None), || input.handle_event(shortcut('x'), area));
+    assert_eq!(error.unwrap().kind(), io::ErrorKind::BrokenPipe);
+    assert_eq!(input.value(), "e\u{301}中文🙂.txt");
+    assert_eq!(input.selected_text().as_deref(), Some("e\u{301}中文🙂"));
+
+    let text = Rc::new(RefCell::new(String::new()));
+    let (_, error) = with_text_clipboard(Clipboard(Some(text.clone())), || {
+        input.handle_event(shortcut('x'), area);
+        assert_eq!(input.value(), ".txt");
+        assert_eq!(*text.borrow(), "e\u{301}中文🙂");
+        input.handle_event(InputEvent::Paste("external".into()), area);
+        input.handle_event(shortcut('v'), area);
+        assert_eq!(input.value(), "externale\u{301}中文🙂.txt");
+        let mut secret = TextInput::new("password").with_sensitive(true);
+        secret.set_value("secret");
+        secret.set_focused(true);
+        secret.set_selection_anchor(Some(0));
+        secret.handle_event(shortcut('c'), area);
+        secret.handle_event(shortcut('x'), area);
+        assert_eq!(secret.value(), "secret");
+        assert_eq!(*text.borrow(), "e\u{301}中文🙂");
+    });
+    assert!(error.is_none());
+}
+
+#[test]
 fn overflowing_scrollbars_keep_drag_travel_on_short_tracks() {
     use ui::components::{Scrollbar, ScrollbarOrientation};
     let vertical = Rect::new(4, 5, 1, 3);

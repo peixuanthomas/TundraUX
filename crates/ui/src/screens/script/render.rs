@@ -64,10 +64,16 @@ pub fn render_script_contextual_with_terminal_images(
                 layout.output_area,
                 output,
                 &theme,
-                model.focus == ScriptPane::Output,
+                model.focus == ScriptPane::Output && model.output_clipboard.menu.is_none(),
                 output_images,
-                picker,
+                picker.filter(|_| model.output_clipboard.menu.is_none()),
             );
+            if model.output_clipboard.menu.is_some() {
+                let _ = output_images.take_workspace_images();
+            }
+            model
+                .output_clipboard
+                .render(frame, layout.output_area, output, context);
         } else {
             output_images.clear();
             frame.render_widget(

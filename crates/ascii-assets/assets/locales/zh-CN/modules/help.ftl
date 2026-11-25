@@ -112,7 +112,9 @@ ui-help-editor-focus = 切换焦点
 
 ui-help-command-line-title = 命令行
 ui-help-command-line-close = 关闭命令行
-ui-help-command-line-keys = 按键交给终端
+ui-help-terminal-clipboard = 复制选中的输出，或从工作区剪贴板粘贴
+ui-help-terminal-interrupt = 中断前台程序
+ui-help-terminal-menu = 打开终端菜单，也可用鼠标右键打开。拖动选择文字。子程序接管鼠标时请按住 Shift。
 
 ui-help-explorer-sort = 排序文件列表
 ui-help-explorer-options = 文件浏览器选项

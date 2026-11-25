@@ -1,7 +1,19 @@
 use super::*;
 
 #[test]
-fn command_line_open_requires_size_and_routes_ctrl_c_to_the_child() {
+fn ctrl_c_leaves_the_workspace_open_when_no_text_control_has_focus() {
+    let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
+    state.set_navigation_path(vec![ShellScreen::Home]);
+    assert_eq!(
+        state.apply_input(InputEvent::from_key_label("Ctrl+C")),
+        ShellAction::Redraw
+    );
+    assert_eq!(state.active_screen(), ShellScreen::Home);
+    assert!(!state.shutdown_requested());
+}
+
+#[test]
+fn command_line_open_requires_size_and_routes_ctrl_c_to_the_terminal_host() {
     let mut state = ShellSession::new(ShellLaunchConfig::default(), (120, 40));
     set_test_auth_role(&mut state, UserRole::Admin);
     state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::Launcher]);

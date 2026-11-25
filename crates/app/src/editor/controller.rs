@@ -286,17 +286,15 @@ impl EditorController {
                 }
                 Vec::new()
             }
-            EditorCommand::Copy => state
+            EditorCommand::Copy | EditorCommand::Cut => state
                 .selected_text()
-                .map(|text| vec![EditorEffect::WriteClipboard(text)])
+                .map(|text| {
+                    vec![EditorEffect::WriteClipboard {
+                        text,
+                        cut: command == EditorCommand::Cut,
+                    }]
+                })
                 .unwrap_or_default(),
-            EditorCommand::Cut => {
-                let Some(text) = state.selected_text() else {
-                    return Vec::new();
-                };
-                apply_delete_selection(state);
-                vec![EditorEffect::WriteClipboard(text)]
-            }
             EditorCommand::RequestPaste => vec![EditorEffect::ReadClipboard],
             EditorCommand::RequestOpen => vec![EditorEffect::OpenFilePicker],
             EditorCommand::RequestSave => {

@@ -10,6 +10,7 @@ use crate::TundraTheme;
 use super::foundation::{
     char_index_for_terminal_column, terminal_width, truncate_to_terminal_width,
 };
+use super::text_clipboard::{TextClipboardAction, read_text_clipboard, write_text_clipboard};
 use super::{
     ComponentEvent, ComponentId, ComponentState, InputEvent, Key, MouseButton, MouseKind,
     byte_index_for_char, char_count, contains_point, inner_area,
@@ -220,16 +221,33 @@ impl TextInput {
                 self.set_focused(false);
                 ComponentEvent::Consumed
             }
-            InputEvent::Paste(value) if self.state.focused => {
-                let mut changed = false;
-                for character in value.chars().filter(|character| !character.is_control()) {
-                    self.insert_char(character);
-                    changed = true;
+            InputEvent::Paste(value) if self.state.focused => self.paste_text(&value),
+            InputEvent::Key(key)
+                if self.state.focused
+                    && let Some(action) = TextClipboardAction::for_key(&key) =>
+            {
+                if key.phase != crate::InputPhase::Press {
+                    return ComponentEvent::Consumed;
                 }
-                if changed {
-                    ComponentEvent::Changed(self.id.clone())
-                } else {
-                    ComponentEvent::Consumed
+                match action {
+                    TextClipboardAction::Paste => read_text_clipboard()
+                        .map_or(ComponentEvent::None, |text| self.paste_text(&text)),
+                    TextClipboardAction::Copy | TextClipboardAction::Cut => {
+                        if self.sensitive {
+                            return ComponentEvent::Consumed;
+                        }
+                        let Some(text) = self.selected_text() else {
+                            return ComponentEvent::Consumed;
+                        };
+                        if !write_text_clipboard(text) {
+                            return ComponentEvent::None;
+                        }
+                        if action == TextClipboardAction::Cut && self.delete_selection() {
+                            ComponentEvent::Changed(self.id.clone())
+                        } else {
+                            ComponentEvent::Consumed
+                        }
+                    }
                 }
             }
             InputEvent::Key(key) if self.state.focused => match key.key {
@@ -542,6 +560,18 @@ impl TextInput {
         let byte_index = byte_index_for_char(&self.text, self.cursor);
         self.text.insert(byte_index, character);
         self.cursor = self.cursor.saturating_add(1);
+    }
+
+    fn paste_text(&mut self, value: &str) -> ComponentEvent {
+        let text: String = value.chars().filter(|c| !c.is_control()).collect();
+        if text.is_empty() {
+            return ComponentEvent::Consumed;
+        }
+        self.delete_selection();
+        let offset = byte_index_for_char(&self.text, self.cursor);
+        self.text.insert_str(offset, &text);
+        self.cursor += char_count(&text);
+        ComponentEvent::Changed(self.id.clone())
     }
 
     fn delete_before_cursor(&mut self) -> bool {

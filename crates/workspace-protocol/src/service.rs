@@ -59,6 +59,10 @@ pub enum ServiceOperation {
     UpdateFileOperations {
         operation: Value,
     },
+    ReadTextClipboard,
+    WriteTextClipboard {
+        text: String,
+    },
     ReadSystemSnapshot,
     WriteSystemSnapshot {
         snapshot: Value,

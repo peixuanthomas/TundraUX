@@ -66,6 +66,10 @@ pub(super) async fn run(
         if let Some(request) = &request {
             next_id += 1;
             match transact(wire, next_id, request.operation.clone()).await {
+                Ok(result) if !request.refresh_snapshot => {
+                    let _ = request.reply.send(result);
+                    continue;
+                }
                 Ok(result) => reply = Some(result),
                 Err(_) => {
                     failed(&shared);

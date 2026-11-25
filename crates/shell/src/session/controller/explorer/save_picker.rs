@@ -56,7 +56,7 @@ impl ShellSession {
 
     pub(in crate::session) fn handle_explorer_save_picker_input(
         &mut self,
-        mut event: InputEvent,
+        event: InputEvent,
         platform: &dyn Platform,
     ) {
         if !matches!(
@@ -105,33 +105,6 @@ impl ShellSession {
         else {
             return;
         };
-        if let InputEvent::Key(key) = &event
-            && key.phase == InputPhase::Press
-            && (key.modifiers.control || key.modifiers.super_key)
-            && !key.modifiers.alt
-        {
-            match key.key {
-                InputKey::Char('c' | 'C' | 'x' | 'X') => {
-                    if let Some(text) = input.selected_text() {
-                        if let Err(error) = platform.write_clipboard_text(&text) {
-                            self.notify_status(error.to_string());
-                            return;
-                        }
-                        if matches!(key.key, InputKey::Char('x' | 'X')) {
-                            event = InputEvent::key(InputKey::Backspace);
-                        }
-                    }
-                }
-                InputKey::Char('v' | 'V') => match platform.read_clipboard_text() {
-                    Ok(value) => event = InputEvent::Paste(value),
-                    Err(error) => {
-                        self.notify_status(error.to_string());
-                        return;
-                    }
-                },
-                _ => {}
-            }
-        }
         input.handle_event_borderless(event, layout.save_name);
     }
 

@@ -50,7 +50,9 @@ Kitty keyboard negotiation supports presses, repeats, releases, and extended key
 
 Shell launches `tundra-cli repl --embedded` from its own binary directory, using `xterm-256color` and 2,000 lines of scrollback. Each page instance has an independent PTY and continues reading output while covered.
 
-Ctrl+C, Esc, and Ctrl+Shift+X are passed to the child CLI; after confirmation, the top-right Back button cleans up only the current instance. A normal `exit` returns to the original Launcher or Explorer, and the command-line host interprets the built-in CLI's special exit codes.
+Shell handles Ctrl+C as copy and Ctrl+V as paste in the built-in Command Line, Launcher terminals, and script output. Ctrl+\ and the terminal menu's Interrupt action send the original `0x03` byte to the child. Esc and Ctrl+Shift+X go to the child CLI. The top-right Back button cleans up the current instance after confirmation. Vim uses its ordinary PTY input and native editing keys.
+
+A normal `exit` returns to the original Launcher or Explorer, and the command-line host interprets the built-in CLI's special exit codes.
 
 ## Validation
 

@@ -14,6 +14,54 @@ use workspace_protocol::{ProcessGeneration, RunId, SessionId};
 use super::*;
 
 #[test]
+fn text_clipboard_is_shared_by_current_windows_and_clears_with_authorization() {
+    let fixture = Fixture::new();
+    let mut state = fixture.state();
+    let shell = worker(WorkerRole::Shell, 1);
+    let first = worker(WorkerRole::App(SessionId(1)), 2);
+    let second = worker(WorkerRole::App(SessionId(2)), 3);
+    state.register(shell);
+    login(&mut state, shell, 0, "first");
+    state.register(first);
+    state.register(second);
+    let text = "clipboard-fixture e\u{301} 中文🙂\n\t\0";
+    assert_eq!(
+        state.execute(
+            first,
+            ServiceOperation::WriteTextClipboard { text: text.into() },
+            &UnsupportedPlatform
+        ),
+        Ok(ServiceValue::Empty)
+    );
+    assert_eq!(
+        read::<String>(&mut state, second, ServiceOperation::ReadTextClipboard).1,
+        text
+    );
+    assert!(
+        read::<ExplorerSharedSnapshot>(&mut state, second, ServiceOperation::ReadFileOperations)
+            .1
+            .clipboard
+            .is_none()
+    );
+    let (_, snapshot): (_, Value) = read(&mut state, second, ServiceOperation::ReadSessionSnapshot);
+    assert!(!snapshot.to_string().contains("clipboard-fixture"));
+
+    login(&mut state, shell, 1, "next");
+    assert_eq!(
+        state.execute(
+            second,
+            ServiceOperation::ReadTextClipboard,
+            &UnsupportedPlatform
+        ),
+        Err(ServiceError::Forbidden)
+    );
+    assert_eq!(
+        read::<String>(&mut state, shell, ServiceOperation::ReadTextClipboard).1,
+        ""
+    );
+}
+
+#[test]
 fn session_snapshot_keeps_domain_permissions_and_stale_window_identity() {
     let fixture = Fixture::new();
     let mut state = fixture.state();

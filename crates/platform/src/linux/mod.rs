@@ -19,7 +19,6 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use arboard::Clipboard;
 use freedesktop_desktop_entry::DesktopEntry;
 use image::ImageReader;
 use watchdog::{
@@ -51,7 +50,6 @@ const XDG_OPEN: &str = "xdg-open";
 const GIO: &str = "gio";
 const TRASH_INFO_SUFFIX: &str = ".trashinfo";
 
-static CLIPBOARD: OnceLock<Mutex<Option<Clipboard>>> = OnceLock::new();
 static LIFECYCLE_EVENTS: OnceLock<Mutex<LifecycleEvents>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -72,7 +70,7 @@ impl Platform for LinuxPlatform {
     }
 
     fn capabilities(&self) -> PlatformCapabilities {
-        // Runtime services (D-Bus, data-control, xdg-utils) are diagnosed by
+        // Runtime services (D-Bus and xdg-utils) are diagnosed by
         // `tundra-cli debug doctor`; their absence must not demote Linux itself to an
         // unsupported platform.
         PlatformCapabilities::native_supported()
@@ -212,14 +210,6 @@ impl Platform for LinuxPlatform {
 
     fn spawn_wait(&self, spec: &ProcessSpec) -> Result<ProcessExit, PlatformError> {
         crate::process::spawn_wait_impl(spec, false)
-    }
-
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        with_clipboard(|clipboard| clipboard.get_text()).map_err(clipboard_error)
-    }
-
-    fn write_clipboard_text(&self, text: &str) -> Result<(), PlatformError> {
-        with_clipboard(|clipboard| clipboard.set_text(text.to_owned())).map_err(clipboard_error)
     }
 
     fn local_volumes(&self) -> Result<Vec<LocalVolume>, PlatformError> {
@@ -368,48 +358,6 @@ impl Platform for LinuxPlatform {
             Ok(event) => Ok(Some(event)),
             Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => Ok(None),
         }
-    }
-
-    fn refresh_session(&self) -> Result<(), PlatformError> {
-        let mut clipboard = clipboard_store()
-            .lock()
-            .map_err(|_| PlatformError::Native {
-                operation: "refresh Linux clipboard",
-                message: "clipboard state is poisoned".to_string(),
-            })?;
-        *clipboard = None;
-        Ok(())
-    }
-}
-
-fn clipboard_store() -> &'static Mutex<Option<Clipboard>> {
-    CLIPBOARD.get_or_init(|| Mutex::new(None))
-}
-
-fn with_clipboard<T>(
-    operation: impl Fn(&mut Clipboard) -> Result<T, arboard::Error>,
-) -> Result<T, arboard::Error> {
-    let mut slot = clipboard_store()
-        .lock()
-        .map_err(|_| arboard::Error::ContentNotAvailable)?;
-    if slot.is_none() {
-        *slot = Some(Clipboard::new()?);
-    }
-    match operation(slot.as_mut().expect("clipboard initialized")) {
-        Ok(value) => Ok(value),
-        Err(first_error) => {
-            // Wayland compositors can restart their data-control connection.
-            // Reconnect once while keeping a long-lived owner in the normal path.
-            *slot = Some(Clipboard::new()?);
-            operation(slot.as_mut().expect("clipboard rebuilt")).map_err(|_| first_error)
-        }
-    }
-}
-
-fn clipboard_error(error: arboard::Error) -> PlatformError {
-    PlatformError::Native {
-        operation: "access Linux clipboard",
-        message: error.to_string(),
     }
 }
 

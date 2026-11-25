@@ -24,6 +24,7 @@ pub(super) type Reply = Result<ServiceValue, ServiceError>;
 
 pub(super) struct Request {
     pub operation: ServiceOperation,
+    pub refresh_snapshot: bool,
     pub reply: mpsc::SyncSender<Reply>,
 }
 
@@ -250,9 +251,21 @@ impl SessionServicesClient {
     }
 
     pub(crate) fn submit(&self, operation: ServiceOperation) -> io::Result<mpsc::Receiver<Reply>> {
+        self.enqueue(operation, true)
+    }
+
+    fn enqueue(
+        &self,
+        operation: ServiceOperation,
+        refresh_snapshot: bool,
+    ) -> io::Result<mpsc::Receiver<Reply>> {
         let (reply, receiver) = mpsc::sync_channel(1);
         self.commands
-            .try_send(Request { operation, reply })
+            .try_send(Request {
+                operation,
+                refresh_snapshot,
+                reply,
+            })
             .map_err(|_| service_error(ServiceError::Unavailable))?;
         Ok(receiver)
     }
@@ -286,6 +299,23 @@ impl SessionServicesClient {
     /// Blocking adapter for storage and file-operation workers. UI writes use submit.
     pub(crate) fn request(&self, operation: ServiceOperation) -> io::Result<ServiceValue> {
         self.submit(operation)?
+            .recv_timeout(REQUEST_TIMEOUT)
+            .map_err(|_| service_error(ServiceError::Unavailable))?
+            .map_err(service_error)
+    }
+
+    pub(crate) fn request_text_clipboard(
+        &self,
+        operation: ServiceOperation,
+        session: Option<&str>,
+    ) -> io::Result<ServiceValue> {
+        let (_, _, snapshot) = self.snapshot()?;
+        let (revision, authorization): (_, Option<identity::AuthSession>) =
+            Self::decode(&snapshot.authorization)?;
+        if session != authorization.as_ref().map(|auth| auth.session_id.as_str()) {
+            return Err(service_error(ServiceError::Forbidden));
+        }
+        self.enqueue(Self::authorized(operation, revision), false)?
             .recv_timeout(REQUEST_TIMEOUT)
             .map_err(|_| service_error(ServiceError::Unavailable))?
             .map_err(service_error)

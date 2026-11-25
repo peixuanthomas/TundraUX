@@ -65,6 +65,5 @@ script-help-markers = B：本轮已命中的断点；?：待验证；!：调试�
 script-help-panes = 在源码、输出、变量、函数调用、表达式和断点之间切换。
 script-help-controls = 切换当前区域的控件；源码区的 Tab 仍用于缩进。
 script-help-expression = 暂停时可查看表达式。“执行命令”会运行 Bash 代码；仅查看变量不会执行输入内容。
-script-help-stdin = 输出区的按键和粘贴交给脚本，Ctrl+C 中断脚本。
 script-help-vim = 使用 Vim 编辑；调试时临时显示普通只读源码，结束后恢复 Vim。
 script-help-menu = 打开编辑器菜单。“运行设置”用于修改解释器、参数和工作目录。

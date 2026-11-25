@@ -577,7 +577,7 @@ def check_package_and_log_views(master: int, slave: int, output: bytearray, chil
 
 
 def check_keyboard_paste(master, output, child, start, cli, env):
-    """The isolated child has no desktop clipboard; failed reads must be harmless."""
+    """Repeated pastes from an empty workspace clipboard keep the keyboard usable."""
     def click(*suffixes) -> None:
         current = control_snapshot(master, output, child, cli, env)
         identifier = next(node["id"] for node in current["nodes"]
@@ -615,19 +615,19 @@ def check_keyboard_paste(master, output, child, start, cli, env):
         raise SystemExit("rapid keyboard command did not complete")
     current = wait_for_terminal_prompt(master, output, child, cli, env, window=terminal_window)
     columns, rows = os.get_terminal_size(master)
-    if any("Clipboard unavailable:" in line for line in
+    if any("No text to paste in the clipboard" in line for line in
            current["lines"] + painted_screen_lines(output, columns, rows)):
-        raise SystemExit(f"Clipboard error was already visible before Paste: {current}\n"
+        raise SystemExit(f"Clipboard status was already visible before Paste: {current}\n"
                          + output_diagnostic(output[start:]))
     for _ in range(3):
         click("screen-keyboard.paste")
     click("input.keyboard", "screen-keyboard.toggle")
     # Ratatui can retain the first letter from the previous status message.
     if not wait_for_painted_text(master, output,
-                                 "Clipboard unavailable: access Linux clipboard failed:", child):
+                                 "No text to paste in the clipboard", child):
         frame = control_snapshot(master, output, child, cli, env)
         painted = "\n".join(painted_screen_lines(output, columns, rows))
-        raise SystemExit(f"failed paste did not show a clipboard message: {json.dumps(frame, ensure_ascii=False)}\n"
+        raise SystemExit(f"empty paste did not show a clipboard message: {json.dumps(frame, ensure_ascii=False)}\n"
                          f"Painted:\n{painted}\nPTY:\n" + output_diagnostic(output[start:]))
     offset = len(output)
     os.write(master, b"printf 'PASTE_%s\\n' ALIVE\r")
@@ -636,7 +636,7 @@ def check_keyboard_paste(master, output, child, start, cli, env):
     if not wait_for_output(master, output, b"[system exit code: 0]", child, 5.0, offset, ignore_spaces=True):
         raise SystemExit("command after Paste did not complete")
     wait_for_terminal_prompt(master, output, child, cli, env, window=terminal_window)
-    print("PASS: rapid screen-keyboard clicks with small held movements, repeated unavailable-clipboard clicks and subsequent terminal command")
+    print("PASS: rapid screen-keyboard clicks with small held movements, repeated empty-clipboard clicks and subsequent terminal command")
 
 
 def check_crash_screen(master: int, output: bytearray, child: subprocess.Popen, isolated: Path, cli, env) -> None:
@@ -1213,7 +1213,7 @@ def main() -> int:
     isolated = Path(tempfile.mkdtemp(prefix="tundraux-pty-"))
     env = os.environ.copy()
     if CHECK_CRASH_SCREEN:
-        # Exercise a failed clipboard read without touching the user's clipboard.
+        # Exercise the workspace clipboard in a headless terminal session.
         env.pop("DISPLAY", None)
         env.pop("WAYLAND_DISPLAY", None)
     for name in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"):

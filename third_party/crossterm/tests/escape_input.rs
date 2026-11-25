@@ -6,6 +6,19 @@ fn key(code: KeyCode) -> InternalEvent {
 }
 
 #[test]
+fn legacy_ctrl_backslash_and_enhanced_ctrl_four_stay_distinct() {
+    let mut parser = Parser::default();
+    parser.advance(b"\x1c\x1b[52;5u\x1b[92;5u", false);
+    let keys = ['\\', '4', '\\'].map(|character| {
+        InternalEvent::Event(Event::Key(KeyEvent::new(
+            KeyCode::Char(character),
+            KeyModifiers::CONTROL,
+        )))
+    });
+    assert_eq!(parser.collect::<Vec<_>>(), keys);
+}
+
+#[test]
 fn kitty_maximum_modifier_mask_and_keypad_begin_survive_fragmentation() {
     use crate::event::{KeyEventKind, KeyEventState};
     let modifiers = KeyModifiers::SHIFT

@@ -698,6 +698,7 @@ pub struct UiSessionState {
 pub struct ShellSession {
     pub(super) app: app::AppState,
     pub(super) ui: UiSessionState,
+    pub(super) text_clipboard: super::text_clipboard::MemoryTextClipboard,
 }
 
 impl std::ops::Deref for ShellSession {

@@ -211,7 +211,6 @@ fn capability_label(key: &str) -> Option<LocalizedText> {
             "open_uri" => msg!("app-diagnostics-capability-open-uri"),
             "spawn_detached" => msg!("app-diagnostics-capability-spawn-detached"),
             "spawn_wait" => msg!("app-diagnostics-capability-spawn-wait"),
-            "clipboard_text" => msg!("app-diagnostics-capability-clipboard-text"),
             "user_dirs" => msg!("app-diagnostics-capability-user-dirs"),
             "app_paths" => msg!("app-diagnostics-capability-app-paths"),
             "temp" => msg!("app-diagnostics-capability-temp"),

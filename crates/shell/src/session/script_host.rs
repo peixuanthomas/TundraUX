@@ -92,6 +92,7 @@ impl ScriptHosts {
                 self.completed.remove(&page);
                 let (columns, rows) = state
                     .with_page_context(page, |state| {
+                        state.pages.editor.script.terminal_clipboard.clear();
                         state.pages.editor.script.scrolls[ui::ScriptPane::Output.index()] = 0;
                         let area = state.script_layout().output_area;
                         (area.width.max(1), area.height.max(1))
@@ -397,7 +398,7 @@ impl ScriptHosts {
                     .ui_snapshot_if_changed(host.revision)
                 {
                     host.revision = revision;
-                    state.pages.editor.script.output = Some(Arc::new(snapshot));
+                    state.pages.editor.script.set_output(snapshot);
                     changed = true;
                 }
             });
@@ -409,6 +410,7 @@ impl ScriptHosts {
                 let history_result = host.history_result;
                 state.with_page_context(page, |state| {
                     state.pages.editor.script.process_running = false;
+                    state.pages.editor.script.terminal_clipboard.reset_pointer();
                     state.pages.editor.script.source_view = None;
                     state.pages.editor.script.vim_suspended = false;
                     state.app.dispatch_at(
@@ -422,7 +424,7 @@ impl ScriptHosts {
                     Ok(output) => {
                         let snapshot = output.ui_snapshot();
                         state.with_page_context(page, |state| {
-                            state.pages.editor.script.output = Some(Arc::new(snapshot));
+                            state.pages.editor.script.set_output(snapshot);
                         });
                         self.completed
                             .insert(page, CompletedScript { output, view: None });
@@ -473,7 +475,11 @@ impl ScriptHosts {
                 }
                 let _ = completed.output.resize(area.width, area.height);
                 let _ = completed.output.set_scrollback(offset);
-                state.pages.editor.script.output = Some(Arc::new(completed.output.ui_snapshot()));
+                state
+                    .pages
+                    .editor
+                    .script
+                    .set_output(completed.output.ui_snapshot());
                 completed.view = Some(view);
                 changed = true;
             });
@@ -512,28 +518,69 @@ impl ScriptHosts {
             && self.hosts.contains_key(&state.content_page_id())
     }
 
-    pub(super) fn handle_input(&mut self, state: &ShellSession, input: &InputEvent) -> bool {
-        if !self.captures_terminal_input(state) {
+    pub(super) fn handle_input(&mut self, state: &mut ShellSession, input: &InputEvent) -> bool {
+        if state.active_screen() != ShellScreen::Editor
+            || !state.pages.editor.script.enabled
+            || !state.interactive_overlays().is_empty()
+        {
             return false;
         }
-        let Some(host) = self.hosts.get(&state.content_page_id()) else {
+        let Some(output) = state.pages.editor.script.output.clone() else {
             return false;
         };
-        let pty = host.session.terminal();
+        let area = state.script_layout().output_area;
+        if area.is_empty() {
+            return false;
+        }
+        let output_focused = state.pages.editor.script.focus == ui::ScriptPane::Output;
+        if !output_focused
+            && !matches!(input, InputEvent::Mouse(mouse) if area.contains(mouse.coordinates().into()))
+        {
+            return false;
+        }
+        let pty = self
+            .hosts
+            .get(&state.content_page_id())
+            .map(|host| host.session.terminal());
+        let clipboard = &mut state.pages.editor.script.terminal_clipboard;
+        if let Some(action) = clipboard.handle_shortcut(input, area, &output, pty.is_some()) {
+            state.perform_terminal_clipboard_action(action, pty);
+            return true;
+        }
+        if let InputEvent::Mouse(mouse) = input {
+            let host_pointer = clipboard.captures_pointer(*mouse);
+            if host_pointer && clipboard.handle_pointer(*mouse, area, pty.is_some()) {
+                state.pages.editor.script.focus = ui::ScriptPane::Output;
+                return true;
+            }
+            if output_focused
+                && let Some(pty) = pty
+                && pty.send_mouse(mouse, area).unwrap_or(false)
+            {
+                return true;
+            }
+            if clipboard.handle_pointer(*mouse, area, pty.is_some()) {
+                state.pages.editor.script.focus = ui::ScriptPane::Output;
+                return true;
+            }
+            return false;
+        }
+        let Some(pty) = pty else { return false };
         match input {
             InputEvent::Key(key)
                 if !state.script_host_key(key) && !matches!(key.key, InputKey::F(1 | 8 | 10)) =>
             {
+                if key.phase.is_press_like() {
+                    state.pages.editor.script.terminal_clipboard.clear();
+                }
                 let _ = pty.send_key(key);
                 true
             }
             InputEvent::Paste(text) => {
+                state.pages.editor.script.terminal_clipboard.clear();
                 let _ = pty.send_paste(text);
                 true
             }
-            InputEvent::Mouse(mouse) => pty
-                .send_mouse(mouse, state.script_layout().output_area)
-                .unwrap_or(false),
             _ => false,
         }
     }
@@ -567,4 +614,51 @@ fn fail(state: &mut ShellSession, page: PageInstanceId, error: io::Error) {
     state.with_page_context(page, |state| {
         state.fail_script(i18n::msg!("script-runtime-error", reason = error.to_string()).into())
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ui::{CommandLineCell, CommandLineTerminalSnapshot, KeyModifiers, MouseButton, MouseEvent};
+
+    #[test]
+    fn script_output_clipboard_copies_selection_after_the_child_exits() {
+        let mut state = ShellSession::new_for_home_mode(
+            ShellLaunchConfig::default(),
+            (144, 40),
+            ShellHomeMode::User,
+        );
+        state.set_navigation_path(vec![ShellScreen::Home, ShellScreen::Editor]);
+        state.pages.editor.script.enabled = true;
+        let mut hosts = ScriptHosts::new(default_editor_watchdog().unwrap());
+        let area = state.script_layout().output_area;
+        let mut output = CommandLineTerminalSnapshot::blank(area.width, area.height);
+        for (column, symbol) in [(0, "中"), (2, "e\u{301}")] {
+            output.set_cell(
+                column,
+                0,
+                CommandLineCell {
+                    symbol: symbol.into(),
+                    ..Default::default()
+                },
+            );
+        }
+        state.pages.editor.script.set_output(output);
+        for mouse in [
+            MouseEvent::down(area.x, area.y, MouseButton::Left),
+            MouseEvent::drag(area.x + 2, area.y, MouseButton::Left),
+            MouseEvent::up(area.x + 2, area.y, MouseButton::Left),
+        ] {
+            assert!(hosts.handle_input(&mut state, &InputEvent::Mouse(mouse)));
+        }
+        assert!(hosts.handle_input(
+            &mut state,
+            &InputEvent::Key(KeyInput::with_modifiers(
+                InputKey::F(10),
+                KeyModifiers::SHIFT
+            ))
+        ));
+        assert!(hosts.handle_input(&mut state, &InputEvent::key(InputKey::Enter)));
+        assert_eq!(state.text_clipboard().read().unwrap(), "中e\u{301}");
+    }
 }

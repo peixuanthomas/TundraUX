@@ -44,7 +44,6 @@ D-Bus operations distinguish permission denial, canceled authorization, service 
 | --- | --- | --- |
 | Open a file or URI with the default application | Native interfaces | `xdg-open`, executed in the background |
 | Launcher | Native programs and shortcuts | ELF, AppImage, scripts, and validated `.desktop` files |
-| Clipboard | Native backend | Wayland data-control or X11/XWayland |
 | Local volumes and trash | Native backend | mountinfo/statvfs/sysfs and Freedesktop Trash |
 | Critical errors | Platform alerts and logs | Desktop notifications, watchdog reports, and stderr |
 | Reboot/shutdown | Native APIs | logind + polkit |

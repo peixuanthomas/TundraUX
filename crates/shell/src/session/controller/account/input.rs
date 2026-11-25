@@ -30,6 +30,13 @@ impl ShellSession {
             );
         }
         if key.has_non_shift_modifier() {
+            if self.pages.setup.setup_custom_color_target.is_some()
+                && (ui::components::TextClipboardAction::for_key(key).is_some()
+                    || key.modifiers.is_control_only()
+                        && matches!(key.key, InputKey::Char('a' | 'A')))
+            {
+                return (target, ShellCommand::EditSetupCustomColor(key.clone()));
+            }
             if key.phase == InputPhase::Press
                 && key.modifiers.is_control()
                 && !key.modifiers.alt

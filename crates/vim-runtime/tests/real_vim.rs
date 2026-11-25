@@ -91,6 +91,19 @@ fn real_vim_owns_buffers_undo_and_acknowledged_writes() {
         poll.state.ready && poll.state.last_command >= 1
     });
 
+    host.send_key(&ui::KeyEvent::with_modifiers(
+        ui::Key::Char('v'),
+        ui::KeyModifiers::CTRL,
+    ))
+    .unwrap();
+    until(&mut host, |poll| poll.state.mode == "\u{16}");
+    host.send_key(&ui::KeyEvent::with_modifiers(
+        ui::Key::Char('c'),
+        ui::KeyModifiers::CTRL,
+    ))
+    .unwrap();
+    until(&mut host, |poll| poll.state.mode == "n");
+
     let before_ping = until(&mut host, |poll| poll.state.mode == "n");
     host.request_ping(u64::MAX).unwrap();
     let ping = until(&mut host, |poll| poll.ping_ids.contains(&u64::MAX));

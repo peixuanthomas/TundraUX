@@ -394,6 +394,90 @@ fn assert_snapshot_contains(
     }
 }
 
+#[cfg(unix)]
+#[test]
+#[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
+fn command_line_clipboard_keys_and_menus_send_only_the_intended_pty_bytes() {
+    use ui::{KeyModifiers, MouseButton, MouseEvent, components::TextClipboard};
+
+    let fixture = PtyFixture::new("clipboard-bytes");
+    let unicode = "e\u{301}中文🙂";
+    let host_paste = "外";
+    let expected = format!("{host_paste}{unicode}{unicode}\u{3}\u{3}");
+    let expected_hex = expected
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut scope = CommandLineHost::new(fixture.app.clone());
+    let mut config = PtyConfig::new("/bin/sh");
+    config.args = vec!["-c".into(), format!(
+        "stty raw -echo; printf '{unicode}\\r\\nREADY\\r\\n'; bytes=$(dd bs=1 count={} 2>/dev/null | od -An -v -tx1 | xargs); printf 'BYTES:%s\\r\\n' \"$bytes\"; sleep 60",
+        expected.len(),
+    ).into()];
+    scope.state =
+        CommandLineHostState::Running(PtyProcess::spawn(config, &scope.reader_tasks).unwrap());
+    assert_snapshot_contains(
+        running_pty(&scope),
+        "READY",
+        Duration::from_secs(5),
+        "terminal input test marker",
+    );
+    scope.refresh_snapshot();
+
+    let mut state = crate::ShellSession::new(crate::ShellLaunchConfig::default(), (120, 40));
+    state.set_navigation_path(vec![
+        crate::ShellScreen::Home,
+        crate::ShellScreen::CommandLine,
+    ]);
+    let mut hosts = CommandLineHosts::new(fixture.app.clone());
+    hosts.hosts.insert(state.active_page_id(), scope);
+    let viewport = Rect::new(0, 0, 120, 40);
+    let key = |key, modifiers| InputEvent::Key(KeyInput::with_modifiers(key, modifiers));
+    let mut input = |event| {
+        assert_eq!(
+            hosts.handle_input(&mut state, &event, Some(viewport)),
+            CommandLineHostEvent::None
+        );
+        state.text_clipboard().read().unwrap()
+    };
+
+    assert_eq!(input(key(InputKey::Char('c'), KeyModifiers::CTRL)), "");
+    for mouse in [
+        MouseEvent::down(0, 0, MouseButton::Left),
+        MouseEvent::drag(6, 0, MouseButton::Left),
+        MouseEvent::up(6, 0, MouseButton::Left),
+    ] {
+        input(InputEvent::Mouse(mouse));
+    }
+    assert_eq!(input(key(InputKey::Char('c'), KeyModifiers::CTRL)), unicode);
+    assert_eq!(input(InputEvent::Paste(host_paste.into())), unicode);
+    input(key(InputKey::Char('v'), KeyModifiers::CTRL));
+    input(key(InputKey::F(10), KeyModifiers::SHIFT));
+    input(InputEvent::key(InputKey::Enter));
+    input(key(InputKey::Char('4'), KeyModifiers::CTRL));
+    input(key(InputKey::Char('\\'), KeyModifiers::CTRL));
+    input(InputEvent::Mouse(MouseEvent::down(
+        4,
+        2,
+        MouseButton::Right,
+    )));
+    input(InputEvent::Mouse(MouseEvent::up(4, 2, MouseButton::Right)));
+    input(InputEvent::Mouse(MouseEvent::down(5, 5, MouseButton::Left)));
+    assert_eq!(
+        input(InputEvent::Mouse(MouseEvent::up(5, 5, MouseButton::Left))),
+        unicode
+    );
+
+    assert_snapshot_contains(
+        running_pty(hosts.visible_host(&state)),
+        &format!("BYTES:{expected_hex}"),
+        Duration::from_secs(5),
+        "host paste, clipboard paste, and two interrupts in order",
+    );
+}
+
 #[cfg(any(windows, unix))]
 #[test]
 #[cfg_attr(not(feature = "native-tests"), ignore = "requires a native PTY")]
@@ -559,7 +643,7 @@ fn shell_back_button_requires_confirmation_and_keeps_other_terminal_alive() {
         )),
     ] {
         assert_eq!(
-            hosts.handle_input(&state, &input, Some(Rect::new(0, 0, 120, 40))),
+            hosts.handle_input(&mut state, &input, Some(Rect::new(0, 0, 120, 40))),
             CommandLineHostEvent::None
         );
     }
@@ -635,7 +719,7 @@ fn covered_terminal_output_input_and_completion_are_bound_to_page_ids() {
         .write(b"echo FIRST_BACKGROUND_OUTPUT\r")
         .unwrap();
     hosts.handle_input(
-        &state,
+        &mut state,
         &InputEvent::paste("echo SECOND_ONLY_INPUT\r"),
         Some(Rect::new(0, 0, 120, 40)),
     );
@@ -791,7 +875,7 @@ fn command_line_app_host_launches_a_live_pty_at_the_minimum_window_size() {
         InputEvent::key(InputKey::Char('x')),
         InputEvent::key(InputKey::Enter),
     ] {
-        hosts.handle_input(&state, &input, Some(viewport));
+        hosts.handle_input(&mut state, &input, Some(viewport));
     }
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

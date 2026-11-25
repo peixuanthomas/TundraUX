@@ -225,7 +225,7 @@ fn keyboard_animation_reverses_without_jumping_and_honors_speed_and_reduced_moti
 }
 
 fn route(state: &mut ShellSession, input: InputEvent) -> Option<InputEvent> {
-    state.route_screen_keyboard_input(input, platform::native_platform().as_ref(), Instant::now())
+    state.route_screen_keyboard_input(input, Instant::now())
 }
 
 #[test]
@@ -369,7 +369,16 @@ fn rapid_keyboard_clicks_keep_small_movements_inside_each_key() {
 }
 
 fn click(state: &mut ShellSession, action: Action) -> Option<InputEvent> {
-    click_with_platform(state, action, platform::native_platform().as_ref())
+    let area = state
+        .input_keyboard_layout()
+        .buttons
+        .into_iter()
+        .find(|button| button.action == action)
+        .unwrap()
+        .area;
+    let point = (area.x, area.y);
+    assert!(route(state, InputEvent::mouse_down(PointerButton::Left, point)).is_none());
+    route(state, InputEvent::mouse_up(PointerButton::Left, point))
 }
 
 #[test]
@@ -416,75 +425,22 @@ fn compact_sections_keep_modifiers_and_emit_navigation_keys_without_typing_the_s
     );
 }
 
-fn click_with_platform(
-    state: &mut ShellSession,
-    action: Action,
-    platform: &dyn platform::Platform,
-) -> Option<InputEvent> {
-    let layout = state.input_keyboard_layout();
-    let area = layout
-        .buttons
-        .iter()
-        .find(|button| button.action == action)
-        .unwrap()
-        .area;
-    assert!(
-        state
-            .route_screen_keyboard_input(
-                InputEvent::mouse_down(PointerButton::Left, (area.x, area.y)),
-                platform,
-                Instant::now(),
-            )
-            .is_none()
-    );
-    state.route_screen_keyboard_input(
-        InputEvent::mouse_up(PointerButton::Left, (area.x, area.y)),
-        platform,
-        Instant::now(),
-    )
-}
-
 #[test]
-fn keyboard_paste_handles_empty_unavailable_and_nonempty_clipboards() {
-    let root = std::env::temp_dir().join("tundra-keyboard-paste-test");
-    let dirs = platform::UserDirs::new(
-        root.join("Desktop"),
-        root.join("Documents"),
-        root.join("Downloads"),
-        root.join("Pictures"),
-        root.join("Videos"),
-        root.join("Music"),
-        root.join("Data"),
-    )
-    .unwrap();
-    let platform = platform::mock::MockPlatform::new(
-        dirs,
-        platform::build_binary_dir_app_paths(root).unwrap(),
-    );
+fn keyboard_paste_reads_shared_text_and_leaves_an_empty_clipboard_untouched() {
     let mut state = session();
     state.toggle_input_keyboard();
     state.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
     for _ in 0..3 {
-        assert_eq!(
-            click_with_platform(&mut state, Action::Paste, &platform),
-            None
-        );
+        assert_eq!(click(&mut state, Action::Paste), None);
         assert!(state.status().contains("No text to paste"));
         assert!(state.input_keyboard_open());
     }
+    state
+        .text_clipboard()
+        .write("中文\nnormal text".into())
+        .unwrap();
     assert_eq!(
-        click_with_platform(
-            &mut state,
-            Action::Paste,
-            &platform::mock::UnsupportedPlatform
-        ),
-        None,
-    );
-    assert!(state.status().contains("Clipboard unavailable"));
-    assert!(state.input_keyboard_open());
-    platform.set_clipboard_text("中文\nnormal text");
-    assert_eq!(
-        click_with_platform(&mut state, Action::Paste, &platform),
+        click(&mut state, Action::Paste),
         Some(InputEvent::Paste("中文\nnormal text".into())),
     );
     assert!(matches!(

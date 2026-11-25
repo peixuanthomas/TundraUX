@@ -34,6 +34,7 @@ mod sidebar_workspace;
 mod skeleton;
 mod surface;
 mod tabs;
+mod text_clipboard;
 mod text_input;
 mod toast;
 mod update_activity;
@@ -71,6 +72,9 @@ pub use sidebar_workspace::{SidebarWorkspaceLayout, WorkspaceFocus};
 pub use skeleton::Skeleton;
 pub use surface::{Panel, Surface};
 pub use tabs::{TabItem, Tabs};
+pub use text_clipboard::{
+    TextClipboard, TextClipboardAction, read_text_clipboard, with_text_clipboard,
+};
 pub use text_input::{TextEditState, TextInput};
 pub use update_activity::{UpdateActivity, UpdateActivityViewModel, UpdateMeterViewModel};
 /// Glacier name for the established editable text component.

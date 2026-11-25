@@ -11,8 +11,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use std::sync::Arc;
 
-use crate::components::{CommandStatus, Scrollbar, Surface};
-use crate::{EditorImagePicker, RenderContext, TerminalImageCache, TundraTheme};
+use crate::components::{CommandStatus, ContextMenu, Scrollbar, Surface};
+use crate::{EditorImagePicker, Point, RenderContext, TerminalImageCache, TundraTheme};
 
 /// Smallest outer terminal accepted by the embedded Command Line application.
 pub const MIN_COMMAND_LINE_TERMINAL_WIDTH: u16 = crate::MIN_SHELL_TERMINAL_WIDTH;
@@ -177,6 +177,123 @@ pub enum CommandLineProcessState {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalSelection {
+    start: Point,
+    end: Point,
+}
+
+impl TerminalSelection {
+    pub fn new(anchor: Point, end: Point) -> Self {
+        if (anchor.row, anchor.column) <= (end.row, end.column) {
+            Self { start: anchor, end }
+        } else {
+            Self {
+                start: end,
+                end: anchor,
+            }
+        }
+    }
+
+    fn row(&self, snapshot: &CommandLineTerminalSnapshot, row: u16) -> std::ops::Range<u16> {
+        if row < self.start.row || row > self.end.row || row >= snapshot.rows {
+            return 0..0;
+        }
+        let start = if row == self.start.row {
+            self.start.column
+        } else {
+            0
+        };
+        let end = if row == self.end.row {
+            self.end.column.saturating_add(1)
+        } else {
+            snapshot.columns
+        };
+        let mut column = 0;
+        let mut first = start.min(snapshot.columns);
+        let mut last = end.min(snapshot.columns);
+        while column < last {
+            let next = column + terminal_cell_width(snapshot, column, row);
+            if column < first && first < next {
+                first = column;
+            }
+            if column < last && last < next {
+                last = next.min(snapshot.columns);
+            }
+            column = next;
+        }
+        first..last
+    }
+
+    pub fn text(&self, snapshot: &CommandLineTerminalSnapshot) -> String {
+        let mut result = String::new();
+        for row in self.start.row..=self.end.row.min(snapshot.rows.saturating_sub(1)) {
+            if row != self.start.row {
+                result.push('\n');
+            }
+            let range = self.row(snapshot, row);
+            let mut column = range.start;
+            let line_start = result.len();
+            while column < range.end {
+                let Some(cell) = snapshot.cell(column, row) else {
+                    break;
+                };
+                result.push_str(visible_symbol(&cell.symbol));
+                column += terminal_cell_width(snapshot, column, row);
+            }
+            if row != self.end.row {
+                result.truncate(line_start + result[line_start..].trim_end_matches(' ').len());
+            }
+        }
+        result
+    }
+}
+
+fn terminal_cell_width(snapshot: &CommandLineTerminalSnapshot, column: u16, row: u16) -> u16 {
+    snapshot.cell(column, row).map_or(1, |cell| {
+        u16::try_from(Span::raw(visible_symbol(&cell.symbol)).width())
+            .unwrap_or(u16::MAX)
+            .clamp(1, snapshot.columns.saturating_sub(column).max(1))
+    })
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TerminalClipboardView {
+    pub selection: Option<TerminalSelection>,
+    pub menu: Option<(Point, ContextMenu)>,
+}
+
+impl TerminalClipboardView {
+    pub fn render(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        snapshot: &CommandLineTerminalSnapshot,
+        context: &RenderContext,
+    ) {
+        if let Some(selection) = self.selection {
+            let style = Style::default()
+                .fg(context.theme.canvas)
+                .bg(context.theme.accent)
+                .remove_modifier(Modifier::REVERSED);
+            for row in 0..area.height.min(snapshot.rows) {
+                let columns = selection.row(snapshot, row);
+                let width = columns.end.min(area.width).saturating_sub(columns.start);
+                if width > 0 {
+                    frame.buffer_mut().set_style(
+                        Rect::new(area.x + columns.start, area.y + row, width, 1),
+                        style,
+                    );
+                }
+            }
+        }
+        if let Some((anchor, menu)) = &self.menu {
+            let area = menu.preferred_area(anchor.column, anchor.row, area);
+            menu.render_frame(frame, area, &context.compatibility_theme());
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandLineViewModel {
     /// Immutable frame data shared with the Shell host. Terminal frames can
@@ -187,6 +304,7 @@ pub struct CommandLineViewModel {
     /// A host-side message such as a spawn error or a restart hint.
     pub message: Option<String>,
     pub title: Option<String>,
+    pub clipboard: TerminalClipboardView,
 }
 
 impl CommandLineViewModel {
@@ -196,6 +314,7 @@ impl CommandLineViewModel {
             process_state: CommandLineProcessState::Running,
             message: None,
             title: None,
+            clipboard: TerminalClipboardView::default(),
         }
     }
 
@@ -307,7 +426,18 @@ pub fn render_command_line_content_with_images(
         (message, style)
     });
     render_terminal_snapshot_cells(frame, content_area, model.terminal.as_ref(), theme);
-    images.render(frame, content_area, model.terminal.as_ref(), picker);
+    images.render(
+        frame,
+        content_area,
+        model.terminal.as_ref(),
+        picker.filter(|_| model.clipboard.menu.is_none()),
+    );
+    if model.clipboard.menu.is_some() {
+        let _ = images.take_workspace_images();
+    }
+    model
+        .clipboard
+        .render(frame, content_area, model.terminal.as_ref(), context);
     render_command_line_scrollbar(frame, output_area, model.terminal.as_ref(), context);
     if let Some((message, style)) = message {
         render_process_message(

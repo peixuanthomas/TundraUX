@@ -9,6 +9,7 @@ see [Tested Terminals](#tested-terminals) for more info).
 
 TundraUX's local copy re-arms terminal input before returning a resize event, so input received in the same batch does not wait for another keystroke.
 It also preserves complete Kitty modifier masks, keyboard lock state and Keypad Begin events; local changes are documented in [TUNDRA_PATCH.md](TUNDRA_PATCH.md).
+Unix terminals decode the legacy `0x1c` byte as Ctrl+\ and keep enhanced Ctrl+4 reports distinct.
 
 ## Table of Contents
 

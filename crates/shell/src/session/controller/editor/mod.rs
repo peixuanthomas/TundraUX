@@ -740,11 +740,21 @@ impl ShellSession {
             app::editor::EditorEffect::Message(message) => {
                 self.pages.editor.editor_message = Some(message.into());
             }
-            app::editor::EditorEffect::WriteClipboard(text) => {
-                match platform.write_clipboard_text(&text) {
+            app::editor::EditorEffect::WriteClipboard { text, cut } => {
+                match self.text_clipboard().write(text) {
                     Ok(()) => {
+                        if cut {
+                            self.apply_editor_command(
+                                app::editor::EditorCommand::DeleteSelection,
+                                platform,
+                            );
+                        }
                         self.pages.editor.editor_message =
-                            Some(i18n::LocalizedText::from(i18n::msg!("shell-copied")))
+                            Some(i18n::LocalizedText::from(i18n::msg!(if cut {
+                                "shell-cut"
+                            } else {
+                                "shell-copied"
+                            })))
                     }
                     Err(error) => self.report_editor_error(i18n::LocalizedText::from(i18n::msg!(
                         "shell-could-not-copy-error",
@@ -752,9 +762,13 @@ impl ShellSession {
                     ))),
                 }
             }
-            app::editor::EditorEffect::ReadClipboard => match platform.read_clipboard_text() {
-                Ok(text) => {
+            app::editor::EditorEffect::ReadClipboard => match self.text_clipboard().read() {
+                Ok(text) if !text.is_empty() => {
                     self.apply_editor_command(app::editor::EditorCommand::Paste(text), platform)
+                }
+                Ok(_) => {
+                    self.pages.editor.editor_message =
+                        Some(i18n::msg!("shell-clipboard-is-empty").into())
                 }
                 Err(error) => self.report_editor_error(i18n::LocalizedText::from(i18n::msg!(
                     "shell-could-not-paste-error",

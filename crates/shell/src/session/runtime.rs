@@ -1527,7 +1527,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                     };
                     let command_line_captures = command_line_captures_input(&state, &input);
                     let cancel = state.escape_cancels_action(&input);
-                    if !cancel && script_hosts.handle_input(&state, &input) {
+                    if !cancel && script_hosts.handle_input(&mut state, &input) {
                         action = Some(ShellAction::Redraw);
                     } else if !cancel && editor_vim.captures_input(&state, &input) {
                         if let Err(error) = editor_vim.handle_input(&state, &input) {
@@ -1539,7 +1539,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         action = Some(ShellAction::Redraw);
                     } else if !cancel && command_line_captures {
                         let terminal_area = state.command_line_input_area();
-                        match command_line_hosts.handle_input(&state, &input, terminal_area) {
+                        match command_line_hosts.handle_input(&mut state, &input, terminal_area) {
                             CommandLineHostEvent::None => {}
                             CommandLineHostEvent::PanicRequested => trigger_command_line_panic(),
                             CommandLineHostEvent::ExitToCaller => {
@@ -2020,12 +2020,6 @@ fn refresh_session_after_resume(
     platform: &dyn Platform,
     time_sync_worker: &TimeSyncWorker,
 ) {
-    if let Err(error) = platform.refresh_session() {
-        state.notify_alert_with_tone(
-            i18n::msg!("startup-session-refresh-failed", reason = error.to_string()),
-            ui::NotificationTone::Error,
-        );
-    }
     time_sync_worker.request_refresh();
     if let Ok((width, height)) = crossterm::terminal::size() {
         let _ = state.apply_input_with_platform(InputEvent::Resize { width, height }, platform);

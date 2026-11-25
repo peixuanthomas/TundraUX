@@ -44,6 +44,8 @@ Tab accepts the gray inline completion on Windows and Unix. Right cycles through
 
 Help and version queries print built-in text directly without starting watchdog or reading configuration. `doctor` is a top-level command; the former top-level debug entry points are grouped under `debug`.
 
+`doctor` checks optional desktop opening, portal, and notification services. The standalone `debug screen-keyboard` has its own in-memory text clipboard for the lifetime of the preview.
+
 ## Shell interface control
 
 `tundra-cli ui` can list the current user's Shell sessions, read interface snapshots, and send clicks, moves, drags, scrolling, keys, and text. This feature is disabled by default; enable it in **Settings → System → External CLI control**.

@@ -159,9 +159,6 @@ impl ShellSession {
         if key.key == InputKey::Escape {
             self.cancel_management_pointer_gesture();
         }
-        if key.is_ctrl_c() && !self.pages.management.management_state.terminal_mode {
-            return;
-        }
         if management_control_modifier(key) && matches!(key.key, InputKey::Char('t' | 'T')) {
             if key.phase == InputPhase::Press {
                 self.management_touch_control(ui::ManagementControl::Terminal);

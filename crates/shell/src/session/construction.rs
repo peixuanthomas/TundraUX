@@ -290,7 +290,11 @@ impl ShellSession {
             drag_tracker: None,
             scrollbar_drag: None,
         };
-        let mut state = Self { app, ui };
+        let mut state = Self {
+            app,
+            ui,
+            text_clipboard: Default::default(),
+        };
         state.initialize_root_page();
         state.report_language_diagnostics(&prepared_language.diagnostics);
         if let Some(target) = std::env::var_os(app::update::UPDATE_TARGET_SHA_ENV) {

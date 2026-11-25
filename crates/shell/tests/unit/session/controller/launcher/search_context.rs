@@ -161,7 +161,7 @@ fn launcher_search_reuses_unicode_cursor_selection_and_clipboard_without_shutdow
     )));
     fixture.input(InputEvent::from_key_label("Ctrl+C"));
     assert!(!fixture.state.shutdown_requested());
-    assert_eq!(fixture.platform.read_clipboard_text().unwrap(), "中文🙂");
+    assert_eq!(fixture.state.text_clipboard().read().unwrap(), "中文🙂");
     fixture.input(InputEvent::Key(KeyInput::with_modifiers(
         InputKey::Char('x'),
         InputModifiers::CTRL,

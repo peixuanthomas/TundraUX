@@ -9,7 +9,6 @@ struct TestProbe {
     paths: HashSet<&'static str>,
     session_bus_reachable: Option<bool>,
     session_services: HashSet<&'static str>,
-    clipboard_backend_available: Option<bool>,
 }
 
 impl LinuxDoctorProbe for TestProbe {
@@ -28,10 +27,6 @@ impl LinuxDoctorProbe for TestProbe {
     fn session_service_available(&self, name: &str) -> Option<bool> {
         self.session_bus_reachable
             .map(|_| self.session_services.contains(name))
-    }
-
-    fn clipboard_backend_available(&self) -> Option<bool> {
-        self.clipboard_backend_available
     }
 }
 
@@ -72,7 +67,6 @@ fn linux_doctor_reports_ready_desktop_dependencies_from_injected_probe() {
             "org.freedesktop.portal.Desktop",
             "org.freedesktop.Notifications",
         ]),
-        clipboard_backend_available: Some(true),
     };
 
     let checks = linux_environment_checks(PlatformKind::Linux, &probe);
@@ -82,7 +76,7 @@ fn linux_doctor_reports_ready_desktop_dependencies_from_injected_probe() {
         CheckStatus::Pass
     );
     assert_eq!(check(&checks, "Desktop portal").status, CheckStatus::Pass);
-    assert_eq!(check(&checks, "Linux clipboard").status, CheckStatus::Pass);
+
     assert!(
         checks
             .iter()
@@ -92,7 +86,7 @@ fn linux_doctor_reports_ready_desktop_dependencies_from_injected_probe() {
 }
 
 #[test]
-fn linux_doctor_explains_wayland_clipboard_and_missing_runtime_services() {
+fn linux_doctor_explains_missing_wayland_runtime_services() {
     let probe = TestProbe {
         environment: HashMap::from([("WAYLAND_DISPLAY", "wayland-0")]),
         ..TestProbe::default()
@@ -100,9 +94,7 @@ fn linux_doctor_explains_wayland_clipboard_and_missing_runtime_services() {
 
     let checks = linux_environment_checks(PlatformKind::Linux, &probe);
 
-    let clipboard = check(&checks, "Linux clipboard");
-    assert_eq!(clipboard.status, CheckStatus::Warning);
-    assert!(clipboard.message.contains("data-control"));
+    assert!(!checks.iter().any(|check| check.id == "clipboard"));
     assert!(
         check(&checks, "Linux command: xdg-open")
             .message

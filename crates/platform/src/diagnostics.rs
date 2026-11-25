@@ -335,7 +335,6 @@ impl EnvironmentCheck {
             "open_uri" => "capability.open_uri",
             "spawn_detached" => "capability.spawn_detached",
             "spawn_wait" => "capability.spawn_wait",
-            "clipboard_text" => "capability.clipboard_text",
             "user_dirs" => "capability.user_dirs",
             "app_paths" => "capability.app_paths",
             "temp" => "capability.temp",

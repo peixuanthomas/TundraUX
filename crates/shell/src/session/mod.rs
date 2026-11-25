@@ -31,6 +31,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use time::TimeSyncResult;
 use ui::components::ScrollbarOrientation;
+use ui::components::TextClipboard;
 use watchdog::{
     AppWatchdog, ManagedTaskGroup, ManagedThreadHandle, ProcessWatchdog, TaskId, TaskSpec,
 };
@@ -93,9 +94,11 @@ mod screen_keyboard;
 mod screen_saver;
 pub(crate) mod services_client;
 mod spring_progress;
+mod terminal_clipboard;
 #[cfg(test)]
 #[path = "../../tests/unit/session/workflows/mod.rs"]
 mod tests;
+pub(crate) mod text_clipboard;
 mod ui_state;
 
 use command_line_runtime::*;

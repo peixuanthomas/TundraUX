@@ -1,4 +1,5 @@
 //! Connects the Command Line page to the independent terminal runtime.
+use super::terminal_clipboard::{TerminalClipboard, TerminalClipboardAction};
 use crate::{InputEvent, InputKey, PageInstanceId};
 use platform::{Platform, SystemCommandShell};
 use ratatui::layout::Rect;
@@ -58,6 +59,7 @@ pub struct CommandLineHost {
     snapshot_revision: u64,
     ui_snapshot: Arc<ui::CommandLineTerminalSnapshot>,
     scrollbar_drag_offset: Option<u16>,
+    clipboard: TerminalClipboard,
     child_mouse_buttons: Vec<ui::MouseButton>,
     reader_tasks: ManagedTaskGroup,
     history: Option<platform::task_history::TaskRecorder>,
@@ -74,6 +76,7 @@ impl CommandLineHost {
             snapshot_revision: 0,
             ui_snapshot,
             scrollbar_drag_offset: None,
+            clipboard: TerminalClipboard::default(),
             child_mouse_buttons: Vec::new(),
             history: None,
             reader_tasks: watchdog
@@ -99,6 +102,7 @@ impl CommandLineHost {
         self.launch = external.cloned();
         self.output = None;
         self.child_mouse_buttons.clear();
+        self.clipboard.clear();
         self.focused = false;
 
         let program = external.map_or_else(resolve_tundra_cli_program, |launch| {
@@ -186,6 +190,7 @@ impl CommandLineHost {
             return;
         }
         self.scrollbar_drag_offset = None;
+        self.clipboard.clear();
         let result = match &self.state {
             CommandLineHostState::Running(pty) => pty.resize(columns, rows),
             _ => match &self.output {
@@ -231,6 +236,7 @@ impl CommandLineHost {
             self.refresh_snapshot();
             return CommandLineHostEvent::None;
         };
+        self.clipboard.reset_pointer();
 
         let previous = std::mem::replace(&mut self.state, CommandLineHostState::Inactive);
         if let CommandLineHostState::Running(pty) = previous {
@@ -354,6 +360,9 @@ impl CommandLineHost {
         if returns_to_live_output && self.ui_snapshot.scrollback_offset > 0 {
             self.set_scrollback(0);
         }
+        if returns_to_live_output {
+            self.clipboard.clear();
+        }
 
         let write_result = match (&self.state, input) {
             (CommandLineHostState::Running(pty), InputEvent::Key(key)) => pty.send_key(key),
@@ -386,6 +395,7 @@ impl CommandLineHost {
             title: self.launch.as_ref().map(ExternalTerminalLaunch::title),
             terminal: Arc::clone(&self.ui_snapshot),
             process_state,
+            clipboard: self.clipboard.view(),
             message: match (
                 &self.state,
                 self.launch
@@ -469,6 +479,12 @@ impl CommandLineHost {
         }
 
         let content = ui::command_line_content_area(terminal_area, self.ui_snapshot.as_ref());
+        let running = self.is_running();
+        if self.clipboard.captures_pointer(mouse)
+            && self.clipboard.handle_pointer(mouse, content, running)
+        {
+            return;
+        }
         let captured = match mouse.kind {
             ui::MouseEventKind::Drag(button) | ui::MouseEventKind::Up(button) => {
                 self.child_mouse_buttons.contains(&button)
@@ -514,6 +530,10 @@ impl CommandLineHost {
             }
         }
 
+        if self.clipboard.handle_pointer(mouse, content, running) {
+            return;
+        }
+
         match (mouse.kind, scrollbar) {
             (ui::MouseEventKind::Scroll(ui::ScrollDirection::Up), Some(_)) => {
                 self.set_scrollback(
@@ -555,6 +575,7 @@ impl CommandLineHost {
 
     fn fail_running(&mut self, message: String) {
         self.child_mouse_buttons.clear();
+        self.clipboard.reset_pointer();
         let previous = std::mem::replace(&mut self.state, CommandLineHostState::Failed { message });
         if let CommandLineHostState::Running(pty) = previous {
             if let Ok(output) = pty.into_output() {
@@ -590,6 +611,7 @@ impl CommandLineHost {
         if snapshot.scrollback_rows == 0 {
             self.scrollbar_drag_offset = None;
         }
+        self.clipboard.update_snapshot(&self.ui_snapshot, &snapshot);
         self.ui_snapshot = Arc::new(snapshot);
         self.snapshot_revision = revision;
     }
@@ -602,6 +624,7 @@ impl CommandLineHost {
         if !focused {
             self.child_mouse_buttons.clear();
             self.scrollbar_drag_offset = None;
+            self.clipboard.reset_pointer();
         }
         if self.focused == focused {
             return;
@@ -936,7 +959,7 @@ impl CommandLineHosts {
 
     pub(super) fn handle_input(
         &mut self,
-        state: &super::ShellSession,
+        state: &mut super::ShellSession,
         input: &InputEvent,
         terminal_area: Option<Rect>,
     ) -> CommandLineHostEvent {
@@ -945,11 +968,32 @@ impl CommandLineHosts {
         {
             return CommandLineHostEvent::None;
         }
-        self.hosts
-            .get_mut(&state.active_page_id())
-            .map_or(CommandLineHostEvent::None, |host| {
-                host.handle_input(input, terminal_area)
-            })
+        let Some(host) = self.hosts.get_mut(&state.active_page_id()) else {
+            return CommandLineHostEvent::None;
+        };
+        if let Some(area) = terminal_area {
+            let area = host.view_model().output_area(area);
+            let content = ui::command_line_content_area(area, &host.ui_snapshot);
+            let running = host.is_running();
+            if let Some(action) =
+                host.clipboard
+                    .handle_shortcut(input, content, &host.ui_snapshot, running)
+            {
+                if matches!(
+                    action,
+                    TerminalClipboardAction::Paste | TerminalClipboardAction::Interrupt
+                ) {
+                    host.set_scrollback(0);
+                }
+                let process = match &host.state {
+                    CommandLineHostState::Running(pty) => Some(pty),
+                    _ => None,
+                };
+                state.perform_terminal_clipboard_action(action, process);
+                return CommandLineHostEvent::None;
+            }
+        }
+        host.handle_input(input, terminal_area)
     }
 }
 

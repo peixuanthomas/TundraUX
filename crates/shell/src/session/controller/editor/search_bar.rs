@@ -105,11 +105,7 @@ impl ShellSession {
         }
     }
 
-    pub(in crate::session) fn handle_edit_search_key(
-        &mut self,
-        key: &KeyInput,
-        platform: &dyn Platform,
-    ) -> bool {
+    pub(in crate::session) fn handle_edit_search_key(&mut self, key: &KeyInput) -> bool {
         let Some(search) = &mut self.pages.editor.editor_search_bar else {
             return false;
         };
@@ -135,46 +131,6 @@ impl ShellSession {
             input.set_focused(true);
             let mut changed = false;
             match key.key {
-                InputKey::Char('c' | 'C' | 'x' | 'X') => {
-                    if key.phase == InputPhase::Repeat {
-                        return true;
-                    }
-                    if let Some(anchor) = input.selection_anchor().filter(|a| *a != input.cursor())
-                    {
-                        let start = anchor.min(input.cursor());
-                        let end = anchor.max(input.cursor());
-                        let text = input
-                            .value()
-                            .chars()
-                            .skip(start)
-                            .take(end - start)
-                            .collect::<String>();
-                        match platform.write_clipboard_text(&text) {
-                            Ok(()) if matches!(key.key, InputKey::Char('x' | 'X')) => {
-                                input.handle_event_borderless(
-                                    InputEvent::key(InputKey::Backspace),
-                                    Rect::default(),
-                                );
-                                changed = true;
-                            }
-                            Err(error) => search.message = Some(error.to_string()),
-                            _ => {}
-                        }
-                    }
-                }
-                InputKey::Char('v' | 'V') => {
-                    if key.phase == InputPhase::Repeat {
-                        return true;
-                    }
-                    match platform.read_clipboard_text() {
-                        Ok(value) => {
-                            input
-                                .handle_event_borderless(InputEvent::Paste(value), Rect::default());
-                            changed = true;
-                        }
-                        Err(error) => search.message = Some(error.to_string()),
-                    }
-                }
                 InputKey::Left
                 | InputKey::Right
                 | InputKey::Backspace
@@ -223,8 +179,7 @@ impl ShellSession {
             }
             if matches!(
                 key.key,
-                InputKey::Char('c' | 'C' | 'x' | 'X' | 'v' | 'V')
-                    | InputKey::Left
+                InputKey::Left
                     | InputKey::Right
                     | InputKey::Backspace
                     | InputKey::Delete
@@ -242,7 +197,8 @@ impl ShellSession {
         }
         if key.modifiers.alt
             || (key.modifiers.control
-                && !matches!(key.key, InputKey::Char('a' | 'A') | InputKey::Enter))
+                && !matches!(key.key, InputKey::Char('a' | 'A') | InputKey::Enter)
+                && ui::components::TextClipboardAction::for_key(key).is_none())
             || matches!(key.key, InputKey::F(_))
         {
             return false;

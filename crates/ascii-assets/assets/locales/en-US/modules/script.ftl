@@ -65,6 +65,5 @@ script-help-markers = B: breakpoint already hit in this session; ?: pending veri
 script-help-panes = Move between source, output, variables, call stack, expressions and breakpoints.
 script-help-controls = Move between controls in the current pane. Tab still indents in the source editor.
 script-help-expression = Examine expressions while paused. Execute command runs Bash code; viewing variables does not execute it.
-script-help-stdin = In the Output pane, keys and paste go to the script. Ctrl+C interrupts the script.
 script-help-vim = Edit with Vim; debugging temporarily uses the ordinary read-only source view, then restores Vim.
 script-help-menu = Open the editor menu. Run settings changes the interpreter, arguments and working directory.

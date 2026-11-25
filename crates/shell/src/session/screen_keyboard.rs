@@ -299,7 +299,6 @@ impl ShellSession {
     pub(super) fn route_screen_keyboard_input(
         &mut self,
         input: InputEvent,
-        platform: &dyn Platform,
         at: Instant,
     ) -> Option<InputEvent> {
         self.sync_input_keyboard();
@@ -406,7 +405,7 @@ impl ShellSession {
             Action::Alt | Action::RightAlt => modifiers.alt = !modifiers.alt,
             _ => {
                 let event = if action == Action::Paste {
-                    match platform.read_clipboard_text() {
+                    match self.text_clipboard().read() {
                         Ok(text) if text.is_empty() => {
                             self.notify_status(i18n::msg!("screen-keyboard-clipboard-empty"));
                             return None;

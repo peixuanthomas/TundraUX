@@ -937,44 +937,19 @@ impl ShellSession {
             input.set_selection_anchor(Some(0));
         }
         input.set_focused(true);
-        if let InputEvent::Key(key) = &event
-            && (key.modifiers.control || key.modifiers.super_key)
-            && !key.modifiers.alt
-        {
-            match key.key {
-                InputKey::Char('c' | 'C' | 'x' | 'X') => {
-                    if key.phase != InputPhase::Press {
-                        return;
-                    }
-                    if let Some(text) = input.selected_text() {
-                        match platform.write_clipboard_text(&text) {
-                            Ok(()) if matches!(key.key, InputKey::Char('x' | 'X')) => {
-                                event = InputEvent::key(InputKey::Backspace);
-                            }
-                            Ok(()) => {}
-                            Err(error) => {
-                                self.notify_status(error.to_string());
-                                return;
-                            }
-                        }
-                    }
-                }
-                InputKey::Char('v' | 'V') => {
-                    if key.phase != InputPhase::Press {
-                        return;
-                    }
-                    match platform.read_clipboard_text() {
-                        Ok(value) => event = InputEvent::Paste(value),
-                        Err(error) => {
-                            self.notify_status(error.to_string());
-                            return;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
         if self.pages.explorer.explorer_input_mode == ExplorerInputMode::Address {
+            use ui::components::{TextClipboardAction, read_text_clipboard};
+            if let InputEvent::Key(key) = &event
+                && TextClipboardAction::for_key(key) == Some(TextClipboardAction::Paste)
+            {
+                if key.phase != InputPhase::Press {
+                    return;
+                }
+                let Some(text) = read_text_clipboard() else {
+                    return;
+                };
+                event = InputEvent::Paste(text);
+            }
             match &mut event {
                 InputEvent::Key(key) if matches!(key.key, InputKey::Char('/' | '\\')) => {
                     key.key = InputKey::Char(std::path::MAIN_SEPARATOR);

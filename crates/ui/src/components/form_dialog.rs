@@ -1,6 +1,9 @@
 use ratatui::{Frame, layout::Rect};
 
-use super::{ButtonRegion, InputEvent, Key, TextInput, contains_point};
+use super::{
+    ButtonRegion, InputEvent, Key, TextClipboardAction, TextInput, contains_point,
+    read_text_clipboard,
+};
 use crate::{InputPhase, ManagementLayout, ManagementScrollTarget, RenderContext};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -54,13 +57,33 @@ impl FormField {
             && self.choices.is_empty()
     }
 
-    pub fn edit(&mut self, event: InputEvent, area: Rect) {
+    pub fn edit(&mut self, mut event: InputEvent, area: Rect) {
         if !self.is_text() || self.read_only || self.disabled {
             return;
         }
+        if self.secret
+            && let InputEvent::Key(key) = &event
+            && matches!(
+                TextClipboardAction::for_key(key),
+                Some(TextClipboardAction::Copy | TextClipboardAction::Cut)
+            )
+        {
+            return;
+        }
+        if let InputEvent::Key(key) = &event
+            && TextClipboardAction::for_key(key) == Some(TextClipboardAction::Paste)
+        {
+            if key.phase != InputPhase::Press {
+                return;
+            }
+            let Some(text) = read_text_clipboard() else {
+                return;
+            };
+            event = InputEvent::Paste(text);
+        }
         let added = match &event {
             InputEvent::Paste(value) => value.len(),
-            InputEvent::Key(key) => match key.key {
+            InputEvent::Key(key) if !key.has_non_shift_modifier() => match key.key {
                 Key::Char(c) => c.len_utf8(),
                 Key::Space => 1,
                 _ => 0,
@@ -76,7 +99,9 @@ impl FormField {
             return;
         }
         let input = self.input.get_or_insert_with(|| {
-            let mut input = TextInput::new(self.id.as_str()).with_horizontal_scroll(true);
+            let mut input = TextInput::new(self.id.as_str())
+                .with_horizontal_scroll(true)
+                .with_sensitive(self.secret);
             input.set_value(self.value.clone());
             input
         });

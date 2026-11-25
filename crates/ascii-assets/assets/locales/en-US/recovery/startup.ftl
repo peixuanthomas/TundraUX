@@ -19,7 +19,6 @@ resources-fallback = Some resources could not be repaired. Built-in resources ar
 startup-theme-reload-title = Theme reload failed
 startup-theme-reload-failed = Could not reload the active user's theme: { $reason }. Continuing with the current theme.
 startup-lifecycle-failed = Desktop lifecycle monitoring failed: { $reason }
-startup-session-refresh-failed = Desktop session refresh failed: { $reason }
 startup-reboot-failed = Restart computer failed: { $reason }
 startup-shutdown-failed = Shut down computer failed: { $reason }
 startup-storage-recovered = Storage recovered defaults

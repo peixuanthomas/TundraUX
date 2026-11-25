@@ -261,7 +261,7 @@ fn retry_uses_the_same_external_program_arguments_and_directory() {
         assert!(snapshot_text(&hosts.hosts[&id].ui_snapshot).contains("EXTERNAL-RETRY"));
         if expected_runs == 1 {
             assert_eq!(
-                hosts.handle_input(&state, &InputEvent::key(InputKey::Enter), None),
+                hosts.handle_input(&mut state, &InputEvent::key(InputKey::Enter), None),
                 CommandLineHostEvent::None
             );
         }

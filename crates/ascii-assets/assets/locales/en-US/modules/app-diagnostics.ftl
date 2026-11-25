@@ -80,7 +80,6 @@ app-diagnostics-capability-open-with = Open with an application
 app-diagnostics-capability-open-uri = Open links
 app-diagnostics-capability-spawn-detached = Launch background processes
 app-diagnostics-capability-spawn-wait = Run foreground processes
-app-diagnostics-capability-clipboard-text = Clipboard text
 app-diagnostics-capability-user-dirs = User directories
 app-diagnostics-capability-app-paths = Application paths
 app-diagnostics-capability-temp = Temporary files

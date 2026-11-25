@@ -27,8 +27,6 @@ pub enum MockCall {
     OpenUri(String),
     SpawnDetached(ProcessSpec),
     SpawnWait(ProcessSpec),
-    ReadClipboardText,
-    WriteClipboardText(String),
     ShowCriticalError {
         title: String,
         body: String,
@@ -59,7 +57,6 @@ pub struct MockPlatform {
     user_dirs: UserDirs,
     account_user_dirs: BTreeMap<String, Result<UserDirs, PlatformError>>,
     app_paths: AppPaths,
-    clipboard_text: Mutex<String>,
     startup_permission_status: Mutex<Result<StartupPermissionStatus, PlatformError>>,
     request_startup_permissions_result: Mutex<Result<(), PlatformError>>,
     system_time_result: Mutex<Result<SystemTime, PlatformError>>,
@@ -91,7 +88,6 @@ impl MockPlatform {
             user_dirs,
             account_user_dirs: BTreeMap::new(),
             app_paths,
-            clipboard_text: Mutex::new(String::new()),
             startup_permission_status: Mutex::new(Ok(StartupPermissionStatus::Ready)),
             request_startup_permissions_result: Mutex::new(Ok(())),
             system_time_result: Mutex::new(Ok(SystemTime::now())),
@@ -136,10 +132,6 @@ impl MockPlatform {
     pub fn with_capabilities(mut self, capabilities: PlatformCapabilities) -> Self {
         self.capabilities = capabilities;
         self
-    }
-
-    pub fn set_clipboard_text(&self, text: impl Into<String>) {
-        *self.clipboard_text.lock().expect("clipboard lock poisoned") = text.into();
     }
 
     pub fn set_startup_permission_status(
@@ -432,21 +424,6 @@ impl Platform for MockPlatform {
         })
     }
 
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        self.record(MockCall::ReadClipboardText);
-        Ok(self
-            .clipboard_text
-            .lock()
-            .expect("clipboard lock poisoned")
-            .clone())
-    }
-
-    fn write_clipboard_text(&self, text: &str) -> Result<(), PlatformError> {
-        self.record(MockCall::WriteClipboardText(text.to_string()));
-        *self.clipboard_text.lock().expect("clipboard lock poisoned") = text.to_string();
-        Ok(())
-    }
-
     fn show_critical_error(&self, title: &str, body: &str) -> Result<(), PlatformError> {
         self.record(MockCall::ShowCriticalError {
             title: title.to_string(),
@@ -682,18 +659,6 @@ impl Platform for UnsupportedPlatform {
     fn spawn_wait(&self, _spec: &ProcessSpec) -> Result<ProcessExit, PlatformError> {
         Err(PlatformError::Unsupported {
             capability: "spawn_wait",
-        })
-    }
-
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        Err(PlatformError::Unsupported {
-            capability: "clipboard_text",
-        })
-    }
-
-    fn write_clipboard_text(&self, _text: &str) -> Result<(), PlatformError> {
-        Err(PlatformError::Unsupported {
-            capability: "clipboard_text",
         })
     }
 }

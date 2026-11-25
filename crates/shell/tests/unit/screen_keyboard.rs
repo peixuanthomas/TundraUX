@@ -272,52 +272,38 @@ fn screen_keyboard_physical_combinations_do_not_activate_focused_buttons() {
 
 #[test]
 fn screen_keyboard_copy_paste_and_failures_preserve_text() {
-    use platform::{
-        AppPaths, Platform, UserDirs,
-        mock::{MockPlatform, UnsupportedPlatform},
-    };
-    let root = std::env::temp_dir().join("tundra-screen-keyboard-clipboard");
-    let dirs = UserDirs::new(
-        root.join("Desktop"),
-        root.join("Documents"),
-        root.join("Downloads"),
-        root.join("Pictures"),
-        root.join("Videos"),
-        root.join("Music"),
-        root.join("Data"),
-    )
-    .unwrap();
-    let paths = AppPaths::from_parts(
-        root.join("config.toml"),
-        root.join("state"),
-        root.join("cache"),
-        root.join("logs"),
-        root.join("temp"),
-    )
-    .unwrap();
-    let platform = MockPlatform::new(dirs, paths);
+    struct Unavailable;
+    impl TextClipboard for Unavailable {
+        fn read(&self) -> io::Result<String> {
+            Err(io::Error::other("unavailable"))
+        }
+        fn write(&self, _: String) -> io::Result<()> {
+            Err(io::Error::other("unavailable"))
+        }
+    }
+    let clipboard = SessionTextClipboard::standalone();
     let mut state = ScreenKeyboardState::default();
     state.text = "原文".to_owned();
-    platform.set_clipboard_text("\r\n中文\t🙂\0\u{7}");
+    clipboard.write("\r\n中文\t🙂\0\u{7}".into()).unwrap();
     state.activate(ScreenKeyboardAction::Paste);
-    state.apply_clipboard(&platform);
+    state.apply_clipboard(&clipboard);
     assert_eq!(state.text, "原文\n中文\t🙂");
     let copy = InputEvent::Key(KeyEvent::with_modifiers(Key::Char('c'), KeyModifiers::CTRL));
     assert!(
         !state.handle_input(copy, &layout(), Instant::now()),
         "Ctrl+C copies instead of exiting"
     );
-    state.apply_clipboard(&platform);
-    assert_eq!(platform.read_clipboard_text().unwrap(), state.text);
+    state.apply_clipboard(&clipboard);
+    assert_eq!(clipboard.read().unwrap(), state.text);
     state.activate(ScreenKeyboardAction::Clear);
     state.activate(ScreenKeyboardAction::RightCtrl);
     state.activate(ScreenKeyboardAction::Letter('v'));
     assert_eq!(state.last_key, "RCtrl+V");
-    state.apply_clipboard(&platform);
+    state.apply_clipboard(&clipboard);
     assert_eq!(state.text, "原文\n中文\t🙂");
     for action in [ScreenKeyboardAction::Copy, ScreenKeyboardAction::Paste] {
         state.activate(action);
-        state.apply_clipboard(&UnsupportedPlatform);
+        state.apply_clipboard(&Unavailable);
         assert_eq!(state.text, "原文\n中文\t🙂");
         assert!(!state.message.is_empty());
         assert!(state.pending_clipboard.is_none());

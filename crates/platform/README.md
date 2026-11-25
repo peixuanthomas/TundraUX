@@ -20,6 +20,8 @@
 
 Document reads reject FIFOs, devices, symbolic links, and other non-regular files, and recheck file identity after opening.
 
+SessionServices provides the workspace text clipboard on every platform, including headless terminals.
+
 Hosts can install one process-local `task_events` notifier. Result channels notify only after successful delivery; shared result slots and PTY readers notify after publishing and releasing their locks. Libraries retain ordinary channel behavior when no host notifier is installed.
 
 Explorer moves, renames, and undo share `file_operations`: Linux uses `renameat2(RENAME_NOREPLACE)`, macOS uses `renamex_np(RENAME_EXCL)`, and Windows uses `MoveFileExW` without replacement. An existing destination preserves both files. File identities serialize over authenticated session IPC so the shared undo service can validate the same object and parent directories across app processes.

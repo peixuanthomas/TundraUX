@@ -390,7 +390,9 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("F6 / Shift+F6", i18n::tr!("script-help-panes")),
                     row("Tab / Shift+Tab", i18n::tr!("script-help-controls")),
                     row("Enter / Ctrl+Enter", i18n::tr!("script-help-expression")),
-                    row("Ctrl+C", i18n::tr!("script-help-stdin")),
+                    row("Ctrl+C / Ctrl+V", i18n::tr!("ui-help-terminal-clipboard")),
+                    row("Ctrl+\\", i18n::tr!("ui-help-terminal-interrupt")),
+                    row("Shift+F10", i18n::tr!("ui-help-terminal-menu")),
                     row("F8", i18n::tr!("script-help-vim")),
                     row("F10", i18n::tr!("script-help-menu")),
                 ]),
@@ -427,7 +429,11 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     &i18n::tr!("ui-help-back-button"),
                     i18n::tr!("ui-help-command-line-close"),
                 )]),
-                advanced(vec![row("F1", i18n::tr!("ui-help-command-line-keys"))]),
+                advanced(vec![
+                    row("Ctrl+C / Ctrl+V", i18n::tr!("ui-help-terminal-clipboard")),
+                    row("Ctrl+\\", i18n::tr!("ui-help-terminal-interrupt")),
+                    row("Shift+F10", i18n::tr!("ui-help-terminal-menu")),
+                ]),
             ],
         ),
     };

@@ -67,7 +67,6 @@ pub struct PlatformCapabilities {
     pub open_uri: CapabilityStatus,
     pub spawn_detached: CapabilityStatus,
     pub spawn_wait: CapabilityStatus,
-    pub clipboard_text: CapabilityStatus,
     pub user_dirs: CapabilityStatus,
     pub app_paths: CapabilityStatus,
     pub temp: CapabilityStatus,
@@ -88,7 +87,6 @@ impl PlatformCapabilities {
             open_uri: CapabilityStatus::Supported,
             spawn_detached: CapabilityStatus::Supported,
             spawn_wait: CapabilityStatus::Supported,
-            clipboard_text: CapabilityStatus::Supported,
             user_dirs: CapabilityStatus::Supported,
             app_paths: CapabilityStatus::Supported,
             temp: CapabilityStatus::Supported,
@@ -109,7 +107,6 @@ impl PlatformCapabilities {
             open_uri: CapabilityStatus::Unsupported,
             spawn_detached: CapabilityStatus::Unsupported,
             spawn_wait: CapabilityStatus::Unsupported,
-            clipboard_text: CapabilityStatus::Unsupported,
             user_dirs: CapabilityStatus::Unsupported,
             app_paths: CapabilityStatus::Unsupported,
             temp: CapabilityStatus::Unsupported,
@@ -123,14 +120,13 @@ impl PlatformCapabilities {
         }
     }
 
-    pub fn checks(&self) -> [(&'static str, CapabilityStatus); 16] {
+    pub fn checks(&self) -> [(&'static str, CapabilityStatus); 15] {
         [
             ("open_path", self.open_path),
             ("open_with", self.open_with),
             ("open_uri", self.open_uri),
             ("spawn_detached", self.spawn_detached),
             ("spawn_wait", self.spawn_wait),
-            ("clipboard_text", self.clipboard_text),
             ("user_dirs", self.user_dirs),
             ("app_paths", self.app_paths),
             ("temp", self.temp),
@@ -616,9 +612,6 @@ pub trait Platform: Send + Sync {
         Ok(exit)
     }
 
-    fn read_clipboard_text(&self) -> Result<String, PlatformError>;
-    fn write_clipboard_text(&self, text: &str) -> Result<(), PlatformError>;
-
     fn local_volumes(&self) -> Result<Vec<LocalVolume>, PlatformError> {
         Err(PlatformError::Unsupported {
             capability: "local_volumes",
@@ -746,13 +739,6 @@ pub trait Platform: Send + Sync {
     /// PrepareForSleep signals; other platforms may keep the default.
     fn poll_lifecycle_event(&self) -> Result<Option<PlatformLifecycleEvent>, PlatformError> {
         Ok(None)
-    }
-
-    /// Rebuilds session-scoped resources after resume (for example clipboard
-    /// and desktop-service connections). This must be safe to call after an
-    /// ordinary terminal focus gain as well.
-    fn refresh_session(&self) -> Result<(), PlatformError> {
-        Ok(())
     }
 
     /// Returns whether the current desktop session can authorize a power off.

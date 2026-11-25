@@ -40,30 +40,6 @@ impl ShellSession {
             return (RoutedTarget::Global, ShellCommand::Noop);
         }
 
-        if key.is_ctrl_c() && self.active_screen() == ShellScreen::Editor {
-            return (
-                RoutedTarget::Component(ShellComponent::Editor),
-                ShellCommand::EditorKey(key.clone()),
-            );
-        }
-        if key.is_ctrl_c() && self.active_screen() == ShellScreen::Management {
-            return (
-                RoutedTarget::Component(ShellComponent::Management),
-                ShellCommand::ManagementKey(key.clone()),
-            );
-        }
-
-        if key.is_ctrl_c()
-            && self.active_screen() == ShellScreen::Launcher
-            && self.pages.launcher.search.state.focused
-        {
-            return self.route_launcher_key(key);
-        }
-
-        if key.is_ctrl_c() && self.active_screen() != ShellScreen::Explorer {
-            return (RoutedTarget::Global, ShellCommand::Shutdown);
-        }
-
         if key.phase == InputPhase::Press
             && key.key == InputKey::F(6)
             && key.modifiers.is_control()

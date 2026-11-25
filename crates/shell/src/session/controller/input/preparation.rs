@@ -21,7 +21,7 @@ impl ShellSession {
     pub(in crate::session) fn prepare_input(
         &mut self,
         input: InputEvent,
-        platform: &dyn Platform,
+        _platform: &dyn Platform,
         received_at: Instant,
     ) -> Option<InputEvent> {
         if self.consume_screen_saver_input(&input, received_at) {
@@ -59,6 +59,7 @@ impl ShellSession {
                 self.interaction.pointer_motion = false;
             }
             InputEvent::FocusLost => {
+                self.pages.editor.script.terminal_clipboard.reset_pointer();
                 self.interaction.pointer_motion = false;
                 self.details_motion = None;
                 self.advance_input_keyboard(ui::MotionFrame::reduced(Duration::ZERO));
@@ -72,7 +73,7 @@ impl ShellSession {
             _ => {}
         }
         self.synchronize_overlay_focus();
-        let input = self.route_screen_keyboard_input(input, platform, received_at)?;
+        let input = self.route_screen_keyboard_input(input, received_at)?;
         if !self.power_title_pointer(&input) && self.handle_auto_admin_input_at(&input, received_at)
         {
             return None;

@@ -112,7 +112,9 @@ ui-help-editor-focus = Switch focus
 
 ui-help-command-line-title = Command Line
 ui-help-command-line-close = Close command line
-ui-help-command-line-keys = Keys go to the terminal
+ui-help-terminal-clipboard = Copy selected output or paste from the workspace clipboard
+ui-help-terminal-interrupt = Interrupt the foreground program
+ui-help-terminal-menu = Open the terminal menu. You can also right-click. Drag to select text. Hold Shift when the child program handles the mouse.
 
 ui-help-explorer-sort = Sort entries
 ui-help-explorer-options = File Explorer options

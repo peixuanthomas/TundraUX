@@ -8,7 +8,7 @@ use std::io::Write;
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::SystemTime;
 
 #[cfg(target_os = "macos")]
@@ -24,8 +24,6 @@ use crate::{
 use crate::{NetworkInterface, NetworkInterfaceKind, NetworkLinkState, VolumeAccess};
 
 const OPEN: &str = "/usr/bin/open";
-const PBCOPY: &str = "/usr/bin/pbcopy";
-const PBPASTE: &str = "/usr/bin/pbpaste";
 #[cfg(target_os = "macos")]
 const OSASCRIPT: &str = "/usr/bin/osascript";
 const FULL_DISK_ACCESS_SETTINGS_URI: &str =
@@ -260,58 +258,6 @@ impl Platform for MacosPlatform {
 
     fn spawn_wait(&self, spec: &ProcessSpec) -> Result<ProcessExit, PlatformError> {
         crate::process::spawn_wait_impl(spec, false)
-    }
-
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        let output = Command::new(PBPASTE).output_managed().map_err(|error| {
-            PlatformError::from_io("read clipboard", Some(PathBuf::from(PBPASTE)), &error)
-        })?;
-
-        if !output.status.success() {
-            return Err(PlatformError::CommandFailed {
-                program: PBPASTE.to_string(),
-                status: output.status.code(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    }
-
-    fn write_clipboard_text(&self, text: &str) -> Result<(), PlatformError> {
-        let mut child = Command::new(PBCOPY)
-            .stdin(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn_managed()
-            .map_err(|error| {
-                PlatformError::from_io("write clipboard", Some(PathBuf::from(PBCOPY)), &error)
-            })?;
-
-        child
-            .stdin
-            .take()
-            .ok_or_else(|| PlatformError::Native {
-                operation: "write clipboard",
-                message: "pbcopy stdin is unavailable".to_string(),
-            })?
-            .write_all(text.as_bytes())
-            .map_err(|error| {
-                PlatformError::from_io("write clipboard", Some(PathBuf::from(PBCOPY)), &error)
-            })?;
-
-        let output = child.wait_with_output().map_err(|error| {
-            PlatformError::from_io("write clipboard", Some(PathBuf::from(PBCOPY)), &error)
-        })?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(PlatformError::CommandFailed {
-                program: PBCOPY.to_string(),
-                status: output.status.code(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            })
-        }
     }
 
     fn show_critical_error(&self, title: &str, body: &str) -> Result<(), PlatformError> {

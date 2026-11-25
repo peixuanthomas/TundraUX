@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use platform::mock::{MockCall, MockPlatform};
+use platform::mock::MockPlatform;
 use platform::{
     AppPaths, Platform, PlatformCapabilities, PlatformKind, UserDirs, build_windows_app_paths,
     cleanup_temp_path,
@@ -1067,15 +1067,13 @@ fn ctrl_c_copies_selection_in_editor_instead_of_shutting_down() {
     assert_eq!(action, ShellAction::Redraw);
     assert_eq!(state.active_screen(), ShellScreen::Editor);
     assert!(!state.shutdown_requested());
-    assert!(
-        platform.calls().iter().any(|call| {
-            matches!(call, MockCall::WriteClipboardText(text) if text == "copy me")
-        })
-    );
     assert_eq!(
         state.to_editor_view_model().status_message.as_deref(),
         Some("Copied")
     );
+    state.apply_input_with_platform(InputEvent::from_key_label("Delete"), &platform);
+    state.apply_input_with_platform(ctrl('v'), &platform);
+    assert_eq!(state.to_editor_view_model().source_lines, ["copy me"]);
 }
 
 #[test]
@@ -2725,15 +2723,6 @@ fn ordinary_editor_context_menu_preserves_selection_and_reuses_clipboard_actions
             }
         );
     }
-    assert!(platform.calls().iter().any(
-        |call| matches!(call, MockCall::WriteClipboardText(text) if text == "copy this 中文")
-    ));
-    assert!(
-        platform
-            .calls()
-            .iter()
-            .any(|call| matches!(call, MockCall::ReadClipboardText))
-    );
 }
 
 #[test]

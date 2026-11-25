@@ -216,7 +216,7 @@ where
                 .map_err(std::io::Error::other)?;
             let language = i18n::LanguageSnapshot::load_startup(root, &config.language, 1);
             let _language = i18n::enter_snapshot(std::sync::Arc::new(language.snapshot));
-            shell::run_screen_keyboard(stdout, &config.appearance, platform)
+            shell::run_screen_keyboard(stdout, &config.appearance)
         }),
         Ok(CliCommand::UiTest) => match shell::run_ui_test(stdout) {
             Ok(()) => 0,

@@ -21,8 +21,6 @@ const MB_ICONERROR: u32 = 0x0000_0010;
 const MB_TASKMODAL: u32 = 0x0000_2000;
 const MB_SETFOREGROUND: u32 = 0x0001_0000;
 const MB_TOPMOST: u32 = 0x0004_0000;
-const CF_UNICODETEXT: u32 = 13;
-const GMEM_MOVEABLE: u32 = 0x0002;
 const FILE_ATTRIBUTE_READONLY: u32 = 0x0001;
 const FILE_ATTRIBUTE_HIDDEN: u32 = 0x0002;
 const FILE_ATTRIBUTE_SYSTEM: u32 = 0x0004;
@@ -234,91 +232,6 @@ impl Platform for WindowsPlatform {
 
     fn spawn_wait(&self, spec: &ProcessSpec) -> Result<ProcessExit, PlatformError> {
         crate::process::spawn_wait_impl(spec, true)
-    }
-
-    fn read_clipboard_text(&self) -> Result<String, PlatformError> {
-        let _guard = ClipboardGuard::open()?;
-        let handle = unsafe { GetClipboardData(CF_UNICODETEXT) };
-        if handle.is_null() {
-            return Err(PlatformError::Native {
-                operation: "read clipboard",
-                message: "CF_UNICODETEXT is unavailable".to_string(),
-            });
-        }
-
-        let locked = unsafe { GlobalLock(handle) } as *const u16;
-        if locked.is_null() {
-            return Err(PlatformError::Native {
-                operation: "read clipboard",
-                message: "GlobalLock returned null".to_string(),
-            });
-        }
-
-        let mut len = 0usize;
-        unsafe {
-            while *locked.add(len) != 0 {
-                len += 1;
-            }
-        }
-
-        let text = unsafe {
-            let slice = std::slice::from_raw_parts(locked, len);
-            String::from_utf16_lossy(slice)
-        };
-        unsafe {
-            GlobalUnlock(handle);
-        }
-
-        Ok(text)
-    }
-
-    fn write_clipboard_text(&self, text: &str) -> Result<(), PlatformError> {
-        let _guard = ClipboardGuard::open()?;
-        if unsafe { EmptyClipboard() } == 0 {
-            return Err(PlatformError::Native {
-                operation: "write clipboard",
-                message: "EmptyClipboard failed".to_string(),
-            });
-        }
-
-        let mut encoded: Vec<u16> = text.encode_utf16().collect();
-        encoded.push(0);
-        let byte_len = encoded.len() * std::mem::size_of::<u16>();
-        let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, byte_len) };
-        if handle.is_null() {
-            return Err(PlatformError::Native {
-                operation: "write clipboard",
-                message: "GlobalAlloc failed".to_string(),
-            });
-        }
-
-        let locked = unsafe { GlobalLock(handle) } as *mut u16;
-        if locked.is_null() {
-            unsafe {
-                GlobalFree(handle);
-            }
-            return Err(PlatformError::Native {
-                operation: "write clipboard",
-                message: "GlobalLock returned null".to_string(),
-            });
-        }
-
-        unsafe {
-            ptr::copy_nonoverlapping(encoded.as_ptr(), locked, encoded.len());
-            GlobalUnlock(handle);
-        }
-
-        if unsafe { SetClipboardData(CF_UNICODETEXT, handle) }.is_null() {
-            unsafe {
-                GlobalFree(handle);
-            }
-            return Err(PlatformError::Native {
-                operation: "write clipboard",
-                message: "SetClipboardData failed".to_string(),
-            });
-        }
-
-        Ok(())
     }
 
     fn show_critical_error(&self, title: &str, body: &str) -> Result<(), PlatformError> {
@@ -1538,29 +1451,6 @@ fn is_shortcut(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("lnk"))
 }
 
-struct ClipboardGuard;
-
-impl ClipboardGuard {
-    fn open() -> Result<Self, PlatformError> {
-        if unsafe { OpenClipboard(ptr::null_mut()) } == 0 {
-            Err(PlatformError::Native {
-                operation: "open clipboard",
-                message: "OpenClipboard failed".to_string(),
-            })
-        } else {
-            Ok(Self)
-        }
-    }
-}
-
-impl Drop for ClipboardGuard {
-    fn drop(&mut self) {
-        unsafe {
-            CloseClipboard();
-        }
-    }
-}
-
 struct ShutdownPrivilege {
     token: *mut c_void,
     previous: TokenPrivileges,
@@ -2071,11 +1961,6 @@ unsafe extern "system" {
         lp_caption: *const u16,
         u_type: u32,
     ) -> i32;
-    fn OpenClipboard(h_wnd_new_owner: *mut c_void) -> i32;
-    fn CloseClipboard() -> i32;
-    fn EmptyClipboard() -> i32;
-    fn GetClipboardData(u_format: u32) -> *mut c_void;
-    fn SetClipboardData(u_format: u32, h_mem: *mut c_void) -> *mut c_void;
     fn ExitWindowsEx(u_flags: u32, dw_reason: u32) -> i32;
     fn DestroyIcon(icon: *mut c_void) -> i32;
     fn DrawIconEx(
@@ -2239,10 +2124,6 @@ unsafe extern "system" {
     fn FindClose(h_find_file: *mut c_void) -> i32;
     fn GetLastError() -> u32;
     fn SetLastError(error_code: u32);
-    fn GlobalAlloc(u_flags: u32, dw_bytes: usize) -> *mut c_void;
-    fn GlobalLock(h_mem: *mut c_void) -> *mut c_void;
-    fn GlobalUnlock(h_mem: *mut c_void) -> i32;
-    fn GlobalFree(h_mem: *mut c_void) -> *mut c_void;
     fn ReplaceFileW(
         replaced_file_name: *const u16,
         replacement_file_name: *const u16,

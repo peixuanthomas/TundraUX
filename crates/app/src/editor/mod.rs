@@ -716,7 +716,10 @@ pub enum EditorEffect {
         suggested_name: String,
         snapshot: SaveSnapshot,
     },
-    WriteClipboard(String),
+    WriteClipboard {
+        text: String,
+        cut: bool,
+    },
     ReadClipboard,
     ConfirmClose,
     Close,

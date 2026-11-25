@@ -218,7 +218,7 @@ def main():
             current = until(lambda frame: "vtundra_native_check" in "\n".join(frame["lines"]))
             assert not chooser(current)
             assert len(titles(current)) == 3
-            send(b"\x03")
+            send(b"\x1c")
             print("PASS: the native terminal receives Ctrl+W without entering workspace split mode")
         finally:
             if child.poll() is None:
