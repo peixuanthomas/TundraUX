@@ -97,7 +97,11 @@ impl TerminalImageCache {
             }
             let mut canvas = None;
             for piece in pieces {
-                let Some((stored, working)) = preparation_cost(image, piece.as_size(), picker)
+                let Some(crop) = source_for_area(image, piece) else {
+                    continue;
+                };
+                let Some((stored, working)) =
+                    preparation_cost(image, piece.as_size(), crop, picker)
                 else {
                     continue;
                 };
@@ -123,9 +127,6 @@ impl TerminalImageCache {
                         continue;
                     }
                 }
-                let Some(crop) = source_for_area(image, piece) else {
-                    continue;
-                };
                 let target = offset_rect(piece, area.x, area.y);
                 let key = ImageKey::new(image, crop, target, frame, picker);
                 self.render_piece(
@@ -263,12 +264,12 @@ impl TerminalImageCache {
                     piece.width,
                     piece.height,
                 );
-                let Some((stored, working)) =
-                    preparation_cost(&image, piece.as_size(), Some(picker))
-                else {
+                let Some(crop) = source_for_area(&image, local) else {
                     continue;
                 };
-                let Some(crop) = source_for_area(&image, local) else {
+                let Some((stored, working)) =
+                    preparation_cost(&image, piece.as_size(), crop, Some(picker))
+                else {
                     continue;
                 };
                 let key = ImageKey::new(&image, crop, piece, frame, Some(picker));
@@ -438,59 +439,147 @@ fn offset_rect(rect: Rect, x: u16, y: u16) -> Rect {
 fn preparation_cost(
     image: &TerminalImageFragment,
     size: Size,
+    crop: [u32; 4],
     picker: Option<&EditorImagePicker>,
 ) -> Option<(usize, usize)> {
     let cell_size = picker.map_or((1, 2), EditorImagePicker::cell_size);
-    let data = u64::from(image.width).checked_mul(u64::from(image.height))?;
-    let source = u64::from(image.source[2]).checked_mul(u64::from(image.source[3]))?;
-    let canvas_width = u64::from(image.area.width) * u64::from(image.cell_size[0]);
-    let canvas_height = u64::from(image.area.height) * u64::from(image.cell_size[1]);
-    let canvas = canvas_width.checked_mul(canvas_height)?;
-    let crop_width = u64::from(size.width) * u64::from(image.cell_size[0]);
-    let crop = crop_width.checked_mul(u64::from(size.height) * u64::from(image.cell_size[1]))?;
-    let target_height = u64::from(size.height) * u64::from(cell_size.1);
-    let pixels = (u64::from(size.width) * u64::from(cell_size.0)).checked_mul(target_height)?;
-    let content_height =
-        canvas_height.checked_sub(u64::from(image.padding[1]) + u64::from(image.padding[3]))?;
-    // Triangle resizing allocates a floating-point row pass before the final pixels.
-    let canvas_pass = u64::from(image.source[2]).checked_mul(content_height)?;
-    let target_pass = crop_width.checked_mul(target_height)?;
-    if [data, source, canvas, crop, pixels, canvas_pass, target_pass]
-        .into_iter()
-        .any(|pixels| pixels == 0 || pixels > EDITOR_IMAGE_MAX_PIXELS)
-    {
-        return None;
-    }
+    bounded_pixels(u64::from(image.width), u64::from(image.height))?;
+    let native = picker
+        .and_then(EditorImagePicker::protocol)
+        .and_then(|protocol| native_raster(image, crop, cell_size, protocol));
+    let (pixels, working) = if let Some(native) = native {
+        let [source_width, source_height] = [native.source[2], native.source[3]].map(u64::from);
+        let [width, height] = native.output.map(u64::from);
+        let pixels = bounded_pixels(width, height)?;
+        let encoder_working = pixels.checked_mul(16)?;
+        let resize_working = if [source_width, source_height] == [width, height] {
+            0
+        } else {
+            let source = bounded_pixels(source_width, source_height)?;
+            // The float resize buffer is released before native encoding starts.
+            let pass = bounded_pixels(source_width, height)?;
+            source
+                .checked_mul(4)?
+                .checked_add(pass.checked_mul(16)?)?
+                .checked_add(pixels.checked_mul(4)?)?
+        };
+        (pixels, encoder_working.max(resize_working))
+    } else {
+        canvas_preparation_cost(image, size, cell_size)?
+    };
     let cells = u64::from(size.width) * u64::from(size.height);
     let keys = cells.checked_mul((std::mem::size_of::<[Color; 2]>() * 3 + 8) as u64)?;
     let stored = pixels.checked_mul(32)?.checked_add(keys)?.checked_add(
         (std::mem::size_of::<ImageKey>() + std::mem::size_of::<PreparedImage>() + 64) as u64,
     )?;
-    let working = if picker.and_then(EditorImagePicker::protocol).is_some()
-        && directly_fitted(image, size, cell_size)
-    {
-        // Source copies and encoder scratch remain, but no canvas, crop, or resize passes.
-        pixels.checked_mul(16)?
-    } else {
-        source
-            .checked_mul(4)?
-            .checked_add(canvas.checked_mul(8)?)?
-            .checked_add(crop.checked_mul(4)?)?
-            .checked_add(pixels.checked_mul(8)?)?
-            .checked_add(canvas_pass.checked_mul(16)?)?
-            .checked_add(target_pass.checked_mul(16)?)?
-    };
     Some((stored.try_into().ok()?, working.try_into().ok()?))
 }
 
-fn directly_fitted(image: &TerminalImageFragment, size: Size, cell_size: (u16, u16)) -> bool {
-    image.area.as_size() == size
-        && image.cell_size == [cell_size.0, cell_size.1]
-        && image.source == [0, 0, image.width, image.height]
-        && image.padding == [0; 4]
-        && image.width == u32::from(size.width) * u32::from(cell_size.0)
-        && image.height == u32::from(size.height) * u32::from(cell_size.1)
-        && image.rgba.len() as u64 == u64::from(image.width) * u64::from(image.height) * 4
+fn bounded_pixels(width: u64, height: u64) -> Option<u64> {
+    let count = width.checked_mul(height)?;
+    (count > 0 && count <= EDITOR_IMAGE_MAX_PIXELS).then_some(count)
+}
+
+fn canvas_preparation_cost(
+    image: &TerminalImageFragment,
+    size: Size,
+    cell_size: (u16, u16),
+) -> Option<(u64, u64)> {
+    let source = bounded_pixels(u64::from(image.source[2]), u64::from(image.source[3]))?;
+    let canvas_width = u64::from(image.area.width) * u64::from(image.cell_size[0]);
+    let canvas_height = u64::from(image.area.height) * u64::from(image.cell_size[1]);
+    let canvas = bounded_pixels(canvas_width, canvas_height)?;
+    let crop_width = u64::from(size.width) * u64::from(image.cell_size[0]);
+    let crop = bounded_pixels(
+        crop_width,
+        u64::from(size.height) * u64::from(image.cell_size[1]),
+    )?;
+    let target_height = u64::from(size.height) * u64::from(cell_size.1);
+    let pixels = bounded_pixels(
+        u64::from(size.width) * u64::from(cell_size.0),
+        target_height,
+    )?;
+    let content_height =
+        canvas_height.checked_sub(u64::from(image.padding[1]) + u64::from(image.padding[3]))?;
+    // Triangle resizing allocates a floating-point row pass before the final pixels.
+    let canvas_pass = bounded_pixels(u64::from(image.source[2]), content_height)?;
+    let target_pass = bounded_pixels(crop_width, target_height)?;
+    let working = source
+        .checked_mul(4)?
+        .checked_add(canvas.checked_mul(8)?)?
+        .checked_add(crop.checked_mul(4)?)?
+        .checked_add(pixels.checked_mul(8)?)?
+        .checked_add(canvas_pass.checked_mul(16)?)?
+        .checked_add(target_pass.checked_mul(16)?)?;
+    Some((pixels, working))
+}
+
+struct NativeRaster {
+    source: [u32; 4],
+    output: [u32; 2],
+}
+
+fn native_raster(
+    image: &TerminalImageFragment,
+    crop: [u32; 4],
+    cell_size: (u16, u16),
+    protocol: EditorGraphicsProtocol,
+) -> Option<NativeRaster> {
+    if image.padding != [0; 4]
+        || image.cell_size != [cell_size.0, cell_size.1]
+        || !source_in_bounds(image, image.source)
+    {
+        return None;
+    }
+    let [x, y, width, height] = image.source;
+    let [left, top, output_width, output_height] = crop;
+    let (x, width) = scale_crop_axis(
+        left,
+        output_width,
+        u32::from(image.area.width) * u32::from(cell_size.0),
+        x,
+        width,
+    )?;
+    let (y, height) = scale_crop_axis(
+        top,
+        output_height,
+        u32::from(image.area.height) * u32::from(cell_size.1),
+        y,
+        height,
+    )?;
+    let mut output = [output_width, output_height];
+    if protocol == EditorGraphicsProtocol::Iterm2 {
+        // iTerm2 sizes the placement in cells, so upscaling pixels here adds no detail.
+        output = [output_width.min(width), output_height.min(height)];
+    }
+    Some(NativeRaster {
+        source: [x, y, width, height],
+        output,
+    })
+}
+
+fn scale_crop_axis(
+    offset: u32,
+    length: u32,
+    full_length: u32,
+    start: u32,
+    source_length: u32,
+) -> Option<(u32, u32)> {
+    let end = offset.checked_add(length)?;
+    if length == 0 || end > full_length {
+        return None;
+    }
+    let scale = |position| u64::from(position) * u64::from(source_length);
+    let first = (scale(offset) / u64::from(full_length)) as u32;
+    let last = scale(end).div_ceil(u64::from(full_length)) as u32;
+    Some((start + first, last - first))
+}
+
+fn source_in_bounds(image: &TerminalImageFragment, [x, y, width, height]: [u32; 4]) -> bool {
+    width > 0
+        && height > 0
+        && x.checked_add(width).is_some_and(|end| end <= image.width)
+        && y.checked_add(height).is_some_and(|end| end <= image.height)
 }
 
 fn raster_background(cell: &Cell) -> [Color; 2] {
@@ -508,21 +597,6 @@ fn raster_background(cell: &Cell) -> [Color; 2] {
 }
 
 fn image_canvas(image: &TerminalImageFragment) -> Option<RgbaImage> {
-    let pixels = u64::from(image.width).checked_mul(u64::from(image.height))?;
-    if pixels == 0
-        || pixels > EDITOR_IMAGE_MAX_PIXELS
-        || pixels.checked_mul(4)? != image.rgba.len() as u64
-    {
-        return None;
-    }
-    let [x, y, width, height] = image.source;
-    if width == 0
-        || height == 0
-        || x.checked_add(width)? > image.width
-        || y.checked_add(height)? > image.height
-    {
-        return None;
-    }
     let canvas_width = u32::from(image.area.width) * u32::from(image.cell_size[0]);
     let canvas_height = u32::from(image.area.height) * u32::from(image.cell_size[1]);
     if canvas_width == 0
@@ -537,16 +611,30 @@ fn image_canvas(image: &TerminalImageFragment) -> Option<RgbaImage> {
     if content_width == 0 || content_height == 0 {
         return None;
     }
-    let mut cropped = Vec::with_capacity(width as usize * height as usize * 4);
-    for row in y..y + height {
-        let start = (row as usize * image.width as usize + x as usize) * 4;
-        cropped.extend_from_slice(&image.rgba[start..start + width as usize * 4]);
-    }
-    let cropped = DynamicImage::ImageRgba8(RgbaImage::from_raw(width, height, cropped)?);
+    let cropped = DynamicImage::ImageRgba8(crop_image_source(image, image.source)?);
     let content = resize_rgba(cropped, content_width, content_height);
     let mut canvas = RgbaImage::new(canvas_width, canvas_height);
     image::imageops::overlay(&mut canvas, &content, i64::from(left), i64::from(top));
     Some(canvas)
+}
+
+fn crop_image_source(image: &TerminalImageFragment, source: [u32; 4]) -> Option<RgbaImage> {
+    let pixels = bounded_pixels(u64::from(image.width), u64::from(image.height))?;
+    if pixels.checked_mul(4)? != image.rgba.len() as u64 || !source_in_bounds(image, source) {
+        return None;
+    }
+    let [x, y, width, height] = source;
+    let pixels = if source == [0, 0, image.width, image.height] {
+        image.rgba.to_vec()
+    } else {
+        let mut cropped = Vec::with_capacity(width as usize * height as usize * 4);
+        for row in y..y + height {
+            let start = (row as usize * image.width as usize + x as usize) * 4;
+            cropped.extend_from_slice(&image.rgba[start..start + width as usize * 4]);
+        }
+        cropped
+    };
+    RgbaImage::from_raw(width, height, pixels)
 }
 
 fn prepare_image(
@@ -555,15 +643,20 @@ fn prepare_image(
     canvas: &mut Option<Option<RgbaImage>>,
     bytes: usize,
 ) -> Option<PreparedImage> {
-    let directly_fitted = key.backend.is_some() && directly_fitted(image, key.size, key.cell_size);
+    let native = key
+        .backend
+        .and_then(|protocol| native_raster(image, key.crop, key.cell_size, protocol));
     let tmux = key.tmux;
     let mut kitty = None;
     if key.backend == Some(EditorGraphicsProtocol::Kitty) {
         let id = crate::editor_media::next_kitty_image_id();
         kitty = Some((id, tmux));
-        if directly_fitted
-            && let Some((protocol, upload)) =
-                kitty::compressed(&image.rgba, [image.width, image.height], key.size, id, tmux)
+        if native.as_ref().is_some_and(|native| {
+            native.source == [0, 0, image.width, image.height]
+                && native.output == [image.width, image.height]
+                && image.rgba.len() as u64 == u64::from(image.width) * u64::from(image.height) * 4
+        }) && let Some((protocol, upload)) =
+            kitty::compressed(&image.rgba, [image.width, image.height], key.size, id, tmux)
         {
             return Some(PreparedImage {
                 protocol,
@@ -576,14 +669,15 @@ fn prepare_image(
         }
     }
 
-    let target_width = u32::from(key.size.width).checked_mul(u32::from(key.cell_size.0))?;
-    let target_height = u32::from(key.size.height).checked_mul(u32::from(key.cell_size.1))?;
-    if u64::from(target_width) * u64::from(target_height) > EDITOR_IMAGE_MAX_PIXELS {
-        return None;
-    }
-    let mut resized = if directly_fitted {
-        RgbaImage::from_raw(image.width, image.height, image.rgba.to_vec())?
+    let mut resized = if let Some(native) = native {
+        resize_rgba(
+            DynamicImage::ImageRgba8(crop_image_source(image, native.source)?),
+            native.output[0],
+            native.output[1],
+        )
     } else {
+        let target_width = u32::from(key.size.width).checked_mul(u32::from(key.cell_size.0))?;
+        let target_height = u32::from(key.size.height).checked_mul(u32::from(key.cell_size.1))?;
         let canvas = canvas.get_or_insert_with(|| image_canvas(image)).as_ref()?;
         let [x, y, width, height] = key.crop;
         let cropped = DynamicImage::ImageRgba8(

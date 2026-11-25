@@ -11,7 +11,12 @@ use ui::{
 
 const SAMPLE: &[u8] = include_bytes!("../../app/tests/fixtures/pdf/preview.pdf");
 
-fn preview(document: &PdfPreviewDocument, page: usize, area: Rect) -> EditorViewModel {
+fn preview(
+    document: &PdfPreviewDocument,
+    page: usize,
+    area: Rect,
+    cell_size: [u16; 2],
+) -> EditorViewModel {
     let mut model = EditorViewModel::new("测试 e\u{301}.PDF", Vec::new());
     model.read_only = true;
     model.cursor = None;
@@ -23,7 +28,7 @@ fn preview(document: &PdfPreviewDocument, page: usize, area: Rect) -> EditorView
             1,
             EditorPdfPageImage::prepare(
                 document
-                    .render_page(page, [area.width, area.height - 2], [8, 16])
+                    .render_page(page, [area.width, area.height - 2], cell_size)
                     .unwrap(),
             )
             .unwrap(),
@@ -44,7 +49,7 @@ fn pdf_preview_fits_three_window_sizes_in_both_languages_and_color_modes() {
         let _language = i18n::enter_snapshot(Arc::new(language));
         for (width, height) in [(108, 20), (120, 36), (180, 50)] {
             let area = Rect::new(1, 2, width - 2, height - 4);
-            let model = preview(&document, 0, area);
+            let model = preview(&document, 0, area, [8, 16]);
             for color in [ColorCapability::TrueColor, ColorCapability::Ansi] {
                 let context = RenderContext::from_theme(
                     &TundraTheme::default_dark(),
@@ -111,7 +116,7 @@ fn pdf_preview_fits_three_window_sizes_in_both_languages_and_color_modes() {
 fn pdf_preview_transfers_only_the_fitted_page_to_all_native_backends() {
     let document = PdfPreviewDocument::open(SAMPLE.to_vec()).unwrap();
     let area = Rect::new(2, 3, 106, 16);
-    let model = preview(&document, 1, area);
+    let model = preview(&document, 1, area, [8, 16]);
     let context = RenderContext::from_theme(
         &TundraTheme::default_dark(),
         Default::default(),
@@ -167,4 +172,69 @@ fn pdf_preview_transfers_only_the_fitted_page_to_all_native_backends() {
         .unwrap();
     assert!(cache.take_workspace_images().is_empty());
     assert!(editor_layout(smaller, &model).canvas.height < images[0].area.height);
+}
+
+#[test]
+fn large_pdf_preview_uses_iterm2_after_the_editor_pane_expands() {
+    let document = PdfPreviewDocument::open(SAMPLE.to_vec()).unwrap();
+    let context = RenderContext::from_theme(
+        &TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    let cell_size = [14, 32];
+    let graphics = TerminalGraphicsProbe::from_terminal_capabilities(
+        EditorGraphicsProtocol::Iterm2,
+        cell_size[0],
+        cell_size[1],
+        false,
+        false,
+    );
+    let mut worker = Terminal::new(TestBackend::new(208, 55)).unwrap();
+    let mut host = Terminal::new(TestBackend::new(208, 55)).unwrap();
+    let mut worker_cache = TerminalImageCache::default();
+    let mut host_cache = TerminalImageCache::default();
+    for height in [24, 51, 36] {
+        let area = Rect::new(1, 2, 206, height);
+        let model = preview(&document, 1, area, cell_size);
+        worker_cache.capture_workspace(area);
+        worker
+            .draw(|frame| {
+                render_editor_contextual_with_terminal_images(
+                    frame,
+                    area,
+                    &model,
+                    &context,
+                    &mut worker_cache,
+                    None,
+                );
+            })
+            .unwrap();
+        let images = worker_cache.take_workspace_images();
+        assert_eq!(images.len(), 1);
+        let image = &images[0];
+        let origin = (area.x + image.area.x, area.y + image.area.y);
+        assert!(
+            !worker.backend().buffer()[origin]
+                .symbol()
+                .contains("\x1b]1337;")
+        );
+        assert!(matches!(
+            worker.backend().buffer()[origin].bg,
+            Color::Rgb(..)
+        ));
+        if height == 51 {
+            assert!(image.width < u32::from(image.area.width) * u32::from(cell_size[0]));
+        }
+        host.draw(|frame| {
+            host_cache.render_workspace(frame, area, &images, graphics.picker().unwrap());
+        })
+        .unwrap();
+        let symbol = host.backend().buffer()[origin].symbol();
+        assert!(symbol.contains("\x1b]1337;File=inline=1"));
+        assert!(symbol.contains(&format!(
+            "width={};height={};",
+            image.area.width, image.area.height
+        )));
+    }
 }

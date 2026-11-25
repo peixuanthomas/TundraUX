@@ -162,6 +162,8 @@ Default acceleration/constant-speed/deceleration phases are page `[40, 80, 40]`,
 
 `TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. `TerminalImageCache` clips and caches Kitty, Sixel, and iTerm2 images by viewport. An app host captures the visible image placements alongside its rasterized cells. Shell rebuilds native graphics in the pane and retires native resources when the pane moves, closes, or becomes obscured.
 
+For an unpadded native image, Shell crops the visible region directly from the source pixels and resizes it at most once. iTerm2 places the resulting image in terminal cells and can scale it up in the terminal. The preparation budget accounts for the actual crop, resize, and encoding stages.
+
 Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. iTerm2 packets specify the target in terminal cells so images fill the assigned area when a font measurement differs from the terminal's actual cell size. WezTerm on Windows displays each image after the cursor used to place it is hidden. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
 
 Text terminals, dialog occlusion, layout transitions, and transparent or overlapping images use character-block compositing. Snapshots preserve wide characters, italics, and native cursor shapes; the editor's Vim region shares rendering, PTY sizing, and mouse coordinates through `editor_vim_terminal_area`.

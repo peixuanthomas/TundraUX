@@ -165,6 +165,86 @@ fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
 }
 
 #[test]
+fn workspace_iterm2_keeps_a_retina_preview_when_the_pane_expands_or_is_clipped() {
+    let [width, height] = [1187, 1536];
+    let full = workspace_protocol::Rect {
+        x: 20,
+        y: 1,
+        width: 85,
+        height: 48,
+    };
+    let split = workspace_protocol::Rect {
+        width: 43,
+        height: 24,
+        ..full
+    };
+    let mut rgba = [162, 40, 20, 255].repeat((width * height / 2) as usize);
+    rgba.extend([20, 40, 162, 255].repeat((width * height / 2) as usize));
+    let mut image = workspace_protocol::Image {
+        image_id: 42,
+        width,
+        height,
+        rgba: Arc::from(rgba),
+        source: [0, 0, width, height],
+        padding: [0; 4],
+        cell_size: [14, 32],
+        area: split,
+        visible: vec![split],
+        z_index: 0,
+    };
+    let graphical = TerminalGraphicsProbe::from_terminal_capabilities(
+        EditorGraphicsProtocol::Iterm2,
+        14,
+        32,
+        false,
+        false,
+    );
+    let picker = graphical.picker().unwrap();
+    let mut screen = Terminal::new(TestBackend::new(208, 55)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    for (area, viewport_height, source_y, rows, png_size, last_pixel) in [
+        (split, 26, 0, 24, [602, 768], [20, 40, 162, 255]),
+        (full, 55, 0, 48, [1187, 1536], [20, 40, 162, 255]),
+        (full, 25, 0, 24, [1187, 768], [162, 40, 20, 255]),
+        (
+            workspace_protocol::Rect { height: 24, ..full },
+            25,
+            768,
+            24,
+            [1187, 768],
+            [20, 40, 162, 255],
+        ),
+    ] {
+        image.area = area;
+        image.visible[0] = area;
+        image.source = [0, source_y, width, height - source_y];
+        screen
+            .draw(|frame| {
+                frame.buffer_mut()[(full.x, full.y)].set_symbol("▀");
+                let viewport = Rect::new(0, 0, frame.area().width, viewport_height);
+                cache.render_workspace(frame, viewport, std::slice::from_ref(&image), picker)
+            })
+            .unwrap();
+        let symbol = screen.backend().buffer()[(full.x, full.y)].symbol();
+        let (_, packet) = symbol
+            .split_once("\x1b]1337;File=inline=1;")
+            .unwrap_or_else(|| {
+                panic!("no native picture for {area:?} at height {viewport_height}")
+            });
+        let (controls, payload) = packet.split_once(':').unwrap();
+        assert!(controls.contains(&format!("width={};height={rows};", area.width)));
+        let encoded = base64_simd::STANDARD
+            .decode_to_vec(payload.strip_suffix('\x07').unwrap())
+            .unwrap();
+        let pixels = image::load_from_memory_with_format(&encoded, image::ImageFormat::Png)
+            .unwrap()
+            .into_rgba8();
+        assert_eq!([pixels.width(), pixels.height()], png_size);
+        assert_eq!(pixels.get_pixel(0, pixels.height() - 1).0, last_pixel);
+    }
+}
+
+#[test]
 fn fallback_crops_pixels_to_the_visible_terminal_and_applies_the_host_offset() {
     let mut snapshot = CommandLineTerminalSnapshot::blank(4, 2);
     snapshot.images.push(fragment());
@@ -723,7 +803,8 @@ fn preparation_rejects_large_temporary_canvases_before_allocating_or_encoding() 
         ..fragment()
     };
     let picker = picker(EditorGraphicsProtocol::Kitty, false);
-    let (stored, working) = preparation_cost(&image, Size::new(4, 4), Some(&picker)).unwrap();
+    let crop = source_for_area(&image, image.area).unwrap();
+    let (stored, working) = preparation_cost(&image, Size::new(4, 4), crop, Some(&picker)).unwrap();
     assert!(stored + working > CACHE_BUDGET);
     let mut snapshot = CommandLineTerminalSnapshot::blank(4, 4);
     snapshot.images.push(image);
@@ -757,7 +838,16 @@ fn preparation_bounds_the_float_resize_pass_as_well_as_final_pixels() {
         ..fragment()
     };
     let picker = picker(EditorGraphicsProtocol::Kitty, false);
-    assert!(preparation_cost(&image, Size::new(1, 1), Some(&picker)).is_none());
+    let crop = source_for_area(&image, image.area).unwrap();
+    assert!(preparation_cost(&image, Size::new(1, 1), crop, Some(&picker)).is_none());
+    let matching_cell = TerminalGraphicsProbe::from_terminal_capabilities(
+        EditorGraphicsProtocol::Kitty,
+        1,
+        4096,
+        false,
+        false,
+    );
+    assert!(preparation_cost(&image, Size::new(1, 1), crop, matching_cell.picker()).is_none());
 }
 
 #[test]
