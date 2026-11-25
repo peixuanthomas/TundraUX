@@ -54,6 +54,8 @@ The editor handles user-visible characters as graphemes, using save snapshots ti
 
 Opening a text file counts its line endings once and measures terminal widths directly from the text chunks. When the editor imports rich text, it indexes source lines once for all paragraphs, tables, and code blocks. Office previews use a single rich-text projection for the first frame and its word count.
 
+Standalone tall PNGs are decoded one scanline at a time into strips of up to 512 display pixels in height. The preview applies image orientation, supports interlacing and the first animation frame, and scales very large inputs to keep up to 32 megapixels of preview data.
+
 Office tables use the rich editor's table model. Word cell paragraphs and explicit line breaks display on separate lines, and nested table text stays inside its containing cell. Superscript and subscript digits and common operators use Unicode glyphs. Other text in superscript or subscript runs is displayed on the baseline.
 
 Explorer's default editor associations use the built-in suffixes and LSH's filename and path patterns, including `Cargo.lock`, `Gemfile`, and `.git/config`. A custom or empty suffix list takes precedence.

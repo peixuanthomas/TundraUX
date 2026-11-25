@@ -1572,6 +1572,86 @@ fn editor_picker_prepares_standalone_and_embedded_pictures_before_scrolling() {
 }
 
 #[test]
+fn explorer_scrolls_a_long_png_to_its_last_pixels() {
+    let fixture = FixtureRoot::new("long-png-scroll");
+    let platform = mock_platform(fixture.path());
+    initialize_system_profile(&platform);
+    let path = fixture.path().join("Documents/长图.png");
+    let original = include_bytes!("../../app/tests/fixtures/long-bands.png");
+    fs::write(&path, original).unwrap();
+    let mut state = system_home(&platform);
+    open_only_document_in_editor(&mut state, &platform);
+    assert!(state.to_editor_view_model().read_only);
+    let context = ui::RenderContext::from_theme(
+        &ui::TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+    let mut screen_color = |state: &ShellSession, bottom: bool| {
+        let model = state.to_editor_view_model();
+        let mut canvas = Rect::default();
+        terminal
+            .draw(|frame| {
+                let area = match ui::compute_shell_layout(frame.area()) {
+                    ShellLayout::Compact(compact) => compact,
+                    ShellLayout::Full { main, .. } => main,
+                };
+                canvas = ui::render_editor_contextual(frame, area, &model, &context).canvas;
+            })
+            .unwrap();
+        let y = if bottom {
+            canvas.bottom() - 1
+        } else {
+            canvas.y
+        };
+        terminal.backend().buffer()[(canvas.x + canvas.width / 2, y)].bg
+    };
+    let first = current_editor_layout(&state);
+    assert_eq!(first.visible_start, 0);
+    assert_eq!(
+        screen_color(&state, false),
+        ratatui::style::Color::Rgb(230, 20, 30)
+    );
+    let last = first.document_line_count - first.visible_capacity;
+    assert!(last > first.visible_capacity * 3);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Down), &platform);
+    assert_eq!(current_editor_layout(&state).visible_start, 1);
+    state.apply_input_with_platform(InputEvent::key(InputKey::PageDown), &platform);
+    assert_eq!(
+        current_editor_layout(&state).visible_start,
+        first.visible_capacity
+    );
+    state.apply_input_with_platform(InputEvent::key(InputKey::End), &platform);
+    assert_eq!(current_editor_layout(&state).visible_start, last);
+    assert_eq!(
+        screen_color(&state, true),
+        ratatui::style::Color::Rgb(40, 70, 220)
+    );
+    let canvas = (first.canvas.x, first.canvas.y);
+    state.apply_input_with_platform(
+        InputEvent::mouse_scroll(ui::ScrollDirection::Down, canvas),
+        &platform,
+    );
+    assert_eq!(current_editor_layout(&state).visible_start, last);
+    state.apply_input_with_platform(
+        InputEvent::mouse_scroll(ui::ScrollDirection::Up, canvas),
+        &platform,
+    );
+    assert_eq!(current_editor_layout(&state).visible_start, last - 3);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Home), &platform);
+    assert_eq!(current_editor_layout(&state).visible_start, 0);
+    let bar = current_editor_layout(&state).vertical_scrollbar.unwrap();
+    let grab = (bar.thumb.x, bar.thumb.y);
+    let end = (bar.track.x, bar.track.bottom() - 1);
+    state.apply_input_with_platform(InputEvent::mouse_down(PointerButton::Left, grab), &platform);
+    state.apply_input_with_platform(InputEvent::mouse_drag(PointerButton::Left, end), &platform);
+    state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, end), &platform);
+    assert_eq!(current_editor_layout(&state).visible_start, last);
+    assert_eq!(fs::read(path).unwrap(), original);
+}
+
+#[test]
 fn invalid_office_file_reports_conversion_error_and_keeps_existing_document() {
     let fixture = FixtureRoot::new("invalid-office-preview");
     let platform = mock_platform(fixture.path());

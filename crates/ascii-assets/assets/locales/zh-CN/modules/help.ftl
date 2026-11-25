@@ -110,6 +110,7 @@ ui-help-editor-find = 查找
 ui-help-editor-vim = 切换 Vim 模式
 ui-help-editor-focus = 切换焦点
 ui-help-editor-open-preview = 打开文本、图片、PDF 或 Office 文档。打开文档时会一并准备内嵌插图。
+ui-help-editor-scroll-picture = 上下翻看长图，Home 回到图顶，End 跳到图底。也可以使用鼠标滚轮。
 ui-help-pdf-next = 下一页。邻近页面会在后台提前准备。
 ui-help-workspace-close = 关闭焦点窗口。Vim 保留原生 Ctrl+Q。
 

@@ -27,16 +27,19 @@ impl PictureBounds {
         let [cw, ch] = self.cell_size.map(f64::from);
         let width = f64::from(image.width) / cw;
         let height = f64::from(image.height) / ch;
+        let max_height = if image.scrolls_vertically() {
+            u16::MAX
+        } else {
+            self.cells.height
+        };
         let scale = (f64::from(self.cells.width) / width)
-            .min(f64::from(self.cells.height) / height)
+            .min(f64::from(max_height) / height)
             .min(1.0);
         Size::new(
             (width * scale)
                 .ceil()
                 .clamp(1.0, f64::from(self.cells.width)) as u16,
-            (height * scale)
-                .ceil()
-                .clamp(1.0, f64::from(self.cells.height)) as u16,
+            (height * scale).ceil().clamp(1.0, f64::from(max_height)) as u16,
         )
     }
 }

@@ -718,12 +718,14 @@ pub(in crate::session) fn load_editor_document_task(
         );
         (EditorState::from_read_only_document(document), Some(pdf))
     } else if app::editor::is_preview_image_path(&request.path) {
-        let image = app::editor::PreviewImage::decode(&loaded.bytes)
+        let decoded =
+            EditorState::open_preview_image(request.path.clone(), &loaded.bytes, &is_cancelled);
+        if is_cancelled() {
+            return Err("Editor load cancelled".to_string());
+        }
+        let state = decoded
             .map_err(|error| i18n::tr!("shell-image-preview-failed", error = error.to_string()))?;
-        (
-            EditorState::from_preview_image(request.path.clone(), image),
-            None,
-        )
+        (state, None)
     } else if let Some(format) = office_format {
         let state = format
             .open_preview(request.path.clone(), loaded.bytes)

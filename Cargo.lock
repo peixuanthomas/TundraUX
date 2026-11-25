@@ -143,6 +143,7 @@ dependencies = [
  "lsh",
  "memchr",
  "platform",
+ "png",
  "rars",
  "regex",
  "reqwest",

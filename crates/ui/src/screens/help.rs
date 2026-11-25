@@ -406,6 +406,7 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("Ctrl+S", i18n::tr!("ui-help-editor-save")),
                     row("Ctrl+F", i18n::tr!("ui-help-editor-find")),
                     row("R", i18n::tr!("ui-help-editor-reload")),
+                    row("PgUp/PgDn", i18n::tr!("ui-help-editor-scroll-picture")),
                 ]),
                 advanced(vec![
                     row("Shift+F10", i18n::tr!("ui-editor-edit")),

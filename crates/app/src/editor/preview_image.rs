@@ -11,6 +11,8 @@ use image::{
 
 use super::{DocumentKind, EditorDocument, EditorState};
 
+mod long_png;
+
 const MAX_ENCODED_BYTES: usize = 32 * 1024 * 1024;
 const MAX_DECODE_SIDE: u32 = 8192;
 const MAX_DECODE_PIXELS: u64 = 16 * 1024 * 1024;
@@ -28,6 +30,7 @@ pub struct PreviewImage {
     pub rgba: Arc<[u8]>,
     thumbnail: Option<Thumbnail>,
     opaque_cache: Option<Arc<Mutex<Option<OpaquePixels>>>>,
+    scroll_vertically: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +52,7 @@ impl PartialEq for PreviewImage {
             && self.height == other.height
             && self.rgba == other.rgba
             && self.thumbnail == other.thumbnail
+            && self.scroll_vertically == other.scroll_vertically
     }
 }
 
@@ -118,6 +122,10 @@ impl PreviewImage {
             image = image.thumbnail(side, side);
         }
         image.apply_orientation(orientation);
+        Ok(Self::from_pixels(image, maybe_transparent, false))
+    }
+
+    fn from_pixels(image: DynamicImage, maybe_transparent: bool, scroll_vertically: bool) -> Self {
         let thumbnail = (image.width().max(image.height()) > SAMPLE_SIDE).then(|| {
             let pixels = image.thumbnail(SAMPLE_SIDE, SAMPLE_SIDE).into_rgba8();
             Thumbnail {
@@ -129,13 +137,19 @@ impl PreviewImage {
         let pixels = image.into_rgba8();
         let opaque_cache = (maybe_transparent && pixels.pixels().any(|pixel| pixel[3] != 255))
             .then(|| Arc::new(Mutex::new(None)));
-        Ok(Self {
+        Self {
             width: pixels.width(),
             height: pixels.height(),
             rgba: pixels.into_raw().into(),
             thumbnail,
             opaque_cache,
-        })
+            scroll_vertically,
+        }
+    }
+
+    /// Long standalone pictures keep their reading width across consecutive strips.
+    pub fn scrolls_vertically(&self) -> bool {
+        self.scroll_vertically
     }
 
     /// Whether every stored output pixel is fully opaque.
@@ -230,12 +244,37 @@ pub(super) fn preview_image_url(index: usize) -> String {
 }
 
 impl EditorState {
-    pub fn from_preview_image(path: PathBuf, image: PreviewImage) -> Self {
-        let markdown = format!("![]({})", preview_image_url(0));
+    pub fn open_preview_image(
+        path: PathBuf,
+        bytes: &[u8],
+        is_cancelled: impl Fn() -> bool,
+    ) -> Result<Self, ImageError> {
+        if let Some(strips) = long_png::decode(bytes, is_cancelled)? {
+            return Ok(Self::from_preview_images(path, strips));
+        }
+        Ok(Self::from_preview_image(path, PreviewImage::decode(bytes)?))
+    }
+
+    pub fn from_preview_image(path: PathBuf, mut image: PreviewImage) -> Self {
+        image.scroll_vertically = u64::from(image.height) >= 2 * u64::from(image.width);
+        Self::from_preview_images(path, vec![image])
+    }
+
+    fn from_preview_images(path: PathBuf, images: Vec<PreviewImage>) -> Self {
+        let markdown = (0..images.len())
+            .map(|index| format!("![]({})", preview_image_url(index)))
+            .collect::<Vec<_>>()
+            .join("\n\n");
         let document = EditorDocument::from_text(Some(path), DocumentKind::Markdown, markdown);
         let mut state = Self::from_read_only_document(document);
-        state.preview_images.push(image);
+        state.preview_images = images;
         state
+    }
+
+    pub fn is_scrollable_picture(&self) -> bool {
+        self.preview_images
+            .first()
+            .is_some_and(PreviewImage::scrolls_vertically)
     }
 
     pub fn office_image(&self, url: &str) -> Option<&PreviewImage> {

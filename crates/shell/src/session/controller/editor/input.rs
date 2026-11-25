@@ -199,6 +199,36 @@ impl ShellSession {
         if self.handle_editor_vim_key(&key, platform) {
             return;
         }
+        if let Some(state) = self
+            .app
+            .editor_state()
+            .filter(|state| state.is_scrollable_picture())
+            && (key.modifiers == InputModifiers::default()
+                || (key.modifiers.is_control_only()
+                    && matches!(key.key, InputKey::Home | InputKey::End)))
+        {
+            let layout = self.editor_current_layout();
+            let last = layout
+                .document_line_count
+                .saturating_sub(layout.visible_capacity);
+            let page = layout.visible_capacity.saturating_sub(1).max(1);
+            let top = match key.key {
+                InputKey::Up => Some(layout.visible_start.saturating_sub(1)),
+                InputKey::Down => Some(layout.visible_start.saturating_add(1).min(last)),
+                InputKey::PageUp => Some(layout.visible_start.saturating_sub(page)),
+                InputKey::PageDown => Some(layout.visible_start.saturating_add(page).min(last)),
+                InputKey::Home => Some(0),
+                InputKey::End => Some(last),
+                _ => None,
+            };
+            if let Some(top_line) = top {
+                let mut viewport = state.viewport;
+                viewport.top_line = top_line;
+                self.app
+                    .dispatch_at(app::AppCommand::SetEditorViewport(viewport), received_at);
+                return;
+            }
+        }
         let mac_command = platform.kind() == PlatformKind::Macos
             && key.modifiers.super_key
             && !key.modifiers.is_control()
@@ -615,13 +645,23 @@ impl ShellSession {
                 ..
             } => {
                 self.pages.editor.editor_quick_menu_anchor = None;
-                if let Some(mut viewport) = self.app.editor_state().map(|state| state.viewport) {
+                if let Some(state) = self.app.editor_state() {
+                    let mut viewport = state.viewport;
+                    let max_top = if state.is_scrollable_picture() {
+                        let layout = self.editor_current_layout();
+                        viewport.top_line = layout.visible_start;
+                        layout
+                            .document_line_count
+                            .saturating_sub(layout.visible_capacity)
+                    } else {
+                        usize::MAX
+                    };
                     match direction {
                         ScrollDirection::Up => {
                             viewport.top_line = viewport.top_line.saturating_sub(3);
                         }
                         ScrollDirection::Down => {
-                            viewport.top_line = viewport.top_line.saturating_add(3);
+                            viewport.top_line = viewport.top_line.saturating_add(3).min(max_top);
                         }
                         ScrollDirection::Left => {
                             viewport.left_column = viewport.left_column.saturating_sub(4);

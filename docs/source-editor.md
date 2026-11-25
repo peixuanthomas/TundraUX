@@ -17,6 +17,8 @@ Double-click a supported document or image in Explorer, select it and press Ente
 
 Embedded pictures and standalone images are decoded in the background when the file opens. The editor fits them to the available space, uses the first frame of an animation, and draws color blocks on text terminals. Scrolling reuses the prepared pixels. Office previews use the document’s reading order. Legacy Word and Excel pictures follow the document or worksheet text. Legacy PowerPoint pictures follow the text of their slide. A linked picture shows its description without contacting the link target.
 
+Tall PNGs open at a readable width. Scroll with the mouse wheel, the scrollbar, or the Up and Down keys. Page Up and Page Down move one screen. Home jumps to the top and End to the bottom.
+
 Markdown, CSV, TSV, HTML, XML and SVG open as editable source. RTF and OpenDocument (`.odt`, `.ods`, `.odp` and their templates) use different document structures. They are candidates for separate readers, alongside WPS native formats (`.wps`, `.et`, `.dps`), iWork (`.pages`, `.numbers`, `.key`), EPUB and XPS. The rich preview currently supports the Office families listed above. [Microsoft’s file format reference](https://learn.microsoft.com/en-us/office/compatibility/office-file-format-reference)
 
 ## PDF preview
