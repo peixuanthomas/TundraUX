@@ -1,3 +1,4 @@
+use crate::session::window_launch::{WindowApplication, WindowOwner};
 use crate::session::*;
 
 impl ShellSession {
@@ -353,12 +354,6 @@ impl ShellSession {
                 match *result {
                     Ok(document) => self.finish_editor_load(load, document),
                     Err(error) => {
-                        let action = if matches!(load.operation, EditorLoadOperation::Reload { .. })
-                        {
-                            i18n::LocalizedText::from(i18n::msg!("shell-reload"))
-                        } else {
-                            i18n::LocalizedText::from(i18n::msg!("shell-open"))
-                        };
                         let owner = self.pages.editor.selected_id();
                         let origin = match &load.operation {
                             EditorLoadOperation::Open { rollback, .. } => {
@@ -366,37 +361,59 @@ impl ShellSession {
                             }
                             EditorLoadOperation::Reload { .. } => owner,
                         };
-                        self.restore_editor_load_navigation(&load.operation);
-                        if error != "Editor load cancelled" {
-                            let message = i18n::LocalizedText::from(i18n::msg!(
-                                "shell-could-not-action-arg1-error",
-                                action = action,
-                                arg1 = load.path.display().to_string(),
-                                error = error.to_string()
-                            ));
-                            // A picker replacement can leave the original Editor alive.
-                            // End its loading message even while the picker owns the alert.
-                            if let Some(editor) = owner.and_then(|id| self.pages.editor.get_mut(id))
-                            {
-                                editor.editor_message = Some(message.clone());
-                            }
-                            let target = origin
+                        let cancelled = error == "Editor load cancelled";
+                        let keep_editor = !cancelled
+                            && self.window_owner == WindowOwner::App(WindowApplication::Editor)
+                            && owner == Some(self.content_page_id())
+                            && origin.and_then(|id| self.page_screen(id))
+                                == Some(ShellScreen::Home);
+                        if keep_editor {
+                            // Returning an AppHost to Home closes its window before it can report the error.
+                            self.finish_editor_load_navigation(&load.operation);
+                            self.keep_initial_editor_open();
+                        } else {
+                            self.restore_editor_load_navigation(&load.operation);
+                        }
+                        if cancelled {
+                            return;
+                        }
+                        let action = if matches!(load.operation, EditorLoadOperation::Reload { .. })
+                        {
+                            i18n::LocalizedText::from(i18n::msg!("shell-reload"))
+                        } else {
+                            i18n::LocalizedText::from(i18n::msg!("shell-open"))
+                        };
+                        let message = i18n::LocalizedText::from(i18n::msg!(
+                            "shell-could-not-action-arg1-error",
+                            action = action,
+                            arg1 = load.path.display().to_string(),
+                            error = error.to_string()
+                        ));
+                        // A picker replacement can leave the original Editor alive.
+                        // End its loading message even while the picker owns the alert.
+                        if let Some(editor) = owner.and_then(|id| self.pages.editor.get_mut(id)) {
+                            editor.editor_message = Some(message.clone());
+                        }
+                        let target = if keep_editor {
+                            owner
+                        } else {
+                            origin
                                 .filter(|id| self.page_screen(*id).is_some())
-                                .or_else(|| owner.filter(|id| self.page_screen(*id).is_some()));
-                            if let Some(target) = target {
-                                self.with_page_context(target, |session| {
-                                    if session.page_screen(target) == Some(ShellScreen::Editor) {
-                                        session.report_editor_error(message);
-                                    } else {
-                                        session.pages.common.error_message = Some(message.clone());
-                                        session.notify_page_alert_with_key(
-                                            EDITOR_ALERT_KEY,
-                                            message,
-                                            ui::NotificationTone::Error,
-                                        );
-                                    }
-                                });
-                            }
+                                .or_else(|| owner.filter(|id| self.page_screen(*id).is_some()))
+                        };
+                        if let Some(target) = target {
+                            self.with_page_context(target, |session| {
+                                if session.page_screen(target) == Some(ShellScreen::Editor) {
+                                    session.report_editor_error(message);
+                                } else {
+                                    session.pages.common.error_message = Some(message.clone());
+                                    session.notify_page_alert_with_key(
+                                        EDITOR_ALERT_KEY,
+                                        message,
+                                        ui::NotificationTone::Error,
+                                    );
+                                }
+                            });
                         }
                     }
                 }
@@ -745,6 +762,8 @@ impl ShellSession {
             self.pages.common.active_popup = None;
             self.pages.common.focused_component = ShellComponent::Editor;
         }
+        self.pages.common.error_message = None;
+        self.resolve_page_alert(EDITOR_ALERT_KEY);
         self.notify_status(i18n::LocalizedText::from(i18n::msg!(
             "shell-editor-arg1",
             arg1 = path.display().to_string()
@@ -791,11 +810,28 @@ impl ShellSession {
     }
 
     fn report_editor_open_error(&mut self, message: i18n::LocalizedText) {
+        if self.window_owner == WindowOwner::App(WindowApplication::Editor)
+            && self.active_screen() == ShellScreen::Home
+        {
+            self.keep_initial_editor_open();
+        }
         if self.editor_open_reuses_document() {
             self.report_editor_error(message);
         } else {
             self.pages.common.error_message = Some(message.clone());
             self.notify_page_alert_with_key(EDITOR_ALERT_KEY, message, ui::NotificationTone::Error);
+        }
+    }
+
+    fn keep_initial_editor_open(&mut self) {
+        if self.content_screen() == ShellScreen::Home {
+            self.enter_screen(ShellScreen::Editor);
+        }
+        if self.app.editor_state().is_none() {
+            self.app.dispatch_at(
+                app::AppCommand::SetEditorState(Some(EditorState::new())),
+                Instant::now(),
+            );
         }
     }
 

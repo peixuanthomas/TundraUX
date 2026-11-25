@@ -109,6 +109,8 @@ The Editor opens File Explorer in a separate window for Open, first save and Sav
 
 Explorer and the Editor picker open Word, Excel, PowerPoint and supported image files in a read-only Editor window. The background loader prepares the text and embedded pictures together. Scrolling uses the in-memory image data. The [editor guide](../../docs/source-editor.md#documents-and-images) lists the supported extensions.
 
+If a file fails to load in a newly launched Editor window, the window shows the path and the reason so you can try another file. A failed replacement returns you to the previously open document.
+
 The file reader checks size and reports byte progress from the same open operation. Rich documents prepare their first display blocks and word count together in the load worker.
 
 PDFs open in the read-only preview. A background worker renders the first page first, then nearby pages. Each window keeps up to 12 pages within a 32 MiB cache. Page Up, Page Down, and the page buttons reuse prepared pages immediately. A change to the viewport or terminal cell size invalidates images at the old size.

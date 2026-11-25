@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::*;
 use watchdog::{WatchdogConfig, WatchdogRuntime};
 use workspace_protocol::{ServiceError, ServiceSessionSnapshot};
@@ -77,6 +79,127 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
         input_fences: InputFences::default(),
         frame_sequence: 0,
     }
+}
+
+#[test]
+fn app_host_keeps_the_editor_visible_after_an_image_open_fails() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let paths = platform::AppPaths::from_parts(
+        root.join("config"),
+        root.join("data"),
+        root.join("cache"),
+        root.join("logs"),
+        root.join("temp"),
+    )
+    .unwrap();
+    let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        root.join("reports"),
+        root.join("fallback"),
+        root.join("watchdog"),
+        "app-host-editor-load-error-test",
+        "test",
+    ))
+    .unwrap();
+    let watchdog = process
+        .register_app(AppDescriptor::new(
+            AppId::from_static("app-host-editor-load-error-test"),
+            "AppHost editor load error test",
+            "test",
+            AppCriticality::Optional,
+        ))
+        .unwrap();
+    let broken = root.join("broken.png");
+    let document = root.join("retry.txt");
+    std::fs::write(&broken, b"invalid image").unwrap();
+    std::fs::write(&document, "a readable document").unwrap();
+
+    let mut host = host(watchdog.clone(), &paths);
+    host.state.window_owner =
+        WindowOwner::App(crate::session::window_launch::WindowApplication::Editor);
+    host.state.reset_navigation(ShellScreen::Home);
+    host.state.editor_task_runtime = ShellEditorTaskRuntime::new_managed(watchdog);
+    host.compositor.capture_enabled = true;
+    host.services.acknowledge_updates();
+    host.theme_reloader = UserThemeReloader::new(None, Instant::now());
+    host.next_service_sync = Instant::now() + Duration::from_secs(60);
+    while host
+        .state
+        .notification_dismiss_active_modal_without_response()
+    {}
+
+    let start_load = |host: &mut AppHostSession, path: &Path| {
+        WindowLaunch::EditorPath(path.as_os_str().to_owned())
+            .activate(&mut host.state, host.platform.as_ref());
+        assert!(host.state.pages.editor.editor_load_state.is_some());
+    };
+    let wait_for_load = |host: &mut AppHostSession| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while host.state.pages.editor.editor_load_state.is_some() {
+            host.poll(Instant::now()).unwrap();
+            assert!(Instant::now() < deadline, "editor load did not finish");
+            std::thread::sleep(HOST_TICK);
+        }
+    };
+
+    start_load(&mut host, &broken);
+    let editor = host.state.content_page_id();
+    wait_for_load(&mut host);
+    assert_eq!(host.state.content_screen(), ShellScreen::Editor);
+    assert_eq!(host.state.content_page_id(), editor);
+    assert_eq!(host.state.window_close, WindowClose::Idle);
+    assert_eq!(host.close_status, WindowClose::Idle);
+    let reason = host
+        .state
+        .to_shell_chrome_view_model()
+        .status
+        .error
+        .unwrap();
+    assert!(reason.contains("broken.png") && reason.contains("Could not preview this image"));
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let now = Instant::now();
+        host.poll(now).unwrap();
+        if let Some(frame) = host.frame(now).unwrap() {
+            assert!(frame.status.contains(&reason));
+            break;
+        }
+        assert!(now < deadline, "AppHost did not emit the error frame");
+        std::thread::sleep(HOST_TICK);
+    }
+
+    start_load(&mut host, &document);
+    wait_for_load(&mut host);
+    assert_eq!(host.state.to_editor_view_model().file_name, "retry.txt");
+    assert!(
+        host.state
+            .to_shell_chrome_view_model()
+            .status
+            .error
+            .is_none()
+    );
+    start_load(&mut host, &broken);
+    wait_for_load(&mut host);
+    assert_eq!(host.state.content_page_id(), editor);
+    assert_eq!(host.state.to_editor_view_model().file_name, "retry.txt");
+
+    host.state.reset_navigation(ShellScreen::Home);
+    start_load(&mut host, &broken);
+    host.receive(ShellToApp::Input {
+        serial: 1,
+        layout: host.layout,
+        event: serde_json::to_value(InputEvent::key(InputKey::Escape)).unwrap(),
+    })
+    .unwrap();
+    host.poll(Instant::now()).unwrap();
+    assert_eq!(host.state.content_screen(), ShellScreen::Home);
+    assert_eq!(host.state.window_close, WindowClose::Confirmed);
+
+    host.shutdown().unwrap();
+    drop(host);
+    drop(process);
+    runtime.shutdown().unwrap();
 }
 
 #[test]
