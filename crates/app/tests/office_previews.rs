@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use app::editor::{
     DocumentKind, EditorCommand, EditorMode, EditorState, OfficeFormat, PreviewImage,
-    rich_document::ProjectedBlockKind,
+    rich_document::{ProjectedBlockKind, ProjectedTableCell},
 };
 use flate2::read::GzDecoder;
 use image::codecs::{gif::GifEncoder, jpeg::JpegEncoder, png::PngEncoder};
@@ -120,6 +120,117 @@ fn actual_office_documents_preview_their_content_and_keep_the_original_read_only
         assert_eq!(editor.export_text(), text);
         assert_eq!(std::fs::read(path).unwrap(), bytes);
     }
+}
+
+#[test]
+fn word_tables_keep_their_cells_paragraphs_and_literal_markup_in_rich_preview() {
+    // Both files are LibreOffice exports of project-authored Word table samples.
+    let samples: &[(&str, &[u8], usize)] = &[
+        (
+            "温控记录.doc",
+            include_bytes!("fixtures/office_preview/word-table.doc"),
+            1,
+        ),
+        (
+            "温控记录.docx",
+            include_bytes!("fixtures/office_preview/word-table-nested.docx"),
+            2,
+        ),
+    ];
+    for (name, bytes, table_count) in samples.iter().copied() {
+        let path = Path::new(name);
+        let editor = OfficeFormat::from_path(path)
+            .unwrap()
+            .open_preview(path.into(), bytes.to_vec())
+            .unwrap();
+        assert!(editor.is_read_only());
+        let preview = editor.rich_projection().unwrap();
+        assert!(
+            preview.blocks.iter().all(|block| !matches!(
+                block.kind,
+                ProjectedBlockKind::OpaqueMarkdown { .. } | ProjectedBlockKind::CodeBlock { .. }
+            )),
+            "{name} rendered a raw block"
+        );
+        let tables: Vec<_> = preview
+            .blocks
+            .iter()
+            .filter_map(|block| match &block.kind {
+                ProjectedBlockKind::Table { header, rows, .. } => Some((header, rows)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tables.len(), table_count, "{name}");
+        let text = |cell: &ProjectedTableCell| {
+            cell.content
+                .iter()
+                .map(|span| span.text.as_str())
+                .collect::<String>()
+        };
+        let (header, rows) = tables[0];
+        assert_eq!(
+            header.iter().map(text).collect::<Vec<_>>(),
+            ["项目|类别", "记录", "状态"]
+        );
+        assert_eq!(rows[0].len(), 3);
+        assert_eq!(text(&rows[0][0]), r"区域 A|B，管线 C:\|D");
+        assert_eq!(
+            text(&rows[0][1]),
+            "第一段 <sup>原文</sup> <br>\n第二段\n面积 m²，液体 H₂O"
+        );
+        assert_eq!(
+            rows[0][1]
+                .content
+                .iter()
+                .filter(|span| span.hard_break)
+                .count(),
+            2
+        );
+        assert_eq!(text(&rows[0][2]), "通过");
+        assert_eq!(
+            rows[1].iter().map(text).collect::<Vec<_>>(),
+            ["一并检查", "", "完成"]
+        );
+        if let Some((_, details)) = tables.get(1) {
+            assert_eq!(
+                text(&details[0][1]),
+                "附表开始\n细节 | 备注\n参数|范围 | 已复核\n附表结束"
+            );
+        }
+        let markdown = editor.export_text();
+        assert!(markdown.find("温控记录开始").unwrap() < markdown.find("项目").unwrap());
+        assert!(markdown.find("一并检查").unwrap() < markdown.find("复核完成").unwrap());
+    }
+}
+
+#[test]
+fn word_table_preview_preserves_supported_script_symbols_and_keeps_other_text() {
+    let sample = include_bytes!("fixtures/office_preview/word-table-nested.docx");
+    let mut original = ZipArchive::new(Cursor::new(sample.as_slice())).unwrap();
+    let mut updated = ZipWriter::new(Cursor::new(Vec::new()));
+    for index in 0..original.len() {
+        let mut part = original.by_index(index).unwrap();
+        if part.name() == "word/document.xml" {
+            let mut xml = String::new();
+            part.read_to_string(&mut xml).unwrap();
+            assert_eq!(xml.matches("<w:t>2</w:t>").count(), 2);
+            let xml = xml.replace("<w:t>2</w:t>", "<w:t>209+-=()−q例</w:t>");
+            updated
+                .start_file(part.name(), SimpleFileOptions::default())
+                .unwrap();
+            updated.write_all(xml.as_bytes()).unwrap();
+        } else {
+            updated.raw_copy_file(part).unwrap();
+        }
+    }
+    let path = Path::new("带运算符的表格.docx");
+    let preview = OfficeFormat::from_path(path)
+        .unwrap()
+        .open_preview(path.into(), updated.finish().unwrap().into_inner())
+        .unwrap()
+        .export_text();
+    assert!(preview.contains("m²⁰⁹⁺⁻⁼⁽⁾⁻q例"), "{preview}");
+    assert!(preview.contains("H₂₀₉₊₋₌₍₎₋q例O"), "{preview}");
 }
 
 #[test]

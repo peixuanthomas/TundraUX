@@ -34,6 +34,34 @@ fn unedited_import_exports_byte_for_byte() {
 }
 
 #[test]
+fn table_cell_breaks_keep_source_positions_on_the_same_line() {
+    let source =
+        "| 项目 | 内容 |\n| --- | --- |\n| 区域 | 第一<BR />第二<br>第三 |\n| 下一 | 行 |\n";
+    let imported = MarkdownCodec::import(source).unwrap();
+    let RichBlockKind::Table { rows, .. } = &imported.document.blocks[0].kind else {
+        panic!("expected table")
+    };
+    let cell = &rows[0][1];
+    assert_eq!(cell.content.plain_text(), "第一\n第二\n第三");
+    let exported = MarkdownCodec::export(&imported.document).unwrap();
+    assert_eq!(exported.markdown, source);
+    let offset = |index| {
+        exported
+            .positions
+            .source_offset_for(RichPosition::new(cell.id, index))
+    };
+    assert_eq!(offset(2), source.find("<BR />"));
+    assert_eq!(offset(3), source.find("第二"));
+    assert_eq!(offset(6), source.find("第三"));
+    assert_dense_positions(
+        &exported.positions,
+        cell.id,
+        cell.content.grapheme_len(),
+        source,
+    );
+}
+
+#[test]
 fn dirty_block_is_serialized_from_semantics_while_other_blocks_stay_raw() {
     let source = "__old spelling__\n\n<custom untouched>\n";
     let mut imported = MarkdownCodec::import(source).unwrap();

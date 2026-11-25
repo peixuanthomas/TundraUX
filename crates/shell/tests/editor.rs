@@ -1382,6 +1382,66 @@ fn explorer_opens_word_as_rendered_read_only_markdown() {
 }
 
 #[test]
+fn explorer_renders_word_table_cells_with_scientific_notation_in_the_grid() {
+    for (name, original) in [
+        (
+            "记录.doc",
+            include_bytes!("../../app/tests/fixtures/office_preview/word-table.doc").as_slice(),
+        ),
+        (
+            "记录.docx",
+            include_bytes!("../../app/tests/fixtures/office_preview/word-table-nested.docx")
+                .as_slice(),
+        ),
+    ] {
+        let fixture = FixtureRoot::new("word-table-grid");
+        let platform = mock_platform(fixture.path());
+        initialize_system_profile(&platform);
+        let path = fixture.path().join("Documents").join(name);
+        fs::write(&path, original).unwrap();
+        let mut state = system_home(&platform);
+        open_only_document_in_editor(&mut state, &platform);
+        let model = state.to_editor_view_model();
+        assert!(model.read_only);
+        let context = ui::RenderContext::from_theme(
+            &ui::TundraTheme::default_dark(),
+            Default::default(),
+            Default::default(),
+        );
+        let mut screen =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 36)).unwrap();
+        screen
+            .draw(|frame| {
+                ui::render_editor_contextual(frame, frame.area(), &model, &context);
+            })
+            .unwrap();
+        let buffer = screen.backend().buffer();
+        let lines: Vec<_> = (0..36)
+            .map(|y| {
+                (0..120)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect();
+        assert!(
+            lines.iter().any(|line| line.contains('┬')),
+            "{name}: {lines:?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.contains("H₂O") && line.matches('│').count() >= 4),
+            "{name}: {lines:?}"
+        );
+        assert!(
+            lines.iter().all(|line| !line.contains("| --- |")),
+            "{name}: {lines:?}"
+        );
+        assert_eq!(fs::read(path).unwrap(), original);
+    }
+}
+
+#[test]
 fn editor_open_picker_renders_excel_sheets_and_multiline_cells() {
     let fixture = FixtureRoot::new("excel-preview");
     let platform = mock_platform(fixture.path());

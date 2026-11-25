@@ -527,10 +527,12 @@ impl ImportBuilder {
     }
 }
 
+const HTML_LINE_BREAKS: [&str; 3] = ["<br>", "<br/>", "<br />"];
+
 fn editor_inline_value(value: NodeValue) -> NodeValue {
     match &value {
         NodeValue::HtmlInline(html)
-            if ["<br>", "<br/>", "<br />"]
+            if HTML_LINE_BREAKS
                 .iter()
                 .any(|tag| html.eq_ignore_ascii_case(tag)) =>
         {
@@ -1026,19 +1028,27 @@ fn record_inline_content_lexically(
                 *search_from = end;
             }
             InlineNode::SoftBreak | InlineNode::HardBreak => {
-                let start = source[*search_from..]
-                    .find(['\n', '\r'])
-                    .map(|relative| *search_from + relative)
-                    .unwrap_or(*search_from)
-                    .min(source.len());
+                let (start, end) = source[*search_from..]
+                    .char_indices()
+                    .find_map(|(relative, ch)| {
+                        let start = *search_from + relative;
+                        let length = match ch {
+                            '\r' if source.as_bytes().get(start + 1) == Some(&b'\n') => 2,
+                            '\n' | '\r' => 1,
+                            '<' if matches!(node, InlineNode::HardBreak) => HTML_LINE_BREAKS
+                                .iter()
+                                .find(|tag| {
+                                    source
+                                        .get(start..start + tag.len())
+                                        .is_some_and(|text| text.eq_ignore_ascii_case(tag))
+                                })?
+                                .len(),
+                            _ => return None,
+                        };
+                        Some((start, start + length))
+                    })
+                    .unwrap_or((*search_from, *search_from));
                 positions.record(RichPosition::new(container_id, logical), start);
-                let end = if source.as_bytes().get(start) == Some(&b'\r')
-                    && source.as_bytes().get(start + 1) == Some(&b'\n')
-                {
-                    start + 2
-                } else {
-                    (start + 1).min(source.len())
-                };
                 logical = logical.saturating_add(1);
                 positions.record(RichPosition::new(container_id, logical), end);
                 *search_from = end;
@@ -1109,7 +1119,7 @@ fn record_lexical_graphemes(
             .unwrap_or(*search_from)
             .min(source.len());
         positions.record(RichPosition::new(container_id, *logical), start);
-        let end = start.saturating_add(grapheme.len()).min(source.len());
+        let end = normalize_end_boundary(source, start.saturating_add(grapheme.len()));
         *logical = logical.saturating_add(1);
         positions.record(RichPosition::new(container_id, *logical), end);
         *search_from = end;

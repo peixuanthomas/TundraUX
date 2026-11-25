@@ -1047,15 +1047,23 @@ fn render_cell_markdown(cell: &TableCell) -> String {
             other => render_element_markdown(other),
         })
         .collect::<Vec<_>>()
-        .join(" ");
-    // A line break inside a cell (a `LineBreak` renders as a newline, a
-    // nested block as a paragraph) ends a GFM table row; `<br>` is the
-    // form GitHub and pandoc understand.
-    text.split(['\r', '\n'])
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .collect::<Vec<_>>()
-        .join("<br>")
+        .join("\n");
+    // A cell's paragraphs and its literal pipes must stay inside one GFM row.
+    let mut out = String::with_capacity(text.len());
+    for line in text.split(['\r', '\n']).map(str::trim).filter(|line| !line.is_empty()) {
+        if !out.is_empty() {
+            out.push_str("<br>");
+        }
+        let mut escaped = false;
+        for ch in line.chars() {
+            if ch == '|' && !escaped {
+                out.push('\\');
+            }
+            out.push(ch);
+            escaped = ch == '\\' && !escaped;
+        }
+    }
+    out
 }
 
 /// The cells of one rendered GFM row (`| a | b |`), split on the unescaped
@@ -1745,6 +1753,26 @@ mod tests {
         assert!(md.contains("| H1 | H2 |"));
         assert!(md.contains("| --- | --- |"));
         assert!(md.contains("| A | B |"));
+    }
+
+    #[test]
+    fn test_markdown_cell_keeps_paragraphs_and_picture_descriptions_in_its_column() {
+        let cell = TableCell {
+            content: vec![
+                para(r"路径 C:\|D"),
+                Element::Image(Image {
+                    alt_text: Some("图|样本".into()),
+                    source_url: Some("pictures/0".into()),
+                    ..Default::default()
+                }),
+                para("末段"),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            render_cell_markdown(&cell),
+            r"路径 C:\\\|D<br>![图\|样本](pictures/0)<br>末段"
+        );
     }
 
     fn spanning(text: &str, col_span: u32) -> TableCell {

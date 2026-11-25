@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use office_oxide::ir::{DocumentIR, Element, Image, List};
+use office_oxide::ir::{DocumentIR, Element, Image, InlineContent, List};
 use office_oxide::{Document, DocumentFormat, OfficeError, options::ParseOptions};
 
 use super::preview_image::preview_image_url;
@@ -32,15 +32,22 @@ impl OfficeFormat {
             ));
         }
         let mut image_count = 0;
-        visit_document_images(&mut ir, |image| {
-            image_count += usize::from(image.data.is_some());
+        visit_document_elements(&mut ir, |element| match element {
+            Element::Image(image) => image_count += usize::from(image.data.is_some()),
+            Element::Paragraph(paragraph) => prepare_inline_text(&mut paragraph.content),
+            Element::Heading(heading) => prepare_inline_text(&mut heading.content),
+            _ => {}
         });
         let mut images = OfficeImages {
             previews: Vec::new(),
             remaining_images: image_count.min(MAX_IMAGE_DECODES),
             remaining_bytes: MAX_DOCUMENT_IMAGE_BYTES,
         };
-        visit_document_images(&mut ir, |image| images.prepare(image));
+        visit_document_elements(&mut ir, |element| {
+            if let Element::Image(image) = element {
+                images.prepare(image);
+            }
+        });
 
         let document =
             EditorDocument::from_text(Some(path), DocumentKind::Markdown, ir.to_markdown());
@@ -83,7 +90,34 @@ impl OfficeImages {
     }
 }
 
-fn visit_document_images(document: &mut DocumentIR, mut visit: impl FnMut(&mut Image)) {
+fn prepare_inline_text(content: &mut [InlineContent]) {
+    use office_oxide::ir::VerticalAlign;
+
+    for item in content {
+        let InlineContent::Text(span) = item else {
+            continue;
+        };
+        // A script HTML tag would make the rich importer reject the whole table.
+        let aligned = match span.vertical_align.take() {
+            Some(VerticalAlign::Superscript) => "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾⁻",
+            Some(VerticalAlign::Subscript) => "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎₋",
+            _ => continue,
+        };
+        span.text = span
+            .text
+            .chars()
+            .map(|character| {
+                "0123456789+-=()−"
+                    .chars()
+                    .zip(aligned.chars())
+                    .find(|(original, _)| *original == character)
+                    .map_or(character, |(_, glyph)| glyph)
+            })
+            .collect();
+    }
+}
+
+fn visit_document_elements(document: &mut DocumentIR, mut visit: impl FnMut(&mut Element)) {
     for section in &mut document.sections {
         for header in [
             &mut section.first_page_header,
@@ -93,11 +127,11 @@ fn visit_document_images(document: &mut DocumentIR, mut visit: impl FnMut(&mut I
         .into_iter()
         .flatten()
         {
-            visit_element_images(&mut header.content, &mut visit);
+            visit_elements(&mut header.content, &mut visit);
         }
-        visit_element_images(&mut section.elements, &mut visit);
+        visit_elements(&mut section.elements, &mut visit);
         if let Some(notes) = &mut section.speaker_notes {
-            visit_element_images(notes, &mut visit);
+            visit_elements(notes, &mut visit);
         }
         for footer in [
             &mut section.first_page_footer,
@@ -107,35 +141,35 @@ fn visit_document_images(document: &mut DocumentIR, mut visit: impl FnMut(&mut I
         .into_iter()
         .flatten()
         {
-            visit_element_images(&mut footer.content, &mut visit);
+            visit_elements(&mut footer.content, &mut visit);
         }
     }
 }
 
-fn visit_element_images(elements: &mut [Element], visit: &mut impl FnMut(&mut Image)) {
+fn visit_elements(elements: &mut [Element], visit: &mut impl FnMut(&mut Element)) {
     for element in elements {
+        visit(element);
         match element {
-            Element::Image(image) => visit(image),
             Element::Table(table) => {
                 for cell in table.rows.iter_mut().flat_map(|row| &mut row.cells) {
-                    visit_element_images(&mut cell.content, visit);
+                    visit_elements(&mut cell.content, visit);
                 }
             }
-            Element::List(list) => visit_list_images(list, visit),
-            Element::TextBox(text_box) => visit_element_images(&mut text_box.content, visit),
+            Element::List(list) => visit_list_elements(list, visit),
+            Element::TextBox(text_box) => visit_elements(&mut text_box.content, visit),
             Element::Footnote(note) | Element::Endnote(note) => {
-                visit_element_images(&mut note.content, visit);
+                visit_elements(&mut note.content, visit);
             }
             _ => {}
         }
     }
 }
 
-fn visit_list_images(list: &mut List, visit: &mut impl FnMut(&mut Image)) {
+fn visit_list_elements(list: &mut List, visit: &mut impl FnMut(&mut Element)) {
     for item in &mut list.items {
-        visit_element_images(&mut item.content, visit);
+        visit_elements(&mut item.content, visit);
         if let Some(nested) = &mut item.nested {
-            visit_list_images(nested, visit);
+            visit_list_elements(nested, visit);
         }
     }
 }
