@@ -16,7 +16,10 @@ pub(in crate::session) const SETTINGS_RESTORE_NOTIFICATION_KEY: &str = "settings
 pub(in crate::session) const SETTINGS_WEATHER_LOCATION_NOTIFICATION_KEY: &str =
     "settings.weather-location";
 pub(in crate::session) const WEATHER_LOCATION_MAX_LEN: usize = 120;
-pub(in crate::session) const EDITOR_EXTENSIONS_INPUT_MAX_LEN: usize = 1_024;
+// The field displays each suffix with a leading dot and a comma-space separator.
+pub(in crate::session) const EDITOR_EXTENSIONS_INPUT_MAX_LEN: usize =
+    storage::MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS
+        * (storage::MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN + 3);
 const SCREEN_TIMEOUT_OPTIONS: &[u64] = &[0, 30, 60, 120, 300, 600, 1800];
 const TOP_BAR_ALIGNMENTS: [storage::StatusTextAlignment; 3] = [
     storage::StatusTextAlignment::Left,

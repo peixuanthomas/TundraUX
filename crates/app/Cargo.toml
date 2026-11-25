@@ -17,6 +17,7 @@ chrono-tz = "0.10"
 comrak = { version = "0.54", default-features = false }
 hayro = "0.9"
 memchr = "2"
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "tiff", "webp"] }
 regex = "1"
 shell-words = "1.1"
 lsh = { path = "../../third_party/lsh", default-features = false, features = ["glob"] }

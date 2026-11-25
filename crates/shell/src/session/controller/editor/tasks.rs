@@ -717,6 +717,13 @@ pub(in crate::session) fn load_editor_document_task(
             "",
         );
         (EditorState::from_read_only_document(document), Some(pdf))
+    } else if app::editor::is_preview_image_path(&request.path) {
+        let image = app::editor::PreviewImage::decode(&loaded.bytes)
+            .map_err(|error| i18n::tr!("shell-image-preview-failed", error = error.to_string()))?;
+        (
+            EditorState::from_preview_image(request.path.clone(), image),
+            None,
+        )
     } else if let Some(format) = office_format {
         let state = format
             .open_preview(request.path.clone(), loaded.bytes)
@@ -741,7 +748,7 @@ pub(in crate::session) fn load_editor_document_task(
     }
     let rich_blocks = state
         .prepare_rich_projection()
-        .map(|projection| std::sync::Arc::from(editor_rich_render_blocks(&projection)));
+        .map(|projection| std::sync::Arc::from(editor_rich_render_blocks(&state, &projection)));
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }

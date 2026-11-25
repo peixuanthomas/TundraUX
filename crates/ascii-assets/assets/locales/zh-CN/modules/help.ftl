@@ -109,6 +109,9 @@ ui-help-editor-save = 保存
 ui-help-editor-find = 查找
 ui-help-editor-vim = 切换 Vim 模式
 ui-help-editor-focus = 切换焦点
+ui-help-editor-open-preview = 打开文本、图片、PDF 或 Office 文档。打开文档时会一并准备内嵌插图。
+ui-help-pdf-next = 下一页。邻近页面会在后台提前准备。
+ui-help-workspace-close = 关闭焦点窗口。Vim 保留原生 Ctrl+Q。
 
 ui-help-command-line-title = 命令行
 ui-help-command-line-close = 关闭命令行

@@ -761,11 +761,8 @@ impl ShellSession {
         if self.route_window_launch(WindowLaunch::EditorPath(path.as_os_str().to_owned())) {
             return true;
         }
-        let is_pdf = app::editor::is_pdf_path(&path);
-        if !is_pdf
-            && Self::is_system_config_path(&path)
-            && app::editor::OfficeFormat::from_path(&path).is_none()
-        {
+        let preview = app::editor::is_read_only_preview_path(&path);
+        if !preview && Self::is_system_config_path(&path) {
             self.begin_config_editor(path, None, None, None, "system".into());
             return self.config_editor_active();
         }
@@ -774,7 +771,7 @@ impl ShellSession {
             return false;
         }
         let is_log = is_log_document_path(&path);
-        let access = if is_log || is_pdf {
+        let access = if is_log || preview {
             EditorTaskAccess::ReadOnly
         } else {
             EditorTaskAccess::Editable

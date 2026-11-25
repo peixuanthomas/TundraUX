@@ -107,7 +107,7 @@ A new window opened from another app uses the first unfocused pane in layout ord
 
 The Editor opens File Explorer in a separate window for Open, first save and Save As. Once you choose a file or confirm a filename, the picker closes and sends the path to the original Editor. Esc or Close cancels the picker. The draft stays with the Editor.
 
-By default, double-clicking a Word (`.docx`) or Excel (`.xlsx`) file in Explorer, or selecting it and pressing Enter, opens a read-only Editor window. The background loader converts the document to Markdown for display.
+Explorer and the Editor picker open Word, Excel, PowerPoint and supported image files in a read-only Editor window. The background loader prepares the text and embedded pictures together. Scrolling uses the in-memory image data. The [editor guide](../../docs/source-editor.md#documents-and-images) lists the supported extensions.
 
 The file reader checks size and reports byte progress from the same open operation. Rich documents prepare their first display blocks and word count together in the load worker.
 

@@ -17,11 +17,30 @@ pub mod syntax;
 
 mod office_preview;
 mod pdf_preview;
+mod preview_image;
 mod source_buffer;
 mod source_changes;
 pub use office_preview::OfficeFormat;
 pub use pdf_preview::{PdfPageImage, PdfPageSize, PdfPreviewDocument, is_pdf_path};
+pub use preview_image::PreviewImage;
 pub use source_changes::SourceLineChange;
+
+pub fn is_preview_image_path(path: &std::path::Path) -> bool {
+    matches!(
+        image::ImageFormat::from_path(path),
+        Ok(image::ImageFormat::Png
+            | image::ImageFormat::Jpeg
+            | image::ImageFormat::Gif
+            | image::ImageFormat::WebP
+            | image::ImageFormat::Bmp
+            | image::ImageFormat::Ico
+            | image::ImageFormat::Tiff)
+    )
+}
+
+pub fn is_read_only_preview_path(path: &std::path::Path) -> bool {
+    is_pdf_path(path) || is_preview_image_path(path) || OfficeFormat::from_path(path).is_some()
+}
 
 mod document;
 
@@ -1180,6 +1199,7 @@ pub struct SearchSession {
 pub struct EditorState {
     pub document: EditorDocument,
     pub mode: EditorMode,
+    preview_images: Vec<PreviewImage>,
     access: EditorAccess,
     execution_read_only: bool,
     source_change_tracking: bool,

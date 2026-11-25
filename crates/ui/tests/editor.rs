@@ -1725,3 +1725,111 @@ fn ordinary_context_menu_clamps_to_small_windows_and_keeps_clipboard_availabilit
         }
     }
 }
+#[test]
+fn picture_preview_scroll_crops_pixels_and_native_placement_together() {
+    let image = app::editor::PreviewImage::decode(include_bytes!(
+        "../../shell/tests/fixtures/editor/red-blue.png"
+    ))
+    .unwrap();
+    let mut blocks = vec![EditorRenderBlock::paragraph("before"); 10];
+    blocks.push(EditorRenderBlock::Picture {
+        id: 73,
+        image: image.clone(),
+    });
+    blocks.extend(vec![EditorRenderBlock::paragraph("after"); 10]);
+    let mut model = EditorViewModel::new("picture.docx", blocks);
+    model.read_only = true;
+    model.cursor = None;
+    let context = ui::RenderContext::from_theme(
+        &TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    let mut cache = ui::TerminalImageCache::default();
+    for (scroll, w, h) in [(10, 80, 22), (17, 65, 16), (21, 42, 12)] {
+        model.scroll_line = scroll;
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+        let mut capture = Vec::new();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                cache.capture_workspace(area);
+                ui::render_editor_contextual_with_terminal_images(
+                    frame, area, &model, &context, &mut cache, None,
+                );
+                capture = cache.take_workspace_images();
+            })
+            .unwrap();
+        if scroll == 21 {
+            assert!(capture.is_empty());
+            continue;
+        }
+        assert_eq!(capture.len(), 1);
+        let placement = &capture[0];
+        assert_eq!(placement.image_id, 73);
+        assert!(std::sync::Arc::ptr_eq(&image.rgba, &placement.rgba));
+        assert_eq!(placement.source[1] > 0, scroll > 10);
+        let cell = &terminal.backend().buffer()[(placement.area.x, placement.area.y)];
+        let expected = if scroll == 10 {
+            ratatui::style::Color::Rgb(255, 0, 0)
+        } else {
+            ratatui::style::Color::Rgb(0, 0, 255)
+        };
+        assert_eq!(cell.fg, expected);
+    }
+}
+
+#[test]
+fn transparent_picture_uses_the_same_canvas_color_in_native_and_text_previews() {
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        16,
+        32,
+        image::Rgba([255, 0, 0, 128]),
+    ))
+    .write_to(&mut encoded, image::ImageFormat::Png)
+    .unwrap();
+    let image = app::editor::PreviewImage::decode(encoded.get_ref()).unwrap();
+    let mut model = EditorViewModel::new(
+        "transparent.png",
+        vec![EditorRenderBlock::Picture { id: 79, image }],
+    );
+    model.read_only = true;
+    model.cursor = None;
+    let mut cache = ui::TerminalImageCache::default();
+    let mut ids = Vec::new();
+    for (background, expected) in [
+        ((0, 0, 0), [128, 0, 0, 255]),
+        ((255, 255, 255), [255, 127, 127, 255]),
+    ] {
+        let mut context = ui::RenderContext::from_theme(
+            &TundraTheme::default_dark(),
+            Default::default(),
+            Default::default(),
+        );
+        context.theme.editor_canvas =
+            ratatui::style::Color::Rgb(background.0, background.1, background.2);
+        let mut terminal = Terminal::new(TestBackend::new(64, 18)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                cache.capture_workspace(area);
+                ui::render_editor_contextual_with_terminal_images(
+                    frame, area, &model, &context, &mut cache, None,
+                );
+            })
+            .unwrap();
+        let placements = cache.take_workspace_images();
+        assert_eq!(placements.len(), 1);
+        let picture = &placements[0];
+        assert_eq!(picture.rgba[..4], expected);
+        let cell = &terminal.backend().buffer()[(picture.area.x, picture.area.y)];
+        assert_eq!(
+            cell.bg,
+            ratatui::style::Color::Rgb(expected[0], expected[1], expected[2])
+        );
+        ids.push(picture.image_id);
+    }
+    assert_ne!(ids[0], ids[1]);
+}

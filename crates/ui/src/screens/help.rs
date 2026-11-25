@@ -112,7 +112,7 @@ fn workspace_navigation() -> PageHelpSection {
             row("Ctrl+W, s", i18n::tr!("ui-workspace-top-bottom")),
             row("Ctrl+W", i18n::tr!("ui-help-workspace-native")),
             row("Ctrl+W, o", i18n::tr!("ui-help-workspace-maximize")),
-            row("Ctrl+Q / Ctrl+W, Q", i18n::tr!("ui-workspace-close")),
+            row("Ctrl+Q / Ctrl+W, Q", i18n::tr!("ui-help-workspace-close")),
             row("Ctrl+W, Shift+X", i18n::tr!("ui-help-workspace-kill")),
             row("Ctrl+W, Ctrl+W", i18n::tr!("ui-help-workspace-send")),
         ],
@@ -402,6 +402,7 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
             i18n::tr!("ui-help-editor-title"),
             vec![
                 actions(vec![
+                    row("Ctrl+O", i18n::tr!("ui-help-editor-open-preview")),
                     row("Ctrl+S", i18n::tr!("ui-help-editor-save")),
                     row("Ctrl+F", i18n::tr!("ui-help-editor-find")),
                     row("R", i18n::tr!("ui-help-editor-reload")),
@@ -418,7 +419,7 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
             i18n::tr!("ui-help-pdf-title"),
             vec![actions(vec![
                 row("PgUp", i18n::tr!("ui-editor-pdf-previous")),
-                row("PgDn", i18n::tr!("ui-editor-pdf-next")),
+                row("PgDn", i18n::tr!("ui-help-pdf-next")),
                 row("Ctrl+O", i18n::tr!("ui-editor-pdf-open")),
             ])],
         ),

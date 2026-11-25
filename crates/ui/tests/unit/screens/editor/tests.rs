@@ -21,6 +21,14 @@ mod rich_layout_measurement_tests {
                 "plain 好 e\u{301} 🙂 text that wraps",
             )]),
             EditorRenderBlock::Paragraph(vec![mapped("first\r\nsecond\rthird\n")]),
+            EditorRenderBlock::Paragraph(vec![
+                EditorRenderSpan::plain("first\n"),
+                EditorRenderSpan::plain("\u{1b}"),
+            ]),
+            EditorRenderBlock::Paragraph(vec![
+                mapped("好"),
+                mapped("plain span following a wide grapheme"),
+            ]),
             EditorRenderBlock::Heading {
                 level: 2,
                 spans: vec![mapped("a heading that wraps")],
@@ -126,6 +134,152 @@ mod rich_layout_measurement_tests {
         assert_eq!(layout.visible_start, 5_000);
         assert!(layout.vertical_scrollbar.is_some());
         assert_eq!(layout.prepared_lines.len(), layout.visible_capacity);
+    }
+
+    #[test]
+    fn read_only_rich_measurements_and_window_runs_match_the_full_layout() {
+        let table_id = NodeId::new(900);
+        let mut blocks = representative_blocks();
+        blocks.splice(
+            2..2,
+            [
+                EditorRenderBlock::RichTable {
+                    table_id,
+                    header: vec![EditorTableCell {
+                        spans: vec![mapped("heading 栏目")],
+                    }],
+                    rows: vec![
+                        vec![
+                            EditorTableCell {
+                                spans: vec![mapped("value spans multiple cells 好 and wraps")],
+                            },
+                            EditorTableCell {
+                                spans: vec![mapped("another\r\nthen more")],
+                            },
+                        ],
+                        Vec::new(),
+                        vec![EditorTableCell {
+                            spans: vec![mapped("tail")],
+                        }],
+                    ],
+                    alignments: vec![EditorTableAlignment::Center, EditorTableAlignment::Right],
+                },
+                EditorRenderBlock::RawHtml("line 好\r\nlong emoji e\u{301} 🤦‍♀️\u{1b}\n".to_string()),
+                EditorRenderBlock::Image {
+                    markdown: "an image\r\nwith a soft line break".to_string(),
+                },
+                EditorRenderBlock::CodeBlock {
+                    language: Some("short".to_string()),
+                    lines: vec!["a long line of code \u{202e} 好".to_string()],
+                },
+            ],
+        );
+        let mut model = EditorViewModel::new("document.docx", blocks);
+        model.read_only = true;
+        model.rich_table_column_widths.insert(table_id, vec![8, 5]);
+        for big_text in [false, true] {
+            model.text_sizing_protocol = big_text;
+            for width in [1, 14, 33, 84] {
+                let full = flatten_rich_document(&model, width, 12);
+                let measured = ReadOnlyRichLayout::measure(&model, width, 12);
+                assert_eq!(measured.line_count(), full.len());
+                assert_eq!(
+                    measured.content_width,
+                    rich_horizontal_content_width(&full, model.source.as_deref())
+                );
+                for start in 0..full.len() {
+                    let end = (start + 4).min(full.len());
+                    assert_eq!(measured.materialize(&model, start..end), full[start..end]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn read_only_rich_layout_reaches_the_bottom_of_ten_thousand_paragraphs_without_flattening() {
+        let blocks = (0..10_000)
+            .map(|index| EditorRenderBlock::paragraph(format!("paragraph {index:05}")))
+            .collect();
+        let mut model = EditorViewModel::new("long.docx", blocks);
+        model.read_only = true;
+        let area = Rect::new(1, 2, 120, 36);
+        RICH_FLATTEN_CALL_COUNT.with(|count| count.set(0));
+        for requested in [0, 5_000, usize::MAX] {
+            model.scroll_line = requested;
+            let layout = editor_layout(area, &model);
+            assert_eq!(layout.document_line_count, 10_000);
+            assert_eq!(
+                layout.visible_start,
+                requested.min(10_000 - layout.visible_capacity)
+            );
+            assert_eq!(layout.prepared_lines.len(), layout.visible_capacity);
+            assert_eq!(
+                layout.prepared_lines[0].block_index,
+                Some(layout.visible_start)
+            );
+            assert!(layout.vertical_scrollbar.is_some());
+            assert!(layout.horizontal_scrollbar.is_none());
+        }
+        assert_eq!(RICH_FLATTEN_CALL_COUNT.with(std::cell::Cell::get), 0);
+    }
+
+    #[test]
+    fn read_only_sheet_scrolls_into_a_wrapped_row_and_keeps_its_rich_hit() {
+        let rows = (0..10_000)
+            .map(|index| {
+                vec![
+                    EditorTableCell {
+                        spans: vec![
+                            EditorRenderSpan::plain("a".repeat(60))
+                                .with_rich_range(RichRange::from_raw(100 + index, 0, 60)),
+                        ],
+                    },
+                    EditorTableCell::text("wide second column"),
+                ]
+            })
+            .collect();
+        let table = EditorRenderBlock::RichTable {
+            table_id: NodeId::new(10),
+            header: vec![
+                EditorTableCell::text("Name"),
+                EditorTableCell::text("Details"),
+            ],
+            rows,
+            alignments: vec![EditorTableAlignment::Left, EditorTableAlignment::Right],
+        };
+        let mut model = EditorViewModel::new("large.xlsx", vec![table]);
+        model.read_only = true;
+        model.horizontal_scroll = 6;
+        model.scroll_line = 3 + 3 * 5_000 + 1;
+        RICH_FLATTEN_CALL_COUNT.with(|count| count.set(0));
+        let layout = editor_layout(Rect::new(1, 1, 40, 16), &model);
+        assert_eq!(RICH_FLATTEN_CALL_COUNT.with(std::cell::Cell::get), 0);
+        assert_eq!(layout.document_line_count, 30_004);
+        assert_eq!(layout.visible_start, model.scroll_line);
+        assert_eq!(layout.horizontal_scroll, 6);
+        assert!(layout.vertical_scrollbar.is_some());
+        assert!(layout.horizontal_scrollbar.is_some());
+        let hit = layout
+            .hit_test_document(layout.canvas.x + 4, layout.canvas.y)
+            .unwrap();
+        let EditorDocumentPosition::Rich(position) = hit.position else {
+            panic!("sheet must expose the visible table cell's Rich text");
+        };
+        assert_eq!(position.container_id, NodeId::new(5_100));
+        assert!((24..48).contains(&position.grapheme_offset));
+        assert!(hit.editable);
+        model.scroll_line = usize::MAX;
+        let bottom = editor_layout(Rect::new(1, 1, 40, 16), &model);
+        assert_eq!(bottom.visible_start + bottom.visible_capacity, 30_004);
+        assert!(
+            bottom
+                .prepared_lines
+                .last()
+                .unwrap()
+                .runs
+                .iter()
+                .any(|run| run.text.resolve(None) == "┘")
+        );
     }
 
     #[test]

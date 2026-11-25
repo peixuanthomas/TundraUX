@@ -1462,6 +1462,56 @@ fn editor_open_picker_renders_excel_sheets_and_multiline_cells() {
 }
 
 #[test]
+fn editor_picker_prepares_standalone_and_embedded_pictures_before_scrolling() {
+    for (name, bytes, embedded) in [
+        (
+            "照片.PNG",
+            include_bytes!("fixtures/editor/red-blue.png").as_slice(),
+            false,
+        ),
+        (
+            "插图.docx",
+            include_bytes!("fixtures/editor/illustrated.docx").as_slice(),
+            true,
+        ),
+    ] {
+        let fixture = FixtureRoot::new("prepared-picture");
+        let platform = mock_platform(fixture.path());
+        initialize_system_profile(&platform);
+        let path = fixture.path().join("Documents").join(name);
+        fs::write(&path, bytes).unwrap();
+        let mut state = new_user_home_state(&platform);
+        open_editor_from_home(&mut state, &platform);
+        state.apply_input_with_platform(ctrl('o'), &platform);
+        state.apply_input_with_platform(InputEvent::from_key_label("Enter"), &platform);
+        wait_for_editor_background_tasks(&mut state, &platform);
+        let model = state.to_editor_view_model();
+        assert!(model.read_only && !model.vim_available);
+        let blocks = model.render_blocks();
+        let picture = blocks
+            .iter()
+            .position(|block| matches!(block, EditorRenderBlock::Picture { .. }))
+            .expect("decoded picture at open");
+        let EditorRenderBlock::Picture { image, .. } = &blocks[picture] else {
+            unreachable!()
+        };
+        assert_eq!([image.width, image.height], [160, 192]);
+        assert_eq!(image.sample(0, 0, 1, 2), [255, 0, 0, 255]);
+        assert_eq!(image.sample(0, 1, 1, 2), [0, 0, 255, 255]);
+        if embedded {
+            let has_text = |blocks: &[EditorRenderBlock], text: &str| {
+                blocks.iter().any(|block| matches!(block, EditorRenderBlock::Paragraph(spans) if spans.iter().any(|s| s.text.contains(text))))
+            };
+            assert!(has_text(&blocks[..picture], "插图之前"));
+            assert!(has_text(&blocks[picture + 1..], "插图之后"));
+        }
+        state.apply_input_with_platform(InputEvent::key(InputKey::Char('a')), &platform);
+        state.apply_input_with_platform(ctrl('s'), &platform);
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+}
+
+#[test]
 fn invalid_office_file_reports_conversion_error_and_keeps_existing_document() {
     let fixture = FixtureRoot::new("invalid-office-preview");
     let platform = mock_platform(fixture.path());

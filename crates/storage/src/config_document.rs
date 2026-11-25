@@ -426,8 +426,7 @@ impl Default for ExplorerConfig {
     }
 }
 
-// Older releases wrote this list in full. Before Office previews, the same list omitted docx and xlsx.
-const STORED_EDITOR_EXTENSIONS_V0: &[&str] = &[
+pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
     "md",
     "markdown",
     "mdown",
@@ -536,9 +535,43 @@ const STORED_EDITOR_EXTENSIONS_V0: &[&str] = &[
     "zon",
     "zsh",
     "zshrc",
+    // Older releases persisted the 108 entries above in this order.
+    "doc",
+    "dot",
+    "docm",
+    "dotx",
+    "dotm",
+    "xls",
+    "xlt",
+    "xla",
+    "xlsm",
+    "xltx",
+    "xltm",
+    "xlam",
+    "xlsb",
+    "ppt",
+    "pot",
+    "pps",
+    "pptx",
+    "pptm",
+    "potx",
+    "potm",
+    "ppsx",
+    "ppsm",
+    "bmp",
+    "gif",
+    "ico",
+    "jpeg",
+    "jpg",
+    "jfif",
+    "png",
+    "tif",
+    "tiff",
+    "webp",
 ];
-pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = STORED_EDITOR_EXTENSIONS_V0;
-pub const MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS: usize = 128;
+const STORED_EDITOR_EXTENSIONS_V0: &[&str] =
+    DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS.split_at(108).0;
+pub const MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS: usize = 256;
 pub const MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN: usize = 64;
 
 pub fn uses_default_editor_explorer_extensions(extensions: &[impl AsRef<str>]) -> bool {

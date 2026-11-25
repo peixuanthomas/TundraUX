@@ -68,11 +68,11 @@ pub fn render_editor_contextual_with_terminal_images(
         );
         return layout;
     }
-    images.clear();
     render_menu_bar(frame, &layout, model, context);
     render_toolbar(frame, &layout, model, theme, context);
     render_search_bar(frame, &layout, model, theme);
     render_canvas(frame, &layout, model, theme, context);
+    super::picture::render(frame, &layout, model, context, images, picker);
     render_status_bar(frame, &layout, model, context);
     layout
 }
@@ -546,7 +546,7 @@ fn render_canvas(
                 );
                 continue;
             }
-            DisplayLineRole::HeadingBottom(_) => continue,
+            DisplayLineRole::HeadingBottom(_) | DisplayLineRole::Picture { .. } => continue,
             DisplayLineRole::Normal => {}
         }
         let line = styled_line(

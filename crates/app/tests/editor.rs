@@ -199,13 +199,14 @@ fn default_editor_routes_common_text_files() {
         "data.tsv",
         "main.c",
         "API.H",
+        "image.png",
     ] {
         assert!(
             is_editor_document_path(std::path::Path::new(name)),
             "{name}"
         );
     }
-    for name in ["image.png", "archive.zip", "app.exe", "document.pdf"] {
+    for name in ["image.psd", "archive.zip", "app.exe", "document.pdf"] {
         assert!(
             !is_editor_document_path(std::path::Path::new(name)),
             "{name}"
@@ -2208,6 +2209,11 @@ fn explorer_editor_resolver_routes_supported_text_extensions() {
         "app.log",
         "APP.LOG",
         "app.log.1",
+        "report.DOC",
+        "slides.PPSX",
+        "workbook.XLSB",
+        "photo.PNG",
+        "scan.TiF",
     ] {
         assert_eq!(
             resolver.route(PathBuf::from(name).as_path(), &attributes),
@@ -2220,7 +2226,7 @@ fn explorer_editor_resolver_routes_supported_text_extensions() {
     for name in ["app.log", "APP.LOG", "app.LoG.1", "app.log.001"] {
         assert!(is_log_document_path(PathBuf::from(name).as_path()));
     }
-    for name in ["photo.png", "app.log.old", "app.log.gz", "catalog"] {
+    for name in ["drawing.psd", "app.log.old", "app.log.gz", "catalog"] {
         assert_eq!(
             resolver.route(PathBuf::from(name).as_path(), &attributes),
             ExplorerOpenTarget::SystemDefault

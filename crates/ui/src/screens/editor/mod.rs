@@ -18,6 +18,7 @@ mod document;
 mod layout;
 mod model;
 mod pdf;
+mod picture;
 mod render;
 mod source;
 mod vim_install;

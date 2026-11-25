@@ -2,6 +2,10 @@ use super::layout::to_u16;
 use super::*;
 use crate::components::{terminal_width, truncate_to_terminal_width};
 
+mod preview;
+pub(super) use preview::ReadOnlyRichLayout;
+use preview::TableWindow;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct DisplayRun {
     pub(super) text: DisplayText,
@@ -124,13 +128,17 @@ pub(super) enum DisplayLineRole {
     Normal,
     HeadingTop(u8),
     HeadingBottom(u8),
+    Picture {
+        row: u16,
+        size: ratatui::layout::Size,
+    },
 }
 
 impl DisplayLineRole {
     pub(super) const fn heading_level(self) -> Option<u8> {
         match self {
             Self::HeadingTop(level) | Self::HeadingBottom(level) => Some(level),
-            Self::Normal => None,
+            Self::Normal | Self::Picture { .. } => None,
         }
     }
 }
@@ -276,6 +284,7 @@ pub(super) fn rich_document_fits_height(
             big_heading,
             model.read_only,
             model.table_widths_for_block(index, block.table_id()),
+            super::picture::bounds(width, height, model.image_cell_size),
         ) else {
             return false;
         };
@@ -290,7 +299,15 @@ pub(super) fn rich_block_line_count_up_to(
     width: usize,
     limit: usize,
 ) -> Option<usize> {
-    rich_block_line_count_up_to_with_heading(block, width, limit, false, false, None)
+    rich_block_line_count_up_to_with_heading(
+        block,
+        width,
+        limit,
+        false,
+        false,
+        None,
+        super::picture::bounds(width, usize::MAX, [8, 16]),
+    )
 }
 
 fn rich_block_line_count_up_to_with_heading(
@@ -300,11 +317,15 @@ fn rich_block_line_count_up_to_with_heading(
     big_heading: bool,
     wrap_cells: bool,
     table_widths: Option<&[usize]>,
+    picture_bounds: super::picture::PictureBounds,
 ) -> Option<usize> {
     match block {
+        EditorRenderBlock::Picture { image, .. } => {
+            fixed_line_count_up_to(usize::from(picture_bounds.fit(image).height), limit)
+        }
         EditorRenderBlock::Paragraph(spans) => wrapped_line_count_up_to("", spans, width, limit),
         EditorRenderBlock::Heading { level, spans } if big_heading => {
-            let scaled_width = heading_wrap_width(width, *level);
+            let scaled_width = heading_wrap_width(width, (*level).clamp(1, 6));
             let line_limit = limit / 2;
             wrapped_line_count_up_to("", spans, scaled_width, line_limit)
                 .and_then(|lines| lines.checked_mul(2))
@@ -348,33 +369,26 @@ fn rich_block_line_count_up_to_with_heading(
         EditorRenderBlock::Table { header, rows, .. }
         | EditorRenderBlock::RichTable { header, rows, .. } => {
             let has_columns = !header.is_empty() || rows.iter().any(|row| !row.is_empty());
+            let minimum_lines = if !has_columns {
+                1
+            } else {
+                rows.len()
+                    .saturating_add(2)
+                    .saturating_add(usize::from(!header.is_empty()) * 2)
+            };
+            fixed_line_count_up_to(minimum_lines, limit)?;
             if has_columns && wrap_cells {
                 let widths = table_column_widths(header, rows, table_widths);
                 let mut lines = 2 + usize::from(!header.is_empty());
                 let header = (!header.is_empty()).then_some(header);
                 for row in header.into_iter().chain(rows) {
                     let remaining = limit.checked_sub(lines)?;
-                    let mut row_height = 1;
-                    for (cell, &width) in row.iter().zip(&widths) {
-                        row_height = row_height.max(wrapped_line_count_up_to(
-                            "",
-                            &cell.spans,
-                            width,
-                            remaining,
-                        )?);
-                    }
+                    let row_height = wrapped_table_row_height(row, &widths, remaining)?;
                     lines = lines.saturating_add(row_height);
                 }
                 return fixed_line_count_up_to(lines, limit);
             }
-            let line_count = if !has_columns {
-                1
-            } else {
-                rows.len()
-                    .saturating_add(2)
-                    .saturating_add(usize::from(!header.is_empty()).saturating_mul(2))
-            };
-            fixed_line_count_up_to(line_count, limit)
+            Some(minimum_lines)
         }
         EditorRenderBlock::RawHtml(html) => fixed_line_count_up_to(source_line_count(html), limit),
         EditorRenderBlock::HorizontalRule
@@ -385,6 +399,22 @@ fn rich_block_line_count_up_to_with_heading(
 
 pub(super) fn fixed_line_count_up_to(line_count: usize, limit: usize) -> Option<usize> {
     (line_count <= limit).then_some(line_count)
+}
+
+fn wrapped_table_row_height(
+    row: &[EditorTableCell],
+    widths: &[usize],
+    limit: usize,
+) -> Option<usize> {
+    row.iter()
+        .zip(widths)
+        .try_fold(1, |height, (cell, &width)| {
+            Some(height.max(wrapped_line_count_up_to("", &cell.spans, width, limit)?))
+        })
+}
+
+fn printable_ascii(text: &str) -> bool {
+    text.bytes().all(|byte| (b' '..=b'~').contains(&byte))
 }
 
 /// Counts the lines produced by [`wrap_runs`] without creating one owned
@@ -413,6 +443,12 @@ pub(super) fn wrapped_line_count_up_to(
             measure.current_has_runs = true;
             continue;
         }
+        if printable_ascii(&span.text) {
+            if !measure.push_ascii(span.text.len()) {
+                return None;
+            }
+            continue;
+        }
 
         let bytes = span.text.as_bytes();
         let mut segment_start = 0usize;
@@ -439,6 +475,9 @@ pub(super) fn wrapped_line_count_up_to(
         if !measure.push_segment(&span.text[segment_start..]) {
             return None;
         }
+        if segment_start == 0 {
+            measure.current_has_runs = true;
+        }
     }
 
     measure.finish()
@@ -455,6 +494,20 @@ struct WrappedLineMeasure {
 }
 
 impl WrappedLineMeasure {
+    fn push_ascii(&mut self, length: usize) -> bool {
+        let capacity = self.width.saturating_sub(self.prefix_width).max(1);
+        let room = capacity.saturating_sub(self.current_width - self.prefix_width);
+        if length <= room {
+            self.current_width += length;
+        } else {
+            let remaining = length - room;
+            self.line_count = self.line_count.saturating_add(remaining.div_ceil(capacity));
+            self.current_width = self.prefix_width + (remaining - 1) % capacity + 1;
+        }
+        self.current_has_runs = true;
+        self.line_count <= self.limit
+    }
+
     pub(super) fn push_segment(&mut self, segment: &str) -> bool {
         if segment.is_empty() {
             return true;
@@ -526,30 +579,52 @@ impl ThreadLocalCounter {
 #[cfg(test)]
 pub(super) static RICH_FLATTEN_CALL_COUNT: ThreadLocalCounter = ThreadLocalCounter;
 
-pub(super) fn flatten_rich_document(model: &EditorViewModel, width: usize) -> Vec<DisplayLine> {
+pub(super) fn flatten_rich_document(
+    model: &EditorViewModel,
+    width: usize,
+    height: usize,
+) -> Vec<DisplayLine> {
     #[cfg(test)]
     RICH_FLATTEN_CALL_COUNT.with(|count| count.set(count.get().saturating_add(1)));
 
     let width = width.max(1);
     let mut output = Vec::new();
-    for (block_index, block) in model.render_blocks().iter().enumerate() {
-        let table_widths = model.table_widths_for_block(block_index, block.table_id());
-        let lines = block_lines_with_heading(
-            block,
+    let bounds = super::picture::bounds(width, height, model.image_cell_size);
+    for block_index in 0..model.render_blocks().len() {
+        output.extend(materialize_rich_block(
+            model,
             block_index,
             width,
-            model.block_sources.get(block_index).copied(),
-            table_widths,
-            model.source.as_deref(),
-            heading_uses_big_text(model, block),
-            model.read_only,
-        );
-        output.extend(lines);
+            bounds,
+            None,
+        ));
     }
     if output.is_empty() {
         output.push(empty_display_line(None));
     }
     output
+}
+
+fn materialize_rich_block(
+    model: &EditorViewModel,
+    index: usize,
+    width: usize,
+    picture_bounds: super::picture::PictureBounds,
+    table_window: Option<TableWindow<'_>>,
+) -> Vec<DisplayLine> {
+    let block = &model.render_blocks()[index];
+    block_lines_with_heading(
+        block,
+        index,
+        width,
+        model.block_sources.get(index).copied(),
+        model.table_widths_for_block(index, block.table_id()),
+        model.source.as_deref(),
+        heading_uses_big_text(model, block),
+        model.read_only,
+        picture_bounds,
+        table_window,
+    )
 }
 
 #[cfg(test)]
@@ -570,6 +645,8 @@ pub(super) fn block_lines(
         source,
         false,
         false,
+        super::picture::bounds(width, usize::MAX, [8, 16]),
+        None,
     )
 }
 
@@ -582,9 +659,20 @@ fn block_lines_with_heading(
     source: Option<&str>,
     big_heading: bool,
     wrap_cells: bool,
+    picture_bounds: super::picture::PictureBounds,
+    table_window: Option<TableWindow<'_>>,
 ) -> Vec<DisplayLine> {
     let anchor = block_source.map(EditorBlockSourceMap::anchor);
     match block {
+        EditorRenderBlock::Picture { image, .. } => {
+            let size = picture_bounds.fit(image);
+            (0..size.height)
+                .map(|row| DisplayLine {
+                    role: DisplayLineRole::Picture { row, size },
+                    ..empty_display_line(Some(block_index))
+                })
+                .collect()
+        }
         EditorRenderBlock::Paragraph(spans) => {
             wrap_runs(Vec::new(), spans, width, block_index, false, source)
         }
@@ -737,6 +825,7 @@ fn block_lines_with_heading(
             anchor,
             source,
             wrap_cells,
+            table_window,
         ),
         EditorRenderBlock::HorizontalRule => vec![DisplayLine {
             runs: vec![DisplayRun::virtual_text(
@@ -820,7 +909,7 @@ fn block_lines_with_heading(
     }
 }
 
-pub(super) fn table_lines(
+fn table_lines(
     header: &[EditorTableCell],
     rows: &[Vec<EditorTableCell>],
     alignments: &[EditorTableAlignment],
@@ -829,34 +918,43 @@ pub(super) fn table_lines(
     anchor: Option<usize>,
     source: Option<&str>,
     wrap_cells: bool,
+    window: Option<TableWindow<'_>>,
 ) -> Vec<DisplayLine> {
-    let columns = max(
-        header.len(),
-        rows.iter().map(Vec::len).max().unwrap_or_default(),
-    );
-    if columns == 0 {
+    let measured_widths;
+    let widths = if let Some(window) = &window {
+        window.metrics.widths.as_slice()
+    } else {
+        measured_widths = table_column_widths(header, rows, requested_widths);
+        &measured_widths
+    };
+    if widths.is_empty() {
         return vec![empty_display_line_at(Some(block_index), anchor)];
     }
     let rich_anchor = std::iter::once(header)
         .chain(rows.iter().map(Vec::as_slice))
         .flat_map(|row| row.iter())
         .find_map(|cell| table_cell_rich_range(cell).map(|range| range.start));
-    let widths = table_column_widths(header, rows, requested_widths);
     let first_row = if header.is_empty() {
         rows.first().map(Vec::as_slice).unwrap_or_default()
     } else {
         header
     };
     let context = TableLineContext {
-        widths: &widths,
+        widths,
         block_index,
         anchor,
         rich_anchor,
     };
-    let append_row = |output: &mut Vec<DisplayLine>, row: &[EditorTableCell], header: bool| {
+    let append_row = |output: &mut Vec<DisplayLine>,
+                      row: &[EditorTableCell],
+                      header: bool,
+                      within: std::ops::Range<usize>| {
+        if within.is_empty() {
+            return;
+        }
         let mut wrapped_cells = Vec::new();
         if wrap_cells {
-            wrapped_cells.extend(row.iter().zip(&widths).map(|(cell, &width)| {
+            wrapped_cells.extend(row.iter().zip(widths).map(|(cell, &width)| {
                 wrap_runs(Vec::new(), &cell.spans, width, block_index, true, source).into_iter()
             }));
         }
@@ -865,7 +963,12 @@ pub(super) fn table_lines(
             .map(ExactSizeIterator::len)
             .max()
             .unwrap_or(1);
-        output.extend((0..height).map(|_| {
+        if within.start > 0 {
+            for lines in &mut wrapped_cells {
+                lines.nth(within.start - 1);
+            }
+        }
+        output.extend((within.start..height.min(within.end)).map(|_| {
             table_row_line(
                 row,
                 alignments,
@@ -876,26 +979,66 @@ pub(super) fn table_lines(
             )
         }));
     };
-    let mut output = vec![table_border_line(
-        ('┌', '┬', '┐'),
-        first_row,
-        false,
-        &context,
-    )];
+    let show = |line| {
+        window
+            .as_ref()
+            .is_none_or(|window| window.lines.contains(&line))
+    };
+    let mut output = Vec::new();
+    if show(0) {
+        output.push(table_border_line(
+            ('┌', '┬', '┐'),
+            first_row,
+            false,
+            &context,
+        ));
+    }
     if !header.is_empty() {
-        append_row(&mut output, header, true);
-        output.push(table_border_line(('├', '┼', '┤'), header, false, &context));
+        let within = window.as_ref().map_or(0..usize::MAX, |window| {
+            preview::intersect_lines(&window.lines, 1, window.metrics.header_end)
+        });
+        append_row(&mut output, header, true, within);
+        if window
+            .as_ref()
+            .is_none_or(|window| show(window.metrics.header_end))
+        {
+            output.push(table_border_line(('├', '┼', '┤'), header, false, &context));
+        }
     }
-    for row in rows {
-        append_row(&mut output, row, false);
+    if let Some(window) = &window {
+        let metrics = window.metrics;
+        let first_index = metrics
+            .row_ends
+            .partition_point(|&end| end <= window.lines.start);
+        for index in first_index..rows.len() {
+            let start = if index == 0 {
+                metrics.header_end + usize::from(!header.is_empty())
+            } else {
+                metrics.row_ends[index - 1]
+            };
+            if start >= window.lines.end {
+                break;
+            }
+            let within = preview::intersect_lines(&window.lines, start, metrics.row_ends[index]);
+            append_row(&mut output, &rows[index], false, within);
+        }
+    } else {
+        for row in rows {
+            append_row(&mut output, row, false, 0..usize::MAX);
+        }
     }
-    let last_row = rows.last().map(Vec::as_slice).unwrap_or(first_row);
-    output.push(table_border_line(
-        ('└', '┴', '┘'),
-        last_row,
-        false,
-        &context,
-    ));
+    if window
+        .as_ref()
+        .is_none_or(|window| show(window.metrics.line_count - 1))
+    {
+        let last_row = rows.last().map(Vec::as_slice).unwrap_or(first_row);
+        output.push(table_border_line(
+            ('└', '┴', '┘'),
+            last_row,
+            false,
+            &context,
+        ));
+    }
     output
 }
 
@@ -1149,8 +1292,20 @@ pub(super) fn table_column_widths(
     let mut widths = vec![1usize; columns];
     for row in std::iter::once(header).chain(rows.iter().map(Vec::as_slice)) {
         for (index, cell) in row.iter().enumerate() {
-            widths[index] = widths[index]
-                .max(terminal_width(terminal_safe_text(&cell_text(cell)).as_ref()).min(24));
+            if widths[index] == 24 {
+                continue;
+            }
+            let text = match cell.spans.as_slice() {
+                [] => continue,
+                [span] => Cow::Borrowed(span.text.as_str()),
+                _ => Cow::Owned(cell_text(cell)),
+            };
+            let width = if printable_ascii(&text) {
+                text.len()
+            } else {
+                terminal_width(terminal_safe_text(&text).as_ref())
+            };
+            widths[index] = widths[index].max(width.min(24));
         }
     }
     if let Some(requested) = requested {

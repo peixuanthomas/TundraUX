@@ -139,6 +139,7 @@ dependencies = [
  "hayro",
  "i18n",
  "identity",
+ "image",
  "lsh",
  "memchr",
  "platform",

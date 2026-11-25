@@ -156,7 +156,7 @@ impl ExplorerFileService {
         }
         let read_only_preview = target == ExplorerOpenTarget::Editor
             && entry.attributes.is_file
-            && (crate::editor::OfficeFormat::from_path(&entry.path).is_some()
+            && (crate::editor::is_read_only_preview_path(&entry.path)
                 || is_log_document_path(&entry.path));
         let shell_document = entry
             .path

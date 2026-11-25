@@ -71,6 +71,7 @@ impl EditorState {
         Self {
             document,
             mode,
+            preview_images: Vec::new(),
             access,
             execution_read_only: false,
             source_change_tracking: false,

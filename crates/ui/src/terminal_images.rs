@@ -154,6 +154,10 @@ impl TerminalImageCache {
         std::mem::take(&mut self.workspace_images)
     }
 
+    pub(crate) fn capturing_workspace(&self) -> bool {
+        self.workspace_origin.is_some()
+    }
+
     /// Registers a known opaque image whose terminal-cell fallback was drawn separately.
     pub fn capture_opaque_workspace(
         &mut self,

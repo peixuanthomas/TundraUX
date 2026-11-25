@@ -535,6 +535,11 @@ pub fn editor_vim_terminal_area(area: Rect) -> Rect {
     )
 }
 
+enum RichLines {
+    Full(Vec<DisplayLine>),
+    ReadOnly(ReadOnlyRichLayout),
+}
+
 pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
     if let Some(pdf) = &model.pdf {
         return super::pdf::layout(area, pdf);
@@ -700,30 +705,39 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             let reserve_vertical = base_canvas.width > 1
                 && !rich_document_fits_height(model, base_width, usize::from(base_canvas.height));
             canvas.width = canvas.width.saturating_sub(u16::from(reserve_vertical));
-            // Measure first so the expensive, allocation-heavy projection is
-            // built only once, at the final width. Previously a scrolling
-            // document was flattened at the full width and then flattened in
-            // its entirety again after reserving the scrollbar column.
-            let mut lines = flatten_rich_document(model, usize::from(canvas.width.max(1)));
-            let mut content_width = rich_horizontal_content_width(&lines, model.source.as_deref());
+            let layout_rich = |width: u16, height: u16| {
+                let width = usize::from(width.max(1));
+                let height = usize::from(height);
+                if model.read_only {
+                    let measured = ReadOnlyRichLayout::measure(model, width, height);
+                    let (count, content_width) = (measured.line_count(), measured.content_width);
+                    (RichLines::ReadOnly(measured), count, content_width)
+                } else {
+                    let lines = flatten_rich_document(model, width, height);
+                    let count = lines.len().max(1);
+                    let content_width =
+                        rich_horizontal_content_width(&lines, model.source.as_deref());
+                    (RichLines::Full(lines), count, content_width)
+                }
+            };
+            let (mut lines, mut count, mut content_width) =
+                layout_rich(canvas.width, base_canvas.height);
             let reserve_horizontal = base_canvas.height > 1
                 && canvas.width > 0
                 && content_width > usize::from(canvas.width);
 
-            // Reserving the bottom row can make an exactly fitting Rich
-            // document require a vertical bar. That bar narrows wrapping, so
-            // rebuild once at the final width if the two axes interact.
+            // Reserving the bottom row can introduce a vertical bar and narrow wrapping.
             if reserve_horizontal
                 && !reserve_vertical
                 && base_canvas.width > 1
-                && lines.len().max(1) > usize::from(base_canvas.height.saturating_sub(1))
+                && count > usize::from(base_canvas.height.saturating_sub(1))
             {
                 canvas.width = base_canvas.width.saturating_sub(1);
-                lines = flatten_rich_document(model, usize::from(canvas.width.max(1)));
-                content_width = rich_horizontal_content_width(&lines, model.source.as_deref());
+                (lines, count, content_width) =
+                    layout_rich(canvas.width, base_canvas.height.saturating_sub(1));
             }
             canvas.height = canvas.height.saturating_sub(u16::from(reserve_horizontal));
-            (lines.len().max(1), Some(lines), content_width)
+            (count, Some(lines), content_width)
         }
     };
     let horizontal_scroll = if model.soft_wrap {
@@ -741,11 +755,14 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         .saturating_add(visible_capacity)
         .min(document_line_count);
     let prepared_lines = match rich_lines {
-        Some(lines) => lines
+        Some(RichLines::Full(lines)) => lines
             .into_iter()
             .skip(visible_start)
             .take(visible_end.saturating_sub(visible_start))
             .collect(),
+        Some(RichLines::ReadOnly(measured)) => {
+            measured.materialize(model, visible_start..visible_end)
+        }
         None => source_display_lines_for_viewport(model, visible_start, visible_end),
     };
     let line_areas = (visible_start..visible_end)

@@ -4,7 +4,20 @@ The built-in editor handles multiple documents, syntax highlighting, search and 
 
 To open your first file, use Editor from Launcher and choose **File → Open**, or open a supported file from Explorer. **File → Save** writes the current document. If it has no path, the save picker asks for a directory and filename. Browsing and picker controls are in [File Explorer and saving](user-guide.md#browse-and-edit-files).
 
-By default, double-click a Word (`.docx`) or Excel (`.xlsx`) file in Explorer, or select it and press Enter, to open it in Editor. You can also choose **File → Open** in Editor. The read-only preview shows Word headings, paragraphs and tables, and groups Excel cell values under their worksheet names.
+## Documents and images
+
+Double-click a supported document or image in Explorer, select it and press Enter, or choose **File → Open** in Editor. These previews are read-only. Word shows headings, paragraphs and tables, Excel groups values by worksheet, and PowerPoint shows slides in sequence. Macro-enabled files show their content without running VBA.
+
+| Preview | Supported file extensions |
+| --- | --- |
+| Word documents and templates | `.doc`, `.dot`, `.docx`, `.docm`, `.dotx`, `.dotm` |
+| Excel workbooks, templates and add-ins | `.xls`, `.xlt`, `.xla`, `.xlsx`, `.xlsm`, `.xltx`, `.xltm`, `.xlam`, `.xlsb` |
+| PowerPoint presentations, templates and shows | `.ppt`, `.pot`, `.pps`, `.pptx`, `.pptm`, `.potx`, `.potm`, `.ppsx`, `.ppsm` |
+| Raster images | `.png`, `.jpg`, `.jpeg`, `.jfif`, `.gif`, `.webp`, `.bmp`, `.tif`, `.tiff`, `.ico` |
+
+Embedded pictures and standalone images are decoded in the background when the file opens. The editor fits them to the available space, uses the first frame of an animation, and draws color blocks on text terminals. Scrolling reuses the prepared pixels. Office previews use the document’s reading order. Legacy Word and Excel pictures follow the document or worksheet text. Legacy PowerPoint pictures follow the text of their slide. A linked picture shows its description without contacting the link target.
+
+Markdown, CSV, TSV, HTML, XML and SVG open as editable source. RTF and OpenDocument (`.odt`, `.ods`, `.odp` and their templates) use different document structures. They are candidates for separate readers, alongside WPS native formats (`.wps`, `.et`, `.dps`), iWork (`.pages`, `.numbers`, `.key`), EPUB and XPS. The rich preview currently supports the Office families listed above. [Microsoft’s file format reference](https://learn.microsoft.com/en-us/office/compatibility/office-file-format-reference)
 
 ## PDF preview
 

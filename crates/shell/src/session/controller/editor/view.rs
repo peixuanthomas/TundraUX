@@ -107,7 +107,7 @@ impl ShellSession {
                     }
                 } else {
                     let blocks = state.rich_projection().map_or_else(Vec::new, |projection| {
-                        editor_rich_render_blocks(&projection)
+                        editor_rich_render_blocks(state, &projection)
                     });
                     ui::EditorViewModel::new(state.document.display_name(), blocks)
                 };
@@ -199,6 +199,7 @@ impl ShellSession {
             .path
             .as_ref()
             .map(|path| path.display().to_string());
+        model.image_cell_size = self.terminal_image_cell_size;
         model.configuration = self.config_editor_active();
         if self.config_editor_form_visible() {
             model.config_form = Some(Box::new(self.to_management_view_model()));

@@ -109,6 +109,9 @@ ui-help-editor-save = Save
 ui-help-editor-find = Find
 ui-help-editor-vim = Toggle Vim mode
 ui-help-editor-focus = Switch focus
+ui-help-editor-open-preview = Open text, an image, PDF, or Office document. Embedded pictures are prepared when the document opens.
+ui-help-pdf-next = Next page. Nearby pages are prepared in the background.
+ui-help-workspace-close = Close the focused window. Vim keeps Ctrl+Q.
 
 ui-help-command-line-title = Command Line
 ui-help-command-line-close = Close command line

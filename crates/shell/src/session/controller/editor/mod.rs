@@ -157,7 +157,7 @@ impl ShellSession {
             let projection = state.rich_projection()?;
             Some(EditorRichRenderCache {
                 revision: state.revision(),
-                blocks: std::sync::Arc::from(editor_rich_render_blocks(&projection)),
+                blocks: std::sync::Arc::from(editor_rich_render_blocks(state, &projection)),
             })
         });
     }
@@ -318,11 +318,12 @@ pub(in crate::session) fn restore_editor_recovery_v2(
 }
 
 pub(in crate::session) fn editor_rich_render_blocks(
+    state: &EditorState,
     projection: &app::rich_document::RichProjection,
 ) -> Vec<ui::EditorRenderBlock> {
     let mut output = Vec::new();
     for block in &projection.blocks {
-        append_editor_rich_block(block, 0, &mut output);
+        append_editor_rich_block(state, block, 0, &mut output);
     }
     if output.is_empty() {
         output.push(ui::EditorRenderBlock::Blank);
@@ -330,20 +331,29 @@ pub(in crate::session) fn editor_rich_render_blocks(
     output
 }
 
-pub(in crate::session) fn append_editor_rich_block(
+fn append_editor_rich_block(
+    state: &EditorState,
     block: &app::rich_document::ProjectedBlock,
     depth: u8,
     output: &mut Vec<ui::EditorRenderBlock>,
 ) {
     use app::rich_document::{ProjectedBlockKind, RichListKind};
     match &block.kind {
-        ProjectedBlockKind::Paragraph { content } => output.push(ui::EditorRenderBlock::Paragraph(
-            editor_rich_spans_in(block.id, content),
-        )),
+        ProjectedBlockKind::Paragraph { content } => {
+            append_rich_text(
+                state,
+                block.id,
+                content,
+                output,
+                ui::EditorRenderBlock::Paragraph,
+            );
+        }
         ProjectedBlockKind::Heading { level, content } => {
-            output.push(ui::EditorRenderBlock::Heading {
-                level: *level,
-                spans: editor_rich_spans_in(block.id, content),
+            append_rich_text(state, block.id, content, output, |spans| {
+                ui::EditorRenderBlock::Heading {
+                    level: *level,
+                    spans,
+                }
             });
         }
         ProjectedBlockKind::Quote { blocks } => {
@@ -351,12 +361,14 @@ pub(in crate::session) fn append_editor_rich_block(
                 match &nested.kind {
                     ProjectedBlockKind::Paragraph { content }
                     | ProjectedBlockKind::Heading { content, .. } => {
-                        output.push(ui::EditorRenderBlock::Quote {
-                            depth: depth.saturating_add(1),
-                            spans: editor_rich_spans_in(nested.id, content),
+                        append_rich_text(state, nested.id, content, output, |spans| {
+                            ui::EditorRenderBlock::Quote {
+                                depth: depth.saturating_add(1),
+                                spans,
+                            }
                         });
                     }
-                    _ => append_editor_rich_block(nested, depth.saturating_add(1), output),
+                    _ => append_editor_rich_block(state, nested, depth.saturating_add(1), output),
                 }
             }
         }
@@ -369,41 +381,40 @@ pub(in crate::session) fn append_editor_rich_block(
             kind, start, items, ..
         } => {
             for (index, item) in items.iter().enumerate() {
-                let mut primary = Vec::new();
+                let mut primary = None;
                 let mut nested = Vec::new();
                 for item_block in &item.blocks {
                     match &item_block.kind {
                         ProjectedBlockKind::Paragraph { content }
                         | ProjectedBlockKind::Heading { content, .. }
-                            if primary.is_empty() =>
+                            if primary.is_none() =>
                         {
-                            primary = editor_rich_spans_in(item_block.id, content);
+                            primary = Some((item_block.id, content.as_slice()));
                         }
                         _ => nested.push(item_block),
                     }
                 }
-                match kind {
+                let (id, content) = primary.unwrap_or((item.id, &[]));
+                append_rich_text(state, id, content, output, |spans| match kind {
                     RichListKind::Bullet | RichListKind::Task => {
-                        output.push(ui::EditorRenderBlock::BulletListItem {
+                        ui::EditorRenderBlock::BulletListItem {
                             depth,
                             checked: if *kind == RichListKind::Task {
                                 item.checked.or(Some(false))
                             } else {
                                 None
                             },
-                            spans: primary,
-                        });
+                            spans,
+                        }
                     }
-                    RichListKind::Ordered => {
-                        output.push(ui::EditorRenderBlock::OrderedListItem {
-                            depth,
-                            number: start.saturating_add(index) as u64,
-                            spans: primary,
-                        });
-                    }
-                }
+                    RichListKind::Ordered => ui::EditorRenderBlock::OrderedListItem {
+                        depth,
+                        number: start.saturating_add(index) as u64,
+                        spans,
+                    },
+                });
                 for nested_block in nested {
-                    append_editor_rich_block(nested_block, depth.saturating_add(1), output);
+                    append_editor_rich_block(state, nested_block, depth.saturating_add(1), output);
                 }
             }
         }
@@ -411,29 +422,47 @@ pub(in crate::session) fn append_editor_rich_block(
             alignments,
             header,
             rows,
-        } => output.push(ui::EditorRenderBlock::RichTable {
-            table_id: block.id,
-            header: header.iter().map(editor_rich_table_cell).collect(),
-            rows: rows
+        } => {
+            output.push(ui::EditorRenderBlock::RichTable {
+                table_id: block.id,
+                header: header.iter().map(editor_rich_table_cell).collect(),
+                rows: rows
+                    .iter()
+                    .map(|row| row.iter().map(editor_rich_table_cell).collect())
+                    .collect(),
+                alignments: alignments
+                    .iter()
+                    .map(|alignment| match alignment {
+                        app::rich_document::RichTableAlignment::None
+                        | app::rich_document::RichTableAlignment::Left => {
+                            ui::EditorTableAlignment::Left
+                        }
+                        app::rich_document::RichTableAlignment::Center => {
+                            ui::EditorTableAlignment::Center
+                        }
+                        app::rich_document::RichTableAlignment::Right => {
+                            ui::EditorTableAlignment::Right
+                        }
+                    })
+                    .collect(),
+            });
+            for span in header
                 .iter()
-                .map(|row| row.iter().map(editor_rich_table_cell).collect())
-                .collect(),
-            alignments: alignments
-                .iter()
-                .map(|alignment| match alignment {
-                    app::rich_document::RichTableAlignment::None
-                    | app::rich_document::RichTableAlignment::Left => {
-                        ui::EditorTableAlignment::Left
-                    }
-                    app::rich_document::RichTableAlignment::Center => {
-                        ui::EditorTableAlignment::Center
-                    }
-                    app::rich_document::RichTableAlignment::Right => {
-                        ui::EditorTableAlignment::Right
-                    }
-                })
-                .collect(),
-        }),
+                .chain(rows.iter().flatten())
+                .flat_map(|cell| &cell.content)
+            {
+                if let Some(image) = span
+                    .image
+                    .as_ref()
+                    .and_then(|link| state.office_image(&link.url))
+                {
+                    output.push(ui::EditorRenderBlock::Picture {
+                        id: tasks::next_editor_task_id(),
+                        image: image.clone(),
+                    });
+                }
+            }
+        }
         ProjectedBlockKind::Rule => {
             output.push(ui::EditorRenderBlock::HorizontalRule);
         }
@@ -444,6 +473,36 @@ pub(in crate::session) fn append_editor_rich_block(
                 raw = raw
             )));
         }
+    }
+}
+
+fn append_rich_text(
+    state: &EditorState,
+    id: app::rich_document::NodeId,
+    content: &[app::rich_document::ProjectedInline],
+    output: &mut Vec<ui::EditorRenderBlock>,
+    text_block: impl Fn(Vec<ui::EditorRenderSpan>) -> ui::EditorRenderBlock,
+) {
+    let mut start = 0;
+    for (index, span) in content.iter().enumerate() {
+        let Some(image) = span
+            .image
+            .as_ref()
+            .and_then(|link| state.office_image(&link.url))
+        else {
+            continue;
+        };
+        if start < index {
+            output.push(text_block(editor_rich_spans_in(id, &content[start..index])));
+        }
+        output.push(ui::EditorRenderBlock::Picture {
+            id: tasks::next_editor_task_id(),
+            image: image.clone(),
+        });
+        start = index + 1;
+    }
+    if start == 0 || start < content.len() {
+        output.push(text_block(editor_rich_spans_in(id, &content[start..])));
     }
 }
 

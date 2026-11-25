@@ -851,7 +851,7 @@ fn configured_suffix_opens_in_editor_from_explorer() {
 }
 
 #[test]
-fn explorer_opens_office_previews_with_pre_office_defaults() {
+fn explorer_opens_document_and_image_previews_with_pre_office_defaults() {
     for (name, bytes, valid) in [
         (
             "报告.DoCx",
@@ -865,6 +865,17 @@ fn explorer_opens_office_previews_with_pre_office_defaults() {
         ),
         ("损坏.docx", b"invalid document".as_slice(), false),
         ("损坏.xlsx", b"invalid workbook".as_slice(), false),
+        (
+            "旧版.DoC",
+            include_bytes!("../../app/tests/fixtures/office_preview/inspection.doc").as_slice(),
+            true,
+        ),
+        (
+            "色块.PnG",
+            include_bytes!("fixtures/editor/red-blue.png").as_slice(),
+            true,
+        ),
+        ("损坏.png", b"invalid image".as_slice(), false),
     ] {
         for double_click in [true, false] {
             let fixture = FixtureRoot::new("pre-office-explorer");
@@ -913,7 +924,11 @@ fn explorer_opens_office_previews_with_pre_office_defaults() {
             } else {
                 let error = state.to_shell_chrome_view_model().status.error.unwrap();
                 assert!(
-                    error.contains("Office conversion failed"),
+                    error.contains(if name.ends_with(".png") {
+                        "Could not preview this image"
+                    } else {
+                        "Office conversion failed"
+                    }),
                     "{name}: {error}"
                 );
             }
