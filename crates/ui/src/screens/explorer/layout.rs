@@ -813,6 +813,14 @@ fn explorer_overlay_layout(area: Rect, model: &ExplorerViewModel) -> Option<Expl
                 controls,
             })
         }
+        ExplorerOverlayViewModel::Archive(form) => {
+            let layout = form.layout(area);
+            Some(ExplorerOverlayLayout {
+                area: layout.form,
+                content: layout.fields_area,
+                controls: Vec::new(),
+            })
+        }
         ExplorerOverlayViewModel::Name(dialog) => {
             let form = dialog.form(model.overlay_selection);
             let layout = form.layout(area);
@@ -956,7 +964,9 @@ pub(super) fn explorer_overlay_chrome(
     overlay: &ExplorerOverlayViewModel,
 ) -> DialogLayout {
     let rows = match overlay {
-        ExplorerOverlayViewModel::ContextMenu(_) | ExplorerOverlayViewModel::Name(_) => 0,
+        ExplorerOverlayViewModel::ContextMenu(_)
+        | ExplorerOverlayViewModel::Name(_)
+        | ExplorerOverlayViewModel::Archive(_) => 0,
         ExplorerOverlayViewModel::Conflict(conflict) => conflict_footer_rows(area.width, conflict),
         ExplorerOverlayViewModel::Options(_) | ExplorerOverlayViewModel::Properties(_) => 1,
     };

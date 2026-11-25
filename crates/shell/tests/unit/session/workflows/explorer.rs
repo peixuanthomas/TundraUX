@@ -961,3 +961,254 @@ fn holding_explorer_search_key_does_not_type_into_the_new_search() {
         ShellCommand::ExplorerToolbarShortcut(ui::ExplorerToolbarAction::Sort)
     );
 }
+
+fn click_archive_control(state: &mut ShellSession, platform: &dyn Platform, area: Rect) {
+    let point = (area.x + area.width / 2, area.y);
+    state.apply_input_with_platform(InputEvent::mouse_down(PointerButton::Left, point), platform);
+    state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, point), platform);
+}
+
+fn click_archive_menu_item(state: &mut ShellSession, platform: &dyn Platform, id: &str) {
+    let index = explorer_test_context_menu(state)
+        .items
+        .iter()
+        .position(|item| item.id == id && item.enabled)
+        .unwrap_or_else(|| panic!("missing enabled Explorer menu item {id}"));
+    let area = explorer_test_layout(state)
+        .overlay
+        .unwrap()
+        .controls
+        .into_iter()
+        .find(|control| control.control == ui::ExplorerOverlayControl::ContextItem(index))
+        .unwrap()
+        .area;
+    click_archive_control(state, platform, area);
+}
+
+#[test]
+fn archive_dialog_creates_from_selection_retries_password_and_never_opens_the_os() {
+    use platform::mock::MockCall;
+    let (mut state, platform, _guard) = explorer_terminal_test_fixture();
+    let storage = StorageManager::open(platform.app_paths().unwrap())
+        .unwrap()
+        .manager;
+    state.explorer_task_runtime = Some(ShellExplorerTaskRuntime::new(storage.clone()));
+    state.storage_manager = Some(storage);
+    let _language = i18n::enter_snapshot(state.language.clone());
+    let directory = state.app.explorer_state().unwrap().current_path.clone();
+    let output = directory.join("资料.zip");
+    let unpacked = directory.join("资料");
+    let key = |state: &mut ShellSession, key: &str| {
+        state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
+    };
+    let paste = |state: &mut ShellSession, text: &str| {
+        state.apply_input_with_platform(InputEvent::Paste(text.into()), &platform);
+    };
+    let wait = |state: &mut ShellSession| {
+        assert!(
+            state.app.explorer_state().unwrap().operation.is_some(),
+            "expected running job"
+        );
+        let until = Instant::now() + Duration::from_secs(15);
+        while state.app.explorer_state().unwrap().operation.is_some() {
+            assert!(Instant::now() < until, "archive operation timed out");
+            state.poll_explorer_background_tasks(&platform);
+            std::thread::sleep(Duration::from_millis(3));
+        }
+    };
+    let choose = |state: &mut ShellSession, path: &std::path::Path| {
+        state.apply_explorer_command(ExplorerCommand::Refresh, &platform);
+        state.update_explorer_state(|explorer| {
+            let index = explorer
+                .entries
+                .iter()
+                .position(|entry| entry.path == path)
+                .unwrap();
+            explorer.select_index(index, app::explorer::ExplorerSelectionMode::Replace);
+        });
+        state.set_explorer_focus(ui::ExplorerFocus::Files);
+    };
+
+    let more = explorer_test_layout(&state)
+        .page_actions
+        .into_iter()
+        .find(|button| button.action == ui::ExplorerToolbarAction::Menu)
+        .unwrap();
+    click_archive_control(&mut state, &platform, more.area);
+    click_archive_menu_item(&mut state, &platform, "compress");
+    state.apply_input_with_platform(
+        InputEvent::Key(KeyInput::with_modifiers(
+            InputKey::Char('a'),
+            InputModifiers::CTRL,
+        )),
+        &platform,
+    );
+    paste(&mut state, "资料");
+    key(&mut state, "Tab");
+    key(&mut state, "Tab");
+    state.apply_input_with_platform(InputEvent::key(InputKey::Char('密')), &platform);
+    assert!(state.last_key_event().is_none());
+    paste(&mut state, "码🔒");
+    assert!(state.last_key_event().is_none());
+    let form = &state.pages.explorer.archive_dialog.as_ref().unwrap().form;
+    assert_eq!(form.fields[0].value, "资料");
+    assert!(form.fields[2].secret);
+    assert_eq!(form.fields[2].value, "密码🔒");
+    let submit = form.layout(state.touch_main()).submit;
+    click_archive_control(&mut state, &platform, submit);
+    wait(&mut state);
+    assert!(output.is_file());
+    choose(&mut state, &output);
+    key(&mut state, "Enter");
+    assert_eq!(
+        state
+            .pages
+            .explorer
+            .archive_dialog
+            .as_ref()
+            .unwrap()
+            .form
+            .fields[0]
+            .value,
+        unpacked.to_string_lossy()
+    );
+    for password in [None, Some("incorrect"), Some("密码🔒")] {
+        if let Some(password) = password {
+            paste(&mut state, password);
+        }
+        key(&mut state, "F10");
+        wait(&mut state);
+        if password != Some("密码🔒") {
+            let form = &state.pages.explorer.archive_dialog.as_ref().unwrap().form;
+            assert_eq!(form.selected, 1);
+            assert!(form.fields[1].secret && form.fields[1].value.is_empty());
+            assert!(!unpacked.exists());
+        }
+    }
+    for name in ["first.txt", "second.txt"] {
+        assert_eq!(std::fs::read(unpacked.join(name)).unwrap(), b"fixture");
+    }
+
+    choose(&mut state, &output);
+    let row = explorer_test_layout(&state)
+        .rows
+        .into_iter()
+        .find(|row| row.index == state.app.explorer_state().unwrap().selected_index)
+        .unwrap()
+        .area;
+    let point = (row.x + 1, row.y);
+    for _ in 0..2 {
+        state.apply_input_with_platform(
+            InputEvent::mouse_down(PointerButton::Left, point),
+            &platform,
+        );
+        state
+            .apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, point), &platform);
+    }
+    assert!(state.pages.explorer.archive_dialog.is_some());
+    key(&mut state, "F10");
+    assert!(matches!(
+        state.to_explorer_view_model().overlay,
+        Some(ui::ExplorerOverlayViewModel::Conflict(_))
+    ));
+    key(&mut state, "Esc");
+    assert!(state.pages.explorer.archive_dialog.is_none());
+
+    let damaged = directory.join("damaged.zip");
+    std::fs::write(&damaged, b"invalid ZIP file").unwrap();
+    choose(&mut state, &damaged);
+    let row = explorer_test_layout(&state)
+        .rows
+        .into_iter()
+        .find(|row| row.index == state.app.explorer_state().unwrap().selected_index)
+        .unwrap()
+        .area;
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Right, (row.x, row.y)),
+        &platform,
+    );
+    click_archive_menu_item(&mut state, &platform, "extract");
+    assert!(state.pages.explorer.archive_dialog.is_some());
+    key(&mut state, "F10");
+    wait(&mut state);
+    let error = state.app.explorer_state().unwrap().error.as_ref().unwrap();
+    assert!(
+        error
+            .render_current()
+            .contains(&i18n::tr!("explorer-archive-invalid"))
+    );
+    assert!(!directory.join("damaged").exists());
+
+    let unsupported = directory.join("other.xz");
+    std::fs::write(&unsupported, b"archive").unwrap();
+    choose(&mut state, &unsupported);
+    key(&mut state, "Enter");
+    assert!(state.pages.explorer.archive_dialog.is_none());
+    let error = state.app.explorer_state().unwrap().error.as_ref().unwrap();
+    assert_eq!(
+        error.render_current(),
+        i18n::tr!(
+            "explorer-archive-unsupported",
+            path = unsupported.display().to_string()
+        )
+    );
+    assert_eq!(
+        platform
+            .calls()
+            .iter()
+            .filter(|call| matches!(
+                call,
+                MockCall::OpenPath(_) | MockCall::OpenWith { .. } | MockCall::OpenUri(_)
+            ))
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn archive_dialog_discards_password_when_switching_to_tar_gz() {
+    let (mut state, platform, guard) = explorer_terminal_test_fixture();
+    state.language = Arc::new(
+        i18n::LanguageSnapshot::load(&guard.0, "zh-CN", 1)
+            .unwrap()
+            .snapshot,
+    );
+    let _language = i18n::enter_snapshot(state.language.clone());
+    state.terminal_size = (108, 20);
+    state.refresh_hit_map();
+    let row = explorer_test_layout(&state).rows[0].area;
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Right, (row.x, row.y)),
+        &platform,
+    );
+    click_archive_menu_item(&mut state, &platform, "compress");
+    let key = |state: &mut ShellSession, key: &str| {
+        state.apply_input_with_platform(InputEvent::from_key_label(key), &platform);
+    };
+    state.apply_input_with_platform(
+        InputEvent::Key(KeyInput::with_modifiers(
+            InputKey::Char('a'),
+            InputModifiers::CTRL,
+        )),
+        &platform,
+    );
+    state.apply_input_with_platform(InputEvent::Paste("临时归档.zip".into()), &platform);
+    key(&mut state, "Tab");
+    key(&mut state, "Tab");
+    state.apply_input_with_platform(InputEvent::Paste("temporary password".into()), &platform);
+    let form = &state.pages.explorer.archive_dialog.as_ref().unwrap().form;
+    assert_eq!(form.fields[2].value, "temporary password");
+
+    key(&mut state, "Shift+Tab");
+    key(&mut state, "Left");
+    let form = &state.pages.explorer.archive_dialog.as_ref().unwrap().form;
+    assert_eq!(form.fields[0].value, "临时归档.tar.gz");
+    assert_eq!(form.fields[1].value, "TAR.GZ");
+    assert_eq!(form.fields.len(), 2);
+
+    key(&mut state, "Right");
+    let form = &state.pages.explorer.archive_dialog.as_ref().unwrap().form;
+    assert_eq!(form.fields[0].value, "临时归档.zip");
+    assert_eq!(form.fields[1].value, "ZIP");
+    assert!(form.fields[2].secret && form.fields[2].value.is_empty());
+}

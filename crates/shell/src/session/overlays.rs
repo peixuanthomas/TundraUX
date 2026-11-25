@@ -58,6 +58,7 @@ impl ShellOverlayDescriptor {
 pub(in crate::session) enum ResolvedExplorerOverlay {
     RestoreConflict,
     OperationConflict,
+    Archive,
     Input(ExplorerInputMode),
     Semantic(ExplorerOverlayMode),
     PendingDialog(app::explorer::ExplorerDialogKind),
@@ -74,6 +75,11 @@ impl ResolvedExplorerOverlay {
             Self::OperationConflict => (
                 ui::MotionOverlayKind::Dialog,
                 "explorer-operation-conflict",
+                ShellOverlayCategory::PageDialog,
+            ),
+            Self::Archive => (
+                ui::MotionOverlayKind::Dialog,
+                "explorer-archive",
                 ShellOverlayCategory::PageDialog,
             ),
             Self::Input(mode) => (
@@ -218,6 +224,9 @@ impl ShellSession {
         }
         if explorer.pending_conflict.is_some() {
             return Some(ResolvedExplorerOverlay::OperationConflict);
+        }
+        if self.pages.explorer.archive_dialog.is_some() {
+            return Some(ResolvedExplorerOverlay::Archive);
         }
         if matches!(
             self.pages.explorer.explorer_input_mode,

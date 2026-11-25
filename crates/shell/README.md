@@ -42,6 +42,8 @@ Packages offers Add to Launcher after a successful install and for selected pack
 | `account/`, `settings/`, `clock/` | First-run setup and account actions, configuration and update dialogs, and clock-item editing and synchronization |
 | `logs/`, `diagnostics/`, `system_status/`, `notifications/`, `help/` | Screen-specific selection, filtering, detail or repair actions, notifications, and contextual F1 help |
 
+Opening an archive in Explorer prompts for an extraction folder. **More → Compress to…** creates an archive from selected files and folders. The dialog handles optional passwords, retries, and destination conflicts. The Tasks view tracks progress and cancellation.
+
 Explorer's asynchronous Rename and Undo completions merge refreshed listings into the live page, preserving search, sort, selection, and navigation changes made while the operation runs.
 
 ## Worker lifecycle and shared state

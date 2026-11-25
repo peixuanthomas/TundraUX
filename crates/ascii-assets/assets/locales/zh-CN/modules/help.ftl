@@ -18,11 +18,11 @@ ui-help-home-entries = 打开入口
 ui-help-home-move = 在入口之间移动
 
 ui-help-explorer-title = 文件浏览器
-ui-help-explorer-open = 打开选中项
+ui-help-explorer-open = 打开选中项。打开压缩包时可选择解压文件夹。
 ui-help-explorer-new = 新建文件夹 / 新建文本文件
 ui-help-explorer-rename = 重命名
 ui-help-explorer-delete = 删除
-ui-help-explorer-menu = 更多操作
+ui-help-explorer-menu = 更多操作，可将选中的文件和文件夹压缩为归档。
 ui-help-explorer-clipboard = 复制、剪切、粘贴。每个按键也可搭配 Ctrl 或 Cmd。
 ui-help-explorer-select-all = 全选
 ui-help-explorer-refresh = 刷新

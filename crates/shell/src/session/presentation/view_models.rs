@@ -1733,6 +1733,12 @@ impl ShellSession {
                     ui::ExplorerProgressStage::CheckingConflicts
                 }
                 app::explorer::ExplorerOperationPhase::Executing => match operation.operation {
+                    app::explorer_tasks::ExplorerTaskOperation::Compress => {
+                        ui::ExplorerProgressStage::Compressing
+                    }
+                    app::explorer_tasks::ExplorerTaskOperation::Extract => {
+                        ui::ExplorerProgressStage::Extracting
+                    }
                     app::explorer_tasks::ExplorerTaskOperation::Move => {
                         ui::ExplorerProgressStage::Moving
                     }
@@ -1845,9 +1851,11 @@ impl ShellSession {
                     ],
                     selected_choice: ui::ExplorerConflictChoice::KeepBoth,
                     apply_to_remaining: self.pages.explorer.explorer_conflict_apply_to_remaining,
-                    allow_apply_to_remaining: true,
+                    allow_apply_to_remaining: self.pages.explorer.archive_dialog.is_none(),
                 },
             ))
+        } else if let Some(dialog) = &self.pages.explorer.archive_dialog {
+            Some(ui::ExplorerOverlayViewModel::Archive(dialog.form.clone()))
         } else if matches!(
             self.pages.explorer.explorer_input_mode,
             ExplorerInputMode::NewFolder
@@ -1917,6 +1925,11 @@ impl ShellSession {
                         entry_count: state.entries.len(),
                         clipboard_available: state.clipboard.is_some(),
                         undo_available: state.can_undo && !busy,
+                        archive_busy: busy,
+                        selected_archive: state.single_selected_entry().is_some_and(|entry| {
+                            entry.attributes.is_file
+                                && app::explorer::archive::is_recognized_archive(&entry.path)
+                        }),
                         is_trash,
                         trash_has_items: !state.entries.is_empty(),
                         focused_index: self.pages.explorer.explorer_overlay_selection,

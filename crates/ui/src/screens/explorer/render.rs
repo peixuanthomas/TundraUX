@@ -590,6 +590,10 @@ pub fn render_explorer_overlay(
     else {
         return;
     };
+    if let ExplorerOverlayViewModel::Archive(form) = overlay {
+        form.render_frame(frame, area, context);
+        return;
+    }
     if let ExplorerOverlayViewModel::Name(dialog) = overlay {
         dialog
             .form(model.overlay_selection)
@@ -608,6 +612,7 @@ pub fn render_explorer_overlay(
     let title = match overlay {
         ExplorerOverlayViewModel::ContextMenu(menu) => menu.title.clone(),
         ExplorerOverlayViewModel::Name(dialog) => dialog.title.clone(),
+        ExplorerOverlayViewModel::Archive(_) => unreachable!(),
         ExplorerOverlayViewModel::Options(options) => options.title.clone(),
         ExplorerOverlayViewModel::Conflict(conflict) => conflict.title.clone(),
         ExplorerOverlayViewModel::Properties(properties) => properties.title.clone(),
@@ -673,7 +678,7 @@ pub fn render_explorer_overlay(
                 );
             }
         }
-        ExplorerOverlayViewModel::Name(_) => unreachable!(),
+        ExplorerOverlayViewModel::Name(_) | ExplorerOverlayViewModel::Archive(_) => unreachable!(),
         ExplorerOverlayViewModel::Options(options) => {
             for control in &overlay_layout.controls {
                 match control.control {

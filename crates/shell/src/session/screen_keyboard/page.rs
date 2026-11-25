@@ -28,7 +28,10 @@ impl ShellSession {
                 }
                 Some(ShellComponent::Explorer) => matches!(
                     self.resolved_explorer_overlay(),
-                    Some(overlays::ResolvedExplorerOverlay::Input(_))
+                    Some(
+                        overlays::ResolvedExplorerOverlay::Input(_)
+                            | overlays::ResolvedExplorerOverlay::Archive
+                    )
                 ),
                 Some(ShellComponent::Settings) => {
                     (overlay.id.starts_with("settings-editor:")

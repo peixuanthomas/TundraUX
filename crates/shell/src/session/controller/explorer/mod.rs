@@ -1,3 +1,5 @@
+mod archive;
+pub(in crate::session) use archive::ExplorerArchiveDialog;
 mod focus;
 mod input;
 mod save_picker;
@@ -537,6 +539,12 @@ impl ShellSession {
                 ExplorerCommand::DeleteToTrash | ExplorerCommand::DumpTrash
             ));
         }
+        if let ExplorerCommand::ResolveConflict { action, .. } = &command
+            && self.pages.explorer.archive_dialog.is_some()
+        {
+            self.resolve_archive_conflict(*action);
+            return;
+        }
         if self.try_handle_explorer_background_command(&command, platform) {
             return;
         }
@@ -809,6 +817,9 @@ impl ShellSession {
                 }
             },
             ExplorerEffect::OpenRequested(request) => match request.target {
+                ExplorerOpenTarget::Archive => {
+                    self.open_archive_extraction(request.path, None, None)
+                }
                 ExplorerOpenTarget::SystemDefault => {
                     let result = platform.open_path(&request.path);
                     let _ = self.update_explorer_state(|state| match result {
@@ -1352,6 +1363,10 @@ impl ShellSession {
                 self.close_explorer_popup();
                 match item.id.as_str() {
                     "open" => self.apply_explorer_command(ExplorerCommand::OpenSelected, platform),
+                    "compress" => self.open_archive_creation(),
+                    "extract" => {
+                        self.apply_explorer_command(ExplorerCommand::OpenSelected, platform)
+                    }
                     "add-to-launcher" => self.add_selected_explorer_to_launcher(platform),
                     "cut" => self.apply_explorer_command(ExplorerCommand::Cut, platform),
                     "copy" => self.apply_explorer_command(ExplorerCommand::Copy, platform),

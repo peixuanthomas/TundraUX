@@ -110,6 +110,7 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 ### Page controls
 
 - Home and Launcher tiles show the icon and application name. Keyboard focus underlines the name. Home centers its title, account, and grid within 112 columns and uses name-only tiles when the artwork would force scrolling. Launcher shows the selected custom entry's path and any status that needs attention.
+- Explorer uses the shared form for archive format, output path, and masked password entry. Archive creation and extraction report progress through its file operation controls.
 - Explorer puts Back, Parent, and Forward beside the path and fits ten short actions on one row at 108×20, from Open on the left to More on the right. The Delete button retains its trash icon and red feedback through hover and press on truecolor and ANSI terminals. The search row includes a keyboard- and pointer-accessible Include subfolders toggle. Recursive results show paths relative to the search directory. The sidebar and file list each take one Tab stop. Save pickers add filename, Save and Cancel to the same focus order.
 - The ordinary editor keeps Save, Undo, and Find visible. Its footer shows the cursor position and filename on the buttons that act on them. Its context menu stays inside the window and preserves the selection. Rich Markdown keeps its selection-formatting menu.
 - PDF previews show the fitted page, page count, and previous and next controls. They reuse the workspace's native image and terminal character-block rendering.

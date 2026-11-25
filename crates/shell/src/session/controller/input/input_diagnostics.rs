@@ -1,6 +1,24 @@
 use crate::session::*;
 impl ShellSession {
     pub(in crate::session) fn record_input_diagnostics(&mut self, routed: &RoutedEvent) {
+        if matches!(routed.command, ShellCommand::ExplorerArchiveInput(_))
+            && matches!(routed.input, InputEvent::Key(_) | InputEvent::Paste(_))
+            && self
+                .pages
+                .explorer
+                .archive_dialog
+                .as_ref()
+                .is_some_and(|dialog| {
+                    dialog
+                        .form
+                        .fields
+                        .get(dialog.form.selected)
+                        .is_some_and(|field| field.secret)
+                })
+        {
+            self.last_key_event = None;
+            return;
+        }
         match &routed.input {
             // Releasing Ctrl after a chord must not replace the chord's debug label.
             InputEvent::Key(key) if key.phase != InputPhase::Release => {

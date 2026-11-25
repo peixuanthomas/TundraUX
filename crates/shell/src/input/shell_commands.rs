@@ -215,6 +215,7 @@ pub enum ShellCommand {
     AppendExplorerChar(char),
     ExplorerToggleSelection,
     ExplorerEditInput(InputEvent),
+    ExplorerArchiveInput(InputEvent),
     ExplorerBackspace,
     SubmitExplorerInput,
     CancelExplorerInput,

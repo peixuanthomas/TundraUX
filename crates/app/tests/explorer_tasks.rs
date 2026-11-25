@@ -776,3 +776,79 @@ fn delete_plan_moves_each_path_to_trash() {
     assert_eq!(trashed.len(), 1);
     assert_eq!(fs::read(trashed[0].path()).unwrap(), b"recoverable");
 }
+
+#[test]
+fn archive_task_stages_replacements_and_preserves_existing_output_on_error() {
+    use app::explorer::archive::ArchiveFormat;
+    use app::explorer_tasks::{ArchiveInputs, ExplorerArchivePlan};
+
+    let tree = TempTree::new("archive-conflicts");
+    let source = tree.path("资料.txt");
+    fs::write(&source, "第一行\n🙂").unwrap();
+    let target = tree.path("backup.tar.gz");
+    fs::write(&target, "previous").unwrap();
+    let engine = engine(Arc::new(TestPlatform::default()), tree.path("trash"));
+    let mut plan = ExplorerArchivePlan {
+        inputs: ArchiveInputs::Create(vec![source.clone()]),
+        format: ArchiveFormat::TarGz,
+        target: target.clone(),
+        password: None,
+        collision: ExplorerCollisionResolution::KeepBoth,
+        replace_identity: None,
+    };
+    engine
+        .submit(ExplorerTaskPlan::Archive(plan.clone()))
+        .unwrap();
+    let (events, summary) = finished(&engine);
+    assert_eq!(summary.succeeded_items, 1, "{summary:?}");
+    assert!(events.iter().any(|event| matches!(event, ExplorerTaskEvent::Progress { progress, .. } if progress.processed_bytes > 0)));
+    assert!(tree.path("backup (2).tar.gz").is_file());
+    assert_eq!(fs::read(&target).unwrap(), b"previous");
+
+    plan.collision = ExplorerCollisionResolution::Replace;
+    plan.replace_identity = Some(platform::file_identity(&target).unwrap());
+    engine
+        .submit(ExplorerTaskPlan::Archive(plan.clone()))
+        .unwrap();
+    assert_eq!(finished(&engine).1.succeeded_items, 1);
+
+    engine.submit(ExplorerTaskPlan::Archive(plan)).unwrap();
+    assert!(matches!(
+        finished(&engine).1.fatal_error,
+        Some(ExplorerTaskError::DestinationChanged { .. })
+    ));
+
+    let destination = tree.path("restored");
+    fs::create_dir(&destination).unwrap();
+    fs::write(destination.join("original"), "keep me").unwrap();
+    let damaged = tree.path("damaged.tar.gz");
+    fs::write(&damaged, b"not an archive").unwrap();
+    let mut extract = ExplorerArchivePlan {
+        inputs: ArchiveInputs::Extract(damaged),
+        format: ArchiveFormat::TarGz,
+        target: destination.clone(),
+        password: None,
+        collision: ExplorerCollisionResolution::Replace,
+        replace_identity: Some(platform::file_identity(&destination).unwrap()),
+    };
+    engine
+        .submit(ExplorerTaskPlan::Archive(extract.clone()))
+        .unwrap();
+    assert!(finished(&engine).1.fatal_error.is_some());
+    assert_eq!(fs::read(destination.join("original")).unwrap(), b"keep me");
+    assert!(!fs::read_dir(&tree.root).unwrap().flatten().any(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tundra-stage-")
+    }));
+
+    extract.inputs = ArchiveInputs::Extract(target);
+    engine.submit(ExplorerTaskPlan::Archive(extract)).unwrap();
+    assert_eq!(finished(&engine).1.succeeded_items, 1);
+    assert_eq!(
+        fs::read(destination.join("资料.txt")).unwrap(),
+        fs::read(source).unwrap()
+    );
+    assert!(!destination.join("original").exists());
+}

@@ -148,7 +148,10 @@ impl ExplorerFileService {
         }
         let mut target = resolver.route(&entry.path, &entry.attributes);
         let pdf = entry.attributes.is_file && crate::editor::is_pdf_path(&entry.path);
-        if pdf || (editor_requested && entry.attributes.is_file) {
+        let archive = entry.attributes.is_file && archive::is_recognized_archive(&entry.path);
+        if archive {
+            target = ExplorerOpenTarget::Archive;
+        } else if pdf || (editor_requested && entry.attributes.is_file) {
             target = ExplorerOpenTarget::Editor;
         }
         let shell_document = entry
@@ -164,7 +167,7 @@ impl ExplorerFileService {
             FileOpenPolicy::Blocked { reason } => {
                 return Err(ExplorerError::BlockedPath(reason.clone()));
             }
-            FileOpenPolicy::LauncherRequired { .. } if pdf => {}
+            FileOpenPolicy::LauncherRequired { .. } if pdf || archive => {}
             FileOpenPolicy::LauncherRequired {
                 kind: ExecutableKind::Script,
                 ..
@@ -194,7 +197,10 @@ impl ExplorerFileService {
             return Ok(ExplorerEffect::None);
         }
 
-        let permission = if target == ExplorerOpenTarget::Editor {
+        let permission = if matches!(
+            target,
+            ExplorerOpenTarget::Editor | ExplorerOpenTarget::Archive
+        ) {
             PermissionAction::ReadFile
         } else {
             PermissionAction::OpenExternal

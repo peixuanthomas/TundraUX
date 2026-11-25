@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod tasks;
 pub use tasks::ExplorerTaskOperation;
 
@@ -602,6 +603,7 @@ pub enum ExplorerOpenTarget {
     SystemDefault,
     Editor,
     Launcher,
+    Archive,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1251,7 +1253,7 @@ fn explorer_icon_key(
         "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg" | "ico" => "image",
         "mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" => "audio",
         "mp4" | "mkv" | "avi" | "mov" | "webm" => "video",
-        "zip" | "7z" | "rar" | "tar" | "gz" | "bz2" | "xz" => "archive",
+        _ if archive::is_recognized_archive(path) => "archive",
         _ => "file",
     }
 }

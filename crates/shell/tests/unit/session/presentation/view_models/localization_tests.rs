@@ -92,6 +92,8 @@ fn selected_file_menu_keeps_the_actions_moved_from_the_toolbar() {
             entry_count: 1,
             clipboard_available: false,
             undo_available: false,
+            archive_busy: false,
+            selected_archive: false,
             is_trash: false,
             trash_has_items: false,
             focused_index: 0,

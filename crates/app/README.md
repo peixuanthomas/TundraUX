@@ -34,6 +34,8 @@ Explorer manages directories, filtering, sorting, multiple selection, the clipbo
 
 Shell queues clipboard mutations directly to the shared service and reads its authoritative clipboard before planning Paste. File tasks wait for the shared busy reservation and publish their completed move records, consumed cut paths, and busy release together. Cached snapshots provide display state; operation requests and successful replies determine file-operation behavior.
 
+Explorer creates and extracts ZIP, 7z, RAR, TAR, and TAR.GZ archives. ZIP, 7z, and RAR support passwords. The managed Explorer worker runs the archive codecs and reports byte progress. The file task writes into a private sibling staging directory and publishes the result after checking cancellation and the identity of any confirmed replacement. Archive passwords stay in memory and are omitted from the recovery journal.
+
 Launcher lists the built-in applications available on the current platform, plus custom Shell commands and approved external programs. Home shows user-selected shortcuts into the same catalog. Built-in application IDs identify their shared theme icons. Custom entries support a name, a 5×2 terminal-cell text icon, arguments, a working directory, and retained output after exit. Custom commands use `/bin/sh -c` on Unix and `cmd.exe /C` on Windows.
 
 ### Editor and scripts

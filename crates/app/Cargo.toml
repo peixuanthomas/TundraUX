@@ -39,10 +39,12 @@ tokio = { version = "1", features = ["rt", "time", "net", "macros"] }
 semver = "1"
 toml = "0.9"
 zip = { version = "6", default-features = false, features = ["deflate"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
+archive-zip = { package = "zip", version = "9.7", default-features = false, features = ["aes-crypto", "deflate"] }
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["aes256", "compress", "deflate", "bzip2", "ppmd"] }
+rars = { version = "0.12", default-features = false, features = ["encryption", "write"] }
 flate2 = "1"
 tar = "0.4"
+tempfile = "3"
 
 [dev-dependencies]
 watchdog = { path = "../watchdog", features = ["test-support"] }

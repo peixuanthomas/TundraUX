@@ -23,6 +23,8 @@ use watchdog::{
     OperationGuard, OperationKind, OperationRecord, PanicAction, ProcessWatchdog, RecoveryHandler,
     RecoveryOutcome, ReplaySafety, RestartPolicy, TaskId, TaskKind, TaskSpec, WatchdogError,
 };
+mod archive_job;
+pub use archive_job::{ArchiveInputs, ExplorerArchivePlan};
 
 pub const DEFAULT_TRANSFER_CHUNK_SIZE: usize = 256 * 1024;
 static ENGINE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -42,6 +44,8 @@ pub enum ExplorerTaskOperation {
     Copy,
     Move,
     DeleteToTrash,
+    Compress,
+    Extract,
 }
 
 impl ExplorerTaskOperation {
@@ -50,6 +54,8 @@ impl ExplorerTaskOperation {
             Self::Copy => msg!("app-explorer-copying"),
             Self::Move => msg!("app-explorer-moving"),
             Self::DeleteToTrash => msg!("app-explorer-trashing"),
+            Self::Compress => msg!("explorer-archive-compressing"),
+            Self::Extract => msg!("explorer-archive-extracting"),
         }
         .into()
     }
@@ -145,6 +151,7 @@ impl ExplorerDeletePlan {
 pub enum ExplorerTaskPlan {
     Transfer(ExplorerTransferPlan),
     DeleteToTrash(ExplorerDeletePlan),
+    Archive(ExplorerArchivePlan),
 }
 
 impl ExplorerTaskPlan {
@@ -152,6 +159,7 @@ impl ExplorerTaskPlan {
         match self {
             Self::Transfer(plan) => plan.operation.into(),
             Self::DeleteToTrash(_) => ExplorerTaskOperation::DeleteToTrash,
+            Self::Archive(plan) => plan.inputs.operation(),
         }
     }
 }
@@ -263,6 +271,9 @@ pub enum ExplorerTaskEvent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExplorerTaskError {
+    ArchivePassword {
+        incorrect: bool,
+    },
     InvalidPlan {
         message: LocalizedText,
     },
@@ -312,6 +323,9 @@ pub enum ExplorerTaskError {
 impl fmt::Display for ExplorerTaskError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ArchivePassword { .. } => {
+                formatter.write_str(&i18n::render_diagnostic(&self.localized().message))
+            }
             Self::InvalidPlan { message } => match message {
                 LocalizedText::Message(message) => {
                     formatter.write_str(&i18n::render_diagnostic(message))
@@ -380,6 +394,12 @@ impl ExplorerTaskError {
     /// Structured presentation alongside the existing diagnostic Display contract.
     pub fn localized(&self) -> LocalizedError {
         let (code, message) = match self {
+            Self::ArchivePassword { incorrect: true } => {
+                ("ARCHIVE_PASSWORD", msg!("explorer-archive-wrong-password"))
+            }
+            Self::ArchivePassword { incorrect: false } => {
+                ("ARCHIVE_PASSWORD", msg!("explorer-archive-needs-password"))
+            }
             Self::InvalidPlan { message } => (
                 "EXPLORER_INVALID_PLAN",
                 match message {
@@ -1027,6 +1047,10 @@ fn clear_active_task(active: &Mutex<Option<ActiveTask>>, busy: &AtomicBool) {
 
 fn operation_descriptor(id: ExplorerTaskId, plan: &ExplorerTaskPlan) -> OperationDescriptor {
     let (summary, payload) = match plan {
+        ExplorerTaskPlan::Archive(plan) => (
+            format!("{:?} archive", plan.inputs.operation()),
+            serde_json::json!({ "task_id": id.0, "operation": format!("{:?}", plan.inputs.operation()) }),
+        ),
         ExplorerTaskPlan::Transfer(plan) => (
             format!("{:?} {} item(s)", plan.operation, plan.sources.len()),
             serde_json::json!({
@@ -1063,6 +1087,7 @@ impl RecoveryHandler for ExplorerRecoveryHandler {
         let staging = checkpoint_path(payload, "staging");
 
         match phase {
+            "archive_work" | "archive_publish" => archive_job::recover_archive(payload),
             "planned" | "planning" => RecoveryOutcome::Recovered(
                 "the operation had not reached a filesystem mutation".to_string(),
             ),
@@ -1327,6 +1352,24 @@ fn execute_task(
     }
 
     match plan {
+        ExplorerTaskPlan::Archive(plan) => {
+            let mut context = ExecutionContext::new(
+                id,
+                platform,
+                trash,
+                cancellation,
+                event_tx,
+                1,
+                0,
+                DEFAULT_TRANSFER_CHUNK_SIZE,
+                journal,
+            );
+            if let Err(error) = context.run_archive(plan) {
+                context.summary.cancelled = matches!(error, ExplorerTaskError::Cancelled);
+                context.summary.fatal_error = Some(error);
+            }
+            context.summary
+        }
         ExplorerTaskPlan::Transfer(plan) => {
             let prepared = match prepare_transfer(id, platform, &plan, &cancellation, event_tx) {
                 Ok(prepared) => prepared,

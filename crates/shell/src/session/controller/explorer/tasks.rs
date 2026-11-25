@@ -19,6 +19,7 @@ pub(in crate::session) enum ShellExplorerTaskKind {
     Copy,
     Move { from_clipboard: bool },
     Delete,
+    Archive,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub(in crate::session) struct ShellExplorerTaskContext {
     pub(in crate::session) id: ExplorerTaskId,
     pub(in crate::session) kind: ShellExplorerTaskKind,
     pub(in crate::session) sources: Vec<ShellExplorerTaskSource>,
+    extract_target: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +38,7 @@ pub(in crate::session) struct ShellExplorerTaskSource {
 
 pub(in crate::session) fn task_plan_sources(plan: &ExplorerTaskPlan) -> Vec<PathBuf> {
     match plan {
+        ExplorerTaskPlan::Archive(plan) => plan.inputs.paths().to_vec(),
         ExplorerTaskPlan::Transfer(plan) => plan.sources.clone(),
         ExplorerTaskPlan::DeleteToTrash(plan) => plan.paths.clone(),
     }
@@ -182,6 +185,14 @@ impl ShellExplorerTaskRuntime {
         if let Some(active) = context.as_ref() {
             return Err(ExplorerTaskSubmitError::Busy { active: active.id });
         }
+        let extract_target = match &plan {
+            ExplorerTaskPlan::Archive(plan)
+                if matches!(plan.inputs, app::explorer_tasks::ArchiveInputs::Extract(_)) =>
+            {
+                Some(plan.target.clone())
+            }
+            _ => None,
+        };
         let sources = task_plan_sources(&plan)
             .into_iter()
             .map(|original| ShellExplorerTaskSource {
@@ -213,6 +224,7 @@ impl ShellExplorerTaskRuntime {
             id: handle.id,
             kind,
             sources,
+            extract_target,
         });
         Ok(handle.id)
     }
@@ -1102,7 +1114,8 @@ impl ShellSession {
                                 usize::try_from(progress.processed_items).unwrap_or(usize::MAX);
                             operation.total_items = usize::try_from(progress.total_items).ok();
                             operation.completed_bytes = progress.processed_bytes;
-                            operation.total_bytes = Some(progress.total_bytes);
+                            operation.total_bytes =
+                                (progress.total_bytes > 0).then_some(progress.total_bytes);
                         }
                     });
                 }
@@ -1166,6 +1179,22 @@ impl ShellSession {
                 }
 
                 self.apply_explorer_command(ExplorerCommand::Refresh, platform);
+                if let Some(app::explorer_tasks::ExplorerTaskError::ArchivePassword { incorrect }) =
+                    &summary.fatal_error
+                    && let Some(destination) = context.extract_target
+                    && let Some(source) = context.sources.first()
+                {
+                    let _ = self.update_explorer_state(|state| {
+                        state.operation = None;
+                        state.error = None;
+                    });
+                    self.open_archive_extraction(
+                        source.original.clone(),
+                        Some(destination),
+                        Some(*incorrect),
+                    );
+                    return;
+                }
                 let detail =
                     explorer_task_error_detail(summary.fatal_error.as_ref(), &summary.failures);
                 let message = if summary.cancelled {
@@ -1253,8 +1282,13 @@ impl ShellSession {
                     }
                     ExplorerTaskPhase::Executing => {
                         operation.phase = ExplorerOperationPhase::Executing;
-                        operation.label =
-                            i18n::LocalizedText::from(i18n::msg!("shell-applying-file-operation"));
+                        operation.label = match operation.operation {
+                            app::explorer_tasks::ExplorerTaskOperation::Compress
+                            | app::explorer_tasks::ExplorerTaskOperation::Extract => {
+                                operation.operation.localized_label()
+                            }
+                            _ => i18n::msg!("shell-applying-file-operation").into(),
+                        };
                     }
                     ExplorerTaskPhase::CleaningUp => {
                         operation.phase = ExplorerOperationPhase::Executing;

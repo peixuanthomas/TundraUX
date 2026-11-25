@@ -122,6 +122,12 @@ impl ShellSession {
                 ShellCommand::LauncherRunSettingsPaste(value.to_owned())
             }
             Some(ShellComponent::Explorer)
+                if self.resolved_explorer_overlay()
+                    == Some(overlays::ResolvedExplorerOverlay::Archive) =>
+            {
+                ShellCommand::ExplorerArchiveInput(InputEvent::Paste(value.to_owned()))
+            }
+            Some(ShellComponent::Explorer)
                 if matches!(
                     self.resolved_explorer_overlay(),
                     Some(overlays::ResolvedExplorerOverlay::Input(_))

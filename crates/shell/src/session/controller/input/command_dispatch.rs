@@ -1424,6 +1424,10 @@ impl ShellSession {
                 self.explorer_backspace(platform);
                 ShellAction::Redraw
             }
+            ShellCommand::ExplorerArchiveInput(input) => {
+                self.handle_archive_input(input);
+                ShellAction::Redraw
+            }
             ShellCommand::ExplorerEditInput(input) => {
                 self.edit_explorer_input(input, platform);
                 ShellAction::Redraw

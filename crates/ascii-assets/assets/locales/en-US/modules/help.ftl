@@ -18,11 +18,11 @@ ui-help-home-entries = Open an entry
 ui-help-home-move = Move between entries
 
 ui-help-explorer-title = File Explorer
-ui-help-explorer-open = Open selected
+ui-help-explorer-open = Open the selection. Archives prompt for an extraction folder.
 ui-help-explorer-new = New folder / new text file
 ui-help-explorer-rename = Rename
 ui-help-explorer-delete = Delete
-ui-help-explorer-menu = More actions
+ui-help-explorer-menu = More actions, including Compress to… for selected files and folders.
 ui-help-explorer-clipboard = Copy, cut, paste. Ctrl/Cmd also works with each key.
 ui-help-explorer-select-all = Select all
 ui-help-explorer-refresh = Refresh

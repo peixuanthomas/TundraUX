@@ -44,6 +44,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, and Tab focus navigation with arrows in the focused region |
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts, package and command choices for adding an installed program to Launcher, and the AutoAdmin dialog title |
+| `app-explorer.ftl` | Archive creation and extraction, password retries, progress, and entry errors |
 | `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
 | `shell-messages.ftl` | Editor file-picker prompt and Office conversion progress and errors |
 | `ui-editor.ftl` | Editor controls and PDF preview page controls, progress, and errors |

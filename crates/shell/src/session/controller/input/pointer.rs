@@ -19,6 +19,7 @@ impl ShellSession {
                     .map(ui::LauncherEntryEditor::form)
             }),
             ShellScreen::Explorer => match self.to_explorer_view_model().overlay? {
+                ui::ExplorerOverlayViewModel::Archive(form) => Some(form),
                 ui::ExplorerOverlayViewModel::Name(dialog) => {
                     Some(dialog.form(self.pages.explorer.explorer_overlay_selection))
                 }

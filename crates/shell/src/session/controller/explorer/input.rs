@@ -68,6 +68,12 @@ impl ShellSession {
                 ShellCommand::ExplorerEditInput(InputEvent::Key(key.clone())),
             );
         }
+        if self.resolved_explorer_overlay() == Some(ResolvedExplorerOverlay::Archive) {
+            return (
+                target,
+                ShellCommand::ExplorerArchiveInput(InputEvent::Key(key.clone())),
+            );
+        }
         if self.resolved_explorer_overlay().is_some()
             && let Some(command) = explorer_overlay_navigation_command(key)
         {
@@ -102,7 +108,7 @@ impl ShellSession {
                     InputKey::Char('k' | 'K') => (target, ShellCommand::ExplorerConflictKeepBoth),
                     InputKey::Char('r' | 'R') => (target, ShellCommand::ExplorerConflictReplace),
                     InputKey::Char('s' | 'S') => (target, ShellCommand::ExplorerConflictSkip),
-                    InputKey::Char('a' | 'A') => {
+                    InputKey::Char('a' | 'A') if self.pages.explorer.archive_dialog.is_none() => {
                         (target, ShellCommand::ExplorerConflictToggleApplyToRemaining)
                     }
                     InputKey::Escape | InputKey::Char('n' | 'N') => {
@@ -111,7 +117,9 @@ impl ShellSession {
                     _ => (target, ShellCommand::CaptureOverlayInput),
                 };
             }
-            Some(ResolvedExplorerOverlay::Input(_)) => unreachable!(),
+            Some(ResolvedExplorerOverlay::Input(_) | ResolvedExplorerOverlay::Archive) => {
+                unreachable!()
+            }
             Some(ResolvedExplorerOverlay::Semantic(_)) => {
                 return self.route_explorer_overlay_key(key);
             }
@@ -488,6 +496,12 @@ impl ShellSession {
     ) -> (RoutedTarget, ShellCommand) {
         let coordinates = mouse.coordinates();
         let target = RoutedTarget::Component(ShellComponent::Explorer);
+        if self.resolved_explorer_overlay() == Some(ResolvedExplorerOverlay::Archive) {
+            return (
+                target,
+                ShellCommand::ExplorerArchiveInput(InputEvent::Mouse(mouse)),
+            );
+        }
         if matches!(
             self.resolved_explorer_overlay(),
             Some(ResolvedExplorerOverlay::Input(_))

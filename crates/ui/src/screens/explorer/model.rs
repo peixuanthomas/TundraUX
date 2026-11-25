@@ -387,6 +387,8 @@ pub enum ExplorerProgressStage {
     Copying,
     Moving,
     Deleting,
+    Compressing,
+    Extracting,
     Finishing,
 }
 
@@ -398,6 +400,8 @@ impl ExplorerProgressStage {
             Self::Copying => i18n::tr!("ui-explorer-copying"),
             Self::Moving => i18n::tr!("ui-explorer-moving"),
             Self::Deleting => i18n::tr!("ui-explorer-deleting"),
+            Self::Compressing => i18n::tr!("explorer-archive-compressing"),
+            Self::Extracting => i18n::tr!("explorer-archive-extracting"),
             Self::Finishing => i18n::tr!("ui-explorer-finishing"),
         }
     }
@@ -563,6 +567,7 @@ pub struct ExplorerPropertiesViewModel {
 pub enum ExplorerOverlayViewModel {
     ContextMenu(ExplorerContextMenuViewModel),
     Name(ExplorerNameDialogViewModel),
+    Archive(crate::components::FormDialog),
     Options(ExplorerOptionsViewModel),
     Conflict(ExplorerConflictViewModel),
     Properties(ExplorerPropertiesViewModel),

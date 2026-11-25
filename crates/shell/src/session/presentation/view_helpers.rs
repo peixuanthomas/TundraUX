@@ -233,6 +233,8 @@ pub(in crate::session) struct ExplorerContextMenuInput {
     pub(in crate::session) entry_count: usize,
     pub(in crate::session) clipboard_available: bool,
     pub(in crate::session) undo_available: bool,
+    pub(in crate::session) archive_busy: bool,
+    pub(in crate::session) selected_archive: bool,
     pub(in crate::session) is_trash: bool,
     pub(in crate::session) trash_has_items: bool,
     pub(in crate::session) focused_index: usize,
@@ -251,6 +253,8 @@ pub(in crate::session) fn explorer_context_menu_view_model(
         entry_count,
         clipboard_available,
         undo_available,
+        archive_busy,
+        selected_archive,
         is_trash,
         trash_has_items,
         focused_index,
@@ -326,6 +330,20 @@ pub(in crate::session) fn explorer_context_menu_view_model(
                 false,
             ),
         ]);
+        if selected_archive {
+            items.push(item(
+                "extract",
+                i18n::tr!("explorer-archive-extract-menu"),
+                !archive_busy,
+                false,
+            ));
+        }
+        items.push(item(
+            "compress",
+            i18n::tr!("explorer-archive-create-menu"),
+            !archive_busy,
+            false,
+        ));
         items
     } else {
         vec![
