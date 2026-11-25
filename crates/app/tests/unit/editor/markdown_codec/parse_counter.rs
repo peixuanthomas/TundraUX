@@ -1,6 +1,19 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::thread::{self, ThreadId};
+
+thread_local! {
+    static LINE_SCANS: Cell<usize> = const { Cell::new(0) };
+}
+
+pub(super) fn record_line_scan() {
+    LINE_SCANS.set(LINE_SCANS.get() + 1);
+}
+
+pub(super) fn take_line_scans() -> usize {
+    LINE_SCANS.replace(0)
+}
 
 fn counts() -> &'static Mutex<HashMap<ThreadId, usize>> {
     static COUNTS: OnceLock<Mutex<HashMap<ThreadId, usize>>> = OnceLock::new();

@@ -4,7 +4,7 @@
 //! converted back to Rich mode. Rendering and ordinary Rich edits operate on
 //! [`RichDocument`] directly.
 
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment as ComrakTableAlignment};
 use comrak::{Arena, Options, parse_document};
@@ -155,10 +155,14 @@ impl MarkdownCodec {
         let root = parse_document(&arena, source, &options);
         let mut builder = ImportBuilder {
             document: RichDocument::new(),
-            positions: MarkdownPositionMap::default(),
+            positions: ImportPositions::default(),
         };
         builder.document.utf8_bom = utf8_bom;
         builder.document.preferred_line_ending = preferred_line_ending;
+        let indexed_source = MarkdownSource {
+            text: source,
+            lines: line_ranges(source),
+        };
 
         // Comrak keeps footnote definitions as top-level nodes but moves them
         // behind ordinary blocks in AST iteration order. Rich import needs
@@ -166,7 +170,7 @@ impl MarkdownCodec {
         // attached to the correct block.
         let mut nodes = root
             .children()
-            .map(|node| (node_source_range(node, source), node))
+            .map(|node| (indexed_source.node_range(node), node))
             .collect::<Vec<_>>();
         nodes.sort_by_key(|(range, _)| (range.start, range.end));
 
@@ -188,7 +192,12 @@ impl MarkdownCodec {
             });
             let block = RichBlock::imported(id, leading_trivia, raw, kind);
             if map_positions {
-                record_block_positions_from_ast(&block, node, source, &mut builder.positions);
+                record_block_positions_from_ast(
+                    &block,
+                    node,
+                    &indexed_source,
+                    &mut builder.positions,
+                );
             }
             builder.document.blocks.push(block);
             previous_end = range.end;
@@ -197,7 +206,9 @@ impl MarkdownCodec {
         builder.document.repair_node_id_allocator();
         Ok(MarkdownImport {
             document: builder.document,
-            positions: builder.positions,
+            positions: MarkdownPositionMap {
+                entries: builder.positions.entries,
+            },
         })
     }
 
@@ -274,7 +285,37 @@ pub(crate) fn parse_count_for_tests() -> usize {
 
 struct ImportBuilder {
     document: RichDocument,
-    positions: MarkdownPositionMap,
+    positions: ImportPositions,
+}
+
+#[derive(Default)]
+struct ImportPositions {
+    entries: Vec<MarkdownPositionEntry>,
+    indices: HashMap<RichPosition, usize>,
+}
+
+impl ImportPositions {
+    fn entry_or_insert_with(
+        &mut self,
+        rich: RichPosition,
+        source_offset: impl FnOnce() -> usize,
+    ) -> &mut MarkdownPositionEntry {
+        let index = self.indices.entry(rich).or_insert_with(|| {
+            let index = self.entries.len();
+            self.entries.push(MarkdownPositionEntry {
+                rich,
+                source_offset: source_offset(),
+            });
+            index
+        });
+        &mut self.entries[*index]
+    }
+
+    fn record(&mut self, rich: RichPosition, source_offset: usize) {
+        let entry = self.entry_or_insert_with(rich, || source_offset);
+        // A shared inline boundary follows the delimiters of the style on its right.
+        entry.source_offset = entry.source_offset.max(source_offset);
+    }
 }
 
 impl ImportBuilder {
@@ -502,8 +543,8 @@ fn editor_inline_value(value: NodeValue) -> NodeValue {
 fn record_block_positions_from_ast<'a>(
     block: &RichBlock,
     node: &'a AstNode<'a>,
-    source: &str,
-    positions: &mut MarkdownPositionMap,
+    source: &MarkdownSource<'_>,
+    positions: &mut ImportPositions,
 ) {
     match (&block.kind, &node.data().value) {
         (RichBlockKind::Paragraph { content }, _) | (RichBlockKind::Heading { content, .. }, _) => {
@@ -516,7 +557,7 @@ fn record_block_positions_from_ast<'a>(
         }
         (RichBlockKind::CodeBlock { code, .. }, _) => {
             let range = code_content_search_range(node, source);
-            record_display_text_boundaries(block.id, 0, code, range, source, positions);
+            record_display_text_boundaries(block.id, 0, code, range, source.text, positions);
         }
         (RichBlockKind::List { items, .. }, _) => {
             for (item, item_node) in items.iter().zip(node.children()) {
@@ -558,8 +599,8 @@ fn record_inline_container_from_ast<'a>(
     container_id: NodeId,
     expected: &InlineContent,
     node: &'a AstNode<'a>,
-    source: &str,
-    positions: &mut MarkdownPositionMap,
+    source: &MarkdownSource<'_>,
+    positions: &mut ImportPositions,
 ) {
     let mut logical_offset = 0usize;
     for child in node.children() {
@@ -567,11 +608,11 @@ fn record_inline_container_from_ast<'a>(
     }
 
     let expected_len = expected.grapheme_len();
-    let container_range = node_source_range(node, source);
+    let container_range = source.node_range(node);
     if expected_len == 0 {
         positions.record(
             RichPosition::new(container_id, 0),
-            editable_insertion_offset(source, container_range),
+            editable_insertion_offset(source.text, container_range),
         );
         return;
     }
@@ -587,26 +628,32 @@ fn record_inline_container_from_ast<'a>(
         );
     }
 
-    ensure_dense_container_boundaries(container_id, expected, source, container_range, positions);
+    ensure_dense_container_boundaries(
+        container_id,
+        expected_len,
+        source.text,
+        container_range,
+        positions,
+    );
 }
 
 fn record_inline_node_from_ast<'a>(
     container_id: NodeId,
     node: &'a AstNode<'a>,
-    source: &str,
+    source: &MarkdownSource<'_>,
     logical_offset: &mut usize,
-    positions: &mut MarkdownPositionMap,
+    positions: &mut ImportPositions,
 ) {
     match editor_inline_value(node.data().value.clone()) {
         NodeValue::Text(text) => {
             let text = text.into_owned();
-            let range = node_source_range(node, source);
+            let range = source.node_range(node);
             record_display_text_boundaries(
                 container_id,
                 *logical_offset,
                 &text,
                 range,
-                source,
+                source.text,
                 positions,
             );
             *logical_offset = logical_offset.saturating_add(text.graphemes(true).count());
@@ -618,13 +665,13 @@ fn record_inline_node_from_ast<'a>(
                 *logical_offset,
                 &code.literal,
                 range,
-                source,
+                source.text,
                 positions,
             );
             *logical_offset = logical_offset.saturating_add(code.literal.graphemes(true).count());
         }
         NodeValue::SoftBreak | NodeValue::LineBreak => {
-            let range = node_source_range(node, source);
+            let range = source.node_range(node);
             positions.record(
                 RichPosition::new(container_id, *logical_offset),
                 range.start,
@@ -633,7 +680,7 @@ fn record_inline_node_from_ast<'a>(
             positions.record(RichPosition::new(container_id, *logical_offset), range.end);
         }
         NodeValue::Image(_) => {
-            let range = node_source_range(node, source);
+            let range = source.node_range(node);
             positions.record(
                 RichPosition::new(container_id, *logical_offset),
                 range.start,
@@ -660,7 +707,7 @@ fn record_display_text_boundaries(
     display: &str,
     source_range: Range<usize>,
     source: &str,
-    positions: &mut MarkdownPositionMap,
+    positions: &mut ImportPositions,
 ) {
     let range = normalize_range(source, source_range);
     let raw = &source[range.clone()];
@@ -670,7 +717,6 @@ fn record_display_text_boundaries(
         return;
     }
 
-    let fallback = proportional_boundaries(raw, graphemes.len());
     let mut search_from = 0usize;
     let mut first_boundary = None;
     for (index, grapheme) in graphemes.iter().enumerate() {
@@ -678,7 +724,9 @@ fn record_display_text_boundaries(
             .find(grapheme)
             .map(|relative| search_from + relative)
             .filter(|position| raw.is_char_boundary(*position));
-        let start = found.unwrap_or(fallback[index]).min(raw.len());
+        let start = found
+            .unwrap_or_else(|| proportional_boundary(raw, graphemes.len(), index))
+            .min(raw.len());
         if first_boundary.is_none() {
             first_boundary = Some(start);
             positions.record(
@@ -688,7 +736,7 @@ fn record_display_text_boundaries(
         }
         let end = found
             .map(|position| position.saturating_add(grapheme.len()))
-            .unwrap_or(fallback[index + 1])
+            .unwrap_or_else(|| proportional_boundary(raw, graphemes.len(), index + 1))
             .min(raw.len());
         positions.record(
             RichPosition::new(container_id, logical_start + index + 1),
@@ -700,39 +748,36 @@ fn record_display_text_boundaries(
 
 fn ensure_dense_container_boundaries(
     container_id: NodeId,
-    content: &InlineContent,
+    grapheme_len: usize,
     source: &str,
     source_range: Range<usize>,
-    positions: &mut MarkdownPositionMap,
+    positions: &mut ImportPositions,
 ) {
     let range = normalize_range(source, source_range);
-    let fallback = proportional_boundaries(&source[range.clone()], content.grapheme_len());
-    for (offset, relative) in fallback.into_iter().enumerate() {
+    let raw = &source[range.clone()];
+    for offset in 0..=grapheme_len {
         let rich = RichPosition::new(container_id, offset);
-        if !positions.entries.iter().any(|entry| entry.rich == rich) {
-            positions.record(rich, range.start + relative);
-        }
+        positions.entry_or_insert_with(rich, || {
+            range.start + proportional_boundary(raw, grapheme_len, offset)
+        });
     }
 }
 
 fn proportional_boundaries(source: &str, count: usize) -> Vec<usize> {
-    if count == 0 {
-        return vec![0];
-    }
-    let valid = std::iter::once(0)
-        .chain(source.char_indices().map(|(index, _)| index).skip(1))
-        .chain(std::iter::once(source.len()))
-        .collect::<Vec<_>>();
     (0..=count)
-        .map(|index| {
-            let candidate = index.saturating_mul(source.len()) / count;
-            valid
-                .iter()
-                .copied()
-                .min_by_key(|boundary| boundary.abs_diff(candidate))
-                .unwrap_or(0)
-        })
+        .map(|index| proportional_boundary(source, count, index))
         .collect()
+}
+
+fn proportional_boundary(source: &str, count: usize, index: usize) -> usize {
+    let candidate = index.saturating_mul(source.len()) / count.max(1);
+    let before = normalize_boundary(source, candidate);
+    let after = normalize_end_boundary(source, candidate);
+    if candidate - before <= after - candidate {
+        before
+    } else {
+        after
+    }
 }
 
 fn editable_insertion_offset(source: &str, range: Range<usize>) -> usize {
@@ -745,9 +790,12 @@ fn editable_insertion_offset(source: &str, range: Range<usize>) -> usize {
             .unwrap_or(raw.len())
 }
 
-fn inline_code_content_search_range(node: &AstNode<'_>, source: &str) -> Range<usize> {
-    let range = node_source_range(node, source);
-    let raw = &source[range.clone()];
+fn inline_code_content_search_range(
+    node: &AstNode<'_>,
+    source: &MarkdownSource<'_>,
+) -> Range<usize> {
+    let range = source.node_range(node);
+    let raw = &source.text[range.clone()];
     let fence_len = raw.bytes().take_while(|byte| *byte == b'`').count();
     if fence_len == 0 || raw.len() < fence_len.saturating_mul(2) {
         return range;
@@ -761,9 +809,9 @@ fn inline_code_content_search_range(node: &AstNode<'_>, source: &str) -> Range<u
     (range.start + start)..(range.start + end)
 }
 
-fn code_content_search_range(node: &AstNode<'_>, source: &str) -> Range<usize> {
-    let range = node_source_range(node, source);
-    let raw = &source[range.clone()];
+fn code_content_search_range(node: &AstNode<'_>, source: &MarkdownSource<'_>) -> Range<usize> {
+    let range = source.node_range(node);
+    let raw = &source.text[range.clone()];
     let first_line_end = raw
         .find(['\n', '\r'])
         .map(|index| {
@@ -1338,33 +1386,38 @@ fn detect_line_ending(source: &str) -> RichLineEnding {
     .map_or(RichLineEnding::Lf, |(_, ending)| ending)
 }
 
-fn node_source_range(node: &AstNode<'_>, source: &str) -> Range<usize> {
-    source_range_from_position(source, node.data().sourcepos)
+struct MarkdownSource<'a> {
+    text: &'a str,
+    lines: Vec<Range<usize>>,
 }
 
-fn source_range_from_position(source: &str, position: comrak::nodes::Sourcepos) -> Range<usize> {
-    if position.start.line == 0 || position.end.line == 0 {
-        return 0..0;
+impl MarkdownSource<'_> {
+    fn node_range(&self, node: &AstNode<'_>) -> Range<usize> {
+        let position = node.data().sourcepos;
+        if position.start.line == 0 || position.end.line == 0 {
+            return 0..0;
+        }
+        let Some(start_line) = self.lines.get(position.start.line - 1) else {
+            return self.text.len()..self.text.len();
+        };
+        let Some(end_line) = self.lines.get(position.end.line - 1) else {
+            return start_line.start..self.text.len();
+        };
+        let start = normalize_boundary(
+            self.text,
+            (start_line.start + position.start.column.saturating_sub(1)).min(start_line.end),
+        );
+        let end = normalize_end_boundary(
+            self.text,
+            (end_line.start + position.end.column).min(end_line.end),
+        );
+        start..end
     }
-    let lines = line_ranges(source);
-    let Some(start_line) = lines.get(position.start.line.saturating_sub(1)) else {
-        return source.len()..source.len();
-    };
-    let Some(end_line) = lines.get(position.end.line.saturating_sub(1)) else {
-        return start_line.start..source.len();
-    };
-    let start = normalize_boundary(
-        source,
-        (start_line.start + position.start.column.saturating_sub(1)).min(start_line.end),
-    );
-    let end = normalize_end_boundary(
-        source,
-        (end_line.start + position.end.column).min(end_line.end),
-    );
-    start..end
 }
 
 fn line_ranges(source: &str) -> Vec<Range<usize>> {
+    #[cfg(test)]
+    parse_counter::record_line_scan();
     let bytes = source.as_bytes();
     let mut ranges = Vec::new();
     let mut start = 0usize;

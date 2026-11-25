@@ -97,6 +97,53 @@ fn unedited_mixed_line_endings_and_bom_are_byte_identical() {
 }
 
 #[test]
+fn large_multibyte_import_scans_source_lines_once_with_and_without_positions() {
+    let paragraph = "段 **好**\r\n\r\n";
+    let count = 10_000;
+    let source = paragraph.repeat(count);
+    for map_positions in [false, true] {
+        parse_counter::take_line_scans();
+        let imported = MarkdownCodec::import_with_position_map(
+            &source,
+            false,
+            RichLineEnding::CrLf,
+            map_positions,
+        )
+        .unwrap();
+        assert_eq!(parse_counter::take_line_scans(), 1);
+        assert_eq!(imported.document.blocks.len(), count);
+        let last = imported.document.blocks.last().unwrap();
+        assert_eq!(last.original_raw.as_deref(), Some("段 **好**"));
+        if map_positions {
+            assert_eq!(imported.positions.entries.len(), count * 4);
+            assert_eq!(
+                imported
+                    .positions
+                    .source_offset_for(RichPosition::new(last.id, 2)),
+                Some(paragraph.len() * (count - 1) + "段 **".len())
+            );
+        } else {
+            assert!(imported.positions.entries.is_empty());
+        }
+    }
+}
+
+#[test]
+fn proportional_fallback_chooses_the_nearest_utf8_boundary_and_prefers_the_earlier_tie() {
+    let source = "é\r\n好👨‍👩‍👧‍👦e\u{301}\r";
+    for count in 1..=source.len() + 2 {
+        for index in 0..=count {
+            let candidate = index * source.len() / count;
+            let closest = (0..=source.len())
+                .filter(|boundary| source.is_char_boundary(*boundary))
+                .min_by_key(|boundary| boundary.abs_diff(candidate))
+                .unwrap();
+            assert_eq!(proportional_boundary(source, count, index), closest);
+        }
+    }
+}
+
+#[test]
 fn changing_one_block_preserves_front_matter_html_footnotes_and_definitions() {
     let source = concat!(
         "---\n",
@@ -277,13 +324,13 @@ fn formatted_unicode_maps_every_grapheme_boundary_on_import_and_export() {
 #[test]
 fn quote_list_and_code_descendants_have_dense_position_maps() {
     let source = concat!(
-        "> 引用 **好**\n",
-        "\n",
-        "- item 👩‍👩‍👧‍👦\n",
-        "\n",
-        "```rs\n",
-        "let 名 = 1;\n",
-        "```\n",
+        "> 引用 **好**\r\n",
+        "\r\n",
+        "- item 👩‍👩‍👧‍👦\r\n",
+        "\r\n",
+        "```rs\r\n",
+        "let 名 = 1;\r\n",
+        "```\r\n",
     );
     let imported = MarkdownCodec::import(source).unwrap();
 
@@ -342,9 +389,9 @@ fn quote_list_and_code_descendants_have_dense_position_maps() {
 #[test]
 fn table_cells_map_unicode_and_escaped_pipe_boundaries() {
     let source = concat!(
-        "| 名字 | 值\\|pipe |\n",
-        "| --- | --- |\n",
-        "| e\u{301} | 👨‍👩‍👧‍👦 |\n",
+        "| 名字 | 值\\|pipe |\r\n",
+        "| --- | --- |\r\n",
+        "| e\u{301} | 👨‍👩‍👧‍👦 |\r\n",
     );
     let imported = MarkdownCodec::import(source).unwrap();
     let RichBlockKind::Table { header, rows, .. } = &imported.document.blocks[0].kind else {

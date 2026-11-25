@@ -52,7 +52,7 @@ Launcher lists the built-in applications available on the current platform, plus
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 
-Opening a text file counts its line endings once and measures terminal widths directly from the text chunks. Office previews use a single rich-text projection for the first frame and its word count.
+Opening a text file counts its line endings once and measures terminal widths directly from the text chunks. When the editor imports rich text, it indexes source lines once for all paragraphs, tables, and code blocks. Office previews use a single rich-text projection for the first frame and its word count.
 
 Explorer's default editor associations use the built-in suffixes and LSH's filename and path patterns, including `Cargo.lock`, `Gemfile`, and `.git/config`. A custom or empty suffix list takes precedence.
 
