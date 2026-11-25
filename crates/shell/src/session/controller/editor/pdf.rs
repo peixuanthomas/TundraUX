@@ -1,19 +1,67 @@
-use app::editor::{PdfPageImage, PdfPreviewDocument};
+use std::collections::VecDeque;
+use std::sync::atomic::Ordering;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+
+use app::editor::PdfPreviewDocument;
 use i18n::LocalizedText;
 use ui::EditorPdfAction::{self, Next, Open, Previous};
+use ui::EditorPdfPageImage;
 
 use crate::session::*;
 
-type PageRender = Result<(u64, PdfPageImage), LocalizedText>;
+const MAX_CACHED_PAGES: usize = 12;
+const MAX_CACHE_BYTES: usize = 32 * 1024 * 1024;
+const PREFETCH_RADIUS: usize = 2;
+const RENDER_BATCH_PAGES: usize = 3;
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/session/controller/editor/pdf_cache_tests.rs"]
+mod tests;
+
+type PageRender = Result<(u64, EditorPdfPageImage), LocalizedText>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PdfViewport {
+    cells: [u16; 2],
+    cell_size: [u16; 2],
+}
+
+#[derive(Debug)]
+struct RenderBatch {
+    pages: VecDeque<usize>,
+    completed: Receiver<PageRender>,
+}
+
+#[derive(Debug, Default)]
+struct PdfRenderTask {
+    batch: Option<RenderBatch>,
+    worker: app::background::Latest<()>,
+}
+
+// Page snapshots must not take over a live worker or steal its results.
+impl Clone for PdfRenderTask {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for PdfRenderTask {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for PdfRenderTask {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::session) struct EditorPdfPreview {
     document: PdfPreviewDocument,
     page: usize,
     focus: EditorPdfAction,
-    viewport: Option<[u16; 2]>,
-    result: Option<PageRender>,
-    task: app::background::Latest<PageRender>,
+    viewport: Option<PdfViewport>,
+    targets: Vec<usize>,
+    cache: VecDeque<(usize, PageRender)>,
+    task: PdfRenderTask,
 }
 
 impl EditorPdfPreview {
@@ -23,13 +71,17 @@ impl EditorPdfPreview {
             page: 0,
             focus: Open,
             viewport: None,
-            result: None,
+            targets: Vec::new(),
+            cache: VecDeque::new(),
             task: Default::default(),
         }
     }
 
-    pub(super) fn view_model(&self) -> ui::EditorPdfViewModel {
-        let result = self.result.as_ref();
+    pub(super) fn view_model(&self, cell_size: [u16; 2]) -> ui::EditorPdfViewModel {
+        let result = self
+            .viewport
+            .filter(|viewport| viewport.cell_size == cell_size)
+            .and_then(|_| self.cached(self.page));
         ui::EditorPdfViewModel {
             page: self.page,
             total: self.document.page_count(),
@@ -53,9 +105,163 @@ impl EditorPdfPreview {
         if !self.focus.enabled(self.page, self.document.page_count()) {
             self.focus = Open;
         }
-        self.viewport = None;
-        self.result = None;
-        self.task.cancel();
+        if let Some(index) = self.cache.iter().position(|(page, _)| *page == self.page) {
+            let cached = self.cache.remove(index).unwrap();
+            self.cache.push_back(cached);
+        }
+        self.plan_targets();
+    }
+
+    fn cached(&self, page: usize) -> Option<&PageRender> {
+        self.cache
+            .iter()
+            .find_map(|(index, raster)| (*index == page).then_some(raster))
+    }
+
+    fn plan_targets(&mut self) {
+        self.targets.clear();
+        let Some(viewport) = self.viewport else {
+            return;
+        };
+        let total = self.document.page_count();
+        let radius = if total <= MAX_CACHED_PAGES {
+            total - 1
+        } else {
+            PREFETCH_RADIUS
+        };
+        let neighbors = (1..=radius).flat_map(|distance| {
+            [
+                (self.page + distance < total).then_some(self.page + distance),
+                self.page.checked_sub(distance),
+            ]
+            .into_iter()
+            .flatten()
+        });
+        let mut bytes = 0;
+        for page in std::iter::once(self.page).chain(neighbors) {
+            let cost = self
+                .document
+                .page_size(page, viewport.cells, viewport.cell_size)
+                .map_or(0, EditorPdfPageImage::estimated_bytes);
+            if bytes + cost <= MAX_CACHE_BYTES {
+                self.targets.push(page);
+                bytes += cost;
+            }
+        }
+    }
+
+    fn record(&mut self, page: usize, result: PageRender) -> bool {
+        if !self.targets.contains(&page) || self.cached(page).is_some() {
+            return false;
+        }
+        let mut bytes = render_bytes(&result)
+            + self
+                .cache
+                .iter()
+                .map(|(_, result)| render_bytes(result))
+                .sum::<usize>();
+        // Keep the current prefetch window intact and evict older visits first.
+        while self.cache.len() >= MAX_CACHED_PAGES || bytes > MAX_CACHE_BYTES {
+            let index = self
+                .cache
+                .iter()
+                .position(|(page, _)| !self.targets.contains(page))
+                .unwrap();
+            bytes -= render_bytes(&self.cache.remove(index).unwrap().1);
+        }
+        self.cache.push_back((page, result));
+        page == self.page
+    }
+
+    fn poll(
+        &mut self,
+        viewport: Option<PdfViewport>,
+        group: Option<&watchdog::ManagedTaskGroup>,
+    ) -> bool {
+        let mut changed = self.viewport != viewport;
+        if changed {
+            self.viewport = viewport;
+            self.cache.clear();
+            self.task.batch = None;
+            self.task.worker.cancel();
+            self.plan_targets();
+        }
+        let Some(viewport) = viewport else {
+            return changed;
+        };
+
+        while let Some(batch) = &mut self.task.batch {
+            match batch.completed.try_recv() {
+                Ok(result) => {
+                    let page = batch.pages.pop_front().unwrap();
+                    changed |= self.record(page, result);
+                }
+                Err(TryRecvError::Disconnected) => {
+                    self.task.batch = None;
+                }
+                Err(TryRecvError::Empty) => break,
+            }
+        }
+        self.task.worker.take();
+        if let Some(batch) = &self.task.batch
+            && (self.cached(self.page).is_some() || batch.pages.front() == Some(&self.page))
+        {
+            return changed;
+        }
+
+        let pages = self
+            .targets
+            .iter()
+            .copied()
+            .filter(|page| self.cached(*page).is_none())
+            .take(RENDER_BATCH_PAGES)
+            .collect::<VecDeque<_>>();
+        if pages.is_empty() {
+            return changed;
+        }
+
+        let document = self.document.clone();
+        let requested = pages.clone();
+        let (sender, completed) = mpsc::channel();
+        let submitted = group.is_some_and(|group| {
+            self.task
+                .worker
+                .submit_in(group, move |cancel| {
+                    let mut renders = document.render_pages(
+                        requested.iter().copied(),
+                        viewport.cells,
+                        viewport.cell_size,
+                    );
+                    for page in requested.iter().copied() {
+                        if cancel.load(Ordering::Acquire) {
+                            break;
+                        }
+                        let raster = renders.next().unwrap();
+                        if cancel.load(Ordering::Acquire) {
+                            break;
+                        }
+                        let result = raster.and_then(|raster| {
+                            let image = EditorPdfPageImage::prepare(raster)
+                                .ok_or_else(|| page_render_error(page))?;
+                            Ok((super::tasks::next_editor_task_id(), image))
+                        });
+                        if cancel.load(Ordering::Acquire) || sender.send(result).is_err() {
+                            break;
+                        }
+                        platform::task_events::notify();
+                    }
+                })
+                .is_ok()
+        });
+        if submitted {
+            self.task.batch = Some(RenderBatch { pages, completed });
+        } else {
+            self.task.batch = None;
+            for page in pages {
+                changed |= self.record(page, Err(page_render_error(page)));
+            }
+        }
+        changed
     }
 
     fn move_focus(&mut self, backwards: bool) {
@@ -72,10 +278,21 @@ impl EditorPdfPreview {
     }
 }
 
+fn render_bytes(result: &PageRender) -> usize {
+    result.as_ref().map_or(0, |(_, image)| image.bytes())
+}
+
+fn page_render_error(page: usize) -> LocalizedText {
+    i18n::msg!("editor-pdf-render-error", page = page + 1).into()
+}
+
 impl ShellSession {
-    fn editor_pdf_render_viewport(&self) -> Option<[u16; 2]> {
+    fn editor_pdf_render_viewport(&self) -> Option<PdfViewport> {
         let canvas = self.editor_current_layout().canvas;
-        (!canvas.is_empty()).then_some([canvas.width, canvas.height])
+        (!canvas.is_empty()).then_some(PdfViewport {
+            cells: [canvas.width, canvas.height],
+            cell_size: self.terminal_image_cell_size,
+        })
     }
 
     pub(in crate::session) fn editor_pdf_has_background_work(&self) -> bool {
@@ -89,8 +306,12 @@ impl ShellSession {
             .editor_pdf
             .as_ref()
             .is_some_and(|preview| {
-                self.editor_pdf_render_viewport()
-                    .is_some_and(|size| preview.viewport != Some(size) || preview.task.busy())
+                preview.viewport != self.editor_pdf_render_viewport()
+                    || preview.task.batch.is_some()
+                    || preview
+                        .targets
+                        .iter()
+                        .any(|page| preview.cached(*page).is_none())
             })
     }
 
@@ -98,45 +319,13 @@ impl ShellSession {
         if self.pages.editor.editor_pdf.is_none() || self.pages.editor.editor_load_state.is_some() {
             return false;
         }
-        let Some(viewport) = self.editor_pdf_render_viewport() else {
-            return false;
-        };
-        let [width, height] = self.terminal_image_cell_size;
+        let viewport = self.editor_pdf_render_viewport();
         let session_ui = &mut self.ui;
         let preview = session_ui.pages.editor.editor_pdf.as_mut().unwrap();
-        if preview.viewport != Some(viewport) {
-            preview.viewport = Some(viewport);
-            preview.result = None;
-            let document = preview.document.clone();
-            let page = preview.page;
-            let id = super::tasks::next_editor_task_id();
-            let submitted = session_ui
-                .editor_task_runtime
-                .shared
-                .task_group
-                .as_ref()
-                .is_some_and(|group| {
-                    preview
-                        .task
-                        .submit_in(group, move |_| {
-                            document
-                                .render_page(page, viewport, [width, height])
-                                .map(|image| (id, image))
-                        })
-                        .is_ok()
-                });
-            if !submitted {
-                preview.result = Some(Err(
-                    i18n::msg!("editor-pdf-render-error", page = page + 1).into()
-                ));
-            }
-            return true;
-        }
-        if let Some(result) = preview.task.take() {
-            preview.result = Some(result);
-            return true;
-        }
-        false
+        preview.poll(
+            viewport,
+            session_ui.editor_task_runtime.shared.task_group.as_ref(),
+        )
     }
 
     pub(super) fn handle_editor_pdf_key(&mut self, key: &KeyInput, platform: &dyn Platform) {

@@ -6511,6 +6511,8 @@ dependencies = [
  "animate",
  "app",
  "ascii-assets",
+ "base64-simd",
+ "flate2",
  "geojson",
  "i18n",
  "image",

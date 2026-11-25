@@ -13,6 +13,8 @@ shell-control = { path = "../shell-control" }
 workspace-protocol = { path = "../workspace-protocol" }
 serde = { version = "1", features = ["derive"] }
 animate.workspace = true
+base64-simd = "0.8"
+flate2 = "1"
 i18n = { path = "../i18n" }
 geojson = "1.0"
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }

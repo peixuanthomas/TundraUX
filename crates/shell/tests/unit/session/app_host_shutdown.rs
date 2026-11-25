@@ -80,7 +80,7 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
 }
 
 #[test]
-fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
+fn app_host_polls_pdf_on_open_and_resize_and_uses_warm_pages_on_the_first_input_frame() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().canonicalize().unwrap();
     let paths = platform::AppPaths::from_parts(
@@ -129,12 +129,14 @@ fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
     WindowLaunch::EditorPath(path.into()).activate(&mut host.state, host.platform.as_ref());
     assert!(host.state.pages.editor.editor_load_state.is_some());
 
-    let wait_for_image = |host: &mut AppHostSession, after: u64| {
+    let wait_for_image = |host: &mut AppHostSession, after: u64, input: Option<u64>| {
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let now = Instant::now();
             host.poll(now).unwrap();
-            if let Some(frame) = host.frame(now).unwrap() {
+            if let Some(frame) = host.frame(now).unwrap()
+                && input.is_none_or(|serial| frame.processed_input_serial >= serial)
+            {
                 assert!(
                     !frame.modal,
                     "Unexpected test overlay: {:?}",
@@ -147,6 +149,10 @@ fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
                 {
                     return image;
                 }
+                assert!(
+                    input.is_none(),
+                    "warm PDF page was missing from the first input frame"
+                );
             }
             assert!(
                 now < deadline,
@@ -156,19 +162,36 @@ fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
         }
     };
 
-    let first = wait_for_image(&mut host, 0);
-    host.receive(ShellToApp::Input {
-        serial: 1,
-        layout: host.layout,
-        event: serde_json::to_value(InputEvent::key(InputKey::PageDown)).unwrap(),
-    })
-    .unwrap();
-    let scan = wait_for_image(&mut host, first.image_id);
+    let first = wait_for_image(&mut host, 0, None);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.state.editor_pdf_has_background_work() {
+        host.poll(Instant::now()).unwrap();
+        assert!(
+            Instant::now() < deadline,
+            "AppHost did not settle PDF prefetch"
+        );
+        std::thread::sleep(HOST_TICK);
+    }
+    let press = |host: &mut AppHostSession, serial, key| {
+        host.receive(ShellToApp::Input {
+            serial,
+            layout: host.layout,
+            event: serde_json::to_value(InputEvent::key(key)).unwrap(),
+        })
+        .unwrap();
+    };
+    press(&mut host, 1, InputKey::PageDown);
+    let scan = wait_for_image(&mut host, first.image_id, Some(1));
     assert!(
         scan.rgba
             .chunks_exact(4)
             .any(|pixel| pixel == [162, 40, 20, 255])
     );
+    press(&mut host, 2, InputKey::PageUp);
+    let again = wait_for_image(&mut host, 0, Some(2));
+    assert_eq!(again.image_id, first.image_id);
+    assert!(Arc::ptr_eq(&again.rgba, &first.rgba));
+    press(&mut host, 3, InputKey::PageDown);
     host.receive(ShellToApp::Viewport {
         layout: LayoutGeneration(2),
         size: Some(MIN_CONTENT_SIZE),
@@ -176,7 +199,7 @@ fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
         focused: true,
     })
     .unwrap();
-    let resized = wait_for_image(&mut host, scan.image_id);
+    let resized = wait_for_image(&mut host, scan.image_id, None);
     assert!(resized.width < scan.width && resized.height < scan.height);
     assert_eq!(host.state.to_editor_view_model().pdf.unwrap().page, 1);
 

@@ -25,7 +25,7 @@ pub use vim_install::editor_vim_install_layout;
 
 pub use layout::*;
 pub use model::*;
-pub use pdf::{EditorPdfAction, EditorPdfLayout, EditorPdfViewModel};
+pub use pdf::{EditorPdfAction, EditorPdfLayout, EditorPdfPageImage, EditorPdfViewModel};
 pub use render::*;
 pub use source::*;
 

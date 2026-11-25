@@ -73,8 +73,8 @@ fn wait_for_pdf(
             assert_eq!(pdf.page, page);
             assert_eq!(pdf.total, 2);
             assert!(pdf.error.is_none(), "{:?}", pdf.error);
-            if let Some(image) = pdf.image {
-                return image;
+            if let Some((id, image)) = pdf.image {
+                return (id, image.raster);
             }
         }
         assert!(Instant::now() < timeout, "PDF page did not render");
@@ -208,6 +208,48 @@ fn pdf_preview_keeps_the_latest_page_and_size_and_remains_read_only() {
     assert!(!state.app.editor_state().unwrap().is_dirty());
     assert_eq!(std::fs::read(&path).unwrap(), SAMPLE);
     assert!(state.pages.editor.editor_save_state.is_none());
+}
+
+#[test]
+fn pdf_preview_reuses_prefetched_pages_until_pixel_cell_size_changes() {
+    let (mut state, platform, _guard, path) = pdf_fixture(SAMPLE);
+    assert!(state.open_editor_path(path));
+    let (first, vector) = wait_for_pdf(&mut state, &platform, 0);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while state.editor_pdf_has_background_work() {
+        state.poll_editor_background_tasks(&platform);
+        assert!(Instant::now() < deadline, "PDF prefetch did not settle");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    state.apply_input_with_platform(InputEvent::key(InputKey::PageDown), &platform);
+    let (second, scan) = state
+        .to_editor_view_model()
+        .pdf
+        .unwrap()
+        .image
+        .expect("second page must be ready without another background poll");
+    assert_ne!(second, first);
+    assert_eq!(scan.raster.viewport, vector.viewport);
+    assert!(
+        scan.raster
+            .rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel == [162, 40, 20, 255])
+    );
+
+    state.apply_input_with_platform(InputEvent::key(InputKey::PageUp), &platform);
+    let (again, cached) = state.to_editor_view_model().pdf.unwrap().image.unwrap();
+    assert_eq!(again, first);
+    assert!(Arc::ptr_eq(&cached.raster.rgba, &vector.rgba));
+
+    state.terminal_image_cell_size = [12, 25];
+    assert!(state.to_editor_view_model().pdf.unwrap().image.is_none());
+    let (resized, raster) = wait_for_pdf(&mut state, &platform, 0);
+    assert_ne!(resized, first);
+    assert_eq!(raster.viewport, vector.viewport);
+    assert_eq!(raster.cell_size, [12, 25]);
+    assert_ne!(raster.width, vector.width);
 }
 
 #[test]

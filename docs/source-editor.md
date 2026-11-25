@@ -10,7 +10,7 @@ By default, double-click a Word (`.docx`) or Excel (`.xlsx`) file in Explorer, o
 
 Open a PDF with Enter or a double click in Explorer, or choose it with **File → Open** in Editor. PDFs always open in TundraUX's read-only preview. Use **Previous page** and **Next page** or Page Up and Page Down to move through the document. The current page fits the window automatically as its size changes.
 
-The preview supports scanned pages and uses Kitty, Sixel, or iTerm2 graphics when the terminal supports them. Other terminals show color blocks. A damaged or password-protected PDF reports an error inside the workspace.
+The first page appears as soon as it is ready. The editor then prepares pages in the background, keeping the whole document when it fits its cache and nearby pages for longer files. This also works with scanned pages. Terminals with Kitty, Sixel or iTerm2 graphics show the page image. Other terminals use prepared color blocks. A damaged or password-protected PDF reports an error inside the workspace.
 
 ## Standard editor
 

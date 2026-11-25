@@ -16,6 +16,8 @@ use crate::{
     EditorImagePicker, TerminalImageFragment,
 };
 
+mod kitty;
+
 const CACHE_BUDGET: usize = 128 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -40,6 +42,7 @@ struct PreparedImage {
     protocol: Protocol,
     _rgba: Arc<[u8]>,
     kitty: Option<(u32, bool)>,
+    kitty_upload: Option<String>,
     bytes: usize,
     transparent_cells: Vec<(u16, u16)>,
 }
@@ -94,8 +97,7 @@ impl TerminalImageCache {
             }
             let mut canvas = None;
             for piece in pieces {
-                let cell_size = picker.map_or((1, 2), EditorImagePicker::cell_size);
-                let Some((stored, working)) = preparation_cost(image, piece.as_size(), cell_size)
+                let Some((stored, working)) = preparation_cost(image, piece.as_size(), picker)
                 else {
                     continue;
                 };
@@ -150,6 +152,25 @@ impl TerminalImageCache {
     pub fn take_workspace_images(&mut self) -> Vec<workspace_protocol::Image> {
         self.workspace_origin = None;
         std::mem::take(&mut self.workspace_images)
+    }
+
+    /// Registers a known opaque image whose terminal-cell fallback was drawn separately.
+    pub fn capture_opaque_workspace(
+        &mut self,
+        area: Rect,
+        frame_area: Rect,
+        image: &TerminalImageFragment,
+    ) {
+        if let Some(origin) = self.workspace_origin {
+            let clipped = area.intersection(frame_area);
+            let visible = image.area.intersection(Rect::new(
+                clipped.x.saturating_sub(area.x),
+                clipped.y.saturating_sub(area.y),
+                clipped.width,
+                clipped.height,
+            ));
+            self.capture_workspace_image(area, origin, image, &[visible]);
+        }
     }
 
     fn capture_workspace_image(
@@ -239,7 +260,7 @@ impl TerminalImageCache {
                     piece.height,
                 );
                 let Some((stored, working)) =
-                    preparation_cost(&image, piece.as_size(), picker.cell_size())
+                    preparation_cost(&image, piece.as_size(), Some(picker))
                 else {
                     continue;
                 };
@@ -297,15 +318,12 @@ impl TerminalImageCache {
                     return;
                 }
             }
-            let Some(canvas) = canvas.get_or_insert_with(|| image_canvas(image)).as_ref() else {
-                return;
-            };
             let Some(prepared) = prepare_image(image, &key, canvas, stored) else {
                 return;
             };
             self.entries.insert(key.clone(), prepared);
         }
-        let prepared = &self.entries[&key];
+        let prepared = self.entries.get_mut(&key).unwrap();
         let raster = key.backend.is_none();
         used.insert(key);
         let transparent = prepared
@@ -324,6 +342,11 @@ impl TerminalImageCache {
             }
         }
         frame.render_widget(Image::new(&prepared.protocol), target);
+        if let Some(mut upload) = prepared.kitty_upload.take() {
+            let cell = &mut frame.buffer_mut()[(target.x, target.y)];
+            upload.push_str(cell.symbol());
+            cell.set_symbol(&upload);
+        }
         for (position, cell) in transparent {
             frame.buffer_mut()[position] = cell;
         }
@@ -411,8 +434,9 @@ fn offset_rect(rect: Rect, x: u16, y: u16) -> Rect {
 fn preparation_cost(
     image: &TerminalImageFragment,
     size: Size,
-    cell_size: (u16, u16),
+    picker: Option<&EditorImagePicker>,
 ) -> Option<(usize, usize)> {
+    let cell_size = picker.map_or((1, 2), EditorImagePicker::cell_size);
     let data = u64::from(image.width).checked_mul(u64::from(image.height))?;
     let source = u64::from(image.source[2]).checked_mul(u64::from(image.source[3]))?;
     let canvas_width = u64::from(image.area.width) * u64::from(image.cell_size[0]);
@@ -438,14 +462,31 @@ fn preparation_cost(
     let stored = pixels.checked_mul(32)?.checked_add(keys)?.checked_add(
         (std::mem::size_of::<ImageKey>() + std::mem::size_of::<PreparedImage>() + 64) as u64,
     )?;
-    let working = source
-        .checked_mul(4)?
-        .checked_add(canvas.checked_mul(8)?)?
-        .checked_add(crop.checked_mul(4)?)?
-        .checked_add(pixels.checked_mul(8)?)?
-        .checked_add(canvas_pass.checked_mul(16)?)?
-        .checked_add(target_pass.checked_mul(16)?)?;
+    let working = if picker.and_then(EditorImagePicker::protocol).is_some()
+        && directly_fitted(image, size, cell_size)
+    {
+        // Source copies and encoder scratch remain, but no canvas, crop, or resize passes.
+        pixels.checked_mul(16)?
+    } else {
+        source
+            .checked_mul(4)?
+            .checked_add(canvas.checked_mul(8)?)?
+            .checked_add(crop.checked_mul(4)?)?
+            .checked_add(pixels.checked_mul(8)?)?
+            .checked_add(canvas_pass.checked_mul(16)?)?
+            .checked_add(target_pass.checked_mul(16)?)?
+    };
     Some((stored.try_into().ok()?, working.try_into().ok()?))
+}
+
+fn directly_fitted(image: &TerminalImageFragment, size: Size, cell_size: (u16, u16)) -> bool {
+    image.area.as_size() == size
+        && image.cell_size == [cell_size.0, cell_size.1]
+        && image.source == [0, 0, image.width, image.height]
+        && image.padding == [0; 4]
+        && image.width == u32::from(size.width) * u32::from(cell_size.0)
+        && image.height == u32::from(size.height) * u32::from(cell_size.1)
+        && image.rgba.len() as u64 == u64::from(image.width) * u64::from(image.height) * 4
 }
 
 fn raster_background(cell: &Cell) -> [Color; 2] {
@@ -507,18 +548,45 @@ fn image_canvas(image: &TerminalImageFragment) -> Option<RgbaImage> {
 fn prepare_image(
     image: &TerminalImageFragment,
     key: &ImageKey,
-    canvas: &RgbaImage,
+    canvas: &mut Option<Option<RgbaImage>>,
     bytes: usize,
 ) -> Option<PreparedImage> {
-    let [x, y, width, height] = key.crop;
-    let cropped =
-        DynamicImage::ImageRgba8(image::imageops::crop_imm(canvas, x, y, width, height).to_image());
+    let directly_fitted = key.backend.is_some() && directly_fitted(image, key.size, key.cell_size);
+    let tmux = key.tmux;
+    let mut kitty = None;
+    if key.backend == Some(EditorGraphicsProtocol::Kitty) {
+        let id = crate::editor_media::next_kitty_image_id();
+        kitty = Some((id, tmux));
+        if directly_fitted
+            && let Some((protocol, upload)) =
+                kitty::compressed(&image.rgba, [image.width, image.height], key.size, id, tmux)
+        {
+            return Some(PreparedImage {
+                protocol,
+                _rgba: image.rgba.clone(),
+                kitty,
+                kitty_upload: Some(upload),
+                transparent_cells: Vec::new(),
+                bytes,
+            });
+        }
+    }
+
     let target_width = u32::from(key.size.width).checked_mul(u32::from(key.cell_size.0))?;
     let target_height = u32::from(key.size.height).checked_mul(u32::from(key.cell_size.1))?;
     if u64::from(target_width) * u64::from(target_height) > EDITOR_IMAGE_MAX_PIXELS {
         return None;
     }
-    let mut resized = resize_rgba(cropped, target_width, target_height);
+    let mut resized = if directly_fitted {
+        RgbaImage::from_raw(image.width, image.height, image.rgba.to_vec())?
+    } else {
+        let canvas = canvas.get_or_insert_with(|| image_canvas(image)).as_ref()?;
+        let [x, y, width, height] = key.crop;
+        let cropped = DynamicImage::ImageRgba8(
+            image::imageops::crop_imm(canvas, x, y, width, height).to_image(),
+        );
+        resize_rgba(cropped, target_width, target_height)
+    };
     let mut transparent_cells = Vec::new();
     if key.backend.is_none() {
         let mut transparent =
@@ -549,12 +617,9 @@ fn prepare_image(
             .collect();
     }
     let resized = DynamicImage::ImageRgba8(resized);
-    let tmux = key.tmux;
-    let mut kitty = None;
     let protocol = match key.backend {
         Some(EditorGraphicsProtocol::Kitty) => {
-            let id = crate::editor_media::next_kitty_image_id();
-            kitty = Some((id, tmux));
+            let (id, _) = kitty.unwrap();
             Protocol::Kitty(Kitty::new(resized, key.size, id, tmux).ok()?)
         }
         Some(EditorGraphicsProtocol::Sixel) => {
@@ -569,6 +634,7 @@ fn prepare_image(
         protocol,
         _rgba: image.rgba.clone(),
         kitty,
+        kitty_upload: None,
         transparent_cells,
         bytes,
     })

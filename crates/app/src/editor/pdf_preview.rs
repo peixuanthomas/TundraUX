@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use hayro::hayro_interpret::{InterpreterSettings, util::TransformExt};
-use hayro::hayro_syntax::{LoadPdfError, Pdf};
+use hayro::hayro_syntax::{LoadPdfError, Pdf, page::Page};
 use hayro::kurbo::Affine;
 use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
 use i18n::LocalizedText;
@@ -45,6 +45,12 @@ pub struct PdfPageImage {
     pub rgba: Arc<[u8]>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PdfPageSize {
+    pub pixels: [u16; 2],
+    pub cells: [u16; 2],
+}
+
 impl PdfPreviewDocument {
     pub fn open(bytes: Vec<u8>) -> Result<Self, LocalizedText> {
         let pdf = std::panic::catch_unwind(|| Pdf::new(bytes))
@@ -69,71 +75,125 @@ impl PdfPreviewDocument {
         viewport: [u16; 2],
         cell_size: [u16; 2],
     ) -> Result<PdfPageImage, LocalizedText> {
-        let render_error = || i18n::msg!("editor-pdf-render-error", page = index.saturating_add(1));
-        let page = self.0.pages().get(index).ok_or_else(render_error)?;
-        let (page_width, page_height) = page.render_dimensions();
-        let [page_width, page_height] = [f64::from(page_width), f64::from(page_height)];
-        let [cell_width, cell_height] = cell_size.map(f64::from);
-        let [columns, rows] = viewport.map(f64::from);
-        if [page_width, page_height]
-            .into_iter()
-            .any(|side| !side.is_finite() || side <= 0.0)
-            || viewport.contains(&0)
-            || cell_size.contains(&0)
-        {
-            return Err(render_error().into());
-        }
+        self.render_pages([index], viewport, cell_size)
+            .next()
+            .unwrap()
+    }
 
-        let scale = (columns * cell_width / page_width).min(rows * cell_height / page_height);
-        let columns = (page_width * scale / cell_width).ceil().min(columns) as u16;
-        let rows = (page_height * scale / cell_height).ceil().min(rows) as u16;
-        let (pixel_width, pixel_height) = (
-            f64::from(columns) * cell_width,
-            f64::from(rows) * cell_height,
-        );
-        let raster_scale = (MAX_RASTER_SIDE / pixel_width.max(pixel_height)).min(1.0);
-        let width = (pixel_width * raster_scale).round().max(1.0) as u16;
-        let height = (pixel_height * raster_scale).round().max(1.0) as u16;
-        let scale = (scale * raster_scale)
-            .min(f64::from(width) / page_width)
-            .min(f64::from(height) / page_height);
-        // Center the page on whole cells without stretching it to the cell grid.
-        let transform = Affine::translate((
-            (f64::from(width) - page_width * scale) / 2.0,
-            (f64::from(height) - page_height * scale) / 2.0,
-        )) * Affine::scale(scale)
-            * page.initial_transform(true).to_kurbo();
+    pub fn page_size(
+        &self,
+        index: usize,
+        viewport: [u16; 2],
+        cell_size: [u16; 2],
+    ) -> Option<PdfPageSize> {
+        fit_page(self.0.pages().get(index)?, viewport, cell_size).map(|(size, _)| size)
+    }
 
-        let pixmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut context = RenderContext::new(width, height);
-            hayro::render_into(
-                page,
-                &hayro::RenderCache::new(),
-                &InterpreterSettings::default(),
-                &hayro::RenderSettings::default(),
-                &mut context,
-                transform,
-            );
-            context.flush();
-            let mut pixmap = Pixmap::new(width, height);
-            context.render_with(
-                &mut pixmap,
-                &mut Resources::default(),
-                RasterizerSettings {
-                    target_init: TargetInit::Clear(hayro::vello_cpu::color::palette::css::WHITE),
-                    ..Default::default()
-                },
-            );
-            pixmap
-        }))
-        .map_err(|_| render_error())?;
-        Ok(PdfPageImage {
-            viewport,
-            cell_size,
-            cells: [columns, rows],
-            width: u32::from(width),
-            height: u32::from(height),
-            rgba: Arc::from(pixmap.data_as_u8_slice()),
+    /// Shares Hayro's internal caches within a short batch without retaining them between calls.
+    pub fn render_pages(
+        &self,
+        pages: impl IntoIterator<Item = usize>,
+        viewport: [u16; 2],
+        cell_size: [u16; 2],
+    ) -> impl Iterator<Item = Result<PdfPageImage, LocalizedText>> {
+        let mut cache = hayro::RenderCache::new();
+        let mut resources = Resources::default();
+        pages.into_iter().map(move |index| {
+            let error = || i18n::msg!("editor-pdf-render-error", page = index.saturating_add(1));
+            let page = self.0.pages().get(index).ok_or_else(error)?;
+            let (size, transform) = fit_page(page, viewport, cell_size).ok_or_else(error)?;
+            let pixmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                render_fitted_page(page, size, transform, &cache, &mut resources)
+            }))
+            .map_err(|_| {
+                cache = hayro::RenderCache::new();
+                resources = Resources::default();
+                error()
+            })?;
+            Ok(PdfPageImage {
+                viewport,
+                cell_size,
+                cells: size.cells,
+                width: u32::from(size.pixels[0]),
+                height: u32::from(size.pixels[1]),
+                rgba: Arc::from(pixmap.data_as_u8_slice()),
+            })
         })
     }
+}
+
+fn fit_page(
+    page: &Page<'_>,
+    viewport: [u16; 2],
+    cell_size: [u16; 2],
+) -> Option<(PdfPageSize, Affine)> {
+    let (page_width, page_height) = page.render_dimensions();
+    let [page_width, page_height] = [f64::from(page_width), f64::from(page_height)];
+    let [cell_width, cell_height] = cell_size.map(f64::from);
+    let [columns, rows] = viewport.map(f64::from);
+    if [page_width, page_height]
+        .into_iter()
+        .any(|side| !side.is_finite() || side <= 0.0)
+        || viewport.contains(&0)
+        || cell_size.contains(&0)
+    {
+        return None;
+    }
+
+    let scale = (columns * cell_width / page_width).min(rows * cell_height / page_height);
+    let columns = (page_width * scale / cell_width).ceil().min(columns) as u16;
+    let rows = (page_height * scale / cell_height).ceil().min(rows) as u16;
+    let (pixel_width, pixel_height) = (
+        f64::from(columns) * cell_width,
+        f64::from(rows) * cell_height,
+    );
+    let raster_scale = (MAX_RASTER_SIDE / pixel_width.max(pixel_height)).min(1.0);
+    let width = (pixel_width * raster_scale).round().max(1.0) as u16;
+    let height = (pixel_height * raster_scale).round().max(1.0) as u16;
+    let scale = (scale * raster_scale)
+        .min(f64::from(width) / page_width)
+        .min(f64::from(height) / page_height);
+    // Center the page on whole cells without stretching it to the cell grid.
+    let transform = Affine::translate((
+        (f64::from(width) - page_width * scale) / 2.0,
+        (f64::from(height) - page_height * scale) / 2.0,
+    )) * Affine::scale(scale)
+        * page.initial_transform(true).to_kurbo();
+    Some((
+        PdfPageSize {
+            pixels: [width, height],
+            cells: [columns, rows],
+        },
+        transform,
+    ))
+}
+
+fn render_fitted_page<'a>(
+    page: &'a Page<'a>,
+    size: PdfPageSize,
+    transform: Affine,
+    cache: &hayro::RenderCache<'a>,
+    resources: &mut Resources,
+) -> Pixmap {
+    let [width, height] = size.pixels;
+    let mut context = RenderContext::new(width, height);
+    hayro::render_into(
+        page,
+        cache,
+        &InterpreterSettings::default(),
+        &hayro::RenderSettings::default(),
+        &mut context,
+        transform,
+    );
+    context.flush();
+    let mut pixmap = Pixmap::new(width, height);
+    context.render_with(
+        &mut pixmap,
+        resources,
+        RasterizerSettings {
+            target_init: TargetInit::Clear(hayro::vello_cpu::color::palette::css::WHITE),
+            ..Default::default()
+        },
+    );
+    pixmap
 }

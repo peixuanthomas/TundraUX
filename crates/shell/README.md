@@ -109,7 +109,7 @@ The Editor opens File Explorer in a separate window for Open, first save and Sav
 
 By default, double-clicking a Word (`.docx`) or Excel (`.xlsx`) file in Explorer, or selecting it and pressing Enter, opens a read-only Editor window. The background loader converts the document to Markdown for display.
 
-PDFs open in the editor's dedicated read-only preview. The background renderer runs on open, page changes, and viewport changes. The preview offers Page Up and Page Down alongside clickable page controls.
+PDFs open in the read-only preview. A background worker renders the first page first, then nearby pages. Each window keeps up to 12 pages within a 32 MiB cache. Page Up, Page Down, and the page buttons reuse prepared pages immediately. A change to the viewport or terminal cell size invalidates images at the old size.
 
 The bottom row is dedicated to the window bar. Click a title to focus or restore that window. Click its × button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
 

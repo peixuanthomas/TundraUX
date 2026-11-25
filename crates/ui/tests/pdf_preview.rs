@@ -4,9 +4,9 @@ use std::sync::Arc;
 use app::editor::PdfPreviewDocument;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 use ui::{
-    ColorCapability, EditorGraphicsProtocol, EditorPdfAction, EditorPdfViewModel, EditorViewModel,
-    RenderCapabilities, RenderContext, TerminalGraphicsProbe, TerminalImageCache, TundraTheme,
-    editor_layout, render_editor_contextual_with_terminal_images,
+    ColorCapability, EditorGraphicsProtocol, EditorPdfAction, EditorPdfPageImage,
+    EditorPdfViewModel, EditorViewModel, RenderCapabilities, RenderContext, TerminalGraphicsProbe,
+    TerminalImageCache, TundraTheme, editor_layout, render_editor_contextual_with_terminal_images,
 };
 
 const SAMPLE: &[u8] = include_bytes!("../../app/tests/fixtures/pdf/preview.pdf");
@@ -21,9 +21,12 @@ fn preview(document: &PdfPreviewDocument, page: usize, area: Rect) -> EditorView
         focus: EditorPdfAction::Open,
         image: Some((
             1,
-            document
-                .render_page(page, [area.width, area.height - 2], [8, 16])
-                .unwrap(),
+            EditorPdfPageImage::prepare(
+                document
+                    .render_page(page, [area.width, area.height - 2], [8, 16])
+                    .unwrap(),
+            )
+            .unwrap(),
         )),
         error: None,
     });

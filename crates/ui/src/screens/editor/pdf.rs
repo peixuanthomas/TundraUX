@@ -1,9 +1,15 @@
-use app::editor::PdfPageImage;
+use std::sync::Arc;
+
+use app::editor::{PdfPageImage, PdfPageSize};
+use image::{ImageBuffer, Rgba, imageops};
 use ratatui::layout::HorizontalAlignment;
+use ratatui::style::Color;
 
 use super::*;
 use crate::components::{Button, ButtonRegion, Surface, terminal_width};
 use crate::{EditorImagePicker, RenderContext, TerminalImageCache};
+
+const MAX_BLOCK_CELLS: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorPdfAction {
@@ -45,8 +51,68 @@ pub struct EditorPdfViewModel {
     pub page: usize,
     pub total: usize,
     pub focus: EditorPdfAction,
-    pub image: Option<(u64, PdfPageImage)>,
+    pub image: Option<(u64, EditorPdfPageImage)>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorPdfPageImage {
+    pub raster: PdfPageImage,
+    blocks: Arc<[u8]>,
+}
+
+impl EditorPdfPageImage {
+    pub fn prepare(raster: PdfPageImage) -> Option<Self> {
+        let [columns, rows] = raster.cells.map(u32::from);
+        if u64::from(columns) * u64::from(rows) > MAX_BLOCK_CELLS as u64 {
+            return None;
+        }
+        let image = ImageBuffer::<Rgba<u8>, _>::from_raw(
+            raster.width,
+            raster.height,
+            raster.rgba.as_ref(),
+        )?;
+        let blocks = Arc::from(
+            imageops::resize(&image, columns, rows * 2, imageops::FilterType::Triangle).into_raw(),
+        );
+        Some(Self { raster, blocks })
+    }
+
+    pub fn estimated_bytes(size: PdfPageSize) -> usize {
+        let [width, height] = size.pixels.map(usize::from);
+        let [columns, rows] = size.cells.map(usize::from);
+        width * height * 4 + (columns * rows).min(MAX_BLOCK_CELLS) * 8
+    }
+
+    pub fn bytes(&self) -> usize {
+        self.raster.rgba.len() + self.blocks.len()
+    }
+
+    fn draw_blocks(&self, frame: &mut Frame<'_>, area: Rect, context: &RenderContext) {
+        let width = usize::from(self.raster.cells[0]);
+        let color = |index: usize| {
+            let pixels = &self.blocks[index..index + 3];
+            Color::Rgb(pixels[0], pixels[1], pixels[2])
+        };
+        let ansi = context.capabilities.color == crate::ColorCapability::Ansi;
+        let colors = context.capabilities.terminal_colors;
+        let visible = area.intersection(frame.area());
+        for y in visible.y..visible.bottom() {
+            for x in visible.x..visible.right() {
+                let offset = (usize::from(y - area.y) * 2 * width + usize::from(x - area.x)) * 4;
+                let (mut top, mut bottom) = (color(offset), color(offset + width * 4));
+                if ansi {
+                    top = colors.nearest_ansi(top);
+                    bottom = colors.nearest_ansi(bottom);
+                }
+                let cell = &mut frame.buffer_mut()[(x, y)];
+                cell.reset();
+                cell.set_symbol(if top == bottom { " " } else { "▀" })
+                    .set_fg(top)
+                    .set_bg(bottom);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,9 +227,10 @@ pub(super) fn render(
 
     let canvas = layout.canvas;
     if let Some((id, image)) = &pdf.image
-        && image.viewport == [canvas.width, canvas.height]
+        && image.raster.viewport == [canvas.width, canvas.height]
     {
-        let [columns, rows] = image.cells;
+        let raster = &image.raster;
+        let [columns, rows] = raster.cells;
         let placement = Rect::new(
             (canvas.width - columns) / 2,
             (canvas.height - rows) / 2,
@@ -172,45 +239,43 @@ pub(super) fn render(
         );
         let fragment = crate::TerminalImageFragment {
             image_id: *id,
-            width: image.width,
-            height: image.height,
-            rgba: image.rgba.clone(),
-            source: [0, 0, image.width, image.height],
+            width: raster.width,
+            height: raster.height,
+            rgba: raster.rgba.clone(),
+            source: [0, 0, raster.width, raster.height],
             padding: [0; 4],
-            cell_size: image.cell_size,
+            cell_size: raster.cell_size,
             area: placement,
             z_index: 0,
         };
-        images.render(
-            frame,
-            canvas,
-            &crate::CommandLineTerminalSnapshot {
-                columns: canvas.width,
-                rows: canvas.height,
-                cursor_style: Default::default(),
-                scrollback_rows: 0,
-                scrollback_offset: 0,
-                cells: Vec::new(),
-                images: vec![fragment],
-            },
-            picker,
-        );
-        if picker.is_none() && context.capabilities.color == crate::ColorCapability::Ansi {
-            let colors = context.capabilities.terminal_colors;
-            let visible = Rect::new(
-                canvas.x + placement.x,
-                canvas.y + placement.y,
-                columns,
-                rows,
-            )
-            .intersection(frame.area());
-            for y in visible.y..visible.bottom() {
-                for x in visible.x..visible.right() {
-                    let cell = &mut frame.buffer_mut()[(x, y)];
-                    cell.fg = colors.nearest_ansi(cell.fg);
-                    cell.bg = colors.nearest_ansi(cell.bg);
-                }
-            }
+        if let Some(picker) = picker {
+            images.render(
+                frame,
+                canvas,
+                &crate::CommandLineTerminalSnapshot {
+                    columns: canvas.width,
+                    rows: canvas.height,
+                    cursor_style: Default::default(),
+                    scrollback_rows: 0,
+                    scrollback_offset: 0,
+                    cells: Vec::new(),
+                    images: vec![fragment],
+                },
+                Some(picker),
+            );
+        } else {
+            images.clear();
+            images.capture_opaque_workspace(canvas, frame.area(), &fragment);
+            image.draw_blocks(
+                frame,
+                Rect::new(
+                    canvas.x + placement.x,
+                    canvas.y + placement.y,
+                    columns,
+                    rows,
+                ),
+                context,
+            );
         }
         return true;
     }

@@ -20,7 +20,7 @@ mod pdf_preview;
 mod source_buffer;
 mod source_changes;
 pub use office_preview::OfficeFormat;
-pub use pdf_preview::{PdfPageImage, PdfPreviewDocument, is_pdf_path};
+pub use pdf_preview::{PdfPageImage, PdfPageSize, PdfPreviewDocument, is_pdf_path};
 pub use source_changes::SourceLineChange;
 
 mod document;

@@ -26,6 +26,144 @@ fn picker(protocol: EditorGraphicsProtocol, tmux: bool) -> EditorImagePicker {
         .clone()
 }
 
+fn kitty_packets(symbol: &str, tmux: bool) -> (String, Vec<u8>) {
+    let (_, escape, _) = ratatui_image::picker::cap_parser::Parser::tmux_start_escape_end(tmux);
+    let start = format!("{escape}_G");
+    let end = format!("{escape}\\");
+    let chunks = symbol
+        .split(&start)
+        .skip(1)
+        .map(|chunk| chunk.split_once(&end).unwrap().0.split_once(';').unwrap())
+        .collect::<Vec<_>>();
+    let mut decoded = Vec::new();
+    for (index, (controls, payload)) in chunks.iter().enumerate() {
+        assert!(payload.len() <= 4096 && payload.len() % 4 == 0);
+        assert!(controls.ends_with(if index + 1 == chunks.len() {
+            "m=0"
+        } else {
+            "m=1"
+        }));
+        decoded.extend(base64_simd::STANDARD.decode_to_vec(payload).unwrap());
+    }
+    (chunks[0].0.to_owned(), decoded)
+}
+
+#[test]
+fn workspace_kitty_compresses_a_large_fitted_page_and_clears_it_after_hiding() {
+    use std::io::Read as _;
+    let area = workspace_protocol::Rect {
+        x: 24,
+        y: 2,
+        width: 152,
+        height: 98,
+    };
+    let width = u32::from(area.width) * 8;
+    let height = u32::from(area.height) * 16;
+    let image = workspace_protocol::Image {
+        image_id: 42,
+        width,
+        height,
+        rgba: Arc::from([162, 40, 20, 255].repeat((width * height) as usize)),
+        source: [0, 0, width, height],
+        padding: [0; 4],
+        cell_size: [8, 16],
+        area,
+        visible: vec![area],
+        z_index: 0,
+    };
+
+    for tmux in [false, true] {
+        let picker = picker(EditorGraphicsProtocol::Kitty, tmux);
+        let mut screen = Terminal::new(TestBackend::new(220, 104)).unwrap();
+        let mut cache = TerminalImageCache::default();
+        screen
+            .draw(|frame| {
+                cache.render_workspace(frame, frame.area(), std::slice::from_ref(&image), &picker)
+            })
+            .unwrap();
+        let symbol = screen.backend().buffer()[(area.x, area.y)].symbol();
+        let (controls, compressed) = kitty_packets(symbol, tmux);
+        assert!(controls.contains("a=T,U=1,f=32,t=d,s=1216,v=1568,c=152,r=98,o=z,"));
+        assert!(symbol.contains('\u{10eeee}'));
+        assert!(compressed.len() < image.rgba.len() / 50);
+        let mut pixels = Vec::new();
+        flate2::read::ZlibDecoder::new(compressed.as_slice())
+            .read_to_end(&mut pixels)
+            .unwrap();
+        assert_eq!(pixels.as_slice(), image.rgba.as_ref());
+
+        let id = cache.entries.values().next().unwrap().kitty.unwrap().0;
+        screen
+            .draw(|frame| {
+                cache.render_workspace(frame, frame.area(), std::slice::from_ref(&image), &picker)
+            })
+            .unwrap();
+        assert!(
+            !screen.backend().buffer()[(area.x, area.y)]
+                .symbol()
+                .contains("_G")
+        );
+        assert!(cache.take_cleanup().is_empty());
+        screen
+            .draw(|frame| cache.render_workspace(frame, frame.area(), &[], &picker))
+            .unwrap();
+        assert_eq!(screen.backend().buffer()[(area.x, area.y)].symbol(), " ");
+        let (start, escape, end) =
+            ratatui_image::picker::cap_parser::Parser::tmux_start_escape_end(tmux);
+        assert_eq!(
+            cache.take_cleanup(),
+            format!("{start}{escape}_Ga=d,d=I,i={id}{escape}\\{end}").into_bytes()
+        );
+    }
+}
+
+#[test]
+fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
+    let area = workspace_protocol::Rect {
+        x: 1,
+        y: 1,
+        width: 20,
+        height: 16,
+    };
+    let width = u32::from(area.width) * 8;
+    let height = u32::from(area.height) * 16;
+    let mut noise = 0x8bd1ff45u32;
+    let pixels = (0..width * height)
+        .flat_map(|_| {
+            noise ^= noise << 13;
+            noise ^= noise >> 17;
+            noise ^= noise << 5;
+            let [red, green, blue, _] = noise.to_le_bytes();
+            [red, green, blue, 255]
+        })
+        .collect::<Vec<_>>();
+    let image = workspace_protocol::Image {
+        image_id: 42,
+        width,
+        height,
+        rgba: Arc::from(pixels),
+        source: [0, 0, width, height],
+        padding: [0; 4],
+        cell_size: [8, 16],
+        area,
+        visible: vec![area],
+        z_index: 0,
+    };
+    let picker = picker(EditorGraphicsProtocol::Kitty, false);
+    let mut screen = Terminal::new(TestBackend::new(24, 20)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    screen
+        .draw(|frame| {
+            cache.render_workspace(frame, frame.area(), std::slice::from_ref(&image), &picker)
+        })
+        .unwrap();
+    let symbol = screen.backend().buffer()[(area.x, area.y)].symbol();
+    let (controls, pixels) = kitty_packets(symbol, false);
+    assert!(controls.contains("a=T,U=1,f=32,t=d,"));
+    assert!(!controls.contains("o=z"));
+    assert_eq!(pixels.as_slice(), image.rgba.as_ref());
+}
+
 #[test]
 fn fallback_crops_pixels_to_the_visible_terminal_and_applies_the_host_offset() {
     let mut snapshot = CommandLineTerminalSnapshot::blank(4, 2);
@@ -584,7 +722,8 @@ fn preparation_rejects_large_temporary_canvases_before_allocating_or_encoding() 
         area: Rect::new(0, 0, 4, 4),
         ..fragment()
     };
-    let (stored, working) = preparation_cost(&image, Size::new(4, 4), (8, 16)).unwrap();
+    let picker = picker(EditorGraphicsProtocol::Kitty, false);
+    let (stored, working) = preparation_cost(&image, Size::new(4, 4), Some(&picker)).unwrap();
     assert!(stored + working > CACHE_BUDGET);
     let mut snapshot = CommandLineTerminalSnapshot::blank(4, 4);
     snapshot.images.push(image);
@@ -592,12 +731,7 @@ fn preparation_rejects_large_temporary_canvases_before_allocating_or_encoding() 
     let mut screen = Terminal::new(TestBackend::new(4, 4)).unwrap();
     screen
         .draw(|frame| {
-            cache.render(
-                frame,
-                frame.area(),
-                &snapshot,
-                Some(&picker(EditorGraphicsProtocol::Kitty, false)),
-            );
+            cache.render(frame, frame.area(), &snapshot, Some(&picker));
         })
         .unwrap();
     assert!(cache.entries.is_empty());
@@ -622,7 +756,8 @@ fn preparation_bounds_the_float_resize_pass_as_well_as_final_pixels() {
         area: Rect::new(0, 0, 1, 1),
         ..fragment()
     };
-    assert!(preparation_cost(&image, Size::new(1, 1), (8, 16)).is_none());
+    let picker = picker(EditorGraphicsProtocol::Kitty, false);
+    assert!(preparation_cost(&image, Size::new(1, 1), Some(&picker)).is_none());
 }
 
 #[test]
