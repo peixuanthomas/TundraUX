@@ -39,7 +39,7 @@ The editor uses `Rope` and a grapheme cursor to read and write plain text direct
 
 - Opening and saving use background tasks. Save snapshots are tied to an exact revision, so older tasks cannot clear newer changes.
 - Each document has its own recovery ID, process file lock, and throttled writes; drafts are claimed individually after an abnormal exit.
-- The extensions Explorer opens in the editor by default are defined by `storage::DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS`; custom lists and empty lists take precedence.
+- Explorer's defaults combine the suffixes in `storage::DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS` with the filenames and paths recognized by LSH. A custom or empty suffix list takes precedence.
 - LSH provides syntax highlighting, with selection styling taking precedence. Display choices do not affect file contents.
 - Line-change markers compare the current text with the text from the most recent successful save, independently of Git.
 

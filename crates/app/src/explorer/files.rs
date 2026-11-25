@@ -154,6 +154,10 @@ impl ExplorerFileService {
         } else if pdf || (editor_requested && entry.attributes.is_file) {
             target = ExplorerOpenTarget::Editor;
         }
+        let read_only_preview = target == ExplorerOpenTarget::Editor
+            && entry.attributes.is_file
+            && (crate::editor::OfficeFormat::from_path(&entry.path).is_some()
+                || is_log_document_path(&entry.path));
         let shell_document = entry
             .path
             .extension()
@@ -167,7 +171,7 @@ impl ExplorerFileService {
             FileOpenPolicy::Blocked { reason } => {
                 return Err(ExplorerError::BlockedPath(reason.clone()));
             }
-            FileOpenPolicy::LauncherRequired { .. } if pdf || archive => {}
+            FileOpenPolicy::LauncherRequired { .. } if pdf || archive || read_only_preview => {}
             FileOpenPolicy::LauncherRequired {
                 kind: ExecutableKind::Script,
                 ..

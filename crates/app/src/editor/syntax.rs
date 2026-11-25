@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ops::Range;
+use std::path::Path;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -160,6 +161,20 @@ pub fn highlight(path: &str, rope: &Rope) -> Arc<[SyntaxToken]> {
     .0
 }
 
+pub(crate) fn has_named_file_association(path: &Path) -> bool {
+    matching_file_associations(path.as_os_str().as_encoded_bytes())
+        .any(|(pattern, _)| !pattern.starts_with("**/*."))
+}
+
+fn matching_file_associations(
+    path: &[u8],
+) -> impl Iterator<Item = (&'static str, &'static lsh::runtime::Language)> {
+    definitions::FILE_ASSOCIATIONS
+        .iter()
+        .copied()
+        .filter(move |(pattern, _)| lsh::glob::glob_match(pattern.as_bytes(), path))
+}
+
 fn compute(
     path: &str,
     rope: &Rope,
@@ -168,10 +183,7 @@ fn compute(
     cancel: &AtomicBool,
 ) -> (Arc<[SyntaxToken]>, Checkpoints) {
     let path = format!("/{}", path.replace('\\', "/"));
-    let Some((_, language)) = definitions::FILE_ASSOCIATIONS
-        .iter()
-        .find(|(pattern, _)| lsh::glob::glob_match(pattern.as_bytes(), path.as_bytes()))
-    else {
+    let Some((_, language)) = matching_file_associations(path.as_bytes()).next() else {
         return (Arc::from([]), checkpoints);
     };
     let mut runtime = lsh::runtime::Runtime::new(

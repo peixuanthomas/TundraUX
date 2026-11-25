@@ -32,7 +32,7 @@ pub use config_document::{
     RuntimeLogsConfig, SYSTEM_STATUS_MAX_AVAILABLE_GIB, SYSTEM_STATUS_MAX_PERCENTAGE,
     SYSTEM_STATUS_MIN_AVAILABLE_GIB, SYSTEM_STATUS_MIN_PERCENTAGE, StatusTextAlignment,
     StorageConfig, SystemStatusConfig, TimeSyncConfig, TimeSyncSource, TopBarConfig,
-    normalize_editor_explorer_open_extension,
+    normalize_editor_explorer_open_extension, uses_default_editor_explorer_extensions,
 };
 pub use descriptors::{
     CLOCK_DESCRIPTOR, CONFIG_DESCRIPTOR, StorageDescriptor, VERSIONED_JSON_DESCRIPTORS,

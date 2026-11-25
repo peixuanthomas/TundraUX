@@ -46,7 +46,7 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 - `[appearance].icon_display_mode` defaults to `ascii` on Linux and `image` on other platforms. User profiles use the same default when the field is missing.
 - `screen_timeout_seconds` stores the idle-weather timeout; `0` means never, and the default is 300 seconds.
 - `[editor].vim_mode_enabled` stores the default for newly opened editor sessions, disabled by default. F8 changes only the current editor session.
-- `[editor].explorer_open_extensions` controls the suffixes handed to the built-in editor. Defaults include `.docx` and `.xlsx` for read-only previews. Saved lists take precedence.
+- `[editor].explorer_open_extensions` controls the suffixes handed to the built-in editor. The default includes `.docx` and `.xlsx` for read-only previews. On upgrade, a list matching a default from TundraUX 2.x switches to the current defaults. Storage saves only customized lists, including an empty list, so default associations follow future updates.
 - `[command_line].shell` selects the interpreter for new Command Line sessions. Its default is `default`. Windows accepts `cmd`, `powershell`, and `pwsh`. macOS and Linux accept `sh`, `bash`, `zsh`, and `fish`.
 - `animation_timings` stores separate acceleration, constant-speed, and deceleration durations for page/dialog/menu animations, each from 1 to 2000ms.
 - Default page/dialog/menu phases are `[40, 80, 40]`, `[45, 90, 45]`, and `[30, 60, 30]` milliseconds. Existing explicit values and animation speed remain effective; reduced motion bypasses transitions.

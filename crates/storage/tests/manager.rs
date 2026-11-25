@@ -103,11 +103,55 @@ fn reopening_storage_tightens_only_owned_paths() {
 }
 
 #[test]
+fn pre_office_editor_defaults_upgrade_once_and_subsequent_opt_outs_persist() {
+    let base = unique_temp_root("pre-office-editor");
+    let paths = app_paths(&base);
+    let layout = StorageLayout::from_app_paths(&paths);
+    let legacy = include_str!("fixtures/pre-office-editor.toml");
+    fs::create_dir_all(layout.config_path.parent().unwrap()).unwrap();
+    fs::write(&layout.config_path, legacy).unwrap();
+    let old_config: StorageConfig = toml::from_str(legacy).unwrap();
+
+    let opened = StorageManager::open(paths.clone()).unwrap();
+    let mut config = opened.manager.load_config().unwrap();
+    assert_eq!(
+        config.editor.explorer_open_extensions,
+        EditorConfig::default().explorer_open_extensions
+    );
+    assert!(config.editor.vim_mode_enabled);
+    assert_eq!(opened.report.migrated_files, [layout.config_path.clone()]);
+    let persisted: toml::Table =
+        toml::from_str(&fs::read_to_string(&layout.config_path).unwrap()).unwrap();
+    assert!(
+        persisted["editor"]
+            .get("explorer_open_extensions")
+            .is_none()
+    );
+    assert!(
+        StorageManager::open(paths.clone())
+            .unwrap()
+            .report
+            .migrated_files
+            .is_empty()
+    );
+
+    config.editor.explorer_open_extensions = old_config.editor.explorer_open_extensions;
+    opened.manager.save_config(&config).unwrap();
+    let reopened = StorageManager::open(paths).unwrap();
+    assert_eq!(reopened.manager.load_config().unwrap(), config);
+    cleanup(&base);
+}
+
+#[test]
 fn editor_suffixes_preserve_explicit_lists() {
+    let mut pre_office: StorageConfig =
+        toml::from_str(include_str!("fixtures/pre-office-editor.toml")).unwrap();
+    pre_office.editor.explorer_open_extensions.pop();
     for (case, extensions) in [
         ("custom", vec!["txt".to_string(), "rs".to_string()]),
         ("empty", Vec::new()),
         ("default", EditorConfig::default().explorer_open_extensions),
+        ("one-removed", pre_office.editor.explorer_open_extensions),
     ] {
         let base = unique_temp_root(case);
         let paths = app_paths(&base);
@@ -119,12 +163,23 @@ fn editor_suffixes_preserve_explicit_lists() {
         config.editor.explorer_open_extensions = extensions;
         fs::write(&layout.config_path, toml::to_string(&config).unwrap()).unwrap();
 
-        let opened = StorageManager::open(paths).unwrap();
+        let opened = StorageManager::open(paths.clone()).unwrap();
         assert_eq!(opened.manager.load_config().unwrap(), config, "{case}");
         let persisted: StorageConfig =
             toml::from_str(&fs::read_to_string(&layout.config_path).unwrap()).unwrap();
         assert_eq!(persisted, config, "{case}");
         assert!(opened.report.migrated_files.is_empty(), "{case}");
+
+        let mut legacy = toml::Table::try_from(&config).unwrap();
+        let editor = legacy.get_mut("editor").unwrap().as_table_mut().unwrap();
+        editor.remove("explorer_open_extensions_version");
+        editor.insert(
+            "explorer_open_extensions".into(),
+            toml::Value::try_from(&config.editor.explorer_open_extensions).unwrap(),
+        );
+        fs::write(&layout.config_path, toml::to_string(&legacy).unwrap()).unwrap();
+        let reopened = StorageManager::open(paths).unwrap();
+        assert_eq!(reopened.manager.load_config().unwrap(), config, "{case}");
         cleanup(&base);
     }
 }
@@ -229,6 +284,7 @@ fn toml_and_json_documents_round_trip() {
             cursor_acceleration_ramp_ms: 2_500,
             cursor_horizontal_max_step: 10,
             cursor_vertical_max_step: 4,
+            ..EditorConfig::default()
         },
         command_line: storage::CommandLineConfig {
             shell: platform::SystemCommandShell::Pwsh,

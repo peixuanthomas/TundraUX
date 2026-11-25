@@ -46,7 +46,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `management.ftl` | Management prompts, package and command choices for adding an installed program to Launcher, and the AutoAdmin dialog title |
 | `app-explorer.ftl` | Archive creation and extraction, password retries, progress, and entry errors |
 | `ui-explorer.ftl` | Short toolbar labels, path controls, and the Open and Save pickers. The theme supplies the toolbar’s ASCII icons. |
-| `shell-messages.ftl` | Editor file-picker prompt, Office conversion feedback, workspace clipboard feedback, and terminal menu actions |
+| `shell-messages.ftl` | Editor file-picker prompt for text, Markdown, PDF, Word, and Excel, Office conversion feedback, workspace clipboard feedback, and terminal menu actions |
 | `ui-editor.ftl` | Editor controls and PDF preview page controls, progress, and errors |
 | `ui-shell.ftl`, `ui-auth.ftl` | Global Tasks button, the shared terminal-size prompt, and first-time setup including completion with default appearance |
 | `ui-explorer.ftl` subfolder search controls | English and Chinese labels for the search scope, search progress and skipped entries |

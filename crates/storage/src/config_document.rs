@@ -426,7 +426,8 @@ impl Default for ExplorerConfig {
     }
 }
 
-pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
+// Older releases wrote this list in full. Before Office previews, the same list omitted docx and xlsx.
+const STORED_EDITOR_EXTENSIONS_V0: &[&str] = &[
     "md",
     "markdown",
     "mdown",
@@ -536,8 +537,16 @@ pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = &[
     "zsh",
     "zshrc",
 ];
+pub const DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS: &[&str] = STORED_EDITOR_EXTENSIONS_V0;
 pub const MAX_EDITOR_EXPLORER_OPEN_EXTENSIONS: usize = 128;
 pub const MAX_EDITOR_EXPLORER_OPEN_EXTENSION_LEN: usize = 64;
+
+pub fn uses_default_editor_explorer_extensions(extensions: &[impl AsRef<str>]) -> bool {
+    extensions
+        .iter()
+        .map(AsRef::as_ref)
+        .eq(DEFAULT_EDITOR_EXPLORER_OPEN_EXTENSIONS.iter().copied())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -547,7 +556,11 @@ pub struct EditorConfig {
     ///
     /// Values omit the leading dot, are matched case-insensitively, and may
     /// contain multiple components such as `d.ts`.
+    #[serde(skip_serializing_if = "uses_default_editor_explorer_extensions")]
     pub explorer_open_extensions: Vec<String>,
+    /// Distinguishes explicit suffix choices saved after the v0 default lists were migrated.
+    #[serde(default)]
+    pub explorer_open_extensions_version: u8,
     pub cursor_acceleration_enabled: bool,
     pub cursor_acceleration_delay_ms: u32,
     pub cursor_acceleration_ramp_ms: u32,
@@ -563,6 +576,7 @@ impl Default for EditorConfig {
                 .iter()
                 .map(|extension| (*extension).to_string())
                 .collect(),
+            explorer_open_extensions_version: 1,
             cursor_acceleration_enabled: true,
             cursor_acceleration_delay_ms: 750,
             cursor_acceleration_ramp_ms: 1_250,
@@ -574,6 +588,24 @@ impl Default for EditorConfig {
 
 impl EditorConfig {
     fn normalize(&mut self) -> bool {
+        let unversioned = self.explorer_open_extensions_version == 0;
+        if unversioned {
+            self.explorer_open_extensions_version = 1;
+            let before_office = STORED_EDITOR_EXTENSIONS_V0
+                .iter()
+                .copied()
+                .filter(|ext| !matches!(*ext, "docx" | "xlsx"));
+            if self.explorer_open_extensions == STORED_EDITOR_EXTENSIONS_V0
+                || self
+                    .explorer_open_extensions
+                    .iter()
+                    .map(String::as_str)
+                    .eq(before_office)
+            {
+                self.explorer_open_extensions = Self::default().explorer_open_extensions;
+                return true;
+            }
+        }
         let normalized = self
             .explorer_open_extensions
             .iter()
@@ -587,7 +619,7 @@ impl EditorConfig {
                 extensions
             });
         if normalized == self.explorer_open_extensions {
-            false
+            unversioned
         } else {
             self.explorer_open_extensions = normalized;
             true

@@ -497,6 +497,83 @@ fn editor_open_intent_reads_scripts_without_changing_native_or_blocked_routes() 
     assert!(state.error.is_some());
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_executable_bit_preserves_configured_read_only_previews() {
+    use app::explorer::{ExplorerEffect, ExplorerOpenTarget};
+    use platform::{ExecutableKind, FileOpenPolicy};
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let fixture = Fixture::new("macos-executable-bit-preview");
+    let previews = ["report.DOCX", "sheet.Xlsx", "service.LoG.2"];
+    for name in previews.into_iter().chain(["executable.txt"]) {
+        let path = fixture.documents.join(name);
+        fs::write(&path, "fixture").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        let attributes = platform::default_file_attributes(&path).unwrap();
+        let policy = platform::default_file_open_policy(PlatformKind::Macos, &path, &attributes);
+        assert!(
+            matches!(
+                policy,
+                FileOpenPolicy::LauncherRequired {
+                    kind: ExecutableKind::NativeBinary,
+                    ..
+                }
+            ),
+            "{name}: {policy:?}"
+        );
+        fixture.platform.set_file_open_policy(path, policy);
+    }
+    let link = fixture.documents.join("blocked.docx");
+    symlink(fixture.documents.join(previews[0]), &link).unwrap();
+    let attributes = platform::default_file_attributes(&link).unwrap();
+    let policy = platform::default_file_open_policy(PlatformKind::Macos, &link, &attributes);
+    assert!(matches!(policy, FileOpenPolicy::Blocked { .. }));
+    fixture.platform.set_file_open_policy(link, policy);
+
+    let storage = fixture.storage();
+    let actor = session();
+    let mut state = ExplorerState::new(&fixture.documents, true);
+    let associated = ExplorerController::default()
+        .with_editor_extensions(["docx", "xlsx", "log", "txt"].map(str::to_owned).to_vec());
+    let unassociated = ExplorerController::default().with_editor_extensions(vec!["txt".into()]);
+    associated.apply(
+        &mut state,
+        ExplorerCommand::Refresh,
+        Some(&actor),
+        &fixture.platform,
+        &storage,
+    );
+    let mut open = |controller: &ExplorerController, name: &str| {
+        select_name(&mut state, name);
+        controller.apply(
+            &mut state,
+            ExplorerCommand::OpenSelected,
+            Some(&actor),
+            &fixture.platform,
+            &storage,
+        )
+    };
+    for (controller, target) in [
+        (&associated, ExplorerOpenTarget::Editor),
+        (&unassociated, ExplorerOpenTarget::Launcher),
+    ] {
+        for name in previews {
+            let effect = open(controller, name);
+            assert!(
+                matches!(effect, ExplorerEffect::OpenRequested(request) if request.target == target),
+                "{name}: {target:?}"
+            );
+        }
+    }
+
+    assert!(
+        matches!(open(&associated, "executable.txt"), ExplorerEffect::OpenRequested(request) if request.target == ExplorerOpenTarget::Launcher)
+    );
+    assert_eq!(open(&associated, "blocked.docx"), ExplorerEffect::None);
+    assert!(state.error.is_some());
+}
+
 #[test]
 fn explicit_editor_picker_still_navigates_directories() {
     let fixture = Fixture::new("editor-directory-navigation");

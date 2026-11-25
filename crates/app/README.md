@@ -52,6 +52,8 @@ Launcher lists the built-in applications available on the current platform, plus
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
 
+Explorer's default editor associations use the built-in suffixes and LSH's filename and path patterns, including `Cargo.lock`, `Gemfile`, and `.git/config`. A custom or empty suffix list takes precedence.
+
 Editor Copy and Cut produce a text clipboard request. The host applies the selection deletion after a successful Cut write, so a failed request leaves the document and selection intact.
 
 Editor calculations, Explorer tasks, and diagnostic results notify an optional host event loop after publishing their results. Domain code uses the platform notifier and does not depend on Shell.

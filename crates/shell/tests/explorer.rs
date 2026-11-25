@@ -851,6 +851,77 @@ fn configured_suffix_opens_in_editor_from_explorer() {
 }
 
 #[test]
+fn explorer_opens_office_previews_with_pre_office_defaults() {
+    for (name, bytes, valid) in [
+        (
+            "报告.DoCx",
+            include_bytes!("fixtures/editor/preview.docx").as_slice(),
+            true,
+        ),
+        (
+            "库存.XLSX",
+            include_bytes!("fixtures/editor/preview.xlsx").as_slice(),
+            true,
+        ),
+        ("损坏.docx", b"invalid document".as_slice(), false),
+        ("损坏.xlsx", b"invalid workbook".as_slice(), false),
+    ] {
+        for double_click in [true, false] {
+            let fixture = FixtureRoot::new("pre-office-explorer");
+            let platform = mock_platform(fixture.path()).with_kind(PlatformKind::Macos);
+            initialize_system_profile(&platform);
+            let layout = storage::StorageLayout::from_app_paths(&platform.app_paths().unwrap());
+            fs::write(
+                layout.config_path,
+                include_str!("../../storage/tests/fixtures/pre-office-editor.toml"),
+            )
+            .unwrap();
+            fs::write(fixture.path().join("Documents").join(name), bytes).unwrap();
+            let mut state = system_home(&platform);
+            open_home_entry(&mut state, &platform, "explorer");
+
+            if double_click {
+                let point = first_entry_coordinates(&state);
+                for _ in 0..2 {
+                    state.apply_input_with_platform(
+                        InputEvent::mouse_down(PointerButton::Left, point),
+                        &platform,
+                    );
+                    state.apply_input_with_platform(
+                        InputEvent::mouse_up(PointerButton::Left, point),
+                        &platform,
+                    );
+                }
+            } else {
+                state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+            }
+            drive_editor_tasks_until_idle(&mut state, &platform);
+
+            assert!(
+                !platform.calls().iter().any(|call| matches!(
+                    call,
+                    MockCall::OpenPath(_) | MockCall::OpenWith { .. } | MockCall::OpenUri(_)
+                )),
+                "system opened {name}, double_click={double_click}"
+            );
+            if valid {
+                assert_eq!(state.active_screen(), ShellScreen::Editor);
+                let editor = state.to_editor_view_model();
+                assert_eq!(editor.file_name, name);
+                assert_eq!(editor.mode, ui::EditorMode::Rich);
+                assert!(editor.read_only);
+            } else {
+                let error = state.to_shell_chrome_view_model().status.error.unwrap();
+                assert!(
+                    error.contains("Office conversion failed"),
+                    "{name}: {error}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn mouse_double_click_on_first_rendered_row_does_not_open_second_entry() {
     let fixture = FixtureRoot::new("mouse-row-offset");
     let platform = mock_platform(fixture.path());

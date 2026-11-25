@@ -107,7 +107,7 @@ A new window opened from another app uses the first unfocused pane in layout ord
 
 The Editor opens File Explorer in a separate window for Open, first save and Save As. Once you choose a file or confirm a filename, the picker closes and sends the path to the original Editor. Esc or Close cancels the picker. The draft stays with the Editor.
 
-The background editor loader converts Word and Excel documents to Markdown. Office previews use the standard editor's read-only canvas.
+By default, double-clicking a Word (`.docx`) or Excel (`.xlsx`) file in Explorer, or selecting it and pressing Enter, opens a read-only Editor window. The background loader converts the document to Markdown for display.
 
 PDFs open in the editor's dedicated read-only preview. The background renderer runs on open, page changes, and viewport changes. The preview offers Page Up and Page Down alongside clickable page controls.
 
