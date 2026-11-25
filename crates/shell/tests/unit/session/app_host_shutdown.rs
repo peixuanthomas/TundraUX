@@ -80,6 +80,113 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
 }
 
 #[test]
+fn app_host_polls_pdf_after_open_page_turn_and_viewport_change() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let paths = platform::AppPaths::from_parts(
+        root.join("config"),
+        root.join("data"),
+        root.join("cache"),
+        root.join("logs"),
+        root.join("temp"),
+    )
+    .unwrap();
+    let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        root.join("reports"),
+        root.join("fallback"),
+        root.join("watchdog"),
+        "app-host-pdf-render-test",
+        "test",
+    ))
+    .unwrap();
+    let watchdog = process
+        .register_app(AppDescriptor::new(
+            AppId::from_static("app-host-pdf-render-test"),
+            "AppHost PDF render test",
+            "test",
+            AppCriticality::Optional,
+        ))
+        .unwrap();
+    let path = root.join("sample.PDF");
+    std::fs::write(
+        &path,
+        include_bytes!("../../../../app/tests/fixtures/pdf/preview.pdf"),
+    )
+    .unwrap();
+    let mut host = host(watchdog.clone(), &paths);
+    host.state.window_owner =
+        WindowOwner::App(crate::session::window_launch::WindowApplication::Editor);
+    host.state.editor_task_runtime = ShellEditorTaskRuntime::new_managed(watchdog);
+    host.compositor.capture_enabled = true;
+    host.compositor.capture_workspace_images = true;
+    host.services.acknowledge_updates();
+    host.theme_reloader = UserThemeReloader::new(None, Instant::now());
+    host.next_service_sync = Instant::now() + Duration::from_secs(60);
+    while host
+        .state
+        .notification_dismiss_active_modal_without_response()
+    {}
+    WindowLaunch::EditorPath(path.into()).activate(&mut host.state, host.platform.as_ref());
+    assert!(host.state.pages.editor.editor_load_state.is_some());
+
+    let wait_for_image = |host: &mut AppHostSession, after: u64| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let now = Instant::now();
+            host.poll(now).unwrap();
+            if let Some(frame) = host.frame(now).unwrap() {
+                assert!(
+                    !frame.modal,
+                    "Unexpected test overlay: {:?}",
+                    host.state.to_notification_view_model()
+                );
+                if let Some(image) = frame
+                    .images
+                    .into_iter()
+                    .find(|image| image.image_id > after)
+                {
+                    return image;
+                }
+            }
+            assert!(
+                now < deadline,
+                "AppHost did not publish the requested PDF page after image {after}"
+            );
+            std::thread::sleep(HOST_TICK);
+        }
+    };
+
+    let first = wait_for_image(&mut host, 0);
+    host.receive(ShellToApp::Input {
+        serial: 1,
+        layout: host.layout,
+        event: serde_json::to_value(InputEvent::key(InputKey::PageDown)).unwrap(),
+    })
+    .unwrap();
+    let scan = wait_for_image(&mut host, first.image_id);
+    assert!(
+        scan.rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel == [162, 40, 20, 255])
+    );
+    host.receive(ShellToApp::Viewport {
+        layout: LayoutGeneration(2),
+        size: Some(MIN_CONTENT_SIZE),
+        visible: true,
+        focused: true,
+    })
+    .unwrap();
+    let resized = wait_for_image(&mut host, scan.image_id);
+    assert!(resized.width < scan.width && resized.height < scan.height);
+    assert_eq!(host.state.to_editor_view_model().pdf.unwrap().page, 1);
+
+    host.shutdown().unwrap();
+    drop(host);
+    drop(process);
+    runtime.shutdown().unwrap();
+}
+
+#[test]
 fn an_explicit_debug_request_is_forwarded_before_close_without_panicking_the_host() {
     let directory = TestDirectory(std::env::temp_dir().join(format!(
         "tundra-app-debug-{}-{}",

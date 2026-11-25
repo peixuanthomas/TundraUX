@@ -147,7 +147,8 @@ impl ExplorerFileService {
             )));
         }
         let mut target = resolver.route(&entry.path, &entry.attributes);
-        if editor_requested && entry.attributes.is_file {
+        let pdf = entry.attributes.is_file && crate::editor::is_pdf_path(&entry.path);
+        if pdf || (editor_requested && entry.attributes.is_file) {
             target = ExplorerOpenTarget::Editor;
         }
         let shell_document = entry
@@ -163,6 +164,7 @@ impl ExplorerFileService {
             FileOpenPolicy::Blocked { reason } => {
                 return Err(ExplorerError::BlockedPath(reason.clone()));
             }
+            FileOpenPolicy::LauncherRequired { .. } if pdf => {}
             FileOpenPolicy::LauncherRequired {
                 kind: ExecutableKind::Script,
                 ..

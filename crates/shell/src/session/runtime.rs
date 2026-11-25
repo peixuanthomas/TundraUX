@@ -948,6 +948,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let terminal_cell_size = terminal_graphics_probe
         .picker()
         .map_or((8, 16), ui::EditorImagePicker::cell_size);
+    state.terminal_image_cell_size = [terminal_cell_size.0, terminal_cell_size.1];
     command_line_hosts.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
     let mut script_hosts = super::script_host::ScriptHosts::new(shell_watchdog.clone());
     script_hosts.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
@@ -1908,6 +1909,7 @@ pub(super) fn session_has_background_work(state: &ShellSession) -> bool {
             .launcher
             .iter()
             .any(|(_, page)| page.launcher_refresh_request.is_some())
+        || state.editor_pdf_has_background_work()
         || state.pages.editor.iter().any(|(id, page)| {
             page.editor_load_state.is_some()
                 || page.editor_save_state.is_some()

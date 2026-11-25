@@ -752,6 +752,7 @@ pub struct EditorScriptBreakpoint {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditorViewModel {
+    pub pdf: Option<EditorPdfViewModel>,
     pub script_available: bool,
     pub script_settings_available: bool,
     pub script_breakpoints: Option<Arc<[EditorScriptBreakpoint]>>,
@@ -847,6 +848,7 @@ pub struct EditorViewModel {
 impl EditorViewModel {
     pub fn new(file_name: impl Into<String>, blocks: Vec<EditorRenderBlock>) -> Self {
         Self {
+            pdf: None,
             script_available: false,
             script_settings_available: true,
             script_breakpoints: None,

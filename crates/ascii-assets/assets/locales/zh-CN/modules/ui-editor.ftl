@@ -76,6 +76,15 @@ ui-editor-byte-window = 字节 { $start }-{ $end } / { $total }
 ui-editor-status = { $mode }  行 { $line }，列 { $column }  { $count } 个词  { $encoding }/{ $line_ending }  { $protocol }{ $window }
 
 ui-editor-read-only-title = { $title } [只读]
+editor-pdf-invalid = 此 PDF 已损坏或无法读取。
+editor-pdf-encrypted = 此 PDF 需要密码，或使用了无法读取的加密方式。
+editor-pdf-no-pages = 此 PDF 没有可预览的页面。
+editor-pdf-render-error = 无法显示 PDF 第 { $page } 页。
+ui-editor-pdf-open = 打开
+ui-editor-pdf-previous = 上一页
+ui-editor-pdf-next = 下一页
+ui-editor-pdf-position = 第 { $page } / { $total } 页
+ui-editor-pdf-rendering = 正在渲染页面…
 
 ui-editor-tail-title = { $title } [跟踪末尾]
 

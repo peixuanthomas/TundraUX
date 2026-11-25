@@ -284,6 +284,7 @@ impl AppHostSession {
             frame_sequence: 0,
         };
         if let Some([width, height]) = init.image_cell_size {
+            host.state.terminal_image_cell_size = [width.max(1), height.max(1)];
             host.command_lines.set_cell_size(width, height);
             host.vim.set_cell_size(width, height);
             host.scripts.set_cell_size(width, height);

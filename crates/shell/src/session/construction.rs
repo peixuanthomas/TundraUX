@@ -250,6 +250,7 @@ impl ShellSession {
                 startup.platform_kind,
             ),
             terminal_image_support: runtime_services.terminal_image_support,
+            terminal_image_cell_size: [8, 16],
             terminal_text_sizing_support: false,
 
             interaction: Default::default(),

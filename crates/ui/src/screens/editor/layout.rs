@@ -146,6 +146,7 @@ pub struct EditorTableEdgeHandle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorHitTarget {
+    Pdf(EditorPdfAction),
     MenuScroll,
     Search(EditorSearchControl),
     SettingsControl(EditorSettingsControl),
@@ -235,6 +236,7 @@ pub struct EditorSourceLineMap {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EditorLayout {
+    pub pdf: Option<EditorPdfLayout>,
     pub vim_toggle: Rect,
     pub menu_scrollbar: Option<Rect>,
     pub search_items: Vec<(EditorSearchControl, Rect)>,
@@ -287,6 +289,9 @@ pub struct EditorLayout {
 
 impl EditorLayout {
     pub fn hit_test(&self, x: u16, y: u16) -> Option<EditorHitTarget> {
+        if let Some(pdf) = &self.pdf {
+            return pdf.action_at((x, y)).map(EditorHitTarget::Pdf);
+        }
         if let Some(settings) = self.settings.as_ref() {
             if let Some(control) = settings
                 .controls
@@ -531,6 +536,9 @@ pub fn editor_vim_terminal_area(area: Rect) -> Rect {
 }
 
 pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
+    if let Some(pdf) = &model.pdf {
+        return super::pdf::layout(area, pdf);
+    }
     let inner = area;
     let menu_height = u16::from(inner.height > 0);
     if let Some(terminal) = &model.vim_terminal {
@@ -952,6 +960,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         Rect::default()
     };
     EditorLayout {
+        pdf: None,
         vim_toggle,
         menu_scrollbar: menu_popup
             .filter(|_| {

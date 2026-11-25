@@ -104,6 +104,7 @@ ui-help-auth-back = Back
 ui-help-auth-focus = Switch field
 
 ui-help-editor-title = Editor
+ui-help-pdf-title = PDF preview
 ui-help-editor-save = Save
 ui-help-editor-find = Find
 ui-help-editor-vim = Toggle Vim mode

@@ -235,6 +235,15 @@ impl ShellSession {
             .or_else(|| self.explorer_action_button_at(point))
             .or_else(|| self.explorer_save_button_at(point))
             .or_else(|| {
+                if self.pages.editor.editor_pdf.is_some()
+                    && self.hit_map.target_at(point) == Some(ShellComponent::Editor)
+                {
+                    self.editor_current_layout().pdf?.button_at(point)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
                 self.button_regions
                     .iter()
                     .rev()

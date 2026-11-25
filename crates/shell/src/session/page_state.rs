@@ -282,6 +282,7 @@ impl Default for ExplorerPageState {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct EditorPageState {
+    pub(super) editor_pdf: Option<super::controller::EditorPdfPreview>,
     pub(super) script: super::controller::script::ScriptPageState,
     pub(super) editor_selected_menu: ui::EditorMenu,
     pub(super) editor_menu_index: usize,
@@ -331,6 +332,7 @@ pub(super) struct EditorPageState {
 impl Default for EditorPageState {
     fn default() -> Self {
         Self {
+            editor_pdf: None,
             script: Default::default(),
             editor_selected_menu: ui::EditorMenu::File,
             editor_menu_index: 0,

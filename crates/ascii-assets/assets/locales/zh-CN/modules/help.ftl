@@ -104,6 +104,7 @@ ui-help-auth-back = 返回
 ui-help-auth-focus = 切换字段
 
 ui-help-editor-title = 编辑器
+ui-help-pdf-title = PDF 预览
 ui-help-editor-save = 保存
 ui-help-editor-find = 查找
 ui-help-editor-vim = 切换 Vim 模式

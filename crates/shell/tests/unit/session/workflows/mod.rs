@@ -8,6 +8,7 @@ mod explorer_dialogs;
 mod launcher;
 mod navigation;
 mod overlays;
+mod pdf;
 mod status_dashboard;
 mod status_monitoring;
 

@@ -10,6 +10,7 @@ pub enum PageHelpScreen {
     Launcher,
     CommandLine,
     Editor,
+    Pdf,
     Script,
     Settings,
     Logs,
@@ -24,13 +25,14 @@ pub enum PageHelpScreen {
 }
 
 impl PageHelpScreen {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Home,
         Self::Setup,
         Self::Explorer,
         Self::Launcher,
         Self::CommandLine,
         Self::Editor,
+        Self::Pdf,
         Self::Script,
         Self::Settings,
         Self::Logs,
@@ -409,6 +411,14 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
                     row("Tab / ←→ / Enter", i18n::tr!("ui-help-editor-settings")),
                 ]),
             ],
+        ),
+        PageHelpScreen::Pdf => (
+            i18n::tr!("ui-help-pdf-title"),
+            vec![actions(vec![
+                row("PgUp", i18n::tr!("ui-editor-pdf-previous")),
+                row("PgDn", i18n::tr!("ui-editor-pdf-next")),
+                row("Ctrl+O", i18n::tr!("ui-editor-pdf-open")),
+            ])],
         ),
         PageHelpScreen::CommandLine => (
             i18n::tr!("ui-help-command-line-title"),

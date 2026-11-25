@@ -226,6 +226,9 @@ impl ShellSession {
             changed |= self
                 .with_page_context(page, |session| {
                     let mut changed = session.poll_editor_preview();
+                    if session.content_page_id() == page {
+                        changed |= session.poll_editor_pdf_preview();
+                    }
                     let cursor = session.app.editor_state().map(|s| s.cursor.byte_offset);
                     let computation = session.app.poll_editor_computations();
                     changed |= computation.changed;
@@ -620,12 +623,17 @@ impl ShellSession {
         let path = load.path;
         let EditorLoadedTaskDocument {
             mut state,
+            pdf,
             fingerprint,
             total_bytes,
             rich_blocks,
         } = document;
         match load.operation {
             EditorLoadOperation::Open { reload, .. } => {
+                if let Some(pdf) = pdf {
+                    self.pages.editor.editor_pdf = Some(super::pdf::EditorPdfPreview::new(pdf));
+                    self.pages.editor.script.enabled = false;
+                }
                 let open_at_bottom = reload
                     .as_ref()
                     .is_some_and(|reload| matches!(reload, EditorReloadPolicy::Log { .. }));
@@ -753,7 +761,9 @@ impl ShellSession {
         if self.route_window_launch(WindowLaunch::EditorPath(path.as_os_str().to_owned())) {
             return true;
         }
-        if Self::is_system_config_path(&path)
+        let is_pdf = app::editor::is_pdf_path(&path);
+        if !is_pdf
+            && Self::is_system_config_path(&path)
             && app::editor::OfficeFormat::from_path(&path).is_none()
         {
             self.begin_config_editor(path, None, None, None, "system".into());
@@ -764,7 +774,7 @@ impl ShellSession {
             return false;
         }
         let is_log = is_log_document_path(&path);
-        let access = if is_log {
+        let access = if is_log || is_pdf {
             EditorTaskAccess::ReadOnly
         } else {
             EditorTaskAccess::Editable

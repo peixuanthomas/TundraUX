@@ -565,6 +565,7 @@ fn a_closed_editors_late_load_cannot_replace_a_new_editor() {
             id,
             result: Box::new(Ok(EditorLoadedTaskDocument {
                 state: EditorState::new(),
+                pdf: None,
                 fingerprint: fingerprint(),
                 total_bytes: 0,
                 rich_blocks: None,

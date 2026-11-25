@@ -250,18 +250,18 @@ pub(crate) fn prepare_iterm2(
 ) -> Result<Iterm2, ratatui_image::errors::Errors> {
     let pixels = (image.width(), image.height());
     let mut protocol = Iterm2::new(image, size, is_tmux)?;
+    // The terminal's cell size can differ from the size measured at startup.
+    let pixel_dimensions = format!("width={}px;height={}px", pixels.0, pixels.1);
+    if let Some(start) = protocol.data.find(&pixel_dimensions) {
+        protocol.data.replace_range(
+            start..start + pixel_dimensions.len(),
+            &format!(
+                "width={};height={};preserveAspectRatio=0",
+                size.width, size.height
+            ),
+        );
+    }
     if cfg!(windows) {
-        // ConPTY's reported font can differ from the window's font, particularly after zooming.
-        let pixel_dimensions = format!("width={}px;height={}px", pixels.0, pixels.1);
-        if let Some(start) = protocol.data.find(&pixel_dimensions) {
-            protocol.data.replace_range(
-                start..start + pixel_dimensions.len(),
-                &format!(
-                    "width={};height={};preserveAspectRatio=0",
-                    size.width, size.height
-                ),
-            );
-        }
         // ConPTY needs a visible cursor to forward the image position. WezTerm holds the update
         // until the paired reset hides the cursor, even if ConPTY delays its own cursor output.
         protocol.data.insert_str(0, "\x1b[?2026;25h");

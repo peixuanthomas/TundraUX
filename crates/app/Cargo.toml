@@ -15,6 +15,7 @@ runtime-log = { path = "../runtime-log" }
 chrono = "0.4"
 chrono-tz = "0.10"
 comrak = { version = "0.54", default-features = false }
+hayro = "0.9"
 regex = "1"
 shell-words = "1.1"
 lsh = { path = "../../third_party/lsh", default-features = false, features = ["glob"] }

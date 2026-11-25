@@ -1,7 +1,7 @@
 //! Domain model for Tundra's single-document terminal editor.
 //!
 //! The built-in editor edits the canonical document as plain text. Markdown
-//! files use the text buffer. Office previews use the rich Markdown model.
+//! files use the text buffer. Office and PDF files have read-only previews.
 
 mod background;
 pub mod c_syntax;
@@ -16,9 +16,11 @@ pub mod soft_wrap;
 pub mod syntax;
 
 mod office_preview;
+mod pdf_preview;
 mod source_buffer;
 mod source_changes;
 pub use office_preview::OfficeFormat;
+pub use pdf_preview::{PdfPageImage, PdfPreviewDocument, is_pdf_path};
 pub use source_changes::SourceLineChange;
 
 mod document;

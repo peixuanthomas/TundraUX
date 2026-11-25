@@ -6,6 +6,12 @@ To open your first file, use Editor from Launcher and choose **File → Open**, 
 
 Open Word (`.docx`) and Excel (`.xlsx`) files with **File → Open** in Editor. Explorer's regular **Open** action also sends these formats to Editor when their extensions are configured to use it. The read-only Markdown preview shows Word headings, paragraphs and tables, and groups Excel cell values under their worksheet names.
 
+## PDF preview
+
+Open a PDF with Enter or a double click in Explorer, or choose it with **File → Open** in Editor. PDFs always open in TundraUX's read-only preview. Use **Previous page** and **Next page** or Page Up and Page Down to move through the document. The current page fits the window automatically as its size changes.
+
+The preview supports scanned pages and uses Kitty, Sixel, or iTerm2 graphics when the terminal supports them. Other terminals show color blocks. A damaged or password-protected PDF reports an error inside the workspace.
+
 ## Standard editor
 
 The interface follows [Microsoft Edit](https://github.com/microsoft/edit/tree/cb6de0a8966aecd01d19a3541dab1829d0e679ca/crates/edit/src/bin/edit), with File, Edit, View, and Help menus. Find and Replace bars sit above the document; language, line endings, encoding, indentation, line/column position, and document switching controls sit at the bottom.

@@ -18,6 +18,7 @@ pub(super) mod system_status;
 pub(super) use input::touch_pages::*;
 
 pub(super) use diagnostics::*;
+pub(super) use editor::pdf::EditorPdfPreview;
 pub(super) use editor::tasks::*;
 pub(super) use editor::*;
 pub(super) use explorer::tasks::*;

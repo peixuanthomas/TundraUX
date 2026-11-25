@@ -42,6 +42,7 @@ pub(in crate::session) struct EditorLoadTaskRequest {
 #[derive(Debug)]
 pub(in crate::session) struct EditorLoadedTaskDocument {
     pub(in crate::session) state: EditorState,
+    pub(in crate::session) pdf: Option<app::editor::PdfPreviewDocument>,
     pub(in crate::session) fingerprint: DocumentFingerprint,
     pub(in crate::session) total_bytes: u64,
     pub(in crate::session) rich_blocks: Option<std::sync::Arc<[ui::EditorRenderBlock]>>,
@@ -727,14 +728,24 @@ pub(in crate::session) fn load_editor_document_task(
         completed_bytes: loaded_bytes,
         total_bytes: Some(loaded_bytes),
     });
-    let state = if let Some(format) = office_format {
-        format
+    let (state, pdf) = if app::editor::is_pdf_path(&request.path) {
+        let pdf = app::editor::PdfPreviewDocument::open(loaded.bytes)
+            .map_err(|error| error.render_current())?;
+        let document = app::editor::EditorDocument::from_text(
+            Some(request.path.clone()),
+            app::editor::DocumentKind::PlainText,
+            "",
+        );
+        (EditorState::from_read_only_document(document), Some(pdf))
+    } else if let Some(format) = office_format {
+        let state = format
             .open_preview(request.path.clone(), loaded.bytes)
             .map_err(|error| {
                 i18n::tr!("shell-office-conversion-failed", error = error.to_string())
-            })?
+            })?;
+        (state, None)
     } else {
-        match request.access {
+        let state = match request.access {
             EditorTaskAccess::Editable => {
                 EditorState::open_owned(request.path.clone(), loaded.bytes)
             }
@@ -742,7 +753,8 @@ pub(in crate::session) fn load_editor_document_task(
                 EditorState::open_read_only_owned(request.path.clone(), loaded.bytes)
             }
         }
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+        (state, None)
     };
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
@@ -759,6 +771,7 @@ pub(in crate::session) fn load_editor_document_task(
     }
     Ok(EditorLoadedTaskDocument {
         state,
+        pdf,
         fingerprint: loaded.fingerprint,
         total_bytes: loaded_bytes,
         rich_blocks,

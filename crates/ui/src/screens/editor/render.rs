@@ -48,6 +48,9 @@ pub fn render_editor_contextual_with_terminal_images(
     Surface::new()
         .background(context.theme.canvas)
         .render_frame(frame, area, context);
+    if super::pdf::render(frame, &layout, model, context, images, picker) {
+        return layout;
+    }
     if let Some(terminal) = &model.vim_terminal {
         let mut vim_toggle = Button::new("editor.vim-toggle", i18n::tr!("ui-editor-vim-enabled"))
             .with_bracketed_label(false)

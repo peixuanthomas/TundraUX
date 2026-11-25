@@ -51,6 +51,39 @@ impl TerminalColors {
         }
     }
 
+    pub(crate) fn nearest_ansi(self, color: Color) -> Color {
+        let Color::Rgb(red, green, blue) = color else {
+            return color;
+        };
+        const COLORS: [Color; 16] = [
+            Color::Black,
+            Color::Red,
+            Color::Green,
+            Color::Yellow,
+            Color::Blue,
+            Color::Magenta,
+            Color::Cyan,
+            Color::Gray,
+            Color::DarkGray,
+            Color::LightRed,
+            Color::LightGreen,
+            Color::LightYellow,
+            Color::LightBlue,
+            Color::LightMagenta,
+            Color::LightCyan,
+            Color::White,
+        ];
+        COLORS
+            .into_iter()
+            .min_by_key(|candidate| {
+                let (r, g, b) = color_rgb(self.resolve(*candidate, false)).unwrap();
+                (i32::from(red) - i32::from(r)).pow(2)
+                    + (i32::from(green) - i32::from(g)).pow(2)
+                    + (i32::from(blue) - i32::from(b)).pow(2)
+            })
+            .unwrap()
+    }
+
     fn resolve(self, color: Color, foreground: bool) -> Color {
         let index = match color {
             Color::Reset => {

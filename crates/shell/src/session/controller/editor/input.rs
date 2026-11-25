@@ -38,6 +38,10 @@ impl ShellSession {
         platform: &dyn Platform,
         received_at: Instant,
     ) {
+        if self.pages.editor.editor_pdf.is_some() && self.pages.editor.editor_load_state.is_none() {
+            self.handle_editor_pdf_key(&key, platform);
+            return;
+        }
         if self.handle_script_key(&key, platform) {
             return;
         }
@@ -491,6 +495,9 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn handle_editor_paste(&mut self, value: String) {
+        if self.pages.editor.editor_pdf.is_some() {
+            return;
+        }
         if self.script_paste(value.clone()) {
             return;
         }
@@ -512,6 +519,10 @@ impl ShellSession {
         mouse: MouseInput,
         platform: &dyn Platform,
     ) {
+        if self.pages.editor.editor_pdf.is_some() && self.pages.editor.editor_load_state.is_none() {
+            self.handle_editor_pdf_pointer(mouse, platform);
+            return;
+        }
         if self.handle_script_pointer(mouse, platform) {
             return;
         }
@@ -778,7 +789,8 @@ impl ShellSession {
                         self.pages.editor.editor_open_menu = None;
                         self.begin_editor_scrollbar_drag(coordinates, ScrollbarAxis::Horizontal);
                     }
-                    Some(ui::EditorHitTarget::SettingsControl(_))
+                    Some(ui::EditorHitTarget::Pdf(_))
+                    | Some(ui::EditorHitTarget::SettingsControl(_))
                     | Some(ui::EditorHitTarget::SettingsField(_))
                     | Some(ui::EditorHitTarget::SettingsDialog) => {}
                     None => self.pages.editor.editor_open_menu = None,

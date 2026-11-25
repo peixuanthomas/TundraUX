@@ -85,6 +85,15 @@ ui-editor-status = { $mode }  Ln { $line }, Col { $column }  { $count ->
     }  { $encoding }/{ $line_ending }  { $protocol }{ $window }
 
 ui-editor-read-only-title = { $title } [read-only]
+editor-pdf-invalid = This PDF is damaged or cannot be read.
+editor-pdf-encrypted = This PDF is protected by a password or uses unsupported encryption.
+editor-pdf-no-pages = This PDF has no pages to preview.
+editor-pdf-render-error = Could not display PDF page { $page }.
+ui-editor-pdf-open = Open
+ui-editor-pdf-previous = Previous page
+ui-editor-pdf-next = Next page
+ui-editor-pdf-position = Page { $page } of { $total }
+ui-editor-pdf-rendering = Rendering page…
 
 ui-editor-tail-title = { $title } [tail]
 

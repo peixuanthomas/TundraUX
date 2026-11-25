@@ -17,6 +17,7 @@ pub use app::rich_document::{NodeId, RichPosition, RichRange};
 mod document;
 mod layout;
 mod model;
+mod pdf;
 mod render;
 mod source;
 mod vim_install;
@@ -24,6 +25,7 @@ pub use vim_install::editor_vim_install_layout;
 
 pub use layout::*;
 pub use model::*;
+pub use pdf::{EditorPdfAction, EditorPdfLayout, EditorPdfViewModel};
 pub use render::*;
 pub use source::*;
 

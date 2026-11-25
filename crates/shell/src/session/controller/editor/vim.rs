@@ -32,10 +32,17 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn editor_vim_available(&self) -> bool {
-        self.app.editor_state().is_none_or(|editor| {
-            editor.access() != app::editor::EditorAccess::ReadOnly
-                || editor.document.kind != app::editor::DocumentKind::Markdown
-        })
+        self.pages.editor.editor_pdf.is_none()
+            && !self
+                .pages
+                .editor
+                .editor_load_state
+                .as_ref()
+                .is_some_and(|load| app::editor::is_pdf_path(&load.path))
+            && self.app.editor_state().is_none_or(|editor| {
+                editor.access() != app::editor::EditorAccess::ReadOnly
+                    || editor.document.kind != app::editor::DocumentKind::Markdown
+            })
     }
 
     pub(in crate::session) fn editor_vim_enabled(&self) -> bool {

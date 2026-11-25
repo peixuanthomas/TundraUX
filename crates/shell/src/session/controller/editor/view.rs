@@ -42,6 +42,7 @@ impl ShellSession {
             let mut model = ui::EditorViewModel::source(file_name, "");
             model.path_hint = Some(load.path.display().to_string());
             model.read_only = true;
+            model.vim_available = self.editor_vim_available();
             model.cursor = None;
             model.settings = self.editor_settings_view_model();
             model.text_sizing_protocol = self.terminal_text_sizing_support;
@@ -54,6 +55,19 @@ impl ShellSession {
             model.text_sizing_protocol = self.terminal_text_sizing_support;
             return model;
         };
+        if let Some(pdf) = &self.pages.editor.editor_pdf {
+            let mut model = ui::EditorViewModel::new(state.document.display_name(), Vec::new());
+            model.path_hint = state
+                .document
+                .path
+                .as_ref()
+                .map(|path| path.display().to_string());
+            model.read_only = true;
+            model.vim_available = false;
+            model.cursor = None;
+            model.pdf = Some(pdf.view_model());
+            return model;
+        }
         let language_path = self
             .pages
             .editor
