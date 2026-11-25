@@ -8,7 +8,7 @@
 | --- | --- |
 | [`artwork`](src/artwork.rs), [`clock_font`](src/clock_font.rs) | Decode text art, themed icon sets, and the clock bitmap font; retain the geometry used by renderers. |
 | [`asset_manifest`](src/asset_manifest.rs) | Declares the default theme, required paths, and expected formats. |
-| [`asset_resolver`](src/asset_resolver.rs), [`asset_distribution`](src/asset_distribution.rs) | Select the resource root at runtime and copy canonical assets beside binaries at build time. |
+| [`asset_resolver`](src/asset_resolver.rs), [`asset_distribution`](src/asset_distribution.rs) | Select the runtime resource root. Cargo build scripts copy assets from the active checkout into the target profile's `assets/` directory. |
 | [`asset_store`](src/asset_store.rs) | Loads and indexes an asset set for consumers, including its maximum dimensions and optional image payloads. |
 | [`asset_validation`](src/asset_validation.rs), [`asset_error`](src/asset_error.rs) | Check required files and supported formats and describe path, read, and validation failures. |
 | [`asset_restore`](src/asset_restore.rs), [`embedded_defaults`](src/embedded_defaults.rs) | Repair default files or provide in-memory fallbacks using the same embedded bytes. |

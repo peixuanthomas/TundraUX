@@ -18,7 +18,7 @@ Each warning, error, or critical alert gets a report ID and keeps its original l
 | [`system_settings`](src/system_settings.rs) | Defines the OS-settings backend, availability, snapshots and requests so hosts can schedule work without leaking UI state into the backend. |
 | [`clock`](src/clock.rs) | Advances scheduled alarms and countdowns from clock snapshots and returns due events. Profile persistence is in storage; Shell presents the reminders. |
 | [`update/`](src/update/) | Orchestrates update checks, preparation, replacement, and rollback. `git` reads remote history; `http` fetches update data; `release` handles Linux artifacts; `toolchain` checks source-build prerequisites; `vim` validates or installs the engine; `cancellation` cleans up or preserves transactions safely. |
-| [`build.rs`](build.rs), [`build_support`](build_support.rs) | Compile the LSH language definitions and supply version, commit, and dirty-state metadata for update checks. |
+| [`build.rs`](build.rs), [`build_support`](build_support.rs) | Compile the active checkout's `third_party/lsh/definitions` and supply version, commit, and dirty-state metadata for update checks. |
 
 Build identity follows the Git checkout and its index, including linked worktrees and packed refs. A nonempty `TUNDRAUX_BUILD_COMMIT` is the sole input for the release identity. Source archives default to `unknown`.
 

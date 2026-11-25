@@ -14,7 +14,7 @@
 | [`session_services/`](src/session_services/) | `server` and `state` own shared revisions, persist writes, and handle file-operation requests. `clock` manages shared clock state. `client`, `client_worker`, and `client_jobs` exchange requests and publish cached snapshots or completion receipts. |
 | [`notification_center`](src/notification_center.rs), [`spring_style`](src/spring_style.rs) | Shell-facing notification types and shared animation style integration |
 | [`previews/`](src/previews/) | Local debug programs for common controls, styles, rainbow text, AA, and the on-screen keyboard |
-| [`build.rs`](build.rs) | Copies canonical resource files beside the built program. |
+| [`build.rs`](build.rs) | Copies the active checkout's UI resources beside `tundra-shell`. |
 
 ### Session modules
 

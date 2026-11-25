@@ -32,7 +32,7 @@ Tab accepts the gray inline completion on Windows and Unix. Right cycles through
 | [`repl`](src/repl.rs), [`repl/completion`](src/repl/completion.rs) | Read interactive lines, distinguish leading-slash commands from native commands, manage history/completion, and notify the embedded host of command completion or special exit actions. Native session state lives in `platform`. |
 | [`management_client`](src/management_client.rs), [`management_client/linux`](src/management_client/linux.rs) | Handle management help and dispatch, and run Linux operations through platform's typed management connection. |
 | [`commands/`](src/commands/) | Implement the command families below. |
-| [`build.rs`](build.rs) | Copies the canonical asset tree to the build output for CLI diagnostics and previews. |
+| [`build.rs`](build.rs) | Copies the active checkout's assets beside `tundra-cli` for diagnostics and previews. |
 
 | Modules under `src/commands/` | Responsibility |
 | --- | --- |

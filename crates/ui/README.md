@@ -17,7 +17,7 @@
 | [`editor_media`](src/editor_media.rs), [`terminal_images`](src/terminal_images.rs) | Detect and prepare graphics and fallbacks; crop, cache, and place images from the child terminal. |
 | [`assets/`](src/assets/) | Accesses the shared application icon catalog and setup preview assets. See [asset sources](assets/README.md) for the included icons and timezone map. |
 | [`ui_test`](src/ui_test.rs), [`style_preview`](src/style_preview.rs), [`rainbow_text_preview`](src/rainbow_text_preview.rs) | Provide demo data and renderers for interactive previews owned by Shell. |
-| [`build.rs`](build.rs) | Copies canonical resources to the build output for renderers and previews. |
+| [`build.rs`](build.rs) | Copies the active checkout's resources to the build output for renderers and previews. |
 
 ### Screen modules
 

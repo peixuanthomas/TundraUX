@@ -11,7 +11,7 @@ mod embedded_defaults;
 
 pub use artwork::{AppIcon, AppIconCatalog, ArtItem, ArtSet, ExplorerIcon, TextArt};
 pub use asset_distribution::{
-    cargo_profile_dir_from_out_dir, copy_canonical_assets_to_profile_dir,
+    cargo_profile_dir_from_out_dir, copy_canonical_assets_to_profile_dir, stage_workspace_assets,
 };
 pub use asset_error::AssetError;
 pub use asset_manifest::{

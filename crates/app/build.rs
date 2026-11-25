@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod build_support;
 
 fn main() {
-    let definitions = lsh::compiler::builtin_definitions_path();
+    let definitions = Path::new("../../third_party/lsh/definitions");
     let mut generator = lsh::compiler::Generator::new();
     generator
         .read_directory(definitions)

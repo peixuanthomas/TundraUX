@@ -12,6 +12,23 @@ fn derives_profile_dir_from_build_out_dir() {
 }
 
 #[test]
+fn a_shared_target_copies_assets_from_the_current_checkout() {
+    let root = TempDir::new("shared-target");
+    let out_dir = root.path.join("target/debug/build/shell-fixture/out");
+    for checkout in ["first", "second"] {
+        let crates = root.path.join(checkout).join("crates");
+        let manifest_dir = crates.join("shell");
+        let assets = crates.join("ascii-assets/assets");
+        fs::create_dir_all(&manifest_dir).unwrap();
+        fs::create_dir_all(&assets).unwrap();
+        fs::write(assets.join("marker"), checkout).unwrap();
+
+        let staged = stage_workspace_assets(&manifest_dir, &out_dir).unwrap();
+        assert_eq!(fs::read_to_string(staged.join("marker")).unwrap(), checkout);
+    }
+}
+
+#[test]
 fn runtime_asset_copy_includes_valid_icon_assets() {
     let root = TempDir::new("runtime-icon-assets");
     let out_dir = root
