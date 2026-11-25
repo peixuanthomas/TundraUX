@@ -46,7 +46,7 @@ The window bar uses the full bottom row. Click an entry's title to restore its w
 
 `WorkspaceTree` stores incremental splits, allowing each axis once per path and at most four panes in a 2×2 grid. T layouts preserve the untouched pane. Size-driven hiding projects this topology without discarding it; growing the terminal restores the hidden panes. At the 108×20 minimum, a single app has 106×16 content cells. Complete frames and one-cell gaps require 217×20 for left/right, 108×39 for top/bottom, and 217×39 for four panes.
 
-All live windows contribute to the minimum content size, including those in the background. If the workspace cannot fit, the focused window keeps its controls and shows a resize notice. The advanced window panel opens with Ctrl+W then W and can close or force-kill windows while the workspace is too small. F1 help lists the keyboard controls.
+All live windows contribute to the minimum content size, including those in the background. If the workspace cannot fit, the focused window keeps its controls and shows a resize notice. The advanced window panel opens with Ctrl+W then W and can close or force-kill windows while the workspace is too small. F1 help lists the keyboard controls, including Ctrl+Q to close the focused window.
 
 App-host frames carry content in pane-local coordinates. Composition translates and clips cells, controls, and sensitive areas together. Only the focused pane keeps the existing automation IDs. The composed snapshot masks sensitive text in every visible pane. AppHost attaches frame sequence numbers, input tracing serials, confirmed input fences, and first-frame startup timings after UI capture.
 

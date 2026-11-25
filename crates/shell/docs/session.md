@@ -98,7 +98,7 @@ Compositing order:
 5. Animations and effects for the current frame;
 6. Floating Toast and the on-screen keyboard.
 
-Esc and Back perform one step in the focused app. They dismiss a menu or dialog, cancel a drag or edit, or return to a previous location or page. At the start of an app the window stays open. The top-bar Back setting keeps Esc visible there as a disabled button. Vim and terminals receive Esc directly. Idle Home opens the power menu with Esc. The window’s × and Ctrl+W followed by Q keep the normal save and running-task confirmations.
+Esc and Back perform one step in the focused app. They dismiss a menu or dialog, cancel a drag or edit, or return to a previous location or page. At the start of an app the window stays open. The top-bar Back setting keeps Esc visible there as a disabled button. Vim and terminals receive Esc directly. Idle Home opens the power menu with Esc. Ctrl+Q closes the focused window with the same save and running-task confirmations as the window’s × and Ctrl+W followed by Q. Vim receives Ctrl+Q while it owns the keyboard.
 
 The window's Split button offers left/right, top/bottom, and full screen. A split keeps the source app left/top and opens a searchable app/window selector in the new pane; cancel removes the pending pane. Full screen minimizes the other panes and clears the split. Ctrl+W then v/s splits outside editor canvases and native terminals, which preserve their own Ctrl+W. The bottom bar switches to a running window or restores a minimized one. A restore uses the previous split position when it fits and the focused slot when the split is full.
 

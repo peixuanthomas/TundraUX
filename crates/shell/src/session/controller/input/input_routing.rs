@@ -216,7 +216,7 @@ impl ShellSession {
                 RoutedTarget::Component(ShellComponent::Home),
                 ShellCommand::ActivateSelectedHomeEntry,
             ),
-            ShellScreen::Home if key.is_character('q') => {
+            ShellScreen::Home if key.is_character('q') && key.is_unmodified_action_key() => {
                 (RoutedTarget::Global, ShellCommand::RequestExit)
             }
             _ => (

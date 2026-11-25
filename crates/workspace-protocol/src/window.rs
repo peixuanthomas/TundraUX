@@ -262,6 +262,9 @@ pub struct WindowFrame {
     pub back_action: Option<BackAction>,
     #[serde(default)]
     pub ctrl_w_passthrough: bool,
+    /// Vim uses Ctrl+Q for native visual-block mode.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ctrl_q_passthrough: bool,
     pub modal: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_timings: Option<AppStartupTimings>,
@@ -289,6 +292,7 @@ impl WindowFrame {
             native_escape: Vec::new(),
             back_action: None,
             ctrl_w_passthrough: false,
+            ctrl_q_passthrough: false,
             modal: false,
             startup_timings: None,
         }

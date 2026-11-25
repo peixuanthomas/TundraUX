@@ -196,6 +196,56 @@ pub(super) fn shell_state() -> ShellSession {
 }
 
 #[test]
+fn direct_ctrl_q_requests_a_normal_close_for_only_the_focused_window() {
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let (first, focused) = (SessionId(1), SessionId(2));
+    for id in [first, focused] {
+        workspace.windows.insert(id, window(Size::new(20, 8)));
+        workspace.selection.open(id);
+    }
+    let mut terminal_frame = WindowFrame::new(workspace.generation, Size::new(20, 8));
+    terminal_frame.native_escape.push(workspace_protocol::Rect {
+        x: 0,
+        y: 0,
+        width: 20,
+        height: 8,
+    });
+    terminal_frame.ctrl_w_passthrough = true;
+    workspace.windows.get_mut(&focused).unwrap().frame = Some(Arc::new(terminal_frame));
+    workspace.input_focus = Some(focused);
+    let key = KeyInput::with_modifiers(InputKey::Char('q'), crate::InputModifiers::CTRL);
+    assert!(
+        workspace
+            .input(&InputEvent::Key(key.clone()), &mut state)
+            .unwrap()
+    );
+    assert_eq!(
+        workspace.windows[&focused].queued.back(),
+        Some(&ShellToApp::RequestClose)
+    );
+    workspace.selection.focus(first);
+    workspace.input_focus = Some(first);
+    for phase in [InputPhase::Repeat, InputPhase::Release] {
+        let mut event = key.clone();
+        event.phase = phase;
+        assert!(
+            workspace
+                .input(&InputEvent::Key(event), &mut state)
+                .unwrap()
+        );
+    }
+    assert!(workspace.windows[&first].queued.is_empty());
+
+    let mut vim_frame = WindowFrame::new(workspace.generation, Size::new(20, 8));
+    vim_frame.ctrl_w_passthrough = true;
+    vim_frame.ctrl_q_passthrough = true;
+    workspace.windows.get_mut(&first).unwrap().frame = Some(Arc::new(vim_frame));
+    workspace.input(&InputEvent::Key(key), &mut state).unwrap();
+    assert_eq!(workspace.windows[&first].close, CloseProgress::Idle);
+}
+
+#[test]
 fn only_the_explicit_debug_message_reaches_the_shell_panic_boundary() {
     use watchdog::{BoundaryKind, BoundarySpec, WatchdogConfig, WatchdogRuntime};
     let root = std::env::temp_dir().join(format!(

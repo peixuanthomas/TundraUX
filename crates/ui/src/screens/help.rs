@@ -112,7 +112,7 @@ fn workspace_navigation() -> PageHelpSection {
             row("Ctrl+W, s", i18n::tr!("ui-workspace-top-bottom")),
             row("Ctrl+W", i18n::tr!("ui-help-workspace-native")),
             row("Ctrl+W, o", i18n::tr!("ui-help-workspace-maximize")),
-            row("Ctrl+W, Q", i18n::tr!("ui-workspace-close")),
+            row("Ctrl+Q / Ctrl+W, Q", i18n::tr!("ui-workspace-close")),
             row("Ctrl+W, Shift+X", i18n::tr!("ui-help-workspace-kill")),
             row("Ctrl+W, Ctrl+W", i18n::tr!("ui-help-workspace-send")),
         ],

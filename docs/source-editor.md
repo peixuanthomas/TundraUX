@@ -17,7 +17,7 @@ The preview supports scanned pages and uses Kitty, Sixel, or iTerm2 graphics whe
 The interface follows [Microsoft Edit](https://github.com/microsoft/edit/tree/cb6de0a8966aecd01d19a3541dab1829d0e679ca/crates/edit/src/bin/edit), with File, Edit, View, and Help menus. Find and Replace bars sit above the document; language, line endings, encoding, indentation, line/column position, and document switching controls sit at the bottom.
 
 - Ctrl+N creates a document, Ctrl+O opens a file, and Ctrl+P shows the document list.
-- Ctrl+Tab / Ctrl+Shift+Tab switches documents, Ctrl+W closes the current one, and Ctrl+Q closes the group one document at a time.
+- Ctrl+Tab / Ctrl+Shift+Tab switches documents, Ctrl+W closes the current one, and Ctrl+Q closes the focused workspace window and prompts for unsaved documents. Vim keeps its native Ctrl+Q.
 - Each document keeps its own undo history, cursor, search options, file tasks, and recovery draft.
 - F10 focuses the menu, Alt+F/E/V/H opens the matching menu, and Esc returns to the document.
 - Ctrl+F10 opens Linux system configuration files; saving goes through a diff preview, configuration validation, authorization, and backup.

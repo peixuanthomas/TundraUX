@@ -91,6 +91,22 @@ impl Workspace {
                 self.split_key(key, state);
                 return Ok(true);
             }
+            if key.modifiers.is_control_only()
+                && matches!(key.key, InputKey::Char('q' | 'Q'))
+                && let Some(id) = self.selection.focused()
+                && self.windows.get(&id).is_some_and(|window| {
+                    window
+                        .frame
+                        .as_ref()
+                        .is_none_or(|frame| !frame.modal && !frame.ctrl_q_passthrough)
+                })
+            {
+                self.prefix.clear();
+                if key.phase == InputPhase::Press {
+                    self.request_close(id);
+                }
+                return Ok(true);
+            }
             let application_owns_key = self
                 .input_focus
                 .and_then(|id| self.windows.get(&id))

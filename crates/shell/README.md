@@ -125,7 +125,7 @@ The screen keyboard fits inside the app content. Its bottom row, including Paste
 | Ctrl+W again | Send one literal Ctrl+W outside native editing areas |
 | Esc | Cancel the prefix |
 
-The old Ctrl+B prefix is removed. The ordinary editor canvas, native Vim, and embedded terminals retain their original Ctrl+W handling; use their window Split button. Shell-owned dialogs receive input before workspace shortcuts. Press/release and repeat handling prevent a held key from creating multiple splits.
+Ctrl+Q requests a normal close for the focused window, including Command Line. Vim receives Ctrl+Q while it owns keyboard input. The ordinary editor canvas, native Vim, and embedded terminals retain their original Ctrl+W handling; use their window Split button. Shell-owned dialogs receive input before workspace shortcuts. Press/release and repeat handling prevent a held key from creating multiple splits.
 
 Selection dialogs share a top search field, case-insensitive filtering, stable option identities, and an empty-result state. This includes window/app selection, all Settings pickers, dashboard component and size pickers, and form choices. Right-click and More action menus retain their compact layout.
 

@@ -943,6 +943,13 @@ impl AppHostSession {
             && (!frame.native_escape.is_empty()
                 || self.state.active_screen() == ShellScreen::Editor
                     && self.state.pages.editor.editor_focus == ui::EditorFocus::Canvas);
+        frame.ctrl_q_passthrough = self.vim.captures_input(
+            &self.state,
+            &InputEvent::Key(KeyInput::with_modifiers(
+                InputKey::Char('q'),
+                crate::InputModifiers::CTRL,
+            )),
+        );
         Ok(Some(frame))
     }
 

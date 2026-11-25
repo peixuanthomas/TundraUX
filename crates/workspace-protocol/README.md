@@ -27,7 +27,7 @@ Private IPC messages and framing for the workspace guardian, Shell, app hosts, a
 
 Each message has a four-byte big-endian length and a JSON body. Frame limits are 1 MiB for guardian worker traffic, 128 MiB for windows, and 8 MiB for shared services. Window cells carry displayable text and style in a gzip-compressed, base64-encoded JSON array, with limits of 256 Ki cells and 16 MiB of decompressed data. Image placements identify their visible regions and refer to the base64-encoded RGBA data from the same frame or the previous frame. The image limit is 80 MB of unique pixel data per window frame. Cursors, controls, and masks use structured data. `Framed` expects an authenticated nonblocking stream from the platform layer and bounds queued bytes and work per poll. Queue backpressure is reported as `WouldBlock`.
 
-Window frames include the additive, default-false `ctrl_w_passthrough` flag. App hosts report when the editor canvas or a native terminal owns Ctrl+W, so Shell can preserve application input while handling workspace prefixes elsewhere.
+Window frames report when an editor canvas or native terminal owns Ctrl+W. A separate `ctrl_q_passthrough` flag keeps Ctrl+Q available to Vim while it owns keyboard input. Both flags default to false.
 
 Window frames also carry styled Markdown headings as text and geometry. The receiving Shell can use native text sizing after checking the pane's bounds.
 

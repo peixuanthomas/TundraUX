@@ -35,6 +35,8 @@ From Home, use the arrow keys and **Enter** or **Space**, or click a tile. Home 
 
 When one app opens content in another, such as Logs opening a read-only Editor, close the new window to return to the original app. A split workspace temporarily uses the first unfocused pane and restores it afterward. A single pane tries left/right, then top/bottom, then temporarily replaces the original window.
 
+Press **Ctrl+Q** to close the focused window. Unsaved edits and running commands get the same confirmation as the window’s × button. Vim keeps its own **Ctrl+Q**.
+
 Outside the editor canvas and native terminal areas, press **Ctrl+W**, release it, then press a second key: **v** / **s** split, **arrows** or **h/j/k/l** change focus, **o** makes the pane full screen, **b** minimizes, **w** lists windows, **n** opens notifications, and **q** closes normally. **Ctrl+W** followed by **Shift+X** force stops the window and can lose unsaved work. Use the frame buttons when the app itself handles Ctrl+W.
 
 With the default minimum, left/right needs 217 × 20 cells, top/bottom needs 108 × 39, and a full grid needs 217 × 39. A child application can ask for more space. Enlarge the terminal to show panes hidden by a resize or to bring back a pending save confirmation. See [all window controls](../crates/shell/README.md#windows) and the [on-screen keyboard](../crates/shell/docs/session.md#on-screen-keyboard-for-aa-and-command-line).
