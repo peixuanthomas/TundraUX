@@ -8,13 +8,13 @@ Run commands from the repository root. Use a feature's test target while editing
 | Routine workspace check | `cargo test --workspace --locked` | Unit and integration tests for workflows, data safety and permission decisions. Uses fixtures for external services and authorization. |
 | Testing native integration | `cargo test --locked -p shell --features native-tests` | Adds Shell's real local connections, services worker and child-terminal tests on the current OS. The CLI, platform, terminal-runtime, script-runtime, vim-runtime and watchdog crates also define this feature. |
 
-Choose the native crate that changed. Local sockets or named pipes, PTYs and child-process supervision must be available. The Linux Bash suite needs Bash 5.2 or newer. Tests for root, real package managers, a bundled Vim, or private systemd remain individually selectable with the commands for those fixtures. On macOS the workspace tests use fixtures for permission decisions and omit the native system Trash round trip.
+Choose the native crate that changed. Local sockets or named pipes, PTYs and child-process supervision must be available. The Linux Bash suite needs Bash 5.2 or newer. Tests for root, real package managers, a bundled Vim, or private systemd remain individually selectable with the commands for those fixtures. On macOS the workspace tests use fixtures for permission decisions. The native system Trash round trip runs on Linux and Windows.
 
 | Change | Checks to start with |
 | --- | --- |
 | Domain behavior or shared types | [Targeted crate tests](#targeted-tests), then workspace tests when behavior crosses crates |
 | Layout, input, or window composition | [Compact UI and motion acceptance](#compact-ui-and-motion-acceptance) and the relevant keyboard, pointer, or touch workflow |
-| Process cleanup, native management, or terminal I/O | [Linux PTY and system operations](#linux-pty-and-system-operations) or the corresponding native-platform checks |
+| Process cleanup, native management, or terminal I/O | [Unix command line and watchdog](#unix-command-line-and-watchdog) or [Linux PTY and system operations](#linux-pty-and-system-operations) |
 | Vim, embedded Command Line, or script debugging | [Real Vim regression tests](#real-vim-regression-tests) and [child-terminal checks](#child-terminals-scripts-and-launcher) |
 | Documentation only | Verify links and heading anchors, confirm command examples and paths against source, and run `git diff --check` |
 
@@ -61,6 +61,18 @@ cargo +1.95.0 test --workspace --locked
 ```
 
 CI configuration is in [cross-platform.yml](../.github/workflows/cross-platform.yml) and [linux.yml](../.github/workflows/linux.yml). The [Vim engine workflow](../.github/workflows/vim-engine-release.yml) checks bundled Vim packaging. Run Linux-related checks in WSL or native Linux, and Windows and macOS checks on their own platforms.
+
+## Unix command line and watchdog
+
+Build Shell and CLI from the same checkout, then run the real-terminal checks on macOS or Linux.
+
+```sh
+cargo build --locked -p shell -p cli
+python3 scripts/tests/command-line-input.py target/debug/tundra-cli
+python3 scripts/tests/shell-watchdog.py target/debug/tundra-shell
+```
+
+On macOS, both scripts give their child processes a temporary home with a readable `.Trash`. Shell uses this directory for its startup check.
 
 ## Linux PTY and system operations
 

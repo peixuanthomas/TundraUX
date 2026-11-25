@@ -93,7 +93,7 @@ class FrameBoundaryTests(unittest.TestCase):
         self.assertEqual(session.match_output(90, frame)["output_ns"], 100)
 
 
-class SessionTraceTests(unittest.TestCase):
+class SessionEnvironmentTests(unittest.TestCase):
     def session_environment(self, detailed_trace=None):
         captured = {}
 
@@ -124,8 +124,15 @@ class SessionTraceTests(unittest.TestCase):
                         descriptor = getattr(session, name, None)
                         if descriptor is not None:
                             os.close(descriptor)
-                    session.temporary.cleanup()
+                    self.addCleanup(session.temporary.cleanup)
             return captured, str(output / "test.trace.jsonl")
+
+    def test_macos_session_home_contains_readable_trash(self):
+        with patch.object(performance.sys, "platform", "darwin"):
+            environment, _ = self.session_environment()
+        home = Path(environment["HOME"])
+        self.assertNotEqual(home, Path.home())
+        self.assertEqual(list((home / ".Trash").iterdir()), [])
 
     def test_default_session_removes_inherited_detailed_trace(self):
         environment, _ = self.session_environment()

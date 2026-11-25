@@ -288,13 +288,15 @@ class Session:
         self.new_process_pids = {}
         self.temporary = tempfile.TemporaryDirectory(prefix="tundra-perf-")
         root = Path(self.temporary.name)
+        home = root / "home"
+        home.mkdir()
+        if sys.platform == "darwin":
+            (home / ".Trash").mkdir()
         self.env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor", LC_ALL="C.UTF-8",
-                        TUNDRA_VIM_CLEAN="1", NO_COLOR="")
+                        TUNDRA_VIM_CLEAN="1", NO_COLOR="", HOME=str(home))
         vim = binary.parent / "vim" / "vim"
         if vim.is_file():
             self.env["TUNDRA_VIM"] = str(vim)
-        self.env["HOME"] = str(root / "home")
-        Path(self.env["HOME"]).mkdir()
         for name in ("CONFIG", "DATA", "CACHE", "STATE", "RUNTIME"):
             folder = root / name.lower()
             folder.mkdir(mode=0o700)
@@ -320,7 +322,7 @@ class Session:
         self.bytes = 0
         self.pty_eof = False
         self.info = None
-        self.child = subprocess.Popen([str(binary)], env=self.env, cwd=root / "home",
+        self.child = subprocess.Popen([str(binary)], env=self.env, cwd=home,
                                       stdin=self.slave, stdout=self.slave, stderr=self.slave,
                                       start_new_session=True)
         try:

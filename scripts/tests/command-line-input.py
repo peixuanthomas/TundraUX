@@ -15,21 +15,28 @@ import time
 import tempfile
 
 binary = Path(sys.argv[1] if len(sys.argv) > 1 else "target/debug/tundra-cli").resolve()
+workspace = tempfile.TemporaryDirectory(prefix="tundra-command-state-")
+fixture = Path(workspace.name).resolve()
+home = fixture / "home"
+home.mkdir()
+if sys.platform == "darwin":
+    (home / ".Trash").mkdir()
+env = dict(os.environ, HOME=str(home), TMPDIR=str(fixture), TERM="xterm-256color",
+           TUNDRA_COMMAND_LINE_USERNAME="input-test")
 pid, master = pty.fork()
 if pid == 0:
-    os.environ["TERM"] = "xterm-256color"
-    os.environ["TUNDRA_COMMAND_LINE_USERNAME"] = "input-test"
-    os.execv(str(binary), [str(binary), "repl", "--embedded"])
+    os.execve(str(binary), [str(binary), "repl", "--embedded"], env)
 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 120, 0, 0))
 output = bytearray()
-workspace = tempfile.TemporaryDirectory(prefix="tundra-command-state-")
 current_directory = Path.cwd().resolve()
 
 
-def wait_for(marker, timeout=5.0, strip_colors=False):
+def wait_for(marker, timeout=5.0, strip_colors=False, start=0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        visible_output = re.sub(rb"\x1b\[[0-9;]*m", b"", output) if strip_colors else output
+        visible_output = output[start:]
+        if strip_colors:
+            visible_output = re.sub(rb"\x1b\[[0-9;]*m", b"", visible_output)
         if marker in visible_output:
             return
         if select.select([master], [], [], max(0, deadline - time.monotonic()))[0]:
@@ -44,16 +51,21 @@ def wait_for(marker, timeout=5.0, strip_colors=False):
     raise AssertionError(f"missing {marker!r}: {bytes(output)!r}")
 
 
-def wait_for_prompt():
-    wait_for(f"input-test@{current_directory} >>".encode(), strip_colors=True)
+def wait_for_prompt(exit_code=None):
+    start = 0
+    if exit_code is not None:
+        # The echoed command also contains the prompt. Only its next paint is ready for input.
+        finished = f"\x1b[777;1;{int(exit_code != 0)}z".encode()
+        wait_for(finished)
+        start = output.index(finished) + len(finished)
+    wait_for(f"input-test@{current_directory} >>".encode(), strip_colors=True, start=start)
 
 
 def run_command(command, expected=None, code=0):
     output.clear()
     os.write(master, command.encode() + b"\r")
     wait_for(f"[system exit code: {code}]".encode())
-    wait_for_prompt()
-    wait_for(f"\x1b[777;1;{int(code != 0)}z".encode())
+    wait_for_prompt(code)
     if expected is not None:
         assert expected in output, bytes(output)
     assert b"could not retain command state" not in output, bytes(output)
@@ -62,7 +74,7 @@ def run_command(command, expected=None, code=0):
 try:
     wait_for_prompt()
     assert "○\x1b[777;0z".encode() in output, bytes(output)
-    folder = Path(workspace.name).resolve() / "space and 中文"
+    folder = fixture / "space and 中文"
     folder.mkdir()
     run_command("export PERSISTED='kept=value'")
     current_directory = folder
@@ -73,13 +85,11 @@ try:
     os.write(master, b"/help\r")
     wait_for(b"Usage: tundra-cli <command> [options]")
     wait_for(b"Use <command> --help for subcommands and options.")
-    wait_for_prompt()
-    wait_for(b"\x1b[777;1;0z")
+    wait_for_prompt(0)
     for invalid in ("invalid-command", "/help '", "/repl", "/", "/echo MUST_NOT_RUN"):
         output.clear()
         os.write(master, invalid.encode() + b"\r")
-        wait_for_prompt()
-        wait_for(b"\x1b[777;1;1z")
+        wait_for_prompt(1)
     assert b"Remove the '/' prefix: echo MUST_NOT_RUN" in output, bytes(output)
     # doctor tests the shared name without Bash's built-in help shadowing PATH.
     system_doctor = folder / "doctor"
@@ -89,14 +99,13 @@ try:
     output.clear()
     os.write(master, b"/doctor --help\r")
     wait_for(b"Usage: tundra-cli doctor")
-    wait_for_prompt()
-    wait_for(b"\x1b[777;1;0z")
+    wait_for_prompt(0)
     assert b"SYSTEM_DOCTOR_RAN" not in output, bytes(output)
     run_command("doctor", b"SYSTEM_DOCTOR_RAN")
     assert b"Usage: tundra-cli" not in output, bytes(output)
     run_command("/usr/bin/printf 'absolute:%s\\n' ok", b"absolute:ok")
-    run_command("printf 'state:%s:%s\\n' \"$PERSISTED\" \"$PWD\"",
-                f"state:kept=value:{folder}".encode())
+    run_command("printf 'state:%s:%s:%s\\n' \"$PERSISTED\" \"$PWD\" \"$HOME\"",
+                f"state:kept=value:{folder}:{home}".encode())
     # The command still reads the real PTY; the state protocol must not
     # consume its stdin or route output through a non-terminal pipe.
     output.clear()
@@ -105,7 +114,7 @@ try:
     os.write(master, b"typed-in-terminal\r")
     wait_for(b"reply:typed-in-terminal")
     wait_for(b"[system exit code: 0]")
-    wait_for_prompt()
+    wait_for_prompt(0)
     run_command("printf contents > relative-file")
     assert (folder / "relative-file").read_text() == "contents"
     run_command("export AFTER_FAILURE=retained; false", code=1)
@@ -123,7 +132,7 @@ try:
     time.sleep(0.25)  # A standalone Escape, not an Alt chord.
     started = time.monotonic()
     os.write(master, b"e")
-    wait_for(b"e", 0.5)
+    wait_for(b" >> e", 0.5, strip_colors=True)
     latency = time.monotonic() - started
     # Left/right are complete CSI sequences and must still work after setting
     # the Escape timeout. A lost first e leaves 'xit', so exit status verifies it.
