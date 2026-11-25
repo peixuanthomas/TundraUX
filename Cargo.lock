@@ -141,7 +141,6 @@ dependencies = [
  "identity",
  "lsh",
  "memchr",
- "office_oxide",
  "platform",
  "rars",
  "regex",
@@ -161,6 +160,7 @@ dependencies = [
  "time 2.0.1",
  "tokio",
  "toml",
+ "tundra-office-reader",
  "unicode-segmentation",
  "unicode-width 0.2.0",
  "watchdog",
@@ -3543,25 +3543,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "office_oxide"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1985d384db629099807a236b6aa07f7cc8f7d0b4e821e02b8aea7175de4e164"
-dependencies = [
- "atoi_simd",
- "encoding_rs",
- "fast-float2",
- "flate2",
- "log",
- "memchr",
- "quick-xml 0.42.0",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "zip 9.7.3",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6459,6 +6440,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 dependencies = [
  "core_maths",
+]
+
+[[package]]
+name = "tundra-office-reader"
+version = "0.1.17"
+dependencies = [
+ "atoi_simd",
+ "encoding_rs",
+ "fast-float2",
+ "flate2",
+ "log",
+ "memchr",
+ "quick-xml 0.42.0",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "zip 9.7.3",
 ]
 
 [[package]]

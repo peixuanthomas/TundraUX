@@ -17,6 +17,7 @@ todo.md
 !/third_party/bashdb/
 !/third_party/wezterm-term/
 !/third_party/opencode/
+!/third_party/office-reader/
 /third_party/wezterm-term/target/
 /third_party/wezterm-term/Cargo.lock
 /clear.bat
