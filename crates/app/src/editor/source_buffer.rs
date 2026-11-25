@@ -68,39 +68,38 @@ impl SourceBuffer {
 
     pub(super) fn rebuild_display_width_cache(&mut self) {
         let mut display_widths = SourceDisplayWidthCache::default();
-        // `Rope::lines` advances sequentially through the tree. In
-        // particular, an all-ASCII log uses only cached RopeSlice lengths and
-        // never performs one `line_to_byte` lookup per short line.
-        for line in self.text.lines() {
-            display_widths.insert(rope_slice_display_width(source_line_content(line)));
+        let mut chunk_start = 0;
+        let mut line_start = 0;
+        let mut after_cr = None;
+        for chunk in self.text.chunks() {
+            for end in memchr::memchr2_iter(b'\r', b'\n', chunk.as_bytes()) {
+                let absolute = chunk_start + end;
+                let cr = chunk.as_bytes()[end] == b'\r';
+                if cr || after_cr != Some(absolute) {
+                    // Most lines fit in one leaf. Only crossing lines need a rope lookup.
+                    let width = if line_start >= chunk_start {
+                        source_text_width(&chunk[line_start - chunk_start..end])
+                    } else {
+                        rope_slice_display_width(self.text.byte_slice(line_start..absolute))
+                    };
+                    display_widths.insert(width);
+                }
+                line_start = absolute + 1;
+                after_cr = cr.then_some(line_start);
+            }
+            chunk_start += chunk.len();
         }
+        display_widths.insert(rope_slice_display_width(self.text.byte_slice(line_start..)));
         self.display_widths = display_widths;
     }
 
     pub(super) fn metadata(&self, utf8_bom: bool, fallback: LineEnding) -> TextMetadata {
-        let distinct = usize::from(self.line_endings.lf > 0)
-            + usize::from(self.line_endings.crlf > 0)
-            + usize::from(self.line_endings.cr > 0);
-        let preferred_line_ending = [
-            (self.line_endings.lf, LineEnding::Lf),
-            (self.line_endings.crlf, LineEnding::CrLf),
-            (self.line_endings.cr, LineEnding::Cr),
-        ]
-        .into_iter()
-        .max_by_key(|(count, _)| *count)
-        .filter(|(count, _)| *count > 0)
-        .map(|(_, ending)| ending)
-        .unwrap_or(fallback);
-        TextMetadata {
-            encoding: TextEncoding::Utf8,
-            utf8_bom,
-            preferred_line_ending,
-            mixed_line_endings: distinct > 1,
-            has_final_newline: self
-                .text
-                .get_byte(self.len_bytes().saturating_sub(1))
-                .is_some_and(|byte| matches!(byte, b'\r' | b'\n')),
-        }
+        let final_newline = self
+            .text
+            .get_byte(self.len_bytes().saturating_sub(1))
+            .is_some_and(|byte| matches!(byte, b'\r' | b'\n'));
+        self.line_endings
+            .metadata(utf8_bom, final_newline, fallback)
     }
 
     /// Returns the complete source, borrowing only when Ropey stores it in a

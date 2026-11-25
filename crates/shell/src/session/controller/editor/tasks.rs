@@ -639,26 +639,6 @@ pub(in crate::session) fn load_editor_document_task(
         completed_bytes: 0,
         total_bytes: None,
     });
-    let metadata = std::fs::symlink_metadata(&request.path).map_err(|error| {
-        if let Ok(mut failure) = request.failure.lock() {
-            *failure = Some(EditorFailureMetadata::capture(&error));
-        }
-        format!("Could not inspect {}: {error}", request.path.display())
-    })?;
-    let total_bytes = metadata.len();
-    if total_bytes > platform::MAX_DOCUMENT_BYTES {
-        return Err(format!(
-            "Document is too large to open ({} bytes; maximum is {} bytes)",
-            total_bytes,
-            platform::MAX_DOCUMENT_BYTES
-        ));
-    }
-    let _ = events.send(EditorTaskEvent::Progress {
-        id: request.id,
-        stage: EditorTaskStage::Reading,
-        completed_bytes: 0,
-        total_bytes: Some(total_bytes),
-    });
     let mut last_reported = 0_u64;
     let mut byte_permit = None;
     let mut budget_error = None;
@@ -759,12 +739,8 @@ pub(in crate::session) fn load_editor_document_task(
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }
-    // Prime revision-scoped derived metadata before handing the state to the
-    // UI thread. Source mode is already O(1); Rich mode avoids a first-frame
-    // full projection scan hereafter.
-    let _ = state.word_count();
     let rich_blocks = state
-        .rich_projection()
+        .prepare_rich_projection()
         .map(|projection| std::sync::Arc::from(editor_rich_render_blocks(&projection)));
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());

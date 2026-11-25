@@ -692,11 +692,13 @@ pub fn is_editor_document_path_with_extensions(
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    let name = name.to_ascii_lowercase();
     extensions.iter().any(|extension| {
-        let extension = extension.as_ref();
-        (extension.eq_ignore_ascii_case("log") && is_log_document_path(path))
-            || name.ends_with(&format!(".{}", extension.to_ascii_lowercase()))
+        let extension = extension.as_ref().as_bytes();
+        let (stem, suffix) = name
+            .as_bytes()
+            .split_at(name.len().saturating_sub(extension.len()));
+        (stem.ends_with(b".") && suffix.eq_ignore_ascii_case(extension))
+            || (extension.eq_ignore_ascii_case(b"log") && is_log_document_path(path))
     }) || (storage::uses_default_editor_explorer_extensions(extensions)
         && crate::editor::syntax::has_named_file_association(path))
 }

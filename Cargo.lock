@@ -140,6 +140,7 @@ dependencies = [
  "i18n",
  "identity",
  "lsh",
+ "memchr",
  "office_oxide",
  "platform",
  "rars",

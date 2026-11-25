@@ -217,28 +217,22 @@ impl TextMetadata {
     }
 
     fn from_source_with_fallback(source: &str, utf8_bom: bool, fallback: LineEnding) -> Self {
-        let mut lf = 0usize;
-        let mut crlf = 0usize;
-        let mut cr = 0usize;
-        let bytes = source.as_bytes();
-        let mut index = 0usize;
-        while index < bytes.len() {
-            match bytes[index] {
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
-                    crlf += 1;
-                    index += 2;
-                }
-                b'\r' => {
-                    cr += 1;
-                    index += 1;
-                }
-                b'\n' => {
-                    lf += 1;
-                    index += 1;
-                }
-                _ => index += 1,
-            }
-        }
+        LineEndingStats::from_text(source).metadata(
+            utf8_bom,
+            source.ends_with(['\r', '\n']),
+            fallback,
+        )
+    }
+}
+
+impl LineEndingStats {
+    fn metadata(
+        self,
+        utf8_bom: bool,
+        has_final_newline: bool,
+        fallback: LineEnding,
+    ) -> TextMetadata {
+        let Self { lf, crlf, cr } = self;
         let distinct = usize::from(lf > 0) + usize::from(crlf > 0) + usize::from(cr > 0);
         let preferred_line_ending = [
             (lf, LineEnding::Lf),
@@ -250,12 +244,12 @@ impl TextMetadata {
         .filter(|(count, _)| *count > 0)
         .map(|(_, ending)| ending)
         .unwrap_or(fallback);
-        Self {
+        TextMetadata {
             encoding: TextEncoding::Utf8,
             utf8_bom,
             preferred_line_ending,
             mixed_line_endings: distinct > 1,
-            has_final_newline: source.ends_with('\n') || source.ends_with('\r'),
+            has_final_newline,
         }
     }
 }
@@ -281,12 +275,20 @@ enum DocumentText {
 
 impl DocumentText {
     fn new(kind: DocumentKind, source: String) -> Self {
+        Self::from_arc(kind, Arc::new(source))
+    }
+
+    fn with_line_endings(
+        kind: DocumentKind,
+        source: String,
+        line_endings: LineEndingStats,
+    ) -> Self {
         match kind {
             DocumentKind::Markdown => Self::Contiguous(Arc::new(source)),
             DocumentKind::PlainText => Self::Rope {
                 text: Rope::from_str(&source),
                 word_count: source.unicode_words().count(),
-                line_endings: LineEndingStats::from_text(&source),
+                line_endings,
             },
         }
     }
@@ -848,22 +850,14 @@ impl LineEndingStats {
     fn from_text(text: &str) -> Self {
         let mut stats = Self::default();
         let bytes = text.as_bytes();
-        let mut index = 0usize;
-        while index < bytes.len() {
+        for index in memchr::memchr2_iter(b'\r', b'\n', bytes) {
             match bytes[index] {
-                b'\r' if bytes.get(index + 1) == Some(&b'\n') => {
+                b'\r' => stats.cr += 1,
+                _ if index > 0 && bytes[index - 1] == b'\r' => {
+                    stats.cr -= 1;
                     stats.crlf += 1;
-                    index += 2;
                 }
-                b'\r' => {
-                    stats.cr += 1;
-                    index += 1;
-                }
-                b'\n' => {
-                    stats.lf += 1;
-                    index += 1;
-                }
-                _ => index += 1,
+                _ => stats.lf += 1,
             }
         }
         stats
@@ -929,10 +923,7 @@ fn rope_slice_display_width(text: RopeSlice<'_>) -> usize {
         return text.len_bytes();
     }
     if let Some(text) = text.as_str() {
-        return text
-            .graphemes(true)
-            .map(source_grapheme_display_width)
-            .fold(0usize, usize::saturating_add);
+        return source_text_width(text);
     }
 
     let text_len = text.len_bytes();
@@ -947,11 +938,11 @@ fn rope_slice_display_width(text: RopeSlice<'_>) -> usize {
     loop {
         match cursor.next_boundary(chunk, chunk_start) {
             Ok(Some(grapheme_end)) => {
-                let grapheme = text.byte_slice(grapheme_start..grapheme_end);
-                if let Some(grapheme) = grapheme.as_str() {
-                    width = width.saturating_add(source_grapheme_display_width(grapheme));
+                if grapheme_start >= chunk_start {
+                    let local = grapheme_start - chunk_start..grapheme_end - chunk_start;
+                    width = width.saturating_add(source_grapheme_display_width(&chunk[local]));
                 } else {
-                    let grapheme = grapheme.to_string();
+                    let grapheme = text.byte_slice(grapheme_start..grapheme_end).to_string();
                     width = width.saturating_add(source_grapheme_display_width(&grapheme));
                 }
                 grapheme_start = grapheme_end;
@@ -1049,6 +1040,16 @@ fn next_rope_grapheme_boundary(rope: &Rope, cursor: &mut GraphemeCursor) -> Opti
             }
             Err(GraphemeIncomplete::PrevChunk | GraphemeIncomplete::InvalidOffset) => return None,
         }
+    }
+}
+
+fn source_text_width(text: &str) -> usize {
+    if text.is_ascii() {
+        text.len()
+    } else {
+        text.graphemes(true)
+            .map(source_grapheme_display_width)
+            .sum()
     }
 }
 

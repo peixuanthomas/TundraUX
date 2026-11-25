@@ -2038,7 +2038,7 @@ fn logical_line_end(text: &str, current: usize) -> usize {
         .map_or(graphemes.len(), |offset| current + offset)
 }
 
-fn projected_plain_text(projection: &RichProjection) -> String {
+pub(super) fn projected_plain_text(projection: &RichProjection) -> String {
     fn block_text(kind: &ProjectedBlockKind) -> String {
         match kind {
             ProjectedBlockKind::Paragraph { content }

@@ -13,16 +13,7 @@ impl EditorDocument {
     }
 
     pub fn from_text(path: Option<PathBuf>, kind: DocumentKind, source: impl Into<String>) -> Self {
-        let source = source.into();
-        let metadata = TextMetadata::from_source(&source, false);
-        let source = DocumentText::new(kind, source);
-        Self {
-            path,
-            kind,
-            metadata,
-            saved_source: source.clone(),
-            source,
-        }
+        Self::from_decoded_text(path, kind, source.into(), false)
     }
 
     pub fn from_bytes(
@@ -98,8 +89,10 @@ impl EditorDocument {
         source: String,
         utf8_bom: bool,
     ) -> Self {
-        let metadata = TextMetadata::from_source(&source, utf8_bom);
-        let source = DocumentText::new(kind, source);
+        let line_endings = LineEndingStats::from_text(&source);
+        let metadata =
+            line_endings.metadata(utf8_bom, source.ends_with(['\r', '\n']), LineEnding::Lf);
+        let source = DocumentText::with_line_endings(kind, source, line_endings);
         Self {
             path,
             kind,

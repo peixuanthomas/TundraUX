@@ -433,6 +433,17 @@ fn source_display_positions_and_max_width_use_terminal_cells() {
 }
 
 #[test]
+fn source_width_and_newline_counts_survive_rope_boundaries_at_open() {
+    let long_line = format!("{}e\u{301}🙂{}", "中".repeat(700), "x".repeat(500));
+    let source = format!("\r\n开头\r{long_line}\n\r\n");
+    let state = EditorState::open_owned("report.txt", source.as_bytes().to_vec()).unwrap();
+    assert_eq!(state.source_max_display_width(), Some(1903));
+    assert_eq!(state.source_line_count(), Some(5));
+    assert!(state.document.metadata.mixed_line_endings);
+    assert_eq!(state.to_bytes(), source.as_bytes());
+}
+
+#[test]
 fn source_max_display_width_tracks_edits_and_history_incrementally() {
     let mut editor = EditorState::from_document(EditorDocument::from_text(
         None,

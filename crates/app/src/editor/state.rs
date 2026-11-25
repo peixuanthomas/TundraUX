@@ -446,6 +446,15 @@ impl EditorState {
         }
     }
 
+    pub fn prepare_rich_projection(&self) -> Option<RichProjection> {
+        let projection = self.rich_projection()?;
+        let words = rich_edit::projected_plain_text(&projection)
+            .unicode_words()
+            .count();
+        self.rich_word_count_cache.set(Some((self.revision, words)));
+        Some(projection)
+    }
+
     /// Exports the active buffer at an explicit boundary without mutating the
     /// model, history, revision, or save checkpoint.
     pub fn export_text(&self) -> String {
