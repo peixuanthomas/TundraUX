@@ -863,10 +863,13 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             let (width, height) = picker.cell_size();
             [width, height]
         });
-        Workspace::new(
+        let mut workspace = Workspace::new(
             image_cell_size,
             terminal_graphics_probe.text_sizing_protocol(),
-        )
+        );
+        workspace.image_workers =
+            image_cell_size.map(|_| shell_watchdog.task_group("workspace-images"));
+        workspace
     });
     guard.enable_keyboard_reporting()?;
     if let Some(diagnostics) = diagnostics_task_runtime.as_ref() {
@@ -980,6 +983,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let execution = std::panic::catch_unwind(AssertUnwindSafe(|| -> io::Result<Option<String>> {
         loop {
             let wake_generation = crate::process_host::event_loop::generation();
+            if compositor.workspace_image_ready() {
+                redraw.request_redraw();
+            }
             let mut background_changed = false;
             if let Some(windows) = &mut workspace {
                 if windows.poll(&mut state)? {

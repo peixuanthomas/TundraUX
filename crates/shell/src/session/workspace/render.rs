@@ -10,7 +10,7 @@ impl Workspace {
         capture: Option<&ui::automation::FrameCapture>,
         controls_blocked: bool,
         picker: Option<&ui::EditorImagePicker>,
-        image_caches: &mut std::collections::HashMap<SessionId, ui::TerminalImageCache>,
+        image_caches: &mut std::collections::HashMap<SessionId, PaneImages>,
         image_cleanup: &mut Vec<u8>,
         text_sizing: bool,
     ) {
@@ -96,11 +96,12 @@ impl Workspace {
                     && !rendered.modal
                     && !rendered.images.is_empty()
                 {
-                    image_caches.entry(pane.id).or_default().render_workspace(
+                    image_caches.entry(pane.id).or_default().render(
                         frame,
                         pane.content,
                         &rendered.images,
                         picker,
+                        self.image_workers.as_ref(),
                     );
                     cached_images.insert(pane.id);
                 }
@@ -142,12 +143,12 @@ impl Workspace {
                     self.placeholder_redraw_at.into_iter().chain(deadline).min();
             }
         }
-        image_caches.retain(|id, cache| {
+        image_caches.retain(|id, images| {
             if cached_images.contains(id) {
                 true
             } else {
-                cache.clear();
-                image_cleanup.extend(cache.take_cleanup());
+                images.cache.clear();
+                image_cleanup.extend(images.cache.take_cleanup());
                 false
             }
         });

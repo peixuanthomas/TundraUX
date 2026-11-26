@@ -47,10 +47,34 @@ struct PreparedImage {
     transparent_cells: Vec<(u16, u16)>,
 }
 
+/// Native encoding can run off the terminal thread while the pane displays its cell fallback.
+#[derive(Clone)]
+pub struct WorkspaceImageRequest {
+    key: ImageKey,
+    image: TerminalImageFragment,
+    bytes: usize,
+}
+
+impl PartialEq for WorkspaceImageRequest {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+pub struct EncodedWorkspaceImage(Option<PreparedImage>);
+type WorkspaceEncoder<'a> = dyn FnMut(&WorkspaceImageRequest) -> Option<EncodedWorkspaceImage> + 'a;
+
+impl WorkspaceImageRequest {
+    pub fn encode(&self) -> EncodedWorkspaceImage {
+        EncodedWorkspaceImage(prepare_image(&self.image, &self.key, &mut None, self.bytes))
+    }
+}
+
 /// One page's prepared image fragments. Only the current viewport is retained.
 #[derive(Default)]
 pub struct TerminalImageCache {
     entries: HashMap<ImageKey, PreparedImage>,
+    failed: HashSet<ImageKey>,
     cleanup: Vec<u8>,
     workspace_origin: Option<Rect>,
     workspace_images: Vec<workspace_protocol::Image>,
@@ -138,6 +162,7 @@ impl TerminalImageCache {
                     stored,
                     working,
                     &mut used,
+                    None,
                 );
             }
         }
@@ -231,6 +256,18 @@ impl TerminalImageCache {
         images: &[workspace_protocol::Image],
         picker: &EditorImagePicker,
     ) {
+        self.render_workspace_with(frame, area, images, picker, None);
+    }
+
+    /// Returning `None` leaves the already painted cells visible until this placement is ready.
+    pub fn render_workspace_with(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        images: &[workspace_protocol::Image],
+        picker: &EditorImagePicker,
+        mut encode: Option<&mut WorkspaceEncoder<'_>>,
+    ) {
         let viewport = area.intersection(frame.area());
         let mut used = HashSet::new();
         for asset in images {
@@ -282,10 +319,12 @@ impl TerminalImageCache {
                     stored,
                     working,
                     &mut used,
+                    encode.as_deref_mut(),
                 );
             }
         }
         self.retain_used(&used);
+        self.failed.retain(|key| used.contains(key));
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -299,8 +338,13 @@ impl TerminalImageCache {
         stored: usize,
         working: usize,
         used: &mut HashSet<ImageKey>,
+        encode: Option<&mut WorkspaceEncoder<'_>>,
     ) {
         if !self.entries.contains_key(&key) {
+            if self.failed.contains(&key) {
+                used.insert(key);
+                return;
+            }
             let needed = |cache: &Self| {
                 let source = if cache
                     .entries
@@ -323,8 +367,26 @@ impl TerminalImageCache {
                     return;
                 }
             }
-            let Some(prepared) = prepare_image(image, &key, canvas, stored) else {
-                return;
+            let prepared = if let Some(encode) = encode {
+                let request = WorkspaceImageRequest {
+                    key: key.clone(),
+                    image: image.clone(),
+                    bytes: stored,
+                };
+                match encode(&request) {
+                    Some(EncodedWorkspaceImage(Some(prepared))) => prepared,
+                    Some(EncodedWorkspaceImage(None)) => {
+                        self.failed.insert(key.clone());
+                        used.insert(key);
+                        return;
+                    }
+                    None => return,
+                }
+            } else {
+                let Some(prepared) = prepare_image(image, &key, canvas, stored) else {
+                    return;
+                };
+                prepared
             };
             self.entries.insert(key.clone(), prepared);
         }
@@ -382,6 +444,7 @@ impl TerminalImageCache {
     }
 
     pub fn clear(&mut self) {
+        self.failed.clear();
         for (_, image) in self.entries.drain() {
             append_cleanup(&mut self.cleanup, image.kitty);
         }

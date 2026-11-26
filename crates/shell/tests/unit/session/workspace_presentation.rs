@@ -307,7 +307,7 @@ fn render(
     terminal: &mut Terminal<TestBackend>,
     context: &ui::RenderContext,
     picker: Option<&ui::EditorImagePicker>,
-    caches: &mut HashMap<SessionId, ui::TerminalImageCache>,
+    caches: &mut HashMap<SessionId, PaneImages>,
 ) -> shell_control::Snapshot {
     let mut snapshot = None;
     terminal
@@ -701,6 +701,92 @@ fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_control
         Some(PointerTarget::Pane(id))
     );
     assert!(workspace.external_snapshot_ready());
+}
+
+#[test]
+fn native_image_encoding_keeps_cells_visible_and_discards_a_superseded_placement() {
+    use watchdog::{WatchdogConfig, WatchdogRuntime};
+    let dir = tempfile::tempdir().unwrap();
+    let (runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        dir.path().join("reports"),
+        dir.path().join("fallback"),
+        dir.path().join("data"),
+        "workspace-images",
+        "test",
+    ))
+    .unwrap();
+    let app = process
+        .register_app(watchdog::AppDescriptor::new(
+            watchdog::AppId::from_static("shell"),
+            "Shell",
+            "test",
+            watchdog::AppCriticality::Optional,
+        ))
+        .unwrap();
+    let group = app.task_group("images");
+    let probe = ui::TerminalGraphicsProbe::from_terminal_capabilities(
+        ui::EditorGraphicsProtocol::Iterm2,
+        2,
+        2,
+        false,
+        false,
+    );
+    let mut terminal = Terminal::new(TestBackend::new(8, 2)).unwrap();
+    let mut pane = PaneImages::default();
+    let image_at = |x| {
+        let area = workspace_protocol::Rect {
+            x,
+            y: 0,
+            width: 1,
+            height: 1,
+        };
+        workspace_protocol::Image {
+            image_id: u64::from(x),
+            width: 2,
+            height: 2,
+            rgba: Arc::from([255_u8; 16]),
+            source: [0, 0, 2, 2],
+            padding: [0; 4],
+            cell_size: [2, 2],
+            area,
+            visible: vec![area],
+            z_index: 0,
+        }
+    };
+    let previous = image_at(1);
+    let current = image_at(4);
+    let mut present = |pane: &mut PaneImages, image: &workspace_protocol::Image| {
+        terminal
+            .draw(|frame| {
+                frame.buffer_mut()[(1, 0)].set_symbol("A");
+                frame.buffer_mut()[(4, 0)].set_symbol("B");
+                pane.render(
+                    frame,
+                    frame.area(),
+                    std::slice::from_ref(image),
+                    probe.picker().unwrap(),
+                    Some(&group),
+                );
+            })
+            .unwrap();
+        [1, 4].map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_string())
+    };
+    let wait = |pane: &PaneImages| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !pane.ready() {
+            assert!(Instant::now() < deadline, "native image was not prepared");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    };
+    assert_eq!(present(&mut pane, &previous), ["A", "B"]);
+    wait(&pane);
+    assert_eq!(present(&mut pane, &current), ["A", "B"]);
+    wait(&pane);
+    let cells = present(&mut pane, &current);
+    assert_eq!(cells[0], "A");
+    assert!(cells[1].contains("\x1b]1337;File="));
+    drop(pane);
+    runtime.shutdown().unwrap();
 }
 
 #[test]

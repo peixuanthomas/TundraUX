@@ -112,7 +112,7 @@ pub(crate) struct ScreenCompositor {
     terminal_image_picker: Option<ui::EditorImagePicker>,
     terminal_images: std::collections::HashMap<(PageInstanceId, u8), ui::TerminalImageCache>,
     workspace_images:
-        std::collections::HashMap<workspace_protocol::SessionId, ui::TerminalImageCache>,
+        std::collections::HashMap<workspace_protocol::SessionId, workspace::PaneImages>,
     terminal_image_cleanup: Vec<u8>,
     pub(super) capture_enabled: bool,
     pub(super) capture_workspace_images: bool,
@@ -122,6 +122,12 @@ pub(crate) struct ScreenCompositor {
 }
 
 impl ScreenCompositor {
+    pub(super) fn workspace_image_ready(&self) -> bool {
+        self.workspace_images
+            .values()
+            .any(workspace::PaneImages::ready)
+    }
+
     pub(super) fn toast_visible(&self) -> bool {
         self.toast_area.is_some()
     }
@@ -140,16 +146,18 @@ impl ScreenCompositor {
         for cache in self.terminal_images.values_mut() {
             self.terminal_image_cleanup.extend(cache.take_cleanup());
         }
-        for cache in self.workspace_images.values_mut() {
-            self.terminal_image_cleanup.extend(cache.take_cleanup());
+        for images in self.workspace_images.values_mut() {
+            self.terminal_image_cleanup
+                .extend(images.cache.take_cleanup());
         }
         std::mem::take(&mut self.terminal_image_cleanup)
     }
 
     fn clear_workspace_images(&mut self) {
-        for (_, mut cache) in self.workspace_images.drain() {
-            cache.clear();
-            self.terminal_image_cleanup.extend(cache.take_cleanup());
+        for (_, mut images) in self.workspace_images.drain() {
+            images.cache.clear();
+            self.terminal_image_cleanup
+                .extend(images.cache.take_cleanup());
         }
     }
 

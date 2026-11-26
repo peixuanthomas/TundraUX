@@ -17,12 +17,14 @@ use workspace_protocol::{
 };
 
 mod chooser;
+mod images;
 mod input;
 mod performance;
 mod render;
 mod taskbar;
 mod windows;
 
+pub(in crate::session) use images::PaneImages;
 use performance::PerformanceTrace;
 
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
@@ -128,6 +130,7 @@ struct PointerCapture {
 }
 
 pub(super) struct Workspace {
+    pub(super) image_workers: Option<ManagedTaskGroup>,
     performance: PerformanceTrace,
     image_cell_size: Option<[u16; 2]>,
     text_sizing: bool,
@@ -183,6 +186,7 @@ pub(super) struct Workspace {
 impl Workspace {
     pub(super) fn new(image_cell_size: Option<[u16; 2]>, text_sizing: bool) -> Self {
         Self {
+            image_workers: None,
             performance: PerformanceTrace::new(),
             image_cell_size,
             text_sizing,

@@ -6,7 +6,7 @@ pub(crate) use foundation::input;
 pub use screens::timezone_map;
 mod editor_media;
 mod terminal_images;
-pub use terminal_images::TerminalImageCache;
+pub use terminal_images::{EncodedWorkspaceImage, TerminalImageCache, WorkspaceImageRequest};
 mod motion;
 mod surface_motion;
 pub use surface_motion::{dim_modal_backdrop, fade_surface, light_surface, morph_surface};
