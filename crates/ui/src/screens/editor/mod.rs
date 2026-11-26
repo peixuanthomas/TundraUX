@@ -19,6 +19,7 @@ mod layout;
 mod model;
 mod pdf;
 mod picture;
+mod preview_zoom;
 mod render;
 mod source;
 mod vim_install;
@@ -29,6 +30,7 @@ pub use model::*;
 pub use pdf::{
     EditorPdfAction, EditorPdfLayout, EditorPdfPageImage, EditorPdfViewModel, editor_pdf_canvas,
 };
+pub use preview_zoom::{EditorPreviewWindow, EditorPreviewZoom};
 pub use render::*;
 pub use source::*;
 

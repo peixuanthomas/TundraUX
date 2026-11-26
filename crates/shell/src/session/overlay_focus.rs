@@ -142,6 +142,15 @@ impl ShellSession {
         if let Some(form) = &mut self.pages.editor.editor_settings_dialog {
             form.interaction.cancel_pointer();
         }
+        if let Some(form) = self
+            .pages
+            .editor
+            .editor_pdf
+            .as_mut()
+            .and_then(|pdf| pdf.jump.as_mut())
+        {
+            form.interaction.cancel_pointer();
+        }
         if let Some(form) = &mut self.pages.clock.clock_create_state {
             form.interaction.cancel_pointer();
         }

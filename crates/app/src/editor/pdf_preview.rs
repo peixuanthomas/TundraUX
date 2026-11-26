@@ -34,7 +34,7 @@ impl PartialEq for PdfPreviewDocument {
 
 impl Eq for PdfPreviewDocument {}
 
-/// An opaque page raster fitted to the viewport's terminal cell proportions.
+/// An opaque page raster fitted to a grid with the terminal's cell proportions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PdfPageImage {
     pub viewport: [u16; 2],
@@ -86,7 +86,23 @@ impl PdfPreviewDocument {
         viewport: [u16; 2],
         cell_size: [u16; 2],
     ) -> Option<PdfPageSize> {
-        fit_page(self.0.pages().get(index)?, viewport, cell_size).map(|(size, _)| size)
+        self.rotated_page_size(index, viewport, cell_size, 0)
+    }
+
+    pub fn rotated_page_size(
+        &self,
+        index: usize,
+        viewport: [u16; 2],
+        cell_size: [u16; 2],
+        quarter_turns: u8,
+    ) -> Option<PdfPageSize> {
+        fit_page(
+            self.0.pages().get(index)?,
+            viewport,
+            cell_size,
+            quarter_turns,
+        )
+        .map(|(size, _)| size)
     }
 
     /// Shares Hayro's internal caches within a short batch without retaining them between calls.
@@ -96,12 +112,23 @@ impl PdfPreviewDocument {
         viewport: [u16; 2],
         cell_size: [u16; 2],
     ) -> impl Iterator<Item = Result<PdfPageImage, LocalizedText>> {
+        self.render_rotated_pages(pages, viewport, cell_size, 0)
+    }
+
+    pub fn render_rotated_pages(
+        &self,
+        pages: impl IntoIterator<Item = usize>,
+        viewport: [u16; 2],
+        cell_size: [u16; 2],
+        quarter_turns: u8,
+    ) -> impl Iterator<Item = Result<PdfPageImage, LocalizedText>> {
         let mut cache = hayro::RenderCache::new();
         let mut resources = Resources::default();
         pages.into_iter().map(move |index| {
             let error = || i18n::msg!("editor-pdf-render-error", page = index.saturating_add(1));
             let page = self.0.pages().get(index).ok_or_else(error)?;
-            let (size, transform) = fit_page(page, viewport, cell_size).ok_or_else(error)?;
+            let (size, transform) =
+                fit_page(page, viewport, cell_size, quarter_turns).ok_or_else(error)?;
             let rgba = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 render_fitted_page(page, size, transform, &cache, &mut resources)
             }))
@@ -126,9 +153,10 @@ fn fit_page(
     page: &Page<'_>,
     viewport: [u16; 2],
     cell_size: [u16; 2],
+    quarter_turns: u8,
 ) -> Option<(PdfPageSize, Affine)> {
     let (page_width, page_height) = page.render_dimensions();
-    let [page_width, page_height] = [f64::from(page_width), f64::from(page_height)];
+    let [mut page_width, mut page_height] = [f64::from(page_width), f64::from(page_height)];
     let [cell_width, cell_height] = cell_size.map(f64::from);
     let [columns, rows] = viewport.map(f64::from);
     if [page_width, page_height]
@@ -140,6 +168,15 @@ fn fit_page(
         return None;
     }
 
+    let rotation = match quarter_turns % 4 {
+        1 => Affine::new([0.0, 1.0, -1.0, 0.0, page_height, 0.0]),
+        2 => Affine::new([-1.0, 0.0, 0.0, -1.0, page_width, page_height]),
+        3 => Affine::new([0.0, -1.0, 1.0, 0.0, 0.0, page_width]),
+        _ => Affine::IDENTITY,
+    };
+    if quarter_turns % 2 == 1 {
+        std::mem::swap(&mut page_width, &mut page_height);
+    }
     let scale = (columns * cell_width / page_width).min(rows * cell_height / page_height);
     let columns = (page_width * scale / cell_width).ceil().min(columns) as u16;
     let rows = (page_height * scale / cell_height).ceil().min(rows) as u16;
@@ -158,6 +195,7 @@ fn fit_page(
         (f64::from(width) - page_width * scale) / 2.0,
         (f64::from(height) - page_height * scale) / 2.0,
     )) * Affine::scale(scale)
+        * rotation
         * page.initial_transform(true).to_kurbo();
     Some((
         PdfPageSize {

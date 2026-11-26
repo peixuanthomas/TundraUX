@@ -5,8 +5,9 @@ use image::{ImageBuffer, Rgba, imageops};
 use ratatui::layout::HorizontalAlignment;
 use ratatui::style::Color;
 
+use super::preview_zoom::preview_pixel_crop;
 use super::*;
-use crate::components::{Button, ButtonRegion, Surface, terminal_width};
+use crate::components::{Button, ButtonRegion, FormDialog, Surface, terminal_width};
 use crate::{EditorImagePicker, RenderContext, TerminalImageCache};
 
 const MAX_BLOCK_CELLS: usize = 256 * 1024;
@@ -14,16 +15,30 @@ const MAX_BLOCK_CELLS: usize = 256 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorPdfAction {
     Open,
+    ZoomOut,
+    ZoomIn,
+    Rotate,
+    Jump,
     Previous,
     Next,
 }
 
 impl EditorPdfAction {
-    pub const ALL: [Self; 3] = [Self::Open, Self::Previous, Self::Next];
+    pub const ALL: [Self; 7] = [
+        Self::Open,
+        Self::ZoomOut,
+        Self::ZoomIn,
+        Self::Rotate,
+        Self::Jump,
+        Self::Previous,
+        Self::Next,
+    ];
 
-    pub fn enabled(self, page: usize, total: usize) -> bool {
+    pub fn enabled(self, page: usize, total: usize, zoom: EditorPreviewZoom) -> bool {
         match self {
-            Self::Open => true,
+            Self::Open | Self::Rotate | Self::Jump => true,
+            Self::ZoomOut => zoom.is_zoomed(),
+            Self::ZoomIn => zoom.can_zoom_in(),
             Self::Previous => page > 0,
             Self::Next => page + 1 < total,
         }
@@ -32,6 +47,10 @@ impl EditorPdfAction {
     fn id(self) -> &'static str {
         match self {
             Self::Open => "editor.pdf.open",
+            Self::ZoomOut => "editor.pdf.zoom-out",
+            Self::ZoomIn => "editor.pdf.zoom-in",
+            Self::Rotate => "editor.pdf.rotate",
+            Self::Jump => "editor.pdf.jump",
             Self::Previous => "editor.pdf.previous",
             Self::Next => "editor.pdf.next",
         }
@@ -40,6 +59,10 @@ impl EditorPdfAction {
     fn label(self) -> String {
         match self {
             Self::Open => i18n::tr!("ui-editor-pdf-open"),
+            Self::ZoomOut => i18n::tr!("ui-editor-preview-zoom-out"),
+            Self::ZoomIn => i18n::tr!("ui-editor-preview-zoom-in"),
+            Self::Rotate => i18n::tr!("ui-editor-pdf-rotate"),
+            Self::Jump => i18n::tr!("ui-editor-pdf-jump"),
             Self::Previous => i18n::tr!("ui-editor-pdf-previous"),
             Self::Next => i18n::tr!("ui-editor-pdf-next"),
         }
@@ -51,6 +74,8 @@ pub struct EditorPdfViewModel {
     pub page: usize,
     pub total: usize,
     pub focus: EditorPdfAction,
+    pub zoom: EditorPreviewZoom,
+    pub jump: Option<FormDialog>,
     pub image: Option<(u64, EditorPdfPageImage)>,
     pub error: Option<String>,
 }
@@ -64,17 +89,19 @@ pub struct EditorPdfPageImage {
 impl EditorPdfPageImage {
     pub fn prepare(raster: PdfPageImage) -> Option<Self> {
         let [columns, rows] = raster.cells.map(u32::from);
-        if u64::from(columns) * u64::from(rows) > MAX_BLOCK_CELLS as u64 {
-            return None;
-        }
         let image = ImageBuffer::<Rgba<u8>, _>::from_raw(
             raster.width,
             raster.height,
             raster.rgba.as_ref(),
         )?;
-        let blocks = Arc::from(
-            imageops::resize(&image, columns, rows * 2, imageops::FilterType::Triangle).into_raw(),
-        );
+        let blocks = if u64::from(columns) * u64::from(rows) <= MAX_BLOCK_CELLS as u64 {
+            Arc::from(
+                imageops::resize(&image, columns, rows * 2, imageops::FilterType::Triangle)
+                    .into_raw(),
+            )
+        } else {
+            Arc::from([])
+        };
         Some(Self { raster, blocks })
     }
 
@@ -88,19 +115,37 @@ impl EditorPdfPageImage {
         self.raster.rgba.len() + self.blocks.len()
     }
 
-    fn draw_blocks(&self, frame: &mut Frame<'_>, area: Rect, context: &RenderContext) {
-        let width = usize::from(self.raster.cells[0]);
-        let color = |index: usize| {
-            let pixels = &self.blocks[index..index + 3];
-            Color::Rgb(pixels[0], pixels[1], pixels[2])
+    fn draw_blocks(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        [left, top]: [u32; 2],
+        context: &RenderContext,
+    ) {
+        let [columns, rows] = self.raster.cells.map(usize::from);
+        let (pixels, width, height) = if self.blocks.is_empty() {
+            (
+                &self.raster.rgba,
+                self.raster.width as usize,
+                self.raster.height as usize,
+            )
+        } else {
+            (&self.blocks, columns, rows * 2)
+        };
+        let color = |x: usize, y: usize| {
+            let x = ((2 * x + 1) * width) / (2 * columns);
+            let y = ((2 * y + 1) * height) / (4 * rows);
+            let offset = (y * width + x) * 4;
+            Color::Rgb(pixels[offset], pixels[offset + 1], pixels[offset + 2])
         };
         let ansi = context.capabilities.color == crate::ColorCapability::Ansi;
         let colors = context.capabilities.terminal_colors;
         let visible = area.intersection(frame.area());
         for y in visible.y..visible.bottom() {
             for x in visible.x..visible.right() {
-                let offset = (usize::from(y - area.y) * 2 * width + usize::from(x - area.x)) * 4;
-                let (mut top, mut bottom) = (color(offset), color(offset + width * 4));
+                let column = left as usize + usize::from(x - area.x);
+                let half_row = 2 * (top as usize + usize::from(y - area.y));
+                let (mut top, mut bottom) = (color(column, half_row), color(column, half_row + 1));
                 if ansi {
                     top = colors.nearest_ansi(top);
                     bottom = colors.nearest_ansi(bottom);
@@ -119,7 +164,7 @@ impl EditorPdfPageImage {
 pub struct EditorPdfLayout {
     title: Rect,
     page_count: Rect,
-    buttons: [(EditorPdfAction, Rect, bool); 3],
+    buttons: Vec<(EditorPdfAction, Rect, bool)>,
 }
 
 impl EditorPdfLayout {
@@ -143,42 +188,76 @@ impl EditorPdfLayout {
 }
 
 pub fn editor_pdf_canvas(area: Rect) -> Rect {
+    let (footer, _) = footer_buttons(area);
+    canvas_above_footer(area, footer)
+}
+
+fn canvas_above_footer(area: Rect, footer: Rect) -> Rect {
     let header = u16::from(area.height > 0);
-    let footer = u16::from(area.height > 1);
     Rect::new(
         area.x,
         area.y.saturating_add(header),
         area.width,
-        area.height - header - footer,
+        area.height - header - footer.height,
     )
 }
 
+fn action_width(action: EditorPdfAction) -> u16 {
+    layout::to_u16(terminal_width(&action.label()) + 2)
+}
+
+fn footer_buttons(area: Rect) -> (Rect, Vec<(EditorPdfAction, Rect)>) {
+    let actions = &EditorPdfAction::ALL[1..];
+    let widths = actions
+        .iter()
+        .copied()
+        .map(action_width)
+        .collect::<Vec<_>>();
+    let available = Rect::new(
+        area.x,
+        area.y,
+        area.width,
+        area.height
+            .saturating_sub(2)
+            .max(u16::from(area.height > 1)),
+    );
+    let positions = crate::right_aligned_actions(available, &widths);
+    let height = positions
+        .iter()
+        .filter(|position| !position.is_empty())
+        .map(|position| position.bottom() - area.y)
+        .max()
+        .unwrap_or(0);
+    let y = area.bottom() - height;
+    let buttons = actions
+        .iter()
+        .copied()
+        .zip(positions)
+        .filter(|(_, position)| !position.is_empty())
+        .map(|(action, mut position)| {
+            position.y = y + (position.y - area.y);
+            (action, position)
+        })
+        .collect();
+    (Rect::new(area.x, y, area.width, height), buttons)
+}
+
 pub(super) fn layout(area: Rect, pdf: &EditorPdfViewModel) -> EditorLayout {
-    use EditorPdfAction::{Next, Open, Previous};
+    use EditorPdfAction::Open;
 
     let header = u16::from(area.height > 0);
-    let footer = u16::from(area.height > 1);
-    let footer_y = area.bottom().saturating_sub(footer);
-    let width = |action: EditorPdfAction| (terminal_width(&action.label()) + 2) as u16;
-    let open_width = width(Open).min(area.width);
-    let next_width = width(Next).min(area.width);
-    let previous_width = width(Previous).min(area.width.saturating_sub(next_width + 1));
-    let next = Rect::new(area.right() - next_width, footer_y, next_width, footer);
-    let previous = Rect::new(
-        next.x.saturating_sub(1 + previous_width).max(area.x),
-        footer_y,
-        previous_width,
-        footer,
-    );
+    let (footer, buttons) = footer_buttons(area);
+    let open_width = action_width(Open).min(area.width);
     let open = Rect::new(area.right() - open_width, area.y, open_width, header);
-    let canvas = editor_pdf_canvas(area);
+    let canvas = canvas_above_footer(area, footer);
+    let count_end = buttons.first().map_or(area.right(), |(_, area)| area.x);
 
     EditorLayout {
         area,
         menu_bar: Rect::new(area.x, area.y, area.width, header),
         canvas_panel: canvas,
         canvas,
-        status_bar: Rect::new(area.x, footer_y, area.width, footer),
+        status_bar: footer,
         pdf: Some(EditorPdfLayout {
             title: Rect::new(
                 area.x,
@@ -186,12 +265,17 @@ pub(super) fn layout(area: Rect, pdf: &EditorPdfViewModel) -> EditorLayout {
                 area.width.saturating_sub(open_width + 1),
                 header,
             ),
-            page_count: Rect::new(area.x, footer_y, previous.x.saturating_sub(area.x), footer),
-            buttons: [
-                (Open, open, true),
-                (Previous, previous, Previous.enabled(pdf.page, pdf.total)),
-                (Next, next, Next.enabled(pdf.page, pdf.total)),
-            ],
+            page_count: Rect::new(
+                area.x,
+                footer.y,
+                count_end - area.x,
+                u16::from(footer.height > 0),
+            ),
+            buttons: std::iter::once((Open, open, true))
+                .chain(buttons.into_iter().map(|(action, area)| {
+                    (action, area, action.enabled(pdf.page, pdf.total, pdf.zoom))
+                }))
+                .collect(),
         }),
         ..Default::default()
     }
@@ -222,33 +306,41 @@ pub(super) fn render(
         page = pdf.page + 1,
         total = pdf.total
     );
-    frame.render_widget(Paragraph::new(count).style(text), pdf_layout.page_count);
-    for (action, area, enabled) in pdf_layout.buttons {
+    let zoom = i18n::tr!(
+        "ui-editor-preview-zoom-percent",
+        percent = pdf.zoom.percent()
+    );
+    frame.render_widget(
+        Paragraph::new(format!("{count}  {zoom}")).style(text),
+        pdf_layout.page_count,
+    );
+    for &(action, area, enabled) in &pdf_layout.buttons {
         let mut button =
             Button::new(action.id(), format!(" {} ", action.label())).with_bracketed_label(false);
-        button.state.focused = pdf.focus == action;
+        button.state.focused = pdf.focus == action && pdf.jump.is_none();
         button.state.disabled = !enabled;
         button.render_inline_frame(frame, area, &theme);
     }
 
     let canvas = layout.canvas;
     if let Some((id, image)) = &pdf.image
-        && image.raster.viewport == [canvas.width, canvas.height]
+        && image.raster.viewport == pdf.zoom.pdf_viewport(canvas)
     {
         let raster = &image.raster;
-        let [columns, rows] = raster.cells;
-        let placement = Rect::new(
-            (canvas.width - columns) / 2,
-            (canvas.height - rows) / 2,
-            columns,
-            rows,
-        );
+        let size = raster.cells.map(u32::from);
+        let window = pdf.zoom.window(canvas, size);
+        let placement = window.area;
         let fragment = crate::TerminalImageFragment {
             image_id: *id,
             width: raster.width,
             height: raster.height,
             rgba: raster.rgba.clone(),
-            source: [0, 0, raster.width, raster.height],
+            source: preview_pixel_crop(
+                window.offset,
+                placement,
+                size,
+                [raster.width, raster.height],
+            ),
             padding: [0; 4],
             cell_size: raster.cell_size,
             area: placement,
@@ -277,9 +369,10 @@ pub(super) fn render(
                 Rect::new(
                     canvas.x + placement.x,
                     canvas.y + placement.y,
-                    columns,
-                    rows,
+                    placement.width,
+                    placement.height,
                 ),
+                window.offset,
                 context,
             );
         }

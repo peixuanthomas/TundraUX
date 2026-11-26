@@ -40,6 +40,7 @@ fn pdf_prefetch_publishes_first_page_while_the_next_page_is_still_running() {
     let viewport = PdfViewport {
         cells: [30, 18],
         cell_size: [8, 16],
+        quarter_turns: 0,
     };
     let raster = document
         .render_page(0, viewport.cells, viewport.cell_size)
@@ -76,6 +77,7 @@ fn pdf_open_starts_with_the_visible_page_in_the_shared_prefetch_batch() {
     let viewport = PdfViewport {
         cells: [30, 18],
         cell_size: [8, 16],
+        quarter_turns: 0,
     };
     let mut preview = EditorPdfPreview::new(blank_document(20));
 
@@ -92,6 +94,7 @@ fn pdf_visible_page_does_not_wait_for_unrelated_prefetch() {
     let viewport = PdfViewport {
         cells: [30, 18],
         cell_size: [8, 16],
+        quarter_turns: 0,
     };
     let mut preview = EditorPdfPreview::new(blank_document(20));
     preview.viewport = Some(viewport);
@@ -131,6 +134,7 @@ fn pdf_prefetch_stays_close_to_the_current_page_and_respects_both_cache_limits()
         let viewport = PdfViewport {
             cells,
             cell_size: [8, 16],
+            quarter_turns: 0,
         };
         let raster = document.render_page(0, cells, viewport.cell_size).unwrap();
         let image = EditorPdfPageImage::prepare(raster).unwrap();

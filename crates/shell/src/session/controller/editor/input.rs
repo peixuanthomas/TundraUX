@@ -529,6 +529,7 @@ impl ShellSession {
 
     pub(in crate::session) fn handle_editor_paste(&mut self, value: String) {
         if self.pages.editor.editor_pdf.is_some() {
+            self.handle_editor_pdf_form(InputEvent::Paste(value));
             return;
         }
         if self.script_paste(value.clone()) {

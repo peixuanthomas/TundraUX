@@ -83,6 +83,13 @@ editor-pdf-render-error = 无法显示 PDF 第 { $page } 页。
 ui-editor-pdf-open = 打开
 ui-editor-pdf-previous = 上一页
 ui-editor-pdf-next = 下一页
+ui-editor-pdf-jump = 跳转到页
+ui-editor-pdf-page-number = 页码（1–{ $total }）
+ui-editor-pdf-page-invalid = 请输入 1 到 { $total } 之间的页码。
+ui-editor-pdf-rotate = 旋转
+ui-editor-preview-zoom-out = 缩小
+ui-editor-preview-zoom-in = 放大
+ui-editor-preview-zoom-percent = { $percent }%
 ui-editor-pdf-position = 第 { $page } / { $total } 页
 ui-editor-pdf-rendering = 正在渲染页面…
 

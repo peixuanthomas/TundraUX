@@ -24,6 +24,8 @@ fn preview(
         page,
         total: document.page_count(),
         focus: EditorPdfAction::Open,
+        zoom: Default::default(),
+        jump: None,
         image: Some((
             1,
             EditorPdfPageImage::prepare(
@@ -89,6 +91,17 @@ fn pdf_preview_fits_three_window_sizes_in_both_languages_and_color_modes() {
                                 .any(|button| button.id.as_str() == "editor.pdf.next"
                                     && !button.disabled)
                         );
+                        for (id, disabled) in [
+                            ("editor.pdf.jump", false),
+                            ("editor.pdf.rotate", false),
+                            ("editor.pdf.zoom-in", false),
+                            ("editor.pdf.zoom-out", true),
+                        ] {
+                            assert!(
+                                buttons.iter().any(|button| button.id.as_str() == id
+                                    && button.disabled == disabled)
+                            );
+                        }
                     })
                     .unwrap();
                 let buffer = terminal.backend().buffer();
@@ -108,6 +121,57 @@ fn pdf_preview_fits_three_window_sizes_in_both_languages_and_color_modes() {
                     color == ColorCapability::TrueColor
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn magnified_pdf_crops_the_blocks_and_native_image_together() {
+    let document = PdfPreviewDocument::open(SAMPLE.to_vec()).unwrap();
+    let area = Rect::new(1, 2, 106, 16);
+    let mut model = preview(&document, 1, area, [8, 16]);
+    let canvas = editor_layout(area, &model).canvas;
+    let pdf = model.pdf.as_mut().unwrap();
+    for _ in 0..4 {
+        pdf.zoom.change(true);
+    }
+    let raster = document
+        .render_page(1, pdf.zoom.pdf_viewport(canvas), [8, 16])
+        .unwrap();
+    let size = raster.cells.map(u32::from);
+    pdf.image = Some((2, EditorPdfPageImage::prepare(raster).unwrap()));
+    let center = pdf.zoom.window(canvas, size);
+    assert_eq!(center.offset, center.limit.map(|limit| limit / 2));
+    assert!(center.offset.into_iter().all(|offset| offset > 0));
+
+    let context = RenderContext::from_theme(
+        &TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    let mut draw = |model: &EditorViewModel| {
+        cache.capture_workspace(area);
+        terminal
+            .draw(|frame| {
+                render_editor_contextual_with_terminal_images(
+                    frame, area, model, &context, &mut cache, None,
+                );
+            })
+            .unwrap();
+        let image = cache.take_workspace_images().pop().unwrap();
+        (image, terminal.backend().buffer().clone())
+    };
+    let (first, blocks) = draw(&model);
+    model.pdf.as_mut().unwrap().zoom.pan(center, [1, 1]);
+    let (panned, shifted) = draw(&model);
+    assert_eq!(panned.image_id, first.image_id);
+    assert_eq!(panned.area, first.area);
+    assert!(panned.source[0] > first.source[0] && panned.source[1] > first.source[1]);
+    for y in canvas.y..canvas.bottom() - 1 {
+        for x in canvas.x..canvas.right() - 1 {
+            assert_eq!(shifted[(x, y)], blocks[(x + 1, y + 1)]);
         }
     }
 }

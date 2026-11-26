@@ -37,6 +37,15 @@ pub(in crate::session) fn editor_cursor_direction(key: &KeyInput) -> Option<Edit
     }
 }
 
+fn preview_pan_direction(key: &KeyInput) -> Option<[i32; 2]> {
+    Some(match editor_cursor_direction(key)? {
+        EditorCursorDirection::Left => [-1, 0],
+        EditorCursorDirection::Right => [1, 0],
+        EditorCursorDirection::Up => [0, -1],
+        EditorCursorDirection::Down => [0, 1],
+    })
+}
+
 pub(in crate::session) fn normalized_editor_config(
     mut config: storage::EditorConfig,
 ) -> storage::EditorConfig {

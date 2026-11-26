@@ -43,7 +43,7 @@ Launcher lists the built-in applications available on the current platform, plus
 | Modules under [`src/editor/`](src/editor/) | Responsibility |
 | --- | --- |
 | `document`, `state`, `controller` | Own the document and its metadata, open-document state, and editor commands and effects |
-| `pdf_preview` | Parse PDFs with hayro and render fitted pages directly into their shared RGBA buffers. Page batches reuse fonts and image resources. |
+| `pdf_preview` | Parse PDFs with hayro and render pages at the requested size and rotation directly into shared RGBA buffers. Page batches reuse fonts and image resources. |
 | `source_buffer`, `source_changes`, `line_changes` | Store source text and history; represent changed line ranges for incremental work and compare against saved text for line markers |
 | `syntax`, `c_syntax`, `search`, `soft_wrap`, `json_format` | Compute highlighting, C lexical tokens, matches, visual row mapping, and JSON formatting |
 | `background`, `recovery` | Run revision-tagged computations and I/O away from the UI loop; persist and claim recoverable drafts separately |

@@ -295,6 +295,16 @@ impl ShellSession {
             });
         }
         let additional = match self.content_screen() {
+            ShellScreen::Editor
+                if self
+                    .pages
+                    .editor
+                    .editor_pdf
+                    .as_ref()
+                    .is_some_and(|pdf| pdf.jump.is_some()) =>
+            {
+                Some(("editor-pdf-jump", ShellComponent::Editor))
+            }
             ShellScreen::Editor if self.current_vim_install().is_some() => {
                 Some(("editor-vim-install", ShellComponent::Editor))
             }

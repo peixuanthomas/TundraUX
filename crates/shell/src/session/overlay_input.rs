@@ -135,7 +135,15 @@ impl ShellSession {
             {
                 ShellCommand::ExplorerEditInput(InputEvent::Paste(value.to_owned()))
             }
-            Some(ShellComponent::Editor) if self.config_editor_form_visible() => {
+            Some(ShellComponent::Editor)
+                if self.config_editor_form_visible()
+                    || self
+                        .pages
+                        .editor
+                        .editor_pdf
+                        .as_ref()
+                        .is_some_and(|pdf| pdf.jump.is_some()) =>
+            {
                 ShellCommand::EditorPaste(value.to_owned())
             }
             _ => ShellCommand::CaptureOverlayInput,

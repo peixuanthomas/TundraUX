@@ -142,6 +142,10 @@ pub fn render_editor_overlay(
     model: &EditorViewModel,
     context: &RenderContext,
 ) {
+    if let Some(form) = model.pdf.as_ref().and_then(|pdf| pdf.jump.as_ref()) {
+        form.render_frame(frame, layout.area, context);
+        return;
+    }
     if let Some(install) = &model.vim_install {
         super::vim_install::render(frame, layout.area, install, context);
         return;

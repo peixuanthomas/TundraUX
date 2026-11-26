@@ -211,6 +211,71 @@ fn pdf_preview_keeps_the_latest_page_and_size_and_remains_read_only() {
 }
 
 #[test]
+fn pdf_preview_jumps_to_a_valid_page_and_pans_without_rerendering() {
+    let (mut state, platform, _guard, path) = pdf_fixture(SAMPLE);
+    assert!(state.open_editor_path(path));
+    wait_for_pdf(&mut state, &platform, 0);
+    let layout = state.editor_current_layout();
+    let footer = layout.status_bar;
+    let controls = layout.pdf.unwrap();
+    let point = (footer.x..footer.right())
+        .map(|x| (x, footer.y))
+        .find(|&point| {
+            controls
+                .button_at(point)
+                .is_some_and(|button| button.id.as_str() == "editor.pdf.jump")
+        })
+        .unwrap();
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Left, point),
+        &platform,
+    );
+    assert!(state.to_editor_view_model().pdf.unwrap().jump.is_none());
+    state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, point), &platform);
+    state.apply_input_with_platform(InputEvent::Paste("0".into()), &platform);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    let pdf = state.to_editor_view_model().pdf.unwrap();
+    assert_eq!(pdf.page, 0);
+    assert_eq!(
+        pdf.jump.unwrap().message,
+        i18n::tr!("ui-editor-pdf-page-invalid", total = 2)
+    );
+    state.apply_input_with_platform(InputEvent::key(InputKey::Escape), &platform);
+    assert!(state.to_editor_view_model().pdf.unwrap().jump.is_none());
+
+    state.apply_input_with_platform(
+        InputEvent::Key(KeyInput::with_modifiers(
+            InputKey::Char('g'),
+            InputModifiers::CTRL,
+        )),
+        &platform,
+    );
+    state.apply_input_with_platform(InputEvent::Paste("2".into()), &platform);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Enter), &platform);
+    let (_, fitted) = wait_for_pdf(&mut state, &platform, 1);
+    assert!(state.to_editor_view_model().pdf.unwrap().jump.is_none());
+
+    for key in [InputKey::Char('r'), InputKey::Char('+')] {
+        state.apply_input_with_platform(InputEvent::key(key), &platform);
+    }
+    let (id, raster) = wait_for_pdf(&mut state, &platform, 1);
+    assert_ne!(fitted.cells, raster.cells);
+    let canvas = state.editor_current_layout().canvas;
+    let size = raster.cells.map(u32::from);
+    let zoom = state.to_editor_view_model().pdf.unwrap().zoom;
+    assert_eq!(zoom.percent(), 150);
+    let center = zoom.window(canvas, size);
+    assert_eq!(center.offset[1], center.limit[1] / 2);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Down), &platform);
+    let pdf = state.to_editor_view_model().pdf.unwrap();
+    assert_eq!(
+        pdf.zoom.window(canvas, size).offset[1],
+        center.offset[1] + 1
+    );
+    assert_eq!(pdf.image.unwrap().0, id);
+}
+
+#[test]
 fn pdf_preview_reuses_prefetched_pages_until_pixel_cell_size_changes() {
     let (mut state, platform, _guard, path) = pdf_fixture(SAMPLE);
     assert!(state.open_editor_path(path));

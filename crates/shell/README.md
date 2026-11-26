@@ -119,7 +119,7 @@ The file reader checks size and reports byte progress from the same open operati
 
 In the source editor, Page Up and Page Down reuse the current window geometry for every cursor step in the page. Wrapped lines and keyboard selections follow the same path as the arrow keys.
 
-PDFs open in the read-only preview. The first batch renders the visible page first and reuses its resources for nearby pages. If a user turns to a different page while prefetch is busy, a second worker can render that page immediately. Each window keeps up to 12 pages within a 32 MiB cache. Page Up, Page Down, and the page buttons reuse prepared pages immediately. A change to the viewport or terminal cell size invalidates images at the old size.
+PDFs open in the read-only preview. The first batch renders the visible page first and reuses its resources for nearby pages. Jumping to a page or using Page Up and Page Down reuses cached pages and gives any missing visible page priority. Each window keeps up to 12 pages within a 32 MiB cache. Changes to rotation, zoom, the viewport or terminal cell size invalidate the prepared pages. Moving around an enlarged page reuses its raster.
 
 The bottom row is dedicated to the window bar. Click a title to focus or restore that window. Click its × button to close it normally. Right-click for **Open**, **New session**, and **Move**. New embedded sessions use the current Launcher settings. Taskbar moves change the taskbar order for the current run. **Delete** is limited to user-added Launcher entries and removes the entry after its selected window closes successfully.
 

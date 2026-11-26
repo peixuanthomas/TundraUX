@@ -23,7 +23,9 @@ Markdown, CSV, TSV, HTML, XML and SVG open as editable source. RTF and OpenDocum
 
 ## PDF preview
 
-Open a PDF with Enter or a double click in Explorer, or choose it with **File → Open** in Editor. PDFs always open in TundraUX's read-only preview. Use **Previous page** and **Next page** or Page Up and Page Down to move through the document. The current page fits the window automatically as its size changes.
+Open a PDF with Enter or a double click in Explorer, or choose it with **File → Open** in Editor. PDFs always open in TundraUX's read-only preview. Use **Previous page** and **Next page** or Page Up and Page Down to move through the document. At 100% zoom the current page fits the window automatically as its size changes.
+
+Choose **Go to page** or press Ctrl+G to enter a page number. **Rotate** or `R` turns the preview 90° clockwise. Use **Zoom in** and **Zoom out** or press `+` and `-` to change the zoom. The preview starts at the center after each zoom change. Use the arrow keys to inspect the edges of the enlarged page.
 
 The first page appears as soon as it is ready. The editor then prepares pages in the background, keeping the whole document when it fits its cache and nearby pages for longer files. This also works with scanned pages. Terminals with Kitty, Sixel or iTerm2 graphics show the page image. Other terminals use prepared color blocks. A damaged or password-protected PDF reports an error inside the workspace.
 

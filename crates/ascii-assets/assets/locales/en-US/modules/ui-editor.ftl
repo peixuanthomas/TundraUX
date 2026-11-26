@@ -92,6 +92,13 @@ editor-pdf-render-error = Could not display PDF page { $page }.
 ui-editor-pdf-open = Open
 ui-editor-pdf-previous = Previous page
 ui-editor-pdf-next = Next page
+ui-editor-pdf-jump = Go to page
+ui-editor-pdf-page-number = Page number (1–{ $total })
+ui-editor-pdf-page-invalid = Enter a page number from 1 to { $total }.
+ui-editor-pdf-rotate = Rotate
+ui-editor-preview-zoom-out = Zoom out
+ui-editor-preview-zoom-in = Zoom in
+ui-editor-preview-zoom-percent = { $percent }%
 ui-editor-pdf-position = Page { $page } of { $total }
 ui-editor-pdf-rendering = Rendering page…
 

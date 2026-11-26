@@ -28,7 +28,16 @@ impl ShellSession {
             ShellScreen::Editor if self.config_editor_form_visible() => {
                 self.to_management_view_model().form
             }
-            ShellScreen::Editor => Some(self.editor_settings_view_model()?.dialog()),
+            ShellScreen::Editor => self
+                .pages
+                .editor
+                .editor_pdf
+                .as_ref()
+                .and_then(|pdf| pdf.jump.clone())
+                .or_else(|| {
+                    self.editor_settings_view_model()
+                        .map(|settings| settings.dialog())
+                }),
             ShellScreen::Clock if !self.is_strict_guest() => {
                 Some(self.to_clock_view_model().create_dialog?.dialog())
             }

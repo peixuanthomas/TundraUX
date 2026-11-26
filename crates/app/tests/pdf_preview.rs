@@ -73,6 +73,26 @@ fn pdf_preview_renders_vector_and_scanned_pages_at_their_own_aspect_ratio() {
 }
 
 #[test]
+fn pdf_rotation_moves_the_blue_top_band_clockwise() {
+    let document = PdfPreviewDocument::open(PREVIEW.to_vec()).unwrap();
+    for (turns, size, [x, y]) in [
+        (0, [180, 240], [8, 12]),
+        (1, [240, 180], [227, 8]),
+        (2, [180, 240], [171, 227]),
+        (3, [240, 180], [12, 171]),
+    ] {
+        let raster = document
+            .render_rotated_pages([0], [240, 240], [1, 1], turns)
+            .next()
+            .unwrap()
+            .unwrap();
+        assert_eq!([raster.width, raster.height], size);
+        let offset = ((y * raster.width + x) * 4) as usize;
+        assert_eq!(&raster.rgba[offset..offset + 4], &[0, 0, 128, 255]);
+    }
+}
+
+#[test]
 fn pdf_preview_reports_invalid_documents_and_missing_passwords() {
     assert_eq!(
         PdfPreviewDocument::open(b"%PDF-1.4\nbroken".to_vec()).unwrap_err(),

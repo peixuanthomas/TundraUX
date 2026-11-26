@@ -421,6 +421,11 @@ pub fn page_help(screen: PageHelpScreen) -> PageHelpViewModel {
             vec![actions(vec![
                 row("PgUp", i18n::tr!("ui-editor-pdf-previous")),
                 row("PgDn", i18n::tr!("ui-help-pdf-next")),
+                row("Ctrl+G", i18n::tr!("ui-editor-pdf-jump")),
+                row("R", i18n::tr!("ui-help-pdf-rotate")),
+                row("+", i18n::tr!("ui-editor-preview-zoom-in")),
+                row("-", i18n::tr!("ui-editor-preview-zoom-out")),
+                row("← ↑ ↓ →", i18n::tr!("ui-help-editor-pan-preview")),
                 row("Ctrl+O", i18n::tr!("ui-editor-pdf-open")),
             ])],
         ),
