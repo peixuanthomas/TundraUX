@@ -228,7 +228,14 @@ impl ShellSession {
                 .with_page_context(page, |session| {
                     let mut changed = session.poll_editor_preview();
                     if session.content_page_id() == page {
+                        changed |= session.poll_editor_read_only_layout();
                         changed |= session.poll_editor_pdf_preview();
+                    } else {
+                        session
+                            .pages
+                            .editor
+                            .editor_read_only_layout
+                            .cancel_pending();
                     }
                     let cursor = session.app.editor_state().map(|s| s.cursor.byte_offset);
                     let computation = session.app.poll_editor_computations();
@@ -769,6 +776,9 @@ impl ShellSession {
             arg1 = path.display().to_string()
         )));
         self.finish_editor_load_navigation(&navigation_operation);
+        if self.pages.editor.selected_id() == Some(self.content_page_id()) {
+            self.poll_editor_read_only_layout();
+        }
         self.refresh_hit_map();
     }
 

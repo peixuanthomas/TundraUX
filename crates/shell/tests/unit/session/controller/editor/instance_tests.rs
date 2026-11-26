@@ -12,6 +12,53 @@ fn insert(state: &mut ShellSession, text: &str) {
 }
 
 #[test]
+fn large_read_only_document_prepares_latest_geometry_without_resetting_scroll() {
+    let mut state = session();
+    let platform = &platform::mock::UnsupportedPlatform;
+    state.open_editor();
+    let editor = EditorState::from_read_only_document(app::editor::EditorDocument::from_text(
+        Some("large.docx".into()),
+        app::editor::DocumentKind::Markdown,
+        "文字 preview e\u{301}\n\n".repeat(2_000),
+    ));
+    state.app.dispatch_at(
+        app::AppCommand::SetEditorState(Some(editor)),
+        Instant::now(),
+    );
+    state.rebuild_editor_rich_render_cache();
+    assert!(state.editor_read_only_layout_has_background_work());
+    assert_eq!(state.editor_current_layout().document_line_count, 0);
+
+    let mut viewport = state.app.editor_state().unwrap().viewport;
+    viewport.top_line = 1_000;
+    state
+        .app
+        .dispatch_at(app::AppCommand::SetEditorViewport(viewport), Instant::now());
+    for (width, height) in [(120, 40), (108, 20), (180, 50)] {
+        state.apply_input_with_platform(InputEvent::Resize { width, height }, platform);
+        state.poll_editor_background_tasks(platform);
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while state.editor_read_only_layout_has_background_work() {
+        state.poll_editor_background_tasks(platform);
+        assert!(Instant::now() < deadline, "read-only layout did not settle");
+        std::thread::yield_now();
+    }
+
+    assert!(matches!(
+        state.to_editor_view_model().read_only_layout,
+        Some(ui::EditorReadOnlyLayoutState::Ready(_))
+    ));
+    let layout = state.editor_current_layout();
+    assert_eq!(layout.visible_start, 1_000);
+    assert!(layout.document_line_count >= 2_000);
+    assert_eq!(
+        layout.line_areas.first().and_then(|line| line.block_index),
+        Some(1_000)
+    );
+}
+
+#[test]
 fn managed_save_picker_keeps_its_draft_in_the_editor_and_cancels_a_pending_close() {
     let mut state = session();
     state.open_editor();

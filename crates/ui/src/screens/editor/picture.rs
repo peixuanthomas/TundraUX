@@ -9,7 +9,7 @@ use crate::{
     TerminalImageFragment,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PictureBounds {
     cells: Size,
     cell_size: [u16; 2],

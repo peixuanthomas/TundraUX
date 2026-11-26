@@ -92,7 +92,7 @@ impl ShellSession {
                     .as_ref()
                     .filter(|cache| cache.revision == state.revision())
                 {
-                    if state.document.source().len() <= 64 * 1024 && cache.blocks.len() <= 512 {
+                    if !cache.is_large(state) {
                         // Preserve the long-standing owned projection for
                         // small documents and external view-model consumers.
                         ui::EditorViewModel::new(
@@ -100,10 +100,15 @@ impl ShellSession {
                             cache.blocks.to_vec(),
                         )
                     } else {
-                        ui::EditorViewModel::new_shared(
+                        let mut model = ui::EditorViewModel::new_shared(
                             state.document.display_name(),
                             std::sync::Arc::clone(&cache.blocks),
-                        )
+                        );
+                        if state.access() == app::editor::EditorAccess::ReadOnly {
+                            model.read_only_layout =
+                                Some(self.pages.editor.editor_read_only_layout.view_state());
+                        }
+                        model
                     }
                 } else {
                     let blocks = state.rich_projection().map_or_else(Vec::new, |projection| {
@@ -339,26 +344,32 @@ impl ShellSession {
         model.line_ending = editor_line_ending_label(state.document.metadata);
         model.image_protocol = ui::EditorImageProtocolStatus::Unsupported;
         model.text_sizing_protocol = self.terminal_text_sizing_support;
-        model.status_message = self
-            .pages
-            .editor
-            .editor_load_state
-            .as_ref()
-            .map(editor_load_status)
-            .or_else(|| {
-                self.pages
-                    .editor
-                    .editor_save_state
-                    .as_ref()
-                    .map(editor_save_status)
-            })
-            .or_else(|| {
-                self.pages
-                    .editor
-                    .editor_message
-                    .as_ref()
-                    .map(i18n::LocalizedText::render_current)
-            });
+        model.status_message = if matches!(
+            model.read_only_layout,
+            Some(ui::EditorReadOnlyLayoutState::Preparing)
+        ) {
+            Some(i18n::tr!("shell-loading-document"))
+        } else {
+            self.pages
+                .editor
+                .editor_load_state
+                .as_ref()
+                .map(editor_load_status)
+                .or_else(|| {
+                    self.pages
+                        .editor
+                        .editor_save_state
+                        .as_ref()
+                        .map(editor_save_status)
+                })
+                .or_else(|| {
+                    self.pages
+                        .editor
+                        .editor_message
+                        .as_ref()
+                        .map(i18n::LocalizedText::render_current)
+                })
+        };
         if model.status_message.is_none()
             && let Some(search) = &state.search
             && search.revision == state.revision()

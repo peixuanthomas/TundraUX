@@ -791,6 +791,7 @@ pub struct EditorViewModel {
     /// over the legacy `blocks` vector, allowing callers to reuse a cached
     /// projection without deep-cloning every block for each frame.
     pub shared_blocks: Option<Arc<[EditorRenderBlock]>>,
+    pub read_only_layout: Option<EditorReadOnlyLayoutState>,
     pub source_lines: Vec<String>,
     /// Cached half-open byte ranges for Source-mode lines. This is populated
     /// alongside `source_lines` by [`EditorViewModel::source`] so layout can
@@ -894,6 +895,7 @@ impl EditorViewModel {
             selected_toolbar_action: None,
             blocks,
             shared_blocks: None,
+            read_only_layout: None,
             source_lines: vec![String::new()],
             source_line_ranges: Vec::new(),
             source_window: None,

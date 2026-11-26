@@ -224,6 +224,68 @@ mod rich_layout_measurement_tests {
     }
 
     #[test]
+    fn prepared_read_only_layout_preserves_scroll_and_ignores_stale_geometry() {
+        let blocks = (0..1_000)
+            .map(|row| EditorRenderBlock::paragraph(format!("row {row} 好 e\u{301}")))
+            .collect();
+        let mut direct = EditorViewModel::new("long.docx", blocks);
+        direct.read_only = true;
+        let area = Rect::new(1, 2, 120, 36);
+        let key =
+            EditorReadOnlyLayoutKey::for_area(area, None, direct.image_cell_size, false, None);
+        let prepared = EditorReadOnlyLayout::prepare(key, &direct, || false).unwrap();
+        let mut cached = direct.clone();
+        cached.read_only_layout = Some(EditorReadOnlyLayoutState::Ready(Arc::new(prepared)));
+
+        for top in [0, 500, usize::MAX] {
+            direct.scroll_line = top;
+            cached.scroll_line = top;
+            let expected = editor_layout(area, &direct);
+            READ_ONLY_MEASURE_CALLS.set(0);
+            assert_eq!(editor_layout(area, &cached), expected);
+            assert_eq!(READ_ONLY_MEASURE_CALLS.get(), 0);
+        }
+
+        let resized = editor_layout(Rect { width: 108, ..area }, &cached);
+        assert!(resized.read_only_layout_pending);
+        assert!(resized.prepared_lines.is_empty());
+        assert!(
+            resized
+                .hit_test(resized.canvas.x, resized.canvas.y)
+                .is_none()
+        );
+        cached.image_cell_size = [11, 23];
+        assert!(editor_layout(area, &cached).read_only_layout_pending);
+    }
+
+    #[test]
+    fn read_only_layout_preparation_can_stop_during_a_large_table() {
+        let table = EditorRenderBlock::Table {
+            header: vec![EditorTableCell::text("header")],
+            rows: vec![vec![EditorTableCell::text("value")]; 1_000],
+            alignments: Vec::new(),
+        };
+        let mut model = EditorViewModel::new("large.xlsx", vec![table]);
+        model.read_only = true;
+        let key = EditorReadOnlyLayoutKey::for_area(
+            Rect::new(1, 2, 120, 36),
+            None,
+            model.image_cell_size,
+            false,
+            None,
+        );
+        let checks = std::cell::Cell::new(0);
+        assert!(
+            EditorReadOnlyLayout::prepare(key, &model, || {
+                checks.set(checks.get() + 1);
+                checks.get() >= 20
+            })
+            .is_none()
+        );
+        assert_eq!(checks.get(), 20);
+    }
+
+    #[test]
     fn read_only_sheet_scrolls_into_a_wrapped_row_and_keeps_its_rich_hit() {
         let rows = (0..10_000)
             .map(|index| {

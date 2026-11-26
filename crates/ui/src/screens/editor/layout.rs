@@ -285,6 +285,7 @@ pub struct EditorLayout {
     /// document a second time.
     pub(super) prepared_lines: Vec<DisplayLine>,
     pub(super) prepared_start: usize,
+    pub(super) read_only_layout_pending: bool,
 }
 
 impl EditorLayout {
@@ -415,7 +416,7 @@ impl EditorLayout {
                 width: handle.width,
             });
         }
-        if contains(self.canvas, x, y) {
+        if !self.read_only_layout_pending && contains(self.canvas, x, y) {
             let line = self
                 .visible_start
                 .saturating_add(usize::from(y.saturating_sub(self.canvas.y)))
@@ -537,38 +538,124 @@ pub fn editor_vim_terminal_area(area: Rect) -> Rect {
 
 enum RichLines {
     Full(Vec<DisplayLine>),
-    ReadOnly(ReadOnlyRichLayout),
+    ReadOnly(Arc<EditorReadOnlyLayout>),
 }
 
-pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
-    if let Some(pdf) = &model.pdf {
-        return super::pdf::layout(area, pdf);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditorReadOnlyLayoutKey {
+    width: u16,
+    height: u16,
+    image_cell_size: [u16; 2],
+    text_sizing_protocol: bool,
+    heading_cursor: Option<RichPosition>,
+}
+
+impl EditorReadOnlyLayoutKey {
+    pub fn for_area(
+        area: Rect,
+        search_bar: Option<&EditorSearchBar>,
+        image_cell_size: [u16; 2],
+        text_sizing_protocol: bool,
+        rich_cursor: Option<RichPosition>,
+    ) -> Self {
+        Self::for_canvas(
+            editor_content_layout(area, search_bar).canvas_panel,
+            image_cell_size,
+            text_sizing_protocol,
+            rich_cursor,
+        )
     }
-    let inner = area;
-    let menu_height = u16::from(inner.height > 0);
-    if let Some(terminal) = &model.vim_terminal {
-        let canvas = editor_vim_terminal_area(area);
-        let width = to_u16(terminal_width(&i18n::tr!("ui-editor-vim-enabled"))).min(inner.width);
-        return EditorLayout {
-            vim_toggle: Rect::new(
-                inner.right().saturating_sub(width),
-                inner.y,
-                width,
-                menu_height,
-            ),
-            area,
-            menu_bar: Rect::new(inner.x, inner.y, inner.width, menu_height),
-            canvas_panel: canvas,
-            canvas,
-            mode: model.mode,
-            visible_capacity: usize::from(canvas.height),
-            document_line_count: usize::from(terminal.rows),
-            horizontal_content_width: usize::from(terminal.columns),
-            ..Default::default()
+
+    fn for_canvas(
+        canvas: Rect,
+        image_cell_size: [u16; 2],
+        text_sizing_protocol: bool,
+        rich_cursor: Option<RichPosition>,
+    ) -> Self {
+        Self {
+            width: canvas.width,
+            height: canvas.height,
+            image_cell_size,
+            text_sizing_protocol,
+            heading_cursor: rich_cursor.filter(|_| text_sizing_protocol),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EditorReadOnlyLayout {
+    key: EditorReadOnlyLayoutKey,
+    canvas_width: u16,
+    canvas_height: u16,
+    measured: ReadOnlyRichLayout,
+}
+
+impl EditorReadOnlyLayout {
+    pub fn prepare(
+        key: EditorReadOnlyLayoutKey,
+        model: &EditorViewModel,
+        cancelled: impl Fn() -> bool,
+    ) -> Option<Self> {
+        if cancelled() {
+            return None;
+        }
+        let measure = |width: u16, height: u16| {
+            ReadOnlyRichLayout::measure_cancellable(
+                model,
+                usize::from(width.max(1)),
+                usize::from(height),
+                &cancelled,
+            )
         };
+        let (base_width, base_height) = (key.width, key.height);
+        let reserve_vertical = base_width > 1
+            && !rich_document_fits_height(model, usize::from(base_width), usize::from(base_height));
+        let mut canvas_width = base_width.saturating_sub(u16::from(reserve_vertical));
+        let mut measured = measure(canvas_width, base_height)?;
+        let reserve_horizontal = base_height > 1
+            && canvas_width > 0
+            && measured.content_width > usize::from(canvas_width);
+        let canvas_height = base_height.saturating_sub(u16::from(reserve_horizontal));
+        if reserve_horizontal
+            && !reserve_vertical
+            && base_width > 1
+            && measured.line_count() > usize::from(canvas_height)
+        {
+            canvas_width = base_width - 1;
+            measured = measure(canvas_width, canvas_height)?;
+        }
+        Some(Self {
+            key,
+            canvas_width,
+            canvas_height,
+            measured,
+        })
     }
+
+    pub fn key(&self) -> EditorReadOnlyLayoutKey {
+        self.key
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditorReadOnlyLayoutState {
+    Preparing,
+    Ready(Arc<EditorReadOnlyLayout>),
+    Unavailable(EditorReadOnlyLayoutKey),
+}
+
+struct EditorContentLayout {
+    menu_bar: Rect,
+    toolbar: Rect,
+    canvas_panel: Rect,
+    status_bar: Rect,
+    search_items: Vec<(EditorSearchControl, Rect)>,
+}
+
+fn editor_content_layout(inner: Rect, search_bar: Option<&EditorSearchBar>) -> EditorContentLayout {
+    let menu_height = u16::from(inner.height > 0);
     let toolbar_height = if inner.height >= 10 {
-        toolbar_layout(Rect::new(0, 0, inner.width, u16::MAX), model)
+        toolbar_layout(Rect::new(0, 0, inner.width, u16::MAX), None)
             .0
             .iter()
             .map(|item| item.area.bottom())
@@ -589,7 +676,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
                 .height
                 .saturating_sub(menu_height + toolbar_height + status_height),
         ),
-        model.search_bar.as_ref(),
+        search_bar,
     );
     let search_height = search_items
         .iter()
@@ -625,6 +712,48 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         inner.width,
         status_height,
     );
+    EditorContentLayout {
+        menu_bar,
+        toolbar,
+        canvas_panel,
+        status_bar,
+        search_items,
+    }
+}
+
+pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
+    if let Some(pdf) = &model.pdf {
+        return super::pdf::layout(area, pdf);
+    }
+    if let Some(terminal) = &model.vim_terminal {
+        let canvas = editor_vim_terminal_area(area);
+        let width = to_u16(terminal_width(&i18n::tr!("ui-editor-vim-enabled"))).min(area.width);
+        let menu_height = u16::from(area.height > 0);
+        return EditorLayout {
+            vim_toggle: Rect::new(
+                area.right().saturating_sub(width),
+                area.y,
+                width,
+                menu_height,
+            ),
+            area,
+            menu_bar: Rect::new(area.x, area.y, area.width, menu_height),
+            canvas_panel: canvas,
+            canvas,
+            mode: model.mode,
+            visible_capacity: usize::from(canvas.height),
+            document_line_count: usize::from(terminal.rows),
+            horizontal_content_width: usize::from(terminal.columns),
+            ..Default::default()
+        };
+    }
+    let EditorContentLayout {
+        menu_bar,
+        toolbar,
+        canvas_panel,
+        status_bar,
+        search_items,
+    } = editor_content_layout(area, model.search_bar.as_ref());
 
     let canvas_framed = false;
     let mut base_canvas = if canvas_framed {
@@ -654,6 +783,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
     base_canvas.width = base_canvas.width.saturating_sub(gutter_width);
     let mut canvas = base_canvas;
     let requested_horizontal_scroll = model.horizontal_scroll;
+    let mut read_only_layout_pending = false;
     let (document_line_count, rich_lines, horizontal_content_width) = match model.mode {
         EditorMode::Source if model.soft_wrap => {
             // A stable scrollbar lane keeps the wrap width independent of the
@@ -700,6 +830,34 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             canvas.height = canvas.height.saturating_sub(u16::from(reserve_horizontal));
             (line_count, None, model.horizontal_content_width)
         }
+        EditorMode::Rich if model.read_only => {
+            let key = EditorReadOnlyLayoutKey::for_canvas(
+                base_canvas,
+                model.image_cell_size,
+                model.text_sizing_protocol,
+                model.rich_cursor,
+            );
+            let measured = match &model.read_only_layout {
+                Some(EditorReadOnlyLayoutState::Ready(layout)) if layout.key == key => {
+                    Some(Arc::clone(layout))
+                }
+                None => EditorReadOnlyLayout::prepare(key, model, || false).map(Arc::new),
+                Some(EditorReadOnlyLayoutState::Unavailable(failed)) if *failed == key => {
+                    EditorReadOnlyLayout::prepare(key, model, || false).map(Arc::new)
+                }
+                _ => None,
+            };
+            if let Some(layout) = measured {
+                canvas.width = layout.canvas_width;
+                canvas.height = layout.canvas_height;
+                let (line_count, content_width) =
+                    (layout.measured.line_count(), layout.measured.content_width);
+                (line_count, Some(RichLines::ReadOnly(layout)), content_width)
+            } else {
+                read_only_layout_pending = true;
+                (0, None, 0)
+            }
+        }
         EditorMode::Rich => {
             let base_width = usize::from(base_canvas.width.max(1));
             let reserve_vertical = base_canvas.width > 1
@@ -708,17 +866,10 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             let layout_rich = |width: u16, height: u16| {
                 let width = usize::from(width.max(1));
                 let height = usize::from(height);
-                if model.read_only {
-                    let measured = ReadOnlyRichLayout::measure(model, width, height);
-                    let (count, content_width) = (measured.line_count(), measured.content_width);
-                    (RichLines::ReadOnly(measured), count, content_width)
-                } else {
-                    let lines = flatten_rich_document(model, width, height);
-                    let count = lines.len().max(1);
-                    let content_width =
-                        rich_horizontal_content_width(&lines, model.source.as_deref());
-                    (RichLines::Full(lines), count, content_width)
-                }
+                let lines = flatten_rich_document(model, width, height);
+                let count = lines.len().max(1);
+                let content_width = rich_horizontal_content_width(&lines, model.source.as_deref());
+                (RichLines::Full(lines), count, content_width)
             };
             let (mut lines, mut count, mut content_width) =
                 layout_rich(canvas.width, base_canvas.height);
@@ -760,9 +911,10 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             .skip(visible_start)
             .take(visible_end.saturating_sub(visible_start))
             .collect(),
-        Some(RichLines::ReadOnly(measured)) => {
-            measured.materialize(model, visible_start..visible_end)
-        }
+        Some(RichLines::ReadOnly(layout)) => layout
+            .measured
+            .materialize(model, visible_start..visible_end),
+        None if read_only_layout_pending => Vec::new(),
         None => source_display_lines_for_viewport(model, visible_start, visible_end),
     };
     let line_areas = (visible_start..visible_end)
@@ -889,7 +1041,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         area,
         (!model.read_only).then_some(model.quick_menu).flatten(),
     );
-    let (toolbar_items, toolbar_overflow) = toolbar_layout(toolbar, model);
+    let (toolbar_items, toolbar_overflow) = toolbar_layout(toolbar, Some(model));
     let rich_line_maps = if model.mode == EditorMode::Rich {
         prepared_lines
             .iter()
@@ -1031,6 +1183,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         rich_line_maps,
         prepared_lines,
         prepared_start: visible_start,
+        read_only_layout_pending,
     }
 }
 
@@ -1424,7 +1577,7 @@ pub(super) fn quick_action_label(action: EditorQuickAction) -> String {
 
 pub(super) fn toolbar_layout(
     area: Rect,
-    model: &EditorViewModel,
+    model: Option<&EditorViewModel>,
 ) -> (Vec<EditorToolbarItemLayout>, bool) {
     if area.is_empty() {
         return (Vec::new(), false);
@@ -1446,9 +1599,11 @@ pub(super) fn toolbar_layout(
         items.push(EditorToolbarItemLayout {
             action,
             area: Rect::new(x, y, width, 1),
-            enabled: model
-                .toolbar
-                .is_enabled(action, model.read_only, model.mode),
+            enabled: model.is_none_or(|model| {
+                model
+                    .toolbar
+                    .is_enabled(action, model.read_only, model.mode)
+            }),
         });
         x = x.saturating_add(width);
     }

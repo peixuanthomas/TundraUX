@@ -2,6 +2,7 @@ mod files;
 mod input;
 mod menus;
 pub(in crate::session) mod pdf;
+mod preview_layout;
 mod recovery;
 mod search_bar;
 mod settings;
@@ -9,6 +10,7 @@ pub(in crate::session) mod tasks;
 mod view;
 mod vim;
 use crate::session::*;
+pub(in crate::session) use preview_layout::EditorReadOnlyLayoutJob;
 pub(in crate::session) const EDITOR_RECOVERY_IDLE: Duration = Duration::from_secs(2);
 pub(in crate::session) const EDITOR_RECOVERY_INTERVAL: Duration = Duration::from_secs(10);
 pub(in crate::session) const EDITOR_CURSOR_TIME_STEP_MS: u32 = 250;
@@ -86,6 +88,7 @@ impl ShellSession {
         self.pages.editor.editor_preview_request = None;
         self.pages.editor.editor_preview_task.cancel();
         self.pages.editor.editor_pdf = None;
+        self.pages.editor.editor_read_only_layout.clear();
         self.pages.editor.editor_document_generation = self
             .pages
             .editor
@@ -153,6 +156,7 @@ impl ShellSession {
 
     pub(in crate::session) fn rebuild_editor_rich_render_cache(&mut self) {
         let _language = i18n::enter_snapshot(self.language.clone());
+        self.pages.editor.editor_read_only_layout.clear();
         self.pages.editor.editor_rich_render_cache = self.app.editor_state().and_then(|state| {
             let projection = state.rich_projection()?;
             Some(EditorRichRenderCache {

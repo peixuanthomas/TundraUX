@@ -3,6 +3,12 @@ use std::ops::Range;
 use super::*;
 use crate::screens::editor::picture::{self, PictureBounds};
 
+#[cfg(test)]
+std::thread_local! {
+    pub(in crate::screens::editor) static READ_ONLY_MEASURE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub(in crate::screens::editor) struct ReadOnlyRichLayout {
     width: usize,
     picture_bounds: PictureBounds,
@@ -12,17 +18,32 @@ pub(in crate::screens::editor) struct ReadOnlyRichLayout {
 }
 
 impl ReadOnlyRichLayout {
+    #[cfg(test)]
     pub(in crate::screens::editor) fn measure(
         model: &EditorViewModel,
         width: usize,
         height: usize,
     ) -> Self {
+        Self::measure_cancellable(model, width, height, &|| false).unwrap()
+    }
+
+    pub(in crate::screens::editor) fn measure_cancellable(
+        model: &EditorViewModel,
+        width: usize,
+        height: usize,
+        cancelled: &impl Fn() -> bool,
+    ) -> Option<Self> {
+        #[cfg(test)]
+        READ_ONLY_MEASURE_CALLS.with(|count| count.set(count.get() + 1));
         let picture_bounds = picture::bounds(width, height, model.image_cell_size);
         let mut block_ends = Vec::with_capacity(model.render_blocks().len());
         let mut tables = BTreeMap::new();
         let mut end = 0usize;
         let mut content_width = 1;
         for (index, block) in model.render_blocks().iter().enumerate() {
+            if cancelled() {
+                return None;
+            }
             let lines = match block {
                 EditorRenderBlock::Table { header, rows, .. }
                 | EditorRenderBlock::RichTable { header, rows, .. } => {
@@ -30,7 +51,8 @@ impl ReadOnlyRichLayout {
                         header,
                         rows,
                         model.table_widths_for_block(index, block.table_id()),
-                    );
+                        cancelled,
+                    )?;
                     content_width = content_width.max(table.content_width());
                     let lines = table.line_count;
                     tables.insert(index, table);
@@ -53,13 +75,13 @@ impl ReadOnlyRichLayout {
             end = end.saturating_add(lines);
             block_ends.push(end);
         }
-        Self {
+        Some(Self {
             width,
             picture_bounds,
             block_ends,
             tables,
             content_width,
-        }
+        })
     }
 
     pub(in crate::screens::editor) fn line_count(&self) -> usize {
@@ -119,6 +141,7 @@ pub(super) struct TableWindow<'a> {
     pub(super) lines: Range<usize>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct TableMetrics {
     pub(super) widths: Vec<usize>,
     pub(super) header_end: usize,
@@ -131,8 +154,9 @@ impl TableMetrics {
         header: &[EditorTableCell],
         rows: &[Vec<EditorTableCell>],
         requested: Option<&[usize]>,
-    ) -> Self {
-        let widths = table_column_widths(header, rows, requested);
+        cancelled: &impl Fn() -> bool,
+    ) -> Option<Self> {
+        let widths = table_column_widths_cancellable(header, rows, requested, cancelled)?;
         let has_header = !header.is_empty();
         let row_height = |row| wrapped_table_row_height(row, &widths, usize::MAX).unwrap();
         let header_end: usize = if has_header {
@@ -146,22 +170,25 @@ impl TableMetrics {
         } else {
             rows.iter()
                 .map(|row| {
+                    if cancelled() {
+                        return None;
+                    }
                     end = end.saturating_add(row_height(row));
-                    end
+                    Some(end)
                 })
-                .collect()
+                .collect::<Option<Vec<_>>>()?
         };
         let line_count = if widths.is_empty() {
             1
         } else {
             end.saturating_add(1)
         };
-        Self {
+        Some(Self {
             widths,
             header_end,
             row_ends,
             line_count,
-        }
+        })
     }
 
     fn content_width(&self) -> usize {

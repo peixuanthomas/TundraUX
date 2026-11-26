@@ -406,6 +406,17 @@ fn render_canvas(
     if layout.canvas.is_empty() {
         return;
     }
+    if layout.read_only_layout_pending {
+        let canvas = layout.canvas;
+        let area = Rect::new(canvas.x, canvas.y + canvas.height / 2, canvas.width, 1);
+        frame.render_widget(
+            Paragraph::new(i18n::tr!("shell-loading-document"))
+                .style(canvas_theme.body_style())
+                .alignment(HorizontalAlignment::Center),
+            area,
+        );
+        return;
+    }
     crate::automation::control(
         "editor.document",
         "textbox",

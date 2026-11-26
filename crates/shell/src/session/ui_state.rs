@@ -455,6 +455,12 @@ pub(super) struct EditorRichRenderCache {
     pub(super) blocks: std::sync::Arc<[ui::EditorRenderBlock]>,
 }
 
+impl EditorRichRenderCache {
+    pub(super) fn is_large(&self, state: &app::editor::EditorState) -> bool {
+        self.blocks.len() > 512 || state.document.source().len() > 64 * 1024
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ExplorerInputMode {
     Browse,

@@ -3,6 +3,8 @@ use super::*;
 use crate::components::{terminal_width, truncate_to_terminal_width};
 
 mod preview;
+#[cfg(test)]
+pub(super) use preview::READ_ONLY_MEASURE_CALLS;
 pub(super) use preview::ReadOnlyRichLayout;
 use preview::TableWindow;
 
@@ -1285,12 +1287,23 @@ pub(super) fn table_column_widths(
     rows: &[Vec<EditorTableCell>],
     requested: Option<&[usize]>,
 ) -> Vec<usize> {
-    let columns = max(
-        header.len(),
-        rows.iter().map(Vec::len).max().unwrap_or_default(),
-    );
-    let mut widths = vec![1usize; columns];
+    table_column_widths_cancellable(header, rows, requested, &|| false).unwrap()
+}
+
+fn table_column_widths_cancellable(
+    header: &[EditorTableCell],
+    rows: &[Vec<EditorTableCell>],
+    requested: Option<&[usize]>,
+    cancelled: &impl Fn() -> bool,
+) -> Option<Vec<usize>> {
+    let mut widths = vec![1usize; header.len()];
     for row in std::iter::once(header).chain(rows.iter().map(Vec::as_slice)) {
+        if cancelled() {
+            return None;
+        }
+        if row.len() > widths.len() {
+            widths.resize(row.len(), 1);
+        }
         for (index, cell) in row.iter().enumerate() {
             if widths[index] == 24 {
                 continue;
@@ -1315,7 +1328,7 @@ pub(super) fn table_column_widths(
             }
         }
     }
-    widths
+    Some(widths)
 }
 
 pub(super) fn table_resize_handles(

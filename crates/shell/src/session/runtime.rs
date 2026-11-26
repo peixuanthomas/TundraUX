@@ -1932,6 +1932,7 @@ pub(super) fn session_has_background_work(state: &ShellSession) -> bool {
             .iter()
             .any(|(_, page)| page.launcher_refresh_request.is_some())
         || state.editor_pdf_has_background_work()
+        || state.editor_read_only_layout_has_background_work()
         || state.pages.editor.iter().any(|(id, page)| {
             page.editor_load_state.is_some()
                 || page.editor_save_state.is_some()
