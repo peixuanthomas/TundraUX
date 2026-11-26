@@ -132,6 +132,7 @@ name = "app"
 version = "2.0.1"
 dependencies = [
  "ascii-assets",
+ "bytemuck",
  "chrono",
  "chrono-tz",
  "comrak",

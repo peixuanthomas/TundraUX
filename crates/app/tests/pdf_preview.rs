@@ -22,6 +22,7 @@ fn warm_pdf_batch_matches_individual_pages_and_the_estimated_raster_sizes() {
             raster.rgba.len(),
             raster.width as usize * raster.height as usize * 4
         );
+        assert!(raster.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
         assert_eq!(
             raster,
             document.render_page(index, viewport, cell_size).unwrap()

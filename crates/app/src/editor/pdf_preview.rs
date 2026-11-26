@@ -4,7 +4,7 @@ use std::sync::Arc;
 use hayro::hayro_interpret::{InterpreterSettings, util::TransformExt};
 use hayro::hayro_syntax::{LoadPdfError, Pdf, page::Page};
 use hayro::kurbo::Affine;
-use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
+use hayro::vello_cpu::{PixmapMut, RasterizerSettings, RenderContext, Resources, TargetInit};
 use i18n::LocalizedText;
 
 const MAX_RASTER_SIDE: f64 = 1600.0;
@@ -102,7 +102,7 @@ impl PdfPreviewDocument {
             let error = || i18n::msg!("editor-pdf-render-error", page = index.saturating_add(1));
             let page = self.0.pages().get(index).ok_or_else(error)?;
             let (size, transform) = fit_page(page, viewport, cell_size).ok_or_else(error)?;
-            let pixmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let rgba = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 render_fitted_page(page, size, transform, &cache, &mut resources)
             }))
             .map_err(|_| {
@@ -116,7 +116,7 @@ impl PdfPreviewDocument {
                 cells: size.cells,
                 width: u32::from(size.pixels[0]),
                 height: u32::from(size.pixels[1]),
-                rgba: Arc::from(pixmap.data_as_u8_slice()),
+                rgba,
             })
         })
     }
@@ -174,7 +174,7 @@ fn render_fitted_page<'a>(
     transform: Affine,
     cache: &hayro::RenderCache<'a>,
     resources: &mut Resources,
-) -> Pixmap {
+) -> Arc<[u8]> {
     let [width, height] = size.pixels;
     let mut context = RenderContext::new(width, height);
     hayro::render_into(
@@ -186,14 +186,17 @@ fn render_fitted_page<'a>(
         transform,
     );
     context.flush();
-    let mut pixmap = Pixmap::new(width, height);
+    // Write into the cached raster's storage to avoid copying the whole page after rendering.
+    let bytes = usize::from(width) * usize::from(height) * 4;
+    let mut rgba = bytemuck::allocation::zeroed_arc_slice(bytes);
+    let pixmap = PixmapMut::new(width, height, Arc::get_mut(&mut rgba).unwrap()).unwrap();
     context.render_with(
-        &mut pixmap,
+        pixmap,
         resources,
         RasterizerSettings {
             target_init: TargetInit::Clear(hayro::vello_cpu::color::palette::css::WHITE),
             ..Default::default()
         },
     );
-    pixmap
+    rgba
 }
