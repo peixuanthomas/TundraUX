@@ -6022,6 +6022,7 @@ dependencies = [
  "platform",
  "portable-pty",
  "ratatui",
+ "ratatui-crossterm",
  "runtime-log",
  "tattoy-termwiz",
  "tattoy-wezterm-cell",

@@ -39,6 +39,16 @@ class FrameBoundaryTests(unittest.TestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual((screen.x, screen.y), (5, 0))
 
+    def test_synchronized_frame_waits_for_the_end_across_every_byte(self):
+        screen = performance.Screen(8, 2)
+        data = "\x1b[?2026h\x1b[2J\x1b[1;1H中ready\x1b[?25l\x1b[?25h\x1b[2;1Hdone\x1b[?2026l".encode()
+        for byte in data[:-1]:
+            self.assertEqual(screen.feed(bytes((byte,))), [])
+        frames = screen.feed(data[-1:])
+        self.assertEqual(len(frames), 1)
+        self.assertEqual("".join(cell[0] for cell in frames[0][0]), "中 ready ")
+        self.assertEqual("".join(cell[0] for cell in frames[0][1]), "done    ")
+
     def test_unicode_and_cursor_diffs_survive_chunk_boundaries(self):
         screen = performance.Screen(8, 2)
         data = "\x1b[1;1H中Ω\x1b[2;3Hok\x1b[?25l".encode()

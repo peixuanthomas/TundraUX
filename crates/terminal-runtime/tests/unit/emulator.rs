@@ -372,7 +372,8 @@ fn centered_iterm_icon_keeps_all_its_pixels_inside_the_tile() {
     let (mut terminal, _writer, _replies) = terminal(10, 20);
     for scale in 1..=if cfg!(windows) { 3 } else { 1 } {
         terminal.set_cell_size(4 * scale, 8 * scale);
-        terminal.process(b"\x1b[2J\x1b[?25l\x1b[4;6H");
+        terminal.process(b"\x1b[2J\x1b[?25l");
+        terminal.process(b"\x1b[?2026h\x1b[4;6H");
         for chunk in packet.as_bytes().chunks(5) {
             terminal.process(chunk);
             assert!(
@@ -380,6 +381,8 @@ fn centered_iterm_icon_keeps_all_its_pixels_inside_the_tile() {
                 "cursor appeared while drawing an icon"
             );
         }
+        assert!(terminal.ui_snapshot().images.is_empty());
+        terminal.process(b"\x1b[?2026l");
         assert!(terminal.synchronized.is_none());
         let images = terminal.ui_snapshot().images;
         assert_eq!(images.len(), 1);
@@ -393,15 +396,14 @@ fn centered_iterm_icon_keeps_all_its_pixels_inside_the_tile() {
     }
 }
 
-#[cfg(windows)]
 #[test]
 fn interrupted_inline_image_releases_the_display_for_the_returning_prompt() {
     let (mut terminal, _writer, _replies) = terminal(4, 20);
-    terminal.process(b"\x1b[?25l\x1b[?2026;25h\x1b]1337;File=inline=1:");
+    terminal.process(b"\x1b[?25l\x1b[?2026h\x1b[?25h\x1b]1337;File=inline=1:");
     assert!(terminal.synchronized.is_some());
 
     let mut output = Vec::new();
-    crate::session::finish_pending_image(&mut output).unwrap();
+    crate::session::finish_pending_update(&mut output).unwrap();
     terminal.process(&output);
     terminal.process(b"\x1b[2;1H> \x1b[?25h");
     assert!(terminal.synchronized.is_none());

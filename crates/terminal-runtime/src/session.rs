@@ -5,11 +5,11 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-    is_raw_mode_enabled,
+    BeginSynchronizedUpdate, EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode, is_raw_mode_enabled,
 };
 use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+use ratatui_crossterm::CrosstermBackend;
 use std::io::{self, Write};
 
 #[cfg(unix)]
@@ -40,8 +40,87 @@ pub fn text_render_capabilities() -> ui::RenderCapabilities {
     }
 }
 
+pub type HostTerminal<W> = Terminal<CrosstermBackend<HostTerminalWriter<W>>>;
+
+pub struct HostTerminalWriter<W> {
+    output: W,
+    frame: Vec<u8>,
+    buffering: bool,
+}
+
+impl<W: Write> Write for HostTerminalWriter<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.buffering {
+            self.frame.extend_from_slice(bytes);
+            Ok(bytes.len())
+        } else {
+            self.output.write(bytes)
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if self.buffering {
+            // Ratatui flushes screen clears and cursor commands before the frame is finished.
+            Ok(())
+        } else {
+            self.output.flush()
+        }
+    }
+}
+
+/// Collects the terminal commands for one frame and discards them on early exit.
+pub struct SynchronizedFrame<'a, W: Write> {
+    terminal: &'a mut HostTerminal<W>,
+}
+
+impl<'a, W: Write> SynchronizedFrame<'a, W> {
+    fn begin(terminal: &'a mut HostTerminal<W>) -> io::Result<Self> {
+        let frame = Self { terminal };
+        #[cfg(windows)]
+        let buffered = crossterm::ansi_support::supports_ansi();
+        #[cfg(not(windows))]
+        let buffered = true;
+        if buffered {
+            let writer = frame.terminal.backend_mut().writer_mut();
+            writer.buffering = true;
+            crossterm::queue!(writer, BeginSynchronizedUpdate)?;
+        }
+        Ok(frame)
+    }
+
+    pub fn terminal_mut(&mut self) -> &mut HostTerminal<W> {
+        self.terminal
+    }
+
+    /// Publish text, images, and cursor state together. Terminals without the
+    /// synchronization extension still receive the commands in one batch.
+    pub fn present(self) -> io::Result<()> {
+        let writer = self.terminal.backend_mut().writer_mut();
+        if !writer.buffering {
+            return Ok(());
+        }
+        crossterm::queue!(writer, EndSynchronizedUpdate)?;
+        let result = writer
+            .output
+            .write_all(&writer.frame)
+            .and_then(|()| writer.output.flush());
+        if result.is_err() {
+            let _ = finish_pending_update(&mut writer.output);
+        }
+        result
+    }
+}
+
+impl<W: Write> Drop for SynchronizedFrame<'_, W> {
+    fn drop(&mut self) {
+        let writer = self.terminal.backend_mut().writer_mut();
+        writer.frame.clear();
+        writer.buffering = false;
+    }
+}
+
 pub struct TerminalGuard<W: Write> {
-    terminal: Terminal<CrosstermBackend<W>>,
+    terminal: HostTerminal<W>,
     restored: bool,
     #[cfg(unix)]
     keyboard_reporting: bool,
@@ -58,7 +137,11 @@ impl<W: Write> TerminalGuard<W> {
         // Constructing `Terminal` probes the backend size and can fail. Do it
         // before changing any terminal mode so that this error path needs no
         // emergency cleanup.
-        let mut terminal = Terminal::new(CrosstermBackend::new(output))?;
+        let mut terminal = Terminal::new(CrosstermBackend::new(HostTerminalWriter {
+            output,
+            frame: Vec::new(),
+            buffering: false,
+        }))?;
         enable_raw_mode()?;
         if let Err(error) = execute!(
             terminal.backend_mut(),
@@ -93,8 +176,12 @@ impl<W: Write> TerminalGuard<W> {
         })
     }
 
-    pub fn terminal_mut(&mut self) -> &mut Terminal<CrosstermBackend<W>> {
+    pub fn terminal_mut(&mut self) -> &mut HostTerminal<W> {
         &mut self.terminal
+    }
+
+    pub fn begin_frame(&mut self) -> io::Result<SynchronizedFrame<'_, W>> {
+        SynchronizedFrame::begin(&mut self.terminal)
     }
 
     /// Preserve modified Enter and Shift+Control letters before decoding input.
@@ -194,7 +281,7 @@ impl<W: Write> TerminalGuard<W> {
         #[cfg(not(unix))]
         let win32_result = Ok(());
         #[cfg(windows)]
-        let image_result = finish_pending_image(self.terminal.backend_mut());
+        let image_result = finish_pending_update(self.terminal.backend_mut());
         let terminal_result = execute!(
             self.terminal.backend_mut(),
             Show,
@@ -300,6 +387,10 @@ fn log_discarded_terminal_input(error: crossterm::event::InputError) {
 #[cfg(test)]
 #[path = "../tests/unit/terminal_input_logging.rs"]
 mod terminal_input_logging_tests;
+
+#[cfg(all(test, unix))]
+#[path = "../tests/unit/terminal_frames.rs"]
+mod terminal_frame_tests;
 
 impl<W: Write> Drop for TerminalGuard<W> {
     fn drop(&mut self) {
@@ -412,18 +503,17 @@ impl Drop for TemporaryRawMode {
     }
 }
 
-/// Release the display if a Windows inline image was interrupted before its closing sequence.
-#[cfg(windows)]
-pub fn finish_pending_image(output: &mut impl Write) -> io::Result<()> {
-    output.write_all(b"\x1b\\")?;
-    execute!(output, crossterm::terminal::EndSynchronizedUpdate)
+/// Release a synchronized frame even if the last write stopped inside an image.
+pub fn finish_pending_update(output: &mut impl Write) -> io::Result<()> {
+    let end_string = output.write_all(b"\x1b\\");
+    let end_update = execute!(output, EndSynchronizedUpdate);
+    end_string.and(end_update)
 }
 
 pub fn restore_terminal_best_effort() {
     let _ = disable_raw_mode();
     let mut stderr = io::stderr();
-    #[cfg(windows)]
-    let _ = finish_pending_image(&mut stderr);
+    let _ = finish_pending_update(&mut stderr);
     #[cfg(unix)]
     {
         let modes = KEYBOARD_MODES.swap(0, std::sync::atomic::Ordering::Relaxed);

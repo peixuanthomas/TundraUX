@@ -111,9 +111,10 @@ mod unix {
                 use crossterm::event::{
                     DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,
                 };
-                use crossterm::terminal::LeaveAlternateScreen;
+                use crossterm::terminal::{EndSynchronizedUpdate, LeaveAlternateScreen};
                 let mut cleanup =
-                    String::from("\x1b[0m\x1b[?9001l\x1b[>4;0m\x1b[<u\x1b_Ga=d,d=a\x1b\\");
+                    String::from("\x1b\\\x1b[0m\x1b[?9001l\x1b[>4;0m\x1b[<u\x1b_Ga=d,d=a\x1b\\");
+                let _ = EndSynchronizedUpdate.write_ansi(&mut cleanup);
                 let _ = DisableMouseCapture.write_ansi(&mut cleanup);
                 let _ = DisableFocusChange.write_ansi(&mut cleanup);
                 let _ = DisableBracketedPaste.write_ansi(&mut cleanup);
@@ -266,7 +267,7 @@ mod windows {
                 && unsafe { GetConsoleMode(self.screen, &mut mode) } != 0
                 && mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING != 0
             {
-                let _ = terminal_runtime::session::finish_pending_image(&mut io::stdout());
+                let _ = terminal_runtime::session::finish_pending_update(&mut io::stdout());
             }
             // SAFETY: the saved handles still refer to this console and its original screen buffer.
             unsafe {

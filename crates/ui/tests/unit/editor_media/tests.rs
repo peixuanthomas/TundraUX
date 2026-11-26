@@ -67,8 +67,9 @@ fn iterm_image_targets_cells_and_preserves_the_windows_cursor_workaround() {
             .data;
         assert!(packet.contains("width=4;height=2;preserveAspectRatio=0;"));
         assert_eq!(packet.contains("\x1bPtmux;"), tmux);
-        assert_eq!(packet.starts_with("\x1b[?2026;25h"), cfg!(windows));
-        assert_eq!(packet.ends_with("\x1b[?25;2026l"), cfg!(windows));
+        assert_eq!(packet.starts_with("\x1b[?25h"), cfg!(windows));
+        assert_eq!(packet.ends_with("\x1b[?25l"), cfg!(windows));
+        assert!(!packet.contains("\x1b[?2026"));
     }
 }
 

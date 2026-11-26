@@ -58,6 +58,7 @@ class Screen:
         self.attributes = set()
         self.saw_rgb = False
         self.await_cursor_position = False
+        self.synchronized_update = False
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.pending = ""
 
@@ -75,11 +76,18 @@ class Screen:
                     if match is None:
                         break
                     raw, _, command = match.groups()
-                    if raw == "?25" and command == "l":
+                    if raw == "?2026" and command == "h":
+                        self.synchronized_update = True
                         self.await_cursor_position = False
+                    elif raw == "?2026" and command == "l" and self.synchronized_update:
+                        self.synchronized_update = False
                         tails.append(tuple(tuple(row) for row in self.cells))
-                    elif raw == "?25" and command == "h":
-                        self.await_cursor_position = True
+                    elif raw == "?25" and not self.synchronized_update:
+                        if command == "l":
+                            self.await_cursor_position = False
+                            tails.append(tuple(tuple(row) for row in self.cells))
+                        elif command == "h":
+                            self.await_cursor_position = True
                     if re.fullmatch(r"[0-9;]*", raw):
                         values = [int(value or "0") for value in raw.split(";")]
                         amount = values[0] or 1
@@ -959,7 +967,7 @@ def main():
                 "restore_endpoint": "Complete business content visible again; viewport/fence readiness is verified after sealing",
                 "resource_sample_timing": "Process-tree points outside capture, after validation; not endpoint CPU/RSS or peak memory",
                 "measurement": "Python monotonic_ns from physical PTY action to the first matching complete Ratatui output tail",
-                "boundary": "Ratatui buffer diff followed by final cursor state and position commands and flush; snapshot verification is excluded",
+                "boundary": "End of the synchronized update, or final cursor state and position for older builds; snapshot verification is excluded",
                 "limitation": "PTY output completion is measured; terminal emulator pixel presentation is not measured",
                 "requested_phase": args.phase, "completed": False,
                 "applications_requested": args.application or list(APPLICATIONS),

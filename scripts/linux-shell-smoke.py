@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 MOUSE_CAPTURE_SEQUENCE = b"\x1b[?1003h"
+FRAME_BEGIN = b"\x1b[?2026h"
+FRAME_END = b"\x1b[?2026l"
 # Type one ordinary character into the existing Appearance color input. Ratatui
 # may emit only changed cells, so a multi-character value is not a reliable byte
 # marker. Keep this deadline independent of saving preferences and loading Home.
@@ -114,6 +116,15 @@ def wait_for_output_quiet(
         if len(output) == previous_size:
             return True
     return False
+
+
+def check_synchronized_repaints(output: bytearray, operation: str) -> None:
+    *frames, tail = output.split(FRAME_END)
+    if not frames or tail or any(
+        not frame.startswith(FRAME_BEGIN) or FRAME_BEGIN in frame[len(FRAME_BEGIN):]
+        for frame in frames
+    ):
+        raise SystemExit(f"{operation} did not send complete synchronized frames")
 
 
 def mouse_motion_events(count: int) -> Iterable[bytes]:
@@ -1274,6 +1285,10 @@ def main() -> int:
                 "tundra-shell output did not become idle after the ready frame; "
                 f"output:\n{output_diagnostic(output)}"
             )
+        first_frame = output.find(FRAME_BEGIN, output.index(MOUSE_CAPTURE_SEQUENCE))
+        if first_frame < 0:
+            raise SystemExit("the initial Shell frame was not synchronized")
+        check_synchronized_repaints(output[first_frame:], "startup")
 
         # A bare PTY has no graphics responder. Acknowledge the real warning
         # before testing Appearance keyboard navigation.
@@ -1363,6 +1378,7 @@ def main() -> int:
 
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Home did not settle before pointer regression")
+        check_synchronized_repaints(output[home_offset:], "first-run setup to Home")
 
         check_animation_settings(master, output, child, cli, env)
         check_editor_resize(master, slave, output, child, isolated, cli, env)
@@ -1371,6 +1387,7 @@ def main() -> int:
 
         # Exercise the companion CLI launched by the real Shell, not just a
         # standalone REPL. Rebuilding Shell alone can leave an older CLI beside it.
+        launcher_offset = len(output)
         frame = open_home_entry(master, output, child, cli, env, "Launcher", "Launcher")
         launcher_window = selected_window(frame)
         wait_for_snapshot(master, output, child, cli, env, "Launcher did not offer Command Line",
@@ -1381,6 +1398,7 @@ def main() -> int:
                                   for item in current["nodes"]))
         if not wait_for_output_quiet(master, output, child, quiet_period=0.2):
             raise SystemExit("Launcher did not settle")
+        check_synchronized_repaints(output[launcher_offset:], "Home to Launcher")
         prompt_offset = len(output)
         os.write(master, b"\r")
         username = pwd.getpwuid(os.geteuid()).pw_name
@@ -1433,6 +1451,11 @@ def main() -> int:
         resize_deadline = time.monotonic() + 0.5
         while time.monotonic() < resize_deadline:
             read_available(master, output, 0.05)
+        clear = output.find(b"\x1b[2J", prompt_offset)
+        if (clear < 0 or output.rfind(FRAME_BEGIN, prompt_offset, clear) <=
+                output.rfind(FRAME_END, prompt_offset, clear)
+                or output.find(FRAME_END, clear) < 0):
+            raise SystemExit("terminal resize exposed a clear outside the synchronized repaint")
         launcher_offset = len(output)
         os.write(master, b"exit\r")
         restore_window(master, output, child, cli, env, launcher_window, "Launcher", launcher_terminal)

@@ -1245,7 +1245,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 let mut animation_running = false;
                 let mut weather_error = None;
                 let output_started_at = Instant::now();
-                guard.terminal_mut().draw(|frame| {
+                let mut update = guard.begin_frame()?;
+                update.terminal_mut().draw(|frame| {
                     let bounds = frame.area();
                     // The terminal can resize after polling but before drawing.
                     if resize_runtime_session(
@@ -1298,7 +1299,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 if let Some(error) = weather_error {
                     return Err(error);
                 }
-                write_terminal_image_cleanup(&mut compositor, guard.terminal_mut().backend_mut())?;
+                write_terminal_image_cleanup(&mut compositor, update.terminal_mut().backend_mut())?;
                 next_weather_frame = frame_now + Duration::from_millis(33);
                 let cursor_style = if let Some(windows) = &workspace
                     && let Some(shape) = windows.cursor_shape()
@@ -1331,9 +1332,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                     )
                 };
                 if cursor_style != vim_cursor_style {
-                    crossterm::execute!(guard.terminal_mut().backend_mut(), cursor_style)?;
+                    crossterm::execute!(update.terminal_mut().backend_mut(), cursor_style)?;
                     vim_cursor_style = cursor_style;
                 }
+                update.present()?;
                 if let Some(windows) = &mut workspace {
                     windows.did_present(&state, output_started_at.elapsed().as_micros() as u64);
                 }
@@ -2107,7 +2109,9 @@ fn run_panic_screen(
             break ShellRunOutcome::Exit;
         }
         if redraw {
-            guard.terminal_mut().draw(|frame| screen.render(frame))?;
+            let mut update = guard.begin_frame()?;
+            update.terminal_mut().draw(|frame| screen.render(frame))?;
+            update.present()?;
             redraw = false;
         }
         if event::poll(Duration::from_millis(250))? {

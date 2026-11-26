@@ -262,10 +262,10 @@ pub(crate) fn prepare_iterm2(
         );
     }
     if cfg!(windows) {
-        // ConPTY needs a visible cursor to forward the image position. WezTerm holds the update
-        // until the paired reset hides the cursor, even if ConPTY delays its own cursor output.
-        protocol.data.insert_str(0, "\x1b[?2026;25h");
-        protocol.data.push_str("\x1b[?25;2026l");
+        // ConPTY needs a visible cursor to forward the position. Shell's synchronized frame
+        // keeps this temporary cursor hidden from the user without nesting update sequences.
+        protocol.data.insert_str(0, "\x1b[?25h");
+        protocol.data.push_str("\x1b[?25l");
     }
     Ok(protocol)
 }

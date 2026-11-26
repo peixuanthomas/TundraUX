@@ -11,6 +11,7 @@ native-tests = []
 [dependencies]
 crossterm.workspace = true
 ratatui.workspace = true
+ratatui-crossterm = { version = "=0.1.2", default-features = false, features = ["crossterm_0_29", "unstable-backend-writer"] }
 portable-pty = "0.9"
 vt100 = "0.15.2"
 wezterm-term = { package = "tattoy-wezterm-term", version = "=0.1.0-fork.5" }
