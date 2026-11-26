@@ -154,12 +154,12 @@ fn render_frame(
 
     write!(output, "{CLEAR_SCREEN}")?;
     for _ in 0..top_padding {
-        writeln!(output)?;
+        write!(output, "\r\n")?;
     }
     let indent = " ".repeat(left_padding);
     write!(output, "{}", ansi_foreground(color))?;
     for line in frame {
-        writeln!(output, "{indent}{}", line.trim_end())?;
+        write!(output, "{indent}{}\r\n", line.trim_end())?;
     }
     write!(output, "\x1B[0m")?;
     output.flush()

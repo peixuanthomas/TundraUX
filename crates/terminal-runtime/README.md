@@ -17,9 +17,9 @@ Shell decides when to take over or hand back the terminal; this crate applies an
 
 ## Host terminal
 
-`TerminalGuard` manages raw mode, the alternate screen, mouse, focus, bracketed paste, and enhanced key reporting. Normal exit, temporary handoff of the terminal, and catchable failures all restore modes enabled by the program. On Windows, cleanup also releases the display if an inline image was interrupted.
+`TerminalGuard` hides the host cursor when entering the alternate screen and manages raw mode, mouse, focus, bracketed paste, and enhanced key reporting. Normal exit, temporary handoff of the terminal, and catchable failures all restore modes enabled by the program. On Windows, cleanup also releases the display if an inline image was interrupted.
 
-On ANSI terminals the guard buffers a whole frame, including resize clears, image commands and cursor updates, before writing it to the host. Terminals with synchronized output support display the completed frame together. The guardian can release the display after an interrupted write.
+On ANSI terminals the guard buffers a whole frame, including resize clears, image commands and cursor updates, before writing it to the host. On Windows, the command that releases a frame also hides the cursor when the app has no cursor to display. This keeps ConPTY from delaying the hide until after the frame appears. The guardian can release the display after an interrupted write.
 
 Startup detection can read the terminal's base colors, default foreground/background, and true-color capability. Queries support fragmented replies and common terminators; rendering only reads cached results. WSL in Windows Terminal prefers win32-input-mode; other terminals use Kitty or xterm key reporting according to their capabilities.
 

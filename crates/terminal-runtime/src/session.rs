@@ -99,7 +99,18 @@ impl<'a, W: Write> SynchronizedFrame<'a, W> {
         if !writer.buffering {
             return Ok(());
         }
-        crossterm::queue!(writer, EndSynchronizedUpdate)?;
+        if cfg!(windows)
+            && writer
+                .frame
+                .windows(b"\x1b[?25l".len())
+                .rfind(|bytes| matches!(*bytes, b"\x1b[?25l" | b"\x1b[?25h"))
+                == Some(b"\x1b[?25l")
+        {
+            // ConPTY can forward the standalone hide after the frame ends.
+            writer.write_all(b"\x1b[?25;2026l")?;
+        } else {
+            crossterm::queue!(writer, EndSynchronizedUpdate)?;
+        }
         let result = writer
             .output
             .write_all(&writer.frame)
@@ -146,10 +157,10 @@ impl<W: Write> TerminalGuard<W> {
         if let Err(error) = execute!(
             terminal.backend_mut(),
             EnterAlternateScreen,
+            Hide,
             EnableMouseCapture,
             EnableFocusChange,
-            EnableBracketedPaste,
-            Hide
+            EnableBracketedPaste
         ) {
             let _ = execute!(
                 terminal.backend_mut(),
@@ -315,10 +326,10 @@ impl<W: Write> TerminalGuard<W> {
         if let Err(error) = execute!(
             self.terminal.backend_mut(),
             EnterAlternateScreen,
+            Hide,
             EnableMouseCapture,
             EnableFocusChange,
-            EnableBracketedPaste,
-            Hide
+            EnableBracketedPaste
         ) {
             let _ = execute!(
                 self.terminal.backend_mut(),
@@ -388,7 +399,7 @@ fn log_discarded_terminal_input(error: crossterm::event::InputError) {
 #[path = "../tests/unit/terminal_input_logging.rs"]
 mod terminal_input_logging_tests;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 #[path = "../tests/unit/terminal_frames.rs"]
 mod terminal_frame_tests;
 

@@ -225,17 +225,16 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         system_services.clone(),
     )
     .map_err(io::Error::other)?;
+    let mut guard = TerminalGuard::enter(&mut *output)?;
     let (terminal_graphics_sender, terminal_graphics_receiver) = mpsc::sync_channel(1);
     let _terminal_graphics_worker =
         spawn_terminal_graphics_probe_worker(terminal_graphics_sender, &shell_watchdog)
             .map_err(io::Error::other)?;
-    with_fullscreen(output, |output| {
-        display_startup_banner_with_assets_colored(
-            output,
-            &ascii_assets,
-            startup.app_config.border_color,
-        )
-    })?;
+    display_startup_banner_with_assets_colored(
+        guard.terminal_mut().backend_mut(),
+        &ascii_assets,
+        startup.app_config.border_color,
+    )?;
     let mut language_runtime = language_worker
         .join()
         .map_err(io::Error::other)?
@@ -286,7 +285,7 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         BoundarySpec::new("shell.fullscreen-session", BoundaryKind::UiSession).terminal_owner(),
         AssertUnwindSafe(|| {
             run_fullscreen_shell_session(FullscreenShellSessionInput {
-                output,
+                guard,
                 config,
                 startup,
                 control: &mut control,
@@ -806,8 +805,8 @@ impl CachedTimeSyncResult {
     }
 }
 
-pub(super) struct FullscreenShellSessionInput<'a, W> {
-    output: &'a mut W,
+pub(super) struct FullscreenShellSessionInput<'a, W: Write> {
+    guard: TerminalGuard<W>,
     config: ShellLaunchConfig,
     startup: ShellStartupState,
     control: &'a mut super::automation::ControlRuntime,
@@ -834,7 +833,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
 ) -> io::Result<FullscreenShellSessionOutcome> {
     platform::task_events::install_notifier(crate::process_host::event_loop::wake);
     let FullscreenShellSessionInput {
-        output,
+        mut guard,
         config,
         startup,
         control,
@@ -857,7 +856,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     } = input;
     let terminal_size_requirement = ShellTerminalSizeRequirement::from_assets(&ascii_assets);
     let initial_size = checked_current_terminal_size(terminal_size_requirement)?;
-    let mut guard = TerminalGuard::enter(output)?;
     let mut workspace = WorkerConnection::current().map(|_| {
         let image_cell_size = terminal_graphics_probe.picker().map(|picker| {
             let (width, height) = picker.cell_size();
