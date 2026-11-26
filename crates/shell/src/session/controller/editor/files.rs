@@ -657,6 +657,8 @@ impl ShellSession {
                 if let Some(pdf) = pdf {
                     self.pages.editor.editor_pdf = Some(super::pdf::EditorPdfPreview::new(pdf));
                     self.pages.editor.script.enabled = false;
+                } else if app::editor::is_preview_image_path(&path) {
+                    self.pages.editor.editor_picture_zoom = Some(ui::EditorPreviewZoom::default());
                 }
                 let open_at_bottom = reload
                     .as_ref()

@@ -237,6 +237,7 @@ pub struct EditorSourceLineMap {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EditorLayout {
     pub pdf: Option<EditorPdfLayout>,
+    pub picture_window: Option<EditorPreviewWindow>,
     pub vim_toggle: Rect,
     pub menu_scrollbar: Option<Rect>,
     pub search_items: Vec<(EditorSearchControl, Rect)>,
@@ -784,6 +785,8 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
     let mut canvas = base_canvas;
     let requested_horizontal_scroll = model.horizontal_scroll;
     let mut read_only_layout_pending = false;
+    let mut picture_window = None;
+    let zoomed_picture = model.picture_zoom.filter(|zoom| zoom.is_zoomed());
     let (document_line_count, rich_lines, horizontal_content_width) = match model.mode {
         EditorMode::Source if model.soft_wrap => {
             // A stable scrollbar lane keeps the wrap width independent of the
@@ -829,6 +832,17 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             canvas.width = canvas.width.saturating_sub(u16::from(reserve_vertical));
             canvas.height = canvas.height.saturating_sub(u16::from(reserve_horizontal));
             (line_count, None, model.horizontal_content_width)
+        }
+        EditorMode::Rich if let Some(zoom) = zoomed_picture => {
+            let size = picture::zoomed_size(model, canvas_panel, zoom);
+            let vertical_lane = canvas.width > 1 && size[1] > u32::from(canvas.height);
+            let width_without_scrollbar = canvas.width - u16::from(vertical_lane);
+            let horizontal_lane = canvas.height > 1 && size[0] > u32::from(width_without_scrollbar);
+            canvas.height -= u16::from(horizontal_lane);
+            let vertical = canvas.width > 1 && size[1] > u32::from(canvas.height);
+            canvas.width -= u16::from(vertical);
+            picture_window = Some(zoom.window(canvas, size));
+            (size[1] as usize, None, size[0] as usize)
         }
         EditorMode::Rich if model.read_only => {
             let key = EditorReadOnlyLayoutKey::for_canvas(
@@ -891,7 +905,9 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             (count, Some(lines), content_width)
         }
     };
-    let horizontal_scroll = if model.soft_wrap {
+    let horizontal_scroll = if let Some(window) = picture_window {
+        window.offset[0] as usize
+    } else if model.soft_wrap {
         0
     } else if model.mode == EditorMode::Rich {
         requested_horizontal_scroll
@@ -901,7 +917,10 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
     };
     let visible_capacity = usize::from(canvas.height);
     let max_start = document_line_count.saturating_sub(visible_capacity);
-    let visible_start = model.scroll_line.min(max_start);
+    let visible_start = picture_window.map_or_else(
+        || model.scroll_line.min(max_start),
+        |window| window.offset[1] as usize,
+    );
     let visible_end = visible_start
         .saturating_add(visible_capacity)
         .min(document_line_count);
@@ -914,10 +933,15 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         Some(RichLines::ReadOnly(layout)) => layout
             .measured
             .materialize(model, visible_start..visible_end),
-        None if read_only_layout_pending => Vec::new(),
+        None if read_only_layout_pending || picture_window.is_some() => Vec::new(),
         None => source_display_lines_for_viewport(model, visible_start, visible_end),
     };
-    let line_areas = (visible_start..visible_end)
+    let line_end = if picture_window.is_some() {
+        visible_start
+    } else {
+        visible_end
+    };
+    let line_areas = (visible_start..line_end)
         .map(|document_line| EditorLineLayout {
             document_line,
             block_index: prepared_lines
@@ -1103,12 +1127,17 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             let item = EditorMenuItemLayout {
                 action: *action,
                 area: Rect::new(status_x, status_bar.y, width, status_bar.height),
-                enabled: (!model.read_only
-                    || !matches!(
-                        action,
-                        EditorMenuAction::LineEnding | EditorMenuAction::Encoding
-                    ))
-                    && !(model.configuration && *action == EditorMenuAction::Encoding),
+                enabled: match action {
+                    EditorMenuAction::ZoomOut => {
+                        model.picture_zoom.is_some_and(EditorPreviewZoom::is_zoomed)
+                    }
+                    EditorMenuAction::ZoomIn => model
+                        .picture_zoom
+                        .is_some_and(EditorPreviewZoom::can_zoom_in),
+                    EditorMenuAction::LineEnding => !model.read_only,
+                    EditorMenuAction::Encoding => !model.read_only && !model.configuration,
+                    _ => true,
+                },
             };
             status_x = status_x.saturating_add(width);
             Some(item)
@@ -1130,6 +1159,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
     };
     EditorLayout {
         pdf: None,
+        picture_window,
         vim_toggle,
         menu_scrollbar: menu_popup
             .filter(|_| {
@@ -1737,6 +1767,8 @@ pub(super) fn menu_action_label(action: EditorMenuAction) -> String {
         EditorMenuAction::LineEnding => i18n::tr!("ui-editor-line-ending"),
         EditorMenuAction::Encoding => i18n::tr!("ui-editor-encoding"),
         EditorMenuAction::Indentation => i18n::tr!("ui-editor-indentation"),
+        EditorMenuAction::ZoomOut => i18n::tr!("ui-editor-preview-zoom-out"),
+        EditorMenuAction::ZoomIn => i18n::tr!("ui-editor-preview-zoom-in"),
         EditorMenuAction::Replace => i18n::tr!("ui-editor-replace"),
         EditorMenuAction::ToggleWrap => i18n::tr!("ui-editor-wrap"),
         EditorMenuAction::FormatJson => i18n::tr!("ui-editor-format-json"),

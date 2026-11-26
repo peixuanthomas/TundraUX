@@ -90,6 +90,7 @@ ui-editor-pdf-rotate = 旋转
 ui-editor-preview-zoom-out = 缩小
 ui-editor-preview-zoom-in = 放大
 ui-editor-preview-zoom-percent = { $percent }%
+ui-editor-preview-image-zoom = 放大（{ $percent }%）
 ui-editor-pdf-position = 第 { $page } / { $total } 页
 ui-editor-pdf-rendering = 正在渲染页面…
 

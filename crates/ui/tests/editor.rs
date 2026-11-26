@@ -1781,6 +1781,66 @@ fn picture_preview_scroll_crops_pixels_and_native_placement_together() {
 }
 
 #[test]
+fn magnified_picture_pans_both_axes_in_the_native_and_fallback_previews() {
+    let pixels = image::RgbaImage::from_fn(640, 240, |x, y| {
+        image::Rgba([(x / 4) as u8, y as u8, 30, 255])
+    });
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    pixels
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .unwrap();
+    let image = app::editor::PreviewImage::decode(encoded.get_ref()).unwrap();
+    let mut model = EditorViewModel::new(
+        "picture.png",
+        vec![EditorRenderBlock::Picture { id: 84, image }],
+    );
+    model.read_only = true;
+    model.cursor = None;
+    model.image_cell_size = [8, 16];
+    let mut zoom = ui::EditorPreviewZoom::default();
+    for _ in 0..4 {
+        zoom.change(true);
+    }
+    model.picture_zoom = Some(zoom);
+    let area = Rect::new(1, 2, 106, 16);
+    let layout = editor_layout(area, &model);
+    let center = layout.picture_window.unwrap();
+    assert_eq!(center.offset, center.limit.map(|limit| limit / 2));
+    assert!(center.offset.into_iter().all(|offset| offset > 0));
+
+    let context = ui::RenderContext::from_theme(
+        &TundraTheme::default_dark(),
+        Default::default(),
+        Default::default(),
+    );
+    let mut cache = ui::TerminalImageCache::default();
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(108, 20)).unwrap();
+    let mut draw = |model: &EditorViewModel| {
+        cache.capture_workspace(area);
+        terminal
+            .draw(|frame| {
+                ui::render_editor_contextual_with_terminal_images(
+                    frame, area, model, &context, &mut cache, None,
+                );
+            })
+            .unwrap();
+        (
+            cache.take_workspace_images().pop().unwrap(),
+            terminal.backend().buffer().clone(),
+        )
+    };
+    let (first, before) = draw(&model);
+    model.picture_zoom.as_mut().unwrap().pan(center, [2, 1]);
+    let (panned, after) = draw(&model);
+    assert_eq!(panned.image_id, first.image_id);
+    assert_eq!(panned.area, first.area);
+    assert!(panned.source[0] > first.source[0] && panned.source[1] > first.source[1]);
+    let (x, y) = (layout.canvas.x, layout.canvas.y);
+    assert_ne!(before[(x, y)], after[(x, y)]);
+    assert_eq!(before[(x + 2, y + 1)], after[(x, y)]);
+}
+
+#[test]
 fn transparent_picture_uses_the_same_canvas_color_in_native_and_text_previews() {
     let mut encoded = std::io::Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(

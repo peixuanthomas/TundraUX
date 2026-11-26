@@ -54,7 +54,7 @@ The editor handles user-visible characters as graphemes, using save snapshots ti
 
 Opening a text file counts its line endings once and measures terminal widths directly from the text chunks. When the editor imports rich text, it indexes source lines once for all paragraphs, tables, and code blocks. Office previews use a single rich-text projection for the first frame and its word count.
 
-The tall PNG decoder writes each sampled scanline into RGBA strips of up to 512 display pixels in height. The preview applies image orientation, supports interlacing and the first animation frame, and scales very large inputs to keep up to 32 megapixels of preview data.
+The tall PNG decoder writes each sampled scanline into RGBA strips of up to 512 display pixels in height. The preview applies image orientation, supports interlacing and the first animation frame, and scales very large inputs to keep up to 32 megapixels of preview data. Enlarged color-block previews sample the prepared RGBA pixels directly.
 
 Office tables use the rich editor's table model. Word cell paragraphs and explicit line breaks display on separate lines, and nested table text stays inside its containing cell. Superscript and subscript digits and common operators use Unicode glyphs. Other text in superscript or subscript runs is displayed on the baseline.
 

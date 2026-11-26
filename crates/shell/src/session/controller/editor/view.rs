@@ -303,6 +303,24 @@ impl ShellSession {
                 }
             ),
         ));
+        if state.mode == app::editor::EditorMode::Rich
+            && let Some(zoom) = self.pages.editor.editor_picture_zoom
+        {
+            model.picture_zoom = Some(zoom);
+            model.status_actions.splice(
+                ..0,
+                [
+                    (
+                        ui::EditorMenuAction::ZoomOut,
+                        i18n::tr!("ui-editor-preview-zoom-out"),
+                    ),
+                    (
+                        ui::EditorMenuAction::ZoomIn,
+                        i18n::tr!("ui-editor-preview-image-zoom", percent = zoom.percent()),
+                    ),
+                ],
+            );
+        }
         model.settings = self.editor_settings_view_model();
         let has_selection = state.has_selection();
         model.quick_menu = self
@@ -344,10 +362,13 @@ impl ShellSession {
         model.line_ending = editor_line_ending_label(state.document.metadata);
         model.image_protocol = ui::EditorImageProtocolStatus::Unsupported;
         model.text_sizing_protocol = self.terminal_text_sizing_support;
-        model.status_message = if matches!(
-            model.read_only_layout,
-            Some(ui::EditorReadOnlyLayoutState::Preparing)
-        ) {
+        model.status_message = if !model
+            .picture_zoom
+            .is_some_and(ui::EditorPreviewZoom::is_zoomed)
+            && matches!(
+                model.read_only_layout,
+                Some(ui::EditorReadOnlyLayoutState::Preparing)
+            ) {
             Some(i18n::tr!("shell-loading-document"))
         } else {
             self.pages

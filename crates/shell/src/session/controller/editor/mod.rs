@@ -2,6 +2,7 @@ mod files;
 mod input;
 mod menus;
 pub(in crate::session) mod pdf;
+mod picture;
 mod preview_layout;
 mod recovery;
 mod search_bar;
@@ -97,6 +98,7 @@ impl ShellSession {
         self.pages.editor.editor_preview_request = None;
         self.pages.editor.editor_preview_task.cancel();
         self.pages.editor.editor_pdf = None;
+        self.pages.editor.editor_picture_zoom = None;
         self.pages.editor.editor_read_only_layout.clear();
         self.pages.editor.editor_document_generation = self
             .pages

@@ -41,7 +41,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `ui-launcher.ftl` | Launcher search, result and organize controls. Built-in search uses the active language pack’s app names and descriptions. |
 | `ui-home.ftl` | Home shortcut actions and icon editing |
 | `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |
-| `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, Tab focus navigation, PDF preview shortcuts, and scrolling tall images in Editor |
+| `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, Tab focus navigation, and shortcuts for PDF and image previews |
 | `management-common.ftl` | Persistent expert areas on management pages |
 | `management.ftl` | Management prompts, package and command choices for adding an installed program to Launcher, and the AutoAdmin dialog title |
 | `app-explorer.ftl` | Archive creation and extraction, password retries, progress, and entry errors |

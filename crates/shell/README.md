@@ -115,6 +115,8 @@ If a file fails to load in a newly launched Editor window, the window shows the 
 
 For a tall standalone image, Up and Down scroll one row, Page Up and Page Down move one screen with a row of overlap, and Home and End jump to either end. The scrollbar and mouse wheel use the same viewport.
 
+Standalone images have per-window zoom. At higher zoom levels the arrow keys, mouse wheel and scrollbars move within the enlarged image. Zooming back to 100% restores the original scroll position.
+
 The file reader checks size and reports byte progress from the same open operation. Rich documents prepare their first display blocks and word count together in the load worker.
 
 In the source editor, Page Up and Page Down reuse the current window geometry for every cursor step in the page. Wrapped lines and keyboard selections follow the same path as the arrow keys.

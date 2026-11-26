@@ -1648,6 +1648,30 @@ fn explorer_scrolls_a_long_png_to_its_last_pixels() {
     state.apply_input_with_platform(InputEvent::mouse_drag(PointerButton::Left, end), &platform);
     state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, end), &platform);
     assert_eq!(current_editor_layout(&state).visible_start, last);
+
+    let zoom_in = current_editor_layout(&state)
+        .status_items
+        .into_iter()
+        .find(|item| item.action == ui::EditorMenuAction::ZoomIn)
+        .unwrap()
+        .area;
+    let point = (zoom_in.x, zoom_in.y);
+    state.apply_input_with_platform(
+        InputEvent::mouse_down(PointerButton::Left, point),
+        &platform,
+    );
+    assert!(current_editor_layout(&state).picture_window.is_none());
+    state.apply_input_with_platform(InputEvent::mouse_up(PointerButton::Left, point), &platform);
+    let center = current_editor_layout(&state).picture_window.unwrap();
+    assert!(center.limit[1] > 2);
+    assert_eq!(center.offset[1], center.limit[1] / 2);
+    state.apply_input_with_platform(InputEvent::key(InputKey::Up), &platform);
+    assert_eq!(
+        current_editor_layout(&state).visible_start,
+        center.offset[1] as usize - 1
+    );
+    state.apply_input_with_platform(InputEvent::key(InputKey::Char('-')), &platform);
+    assert_eq!(current_editor_layout(&state).visible_start, last);
     assert_eq!(fs::read(path).unwrap(), original);
 }
 

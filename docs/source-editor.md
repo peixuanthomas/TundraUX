@@ -19,6 +19,8 @@ Embedded pictures and standalone images are decoded in the background when the f
 
 Tall PNGs open at a readable width. Scroll with the mouse wheel, the scrollbar, or the Up and Down keys. Page Up and Page Down move one screen. Home jumps to the top and End to the bottom.
 
+For a standalone image, use **Zoom in** and **Zoom out** in the footer or press `+` and `-`. Zoom starts at the center of the image. Use the arrow keys to move around the enlarged image, including on terminals that draw color blocks.
+
 Markdown, CSV, TSV, HTML, XML and SVG open as editable source. RTF and OpenDocument (`.odt`, `.ods`, `.odp` and their templates) use different document structures. They are candidates for separate readers, alongside WPS native formats (`.wps`, `.et`, `.dps`), iWork (`.pages`, `.numbers`, `.key`), EPUB and XPS. The rich preview currently supports the Office families listed above. [Microsoft’s file format reference](https://learn.microsoft.com/en-us/office/compatibility/office-file-format-reference)
 
 ## PDF preview

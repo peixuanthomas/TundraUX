@@ -119,6 +119,9 @@ impl ShellSession {
             }
             return;
         }
+        if self.handle_editor_picture_key(&key) {
+            return;
+        }
         if key.key == InputKey::F(8) && !key.has_non_shift_modifier() {
             if !repeated {
                 self.toggle_editor_vim();
@@ -222,10 +225,20 @@ impl ShellSession {
                 _ => None,
             };
             if let Some(top_line) = top {
-                let mut viewport = state.viewport;
-                viewport.top_line = top_line;
-                self.app
-                    .dispatch_at(app::AppCommand::SetEditorViewport(viewport), received_at);
+                if let Some(window) = layout.picture_window {
+                    let offset = [window.offset[0], top_line as u32];
+                    self.pages
+                        .editor
+                        .editor_picture_zoom
+                        .as_mut()
+                        .unwrap()
+                        .pan_to(window, offset);
+                } else {
+                    let mut viewport = state.viewport;
+                    viewport.top_line = top_line;
+                    self.app
+                        .dispatch_at(app::AppCommand::SetEditorViewport(viewport), received_at);
+                }
                 return;
             }
         }
@@ -649,6 +662,15 @@ impl ShellSession {
                 ..
             } => {
                 self.pages.editor.editor_quick_menu_anchor = None;
+                let delta = match direction {
+                    ScrollDirection::Up => [0, -3],
+                    ScrollDirection::Down => [0, 3],
+                    ScrollDirection::Left => [-4, 0],
+                    ScrollDirection::Right => [4, 0],
+                };
+                if self.pan_editor_picture(delta) {
+                    return;
+                }
                 if let Some(state) = self.app.editor_state() {
                     let mut viewport = state.viewport;
                     let max_top = if state.is_scrollable_picture() {
@@ -1295,7 +1317,17 @@ impl ShellSession {
                 )
             }
         };
-        if let Some(mut viewport) = self.app.editor_state().map(|state| state.viewport) {
+        if let Some(window) = layout.picture_window {
+            let mut offset = window.offset;
+            let index = usize::from(matches!(axis, ScrollbarAxis::Vertical));
+            offset[index] = window_start as u32;
+            self.pages
+                .editor
+                .editor_picture_zoom
+                .as_mut()
+                .unwrap()
+                .pan_to(window, offset);
+        } else if let Some(mut viewport) = self.app.editor_state().map(|state| state.viewport) {
             match axis {
                 ScrollbarAxis::Vertical => viewport.top_line = window_start,
                 ScrollbarAxis::Horizontal => viewport.left_column = window_start,

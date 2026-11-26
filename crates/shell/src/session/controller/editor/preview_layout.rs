@@ -52,6 +52,11 @@ impl ShellSession {
         let cache = self.pages.editor.editor_rich_render_cache.as_ref()?;
         if state.access() != app::editor::EditorAccess::ReadOnly
             || state.mode != app::editor::EditorMode::Rich
+            || self
+                .pages
+                .editor
+                .editor_picture_zoom
+                .is_some_and(ui::EditorPreviewZoom::is_zoomed)
             || cache.revision != state.revision()
             || !cache.is_large(state)
         {

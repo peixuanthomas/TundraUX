@@ -99,6 +99,7 @@ ui-editor-pdf-rotate = Rotate
 ui-editor-preview-zoom-out = Zoom out
 ui-editor-preview-zoom-in = Zoom in
 ui-editor-preview-zoom-percent = { $percent }%
+ui-editor-preview-image-zoom = Zoom in ({ $percent }%)
 ui-editor-pdf-position = Page { $page } of { $total }
 ui-editor-pdf-rendering = Rendering page…
 

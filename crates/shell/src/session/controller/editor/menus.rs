@@ -82,6 +82,10 @@ impl ShellSession {
                 self.toggle_editor_wrap();
                 return;
             }
+            Action::ZoomIn | Action::ZoomOut => {
+                self.change_editor_picture_zoom(action == Action::ZoomIn);
+                return;
+            }
             Action::FormatJson => Command::FormatJson,
             Action::Toolbar(action) => {
                 self.activate_editor_toolbar(action, platform);

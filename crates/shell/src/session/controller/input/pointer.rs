@@ -245,10 +245,25 @@ impl ShellSession {
             .or_else(|| self.explorer_action_button_at(point))
             .or_else(|| self.explorer_save_button_at(point))
             .or_else(|| {
-                if self.pages.editor.editor_pdf.is_some()
+                if (self.pages.editor.editor_pdf.is_some()
+                    || self.pages.editor.editor_picture_zoom.is_some())
                     && self.hit_map.target_at(point) == Some(ShellComponent::Editor)
                 {
-                    self.editor_current_layout().pdf?.button_at(point)
+                    let layout = self.editor_current_layout();
+                    if let Some(pdf) = layout.pdf {
+                        return pdf.button_at(point);
+                    }
+                    let item = layout.status_items.iter().find(|item| {
+                        matches!(
+                            item.action,
+                            ui::EditorMenuAction::ZoomIn | ui::EditorMenuAction::ZoomOut
+                        ) && rect_contains(item.area, point)
+                    })?;
+                    Some(ui::components::ButtonRegion {
+                        id: format!("editor.status.{:?}", item.action).into(),
+                        disabled: !item.enabled,
+                        area: item.area,
+                    })
                 } else {
                     None
                 }

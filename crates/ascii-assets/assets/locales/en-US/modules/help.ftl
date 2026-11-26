@@ -111,6 +111,7 @@ ui-help-editor-vim = Toggle Vim mode
 ui-help-editor-focus = Switch focus
 ui-help-editor-open-preview = Open text, an image, PDF, or Office document. Embedded pictures are prepared when the document opens.
 ui-help-editor-scroll-picture = Scroll a tall image. Home and End jump to the top and bottom. You can also use the mouse wheel.
+ui-help-editor-zoom-picture = Zoom a standalone image in or out.
 ui-help-editor-pan-preview = Move around the magnified preview.
 ui-help-pdf-rotate = Rotate the page 90° clockwise.
 ui-help-pdf-next = Next page. Nearby pages are prepared in the background.

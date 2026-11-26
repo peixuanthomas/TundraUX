@@ -191,19 +191,23 @@ impl PreviewImage {
 
     /// Samples the prepared thumbnail at the center of an output grid cell.
     pub fn sample(&self, x: u32, y: u32, columns: u32, half_rows: u32) -> [u8; 4] {
-        if columns == 0 || half_rows == 0 {
-            return [0; 4];
-        }
         let (width, height, rgba) = self
             .thumbnail
             .as_ref()
             .map_or((self.width, self.height, &self.rgba), |thumbnail| {
                 (thumbnail.width, thumbnail.height, &thumbnail.rgba)
             });
-        let x = sample_axis(x, columns, width);
-        let y = sample_axis(y, half_rows, height);
-        let start = (y * width as usize + x) * 4;
-        rgba[start..start + 4].try_into().expect("RGBA pixel")
+        sample_rgba(rgba, [width, height], [x, y], [columns, half_rows])
+    }
+
+    /// Samples the original preview pixels for a magnified region.
+    pub fn sample_full(&self, x: u32, y: u32, columns: u32, half_rows: u32) -> [u8; 4] {
+        sample_rgba(
+            &self.rgba,
+            [self.width, self.height],
+            [x, y],
+            [columns, half_rows],
+        )
     }
 
     pub(super) fn byte_len(&self) -> usize {
@@ -211,6 +215,21 @@ impl PreviewImage {
             + self.thumbnail.as_ref().map_or(0, |image| image.rgba.len())
             + if self.is_opaque() { 0 } else { self.rgba.len() }
     }
+}
+
+fn sample_rgba(
+    rgba: &[u8],
+    [width, height]: [u32; 2],
+    [x, y]: [u32; 2],
+    [columns, half_rows]: [u32; 2],
+) -> [u8; 4] {
+    if columns == 0 || half_rows == 0 {
+        return [0; 4];
+    }
+    let x = sample_axis(x, columns, width);
+    let y = sample_axis(y, half_rows, height);
+    let start = (y * width as usize + x) * 4;
+    rgba[start..start + 4].try_into().expect("RGBA pixel")
 }
 
 fn limit_decoder(decoder: &mut impl ImageDecoder, mut limits: Limits) -> Result<(), ImageError> {
