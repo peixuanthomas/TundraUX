@@ -802,7 +802,11 @@ impl ScreenCompositor {
         .min();
         let animation_running = self.next_redraw_in.is_some() || prepared.rainbow_running();
         self.snapshot = capture.map(|capture| {
-            let mut snapshot = capture.finish(frame.buffer_mut());
+            let mut snapshot = if matches!(state.window_owner, window_launch::WindowOwner::App(_)) {
+                capture.finish_controls()
+            } else {
+                capture.finish(frame.buffer_mut())
+            };
             snapshot.animation_running = animation_running
                 || workspace
                     .as_ref()

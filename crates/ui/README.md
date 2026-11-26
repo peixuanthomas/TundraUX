@@ -181,7 +181,7 @@ When external control is enabled, `automation::FrameCapture` collects the contro
 
 1. Shell starts the frame with `begin` and marks pages and overlays with `set_group`.
 2. Controls record their IDs, names, regions, focus, selection, disabled status, and sensitive status using the actual layout.
-3. `finish` reads the final Buffer and adds visible text not covered by controls.
+3. AppHosts capture the control hierarchy and sensitive rectangles with their pane cells. Shell reads the visible text once from the final composed buffer when it exports the snapshot.
 
 Password regions are consistently masked in both controls and full-screen text; child terminals export parsed visible text. Capture only describes the screen; application operations still run through Shell's normal input flow.
 

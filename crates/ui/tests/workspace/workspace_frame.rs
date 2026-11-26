@@ -57,31 +57,27 @@ fn frame_dto_keeps_pane_snapshot_ids_and_password_masks() {
     let mut source = Buffer::empty(area);
     source.set_string(0, 1, "secret", Style::default());
     source.set_string(0, 2, "Open", Style::default());
-    let mut password = automation::node(
-        "page/password",
-        "textbox",
-        "Password",
-        Rect::new(0, 1, 6, 1),
-    );
+    let capture = automation::FrameCapture::begin(area, "Editor");
+    capture.set_group("page", "page", area, false);
+    let mut password = automation::node("password", "textbox", "Password", Rect::new(0, 1, 6, 1));
     password.sensitive = true;
-    password.parent = Some("page".into());
-    password.text = "secret".into();
-    let mut button = automation::node("modal/open", "button", "Open", Rect::new(0, 2, 4, 1));
+    automation::record(password);
+    capture.set_group("modal", "dialog", area, false);
+    let mut button = automation::node("open", "button", "Open", Rect::new(0, 2, 4, 1));
     button.focused = true;
-    button.parent = Some("modal".into());
     button.actions.push("click".into());
+    automation::record(button);
+    capture.set_group("chrome", "toolbar", area, false);
+    automation::record(automation::node(
+        "back",
+        "button",
+        "Back",
+        Rect::new(0, 1, 4, 1),
+    ));
+    let controls = capture.finish_controls();
+    assert!(controls.lines.is_empty());
     let mut frame = capture_workspace_frame(LayoutGeneration(9), &source, area, None);
-    capture_workspace_controls(
-        &mut frame,
-        area,
-        &[
-            automation::node("page", "page", "", area),
-            password,
-            automation::node("modal", "dialog", "", area),
-            button,
-            automation::node("chrome/back", "button", "Back", Rect::new(0, 0, 4, 1)),
-        ],
-    );
+    capture_workspace_controls(&mut frame, area, &controls.nodes);
     assert_eq!(frame.masks.len(), 1);
     assert_eq!(frame.cells[0].symbol, "s");
     assert!(
@@ -120,6 +116,7 @@ fn frame_dto_keeps_pane_snapshot_ids_and_password_masks() {
         .find(|node| node.id == "modal/open")
         .unwrap();
     assert_eq!(open.parent.as_deref(), Some("modal"));
+    assert_eq!(open.text, "Open");
     assert!(open.actionable && open.focused);
     let inactive = snapshot
         .nodes

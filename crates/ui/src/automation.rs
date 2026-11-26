@@ -73,32 +73,44 @@ impl FrameCapture {
 
     /// Uses the final painted buffer. The host supplies session and frame numbers.
     pub fn finish(self, buffer: &Buffer) -> Snapshot {
+        self.finish_capture(Some(buffer))
+    }
+
+    /// AppHost sends control geometry with its cells. Shell reads text from the composed frame.
+    pub fn finish_controls(self) -> Snapshot {
+        self.finish_capture(None)
+    }
+
+    fn finish_capture(self, buffer: Option<&Buffer>) -> Snapshot {
         let mut capture = CAPTURE
             .with_borrow_mut(Option::take)
             .expect("active frame capture");
-        let mut sensitive = capture.masks;
-        sensitive.extend(
-            capture
-                .nodes
-                .iter()
-                .filter(|node| node.sensitive)
-                .map(|node| area(node.rect)),
-        );
-        let lines = buffer_lines(buffer, capture.bounds, &sensitive);
-        let full_text = lines.join("\n");
-        for node in &mut capture.nodes {
-            node.text = if node.sensitive {
-                "••••".into()
-            } else if node.role == "heading" {
-                node.name.clone()
-            } else if area(node.rect) == capture.bounds {
-                full_text.clone()
-            } else {
-                buffer_lines(buffer, area(node.rect), &sensitive).join("\n")
-            };
-        }
         attach_containers(&mut capture.nodes);
-        capture_visible_text(&mut capture.nodes, buffer, capture.bounds, &sensitive);
+        let lines = buffer.map_or_else(Vec::new, |buffer| {
+            let mut sensitive = capture.masks;
+            sensitive.extend(
+                capture
+                    .nodes
+                    .iter()
+                    .filter(|node| node.sensitive)
+                    .map(|node| area(node.rect)),
+            );
+            let lines = buffer_lines(buffer, capture.bounds, &sensitive);
+            let full_text = lines.join("\n");
+            for node in &mut capture.nodes {
+                node.text = if node.sensitive {
+                    "••••".into()
+                } else if node.role == "heading" {
+                    node.name.clone()
+                } else if area(node.rect) == capture.bounds {
+                    full_text.clone()
+                } else {
+                    buffer_lines(buffer, area(node.rect), &sensitive).join("\n")
+                };
+            }
+            capture_visible_text(&mut capture.nodes, buffer, capture.bounds, &sensitive);
+            lines
+        });
         Snapshot {
             session: String::new(),
             number: 0,
