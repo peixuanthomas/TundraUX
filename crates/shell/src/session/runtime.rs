@@ -988,7 +988,10 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             }
             let mut background_changed = false;
             if let Some(windows) = &mut workspace {
-                if windows.poll(&mut state)? {
+                let (workspace_changed, app_input_ready) = windows.poll(&mut state)?;
+                if app_input_ready {
+                    redraw.request_input_redraw();
+                } else if workspace_changed {
                     redraw.request_redraw();
                 }
                 if windows.reset_requested() {
@@ -1470,10 +1473,9 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             };
             let terminal_event_received = !terminal_events.is_empty();
             if terminal_event_received {
-                redraw.request_input_redraw();
                 for terminal_event in terminal_events {
-                    let identity_before_input = RedrawIdentity::from_session(&state);
                     if let event::Event::Resize(width, height) = &terminal_event {
+                        redraw.request_input_redraw();
                         control.invalidate();
                         compositor.cancel_for_bounds_change();
                         state.details_motion = None;
@@ -1493,6 +1495,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                             .validate(state.terminal_size())
                             .is_err()
                     {
+                        redraw.request_input_redraw();
                         continue;
                     }
                     let received_at = Instant::now();
@@ -1504,22 +1507,30 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                     let input = crossterm_event_to_input(terminal_event);
                     if let Some(windows) = workspace.as_mut()
                         && !state.screen_saver_active()
-                        && windows.input(&input, &mut state)?
                     {
-                        let (rejected, notice) = windows.take_input_rejection();
-                        if rejected && has_external_input {
-                            control.reject_busy();
+                        let same_pane_hover = windows.is_same_pane_hover(&input);
+                        if windows.input(&input, &mut state)? {
+                            let (rejected, notice) = windows.take_input_rejection();
+                            if rejected && has_external_input {
+                                control.reject_busy();
+                            }
+                            if notice {
+                                state.notify_alert_with_tone(
+                                    i18n::msg!("workspace-input-busy"),
+                                    ui::NotificationTone::Warning,
+                                );
+                            }
+                            state.consume_screen_saver_input(&input, received_at);
+                            // Only the AppHost can paint changed content for an in-pane hover.
+                            if !same_pane_hover || notice || has_external_input {
+                                redraw.request_input_redraw();
+                                action = Some(ShellAction::Redraw);
+                            }
+                            continue;
                         }
-                        if notice {
-                            state.notify_alert_with_tone(
-                                i18n::msg!("workspace-input-busy"),
-                                ui::NotificationTone::Warning,
-                            );
-                        }
-                        state.consume_screen_saver_input(&input, received_at);
-                        action = Some(ShellAction::Redraw);
-                        continue;
                     }
+                    redraw.request_input_redraw();
+                    let identity_before_input = RedrawIdentity::from_session(&state);
                     if matches!(input, InputEvent::FocusGained | InputEvent::FocusLost) {
                         let focused = matches!(input, InputEvent::FocusGained);
                         command_line_hosts.observe_window_focus(focused);
@@ -1899,8 +1910,11 @@ pub(super) fn synchronize_motion_hit_map_after_input(
     if identity_before_input == identity_after_input {
         return;
     }
+    let hit_map_changed = identity_after_input.hit_map_changed(&identity_before_input);
     redraw.observe(now, identity_after_input, reduced_motion_enabled(state));
-    state.refresh_hit_map_with_motion(redraw.transitions(now));
+    if hit_map_changed {
+        state.refresh_hit_map_with_motion(redraw.transitions(now));
+    }
 }
 
 pub(super) fn session_has_background_work(state: &ShellSession) -> bool {

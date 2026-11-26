@@ -141,6 +141,30 @@ fn app_frame(workspace: &Workspace, id: SessionId, label: &str) -> WindowFrame {
 }
 
 #[test]
+fn only_hover_within_the_current_front_pane_skips_shell_redraw() {
+    let (mut workspace, id) = workspace(120, 36);
+    let pane = &workspace.layout.panes[0];
+    let inside = (pane.content.x, pane.content.y);
+    let next = (inside.0 + 1, inside.1);
+    let outside = (pane.area.x, pane.area.y);
+    let frame = Arc::new(app_frame(&workspace, id, "current frame"));
+    workspace.windows.get_mut(&id).unwrap().presented = Some(frame);
+
+    let move_inside = InputEvent::mouse_moved(next);
+    assert!(!workspace.is_same_pane_hover(&move_inside));
+    workspace.last_pointer = Some(inside);
+    assert!(workspace.is_same_pane_hover(&move_inside));
+    assert!(!workspace.is_same_pane_hover(&InputEvent::mouse_moved(outside)));
+    assert!(!workspace.is_same_pane_hover(&InputEvent::mouse_down(PointerButton::Left, next)));
+
+    workspace.split_window = Some(id);
+    assert!(!workspace.is_same_pane_hover(&move_inside));
+    workspace.split_window = None;
+    workspace.invalidate_layout();
+    assert!(!workspace.is_same_pane_hover(&move_inside));
+}
+
+#[test]
 fn workspace_back_follows_the_focused_pane_and_pending_split_menu() {
     let (mut workspace, first) = workspace(240, 40);
     let second = SessionId(2);

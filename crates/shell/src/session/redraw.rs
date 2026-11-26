@@ -37,6 +37,14 @@ impl RedrawIdentity {
             overlay,
         }
     }
+
+    pub(super) fn hit_map_changed(&self, previous: &Self) -> bool {
+        self.language_generation != previous.language_generation
+            || self.screen != previous.screen
+            || self.focus != previous.focus
+            || self.screen_saver_active != previous.screen_saver_active
+            || self.overlay != previous.overlay
+    }
 }
 
 #[derive(Debug)]

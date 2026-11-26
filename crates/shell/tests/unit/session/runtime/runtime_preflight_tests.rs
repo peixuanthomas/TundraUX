@@ -377,6 +377,29 @@ fn idle_time_sync_wait_has_no_periodic_wakeup() {
 }
 
 #[test]
+fn keyboard_to_hover_updates_feedback_without_rebuilding_hit_regions() {
+    let mut state = ShellSession::new_for_home_mode(
+        ShellLaunchConfig::default(),
+        (120, 36),
+        ShellHomeMode::User,
+    );
+    let now = Instant::now();
+    let identity_before = RedrawIdentity::from_session(&state);
+    let mut redraw = RedrawScheduler::new(now, identity_before.clone(), false);
+    redraw.did_draw(now);
+    let generation = state.hit_map_generation();
+
+    assert!(state.interaction.keyboard_focus_visible());
+    let point = (20, 10);
+    state.update_button_input_mode(&InputEvent::mouse_moved(point));
+    synchronize_motion_hit_map_after_input(&mut state, &mut redraw, identity_before, now);
+
+    assert_eq!(state.interaction.hover_position(), Some(point));
+    assert!(redraw.is_due(now));
+    assert_eq!(state.hit_map_generation(), generation);
+}
+
+#[test]
 fn batched_input_installs_settled_hit_map_before_the_next_event() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),

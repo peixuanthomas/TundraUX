@@ -175,6 +175,8 @@ Terminal, Vim, and script adapters report changes from output, process errors, s
 
 Shell and AppHost install the shared platform event notifier. Background task results, progress, and PTY output wake their event loops after publication; the notifier does not advance watchdog business progress.
 
+When the pointer moves within the focused pane, Shell presents the AppHost frame that processed the movement as soon as it arrives. Moving between window controls still updates Shell immediately.
+
 Launcher confirmations use the current shared layout to capture button presses and releases before a redraw. Their search field and list remain covered. Explorer popup wheels move the popup selection, and right clicks retain the active popup without changing the covered file list.
 
 See [UI requirements](../../docs/UI-requirements.md) for shared buttons, forms, animations, and layouts. See [Editor and script workspace](../../docs/source-editor.md) for editor operations and [List selection](../../docs/list-selection.md) for page multi-selection.

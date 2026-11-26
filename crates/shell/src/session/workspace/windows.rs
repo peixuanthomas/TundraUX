@@ -5,8 +5,12 @@ use crate::process_host::transport::{
 use std::sync::atomic::{AtomicU64, Ordering};
 
 impl Workspace {
-    pub(in crate::session) fn poll(&mut self, state: &mut ShellSession) -> io::Result<bool> {
+    pub(in crate::session) fn poll(
+        &mut self,
+        state: &mut ShellSession,
+    ) -> io::Result<(bool, bool)> {
         let mut redraw = self.placeholder_redraw_due(Instant::now());
+        let mut input_redraw = false;
         let connection = WorkerConnection::current().expect("managed workspace");
         connection.progress()?;
         while let Some(message) = connection.try_recv()? {
@@ -134,7 +138,22 @@ impl Workspace {
             }
         }
         for (id, message) in received {
-            redraw |= self.receive(id, message, state)?;
+            let has_new_input = if let AppToShell::Frame(frame) = &message
+                && self.input_focus == Some(id)
+            {
+                let previous_serial = self
+                    .windows
+                    .get(&id)
+                    .and_then(|window| window.frame.as_ref())
+                    .map_or(0, |previous| previous.processed_input_serial);
+                frame.processed_input_serial > previous_serial
+            } else {
+                false
+            };
+            if self.receive(id, message, state)? {
+                input_redraw |= has_new_input;
+                redraw = true;
+            }
         }
         state
             .notification_history
@@ -199,7 +218,7 @@ impl Workspace {
             }
         }
         state.windows_active = self.active();
-        Ok(redraw)
+        Ok((redraw, input_redraw))
     }
 
     pub(in crate::session) fn launch_pending(

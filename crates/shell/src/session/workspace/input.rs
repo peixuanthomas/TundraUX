@@ -2,6 +2,23 @@ use super::*;
 use crate::session::window_launch::WindowApplication;
 
 impl Workspace {
+    pub(in crate::session) fn is_same_pane_hover(&self, input: &InputEvent) -> bool {
+        let InputEvent::Mouse(mouse) = input else {
+            return false;
+        };
+        if mouse.kind != ui::MouseEventKind::Moved || self.has_overlay() || self.capture.is_some() {
+            return false;
+        }
+        let Some(id) = self.input_focus else {
+            return false;
+        };
+        let target = Some(PointerTarget::Pane(id));
+        self.target(mouse.coordinates()) == target
+            && self
+                .last_pointer
+                .is_some_and(|point| self.target(point) == target)
+    }
+
     pub(in crate::session) fn input(
         &mut self,
         input: &InputEvent,
