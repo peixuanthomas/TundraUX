@@ -423,21 +423,24 @@ impl ShellSession {
                 extend_selection: key.modifiers.shift,
             },
             InputKey::PageUp | InputKey::PageDown => {
-                let capacity = self
-                    .editor_current_layout()
-                    .visible_capacity
-                    .saturating_sub(2)
-                    .max(1);
+                let layout = self.editor_current_layout();
+                let capacity = layout.visible_capacity.saturating_sub(2).max(1);
+                let source_layout = (!self.pages.editor.script.enabled
+                    && self.editor_vim_terminal.is_none()
+                    && layout.mode == app::editor::EditorMode::Source)
+                    .then_some(&layout);
+                let movement = if key.key == InputKey::PageUp {
+                    app::editor::CursorMove::Up
+                } else {
+                    app::editor::CursorMove::Down
+                };
                 for _ in 0..capacity {
-                    self.apply_editor_command(
+                    self.apply_editor_command_with_layout(
                         app::editor::EditorCommand::MoveCursor {
-                            movement: if key.key == InputKey::PageUp {
-                                app::editor::CursorMove::Up
-                            } else {
-                                app::editor::CursorMove::Down
-                            },
+                            movement,
                             extend_selection: key.modifiers.shift,
                         },
+                        source_layout,
                         platform,
                     );
                 }
@@ -1314,3 +1317,7 @@ impl ShellSession {
 #[cfg(test)]
 #[path = "../../../../tests/unit/session/controller/editor/platform_keys.rs"]
 mod platform_keys;
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/session/controller/editor/source_navigation.rs"]
+mod source_navigation;

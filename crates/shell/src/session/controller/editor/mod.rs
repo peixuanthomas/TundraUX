@@ -586,6 +586,15 @@ impl ShellSession {
         command: app::editor::EditorCommand,
         platform: &dyn Platform,
     ) {
+        self.apply_editor_command_with_layout(command, None, platform);
+    }
+
+    fn apply_editor_command_with_layout(
+        &mut self,
+        mut command: app::editor::EditorCommand,
+        source_layout: Option<&ui::EditorLayout>,
+        platform: &dyn Platform,
+    ) {
         if self.pages.editor.editor_config.pending_action.is_some() {
             return;
         }
@@ -628,46 +637,31 @@ impl ShellSession {
                 return;
             }
         }
-        let command = if self.pages.editor.editor_soft_wrap
+        if self.pages.editor.editor_soft_wrap
             && self
                 .app
                 .editor_state()
                 .is_some_and(|s| s.mode == app::editor::EditorMode::Source)
+            && let app::editor::EditorCommand::MoveCursor {
+                movement: movement @ (app::editor::CursorMove::Up | app::editor::CursorMove::Down),
+                extend_selection,
+            } = &command
         {
-            match command {
-                app::editor::EditorCommand::MoveCursor {
-                    movement: app::editor::CursorMove::Up,
-                    extend_selection,
-                } => match self.to_editor_view_model().wrap_layout {
-                    Some(layout) => app::editor::EditorCommand::MoveVisual {
-                        width: layout.width,
-                        down: false,
-                        extend_selection,
-                    },
-                    None => app::editor::EditorCommand::MoveCursor {
-                        movement: app::editor::CursorMove::Up,
-                        extend_selection,
-                    },
-                },
-                app::editor::EditorCommand::MoveCursor {
-                    movement: app::editor::CursorMove::Down,
-                    extend_selection,
-                } => match self.to_editor_view_model().wrap_layout {
-                    Some(layout) => app::editor::EditorCommand::MoveVisual {
-                        width: layout.width,
-                        down: true,
-                        extend_selection,
-                    },
-                    None => app::editor::EditorCommand::MoveCursor {
-                        movement: app::editor::CursorMove::Down,
-                        extend_selection,
-                    },
-                },
-                other => other,
+            let width = match source_layout {
+                Some(layout) => layout.wrap_layout.as_ref().map(|wrap| wrap.width),
+                None => self
+                    .to_editor_view_model()
+                    .wrap_layout
+                    .map(|wrap| wrap.width),
+            };
+            if let Some(width) = width {
+                command = app::editor::EditorCommand::MoveVisual {
+                    width,
+                    down: *movement == app::editor::CursorMove::Down,
+                    extend_selection: *extend_selection,
+                };
             }
-        } else {
-            command
-        };
+        }
         let caret_navigation = matches!(
             &command,
             app::editor::EditorCommand::MoveVisual { .. }
@@ -724,7 +718,7 @@ impl ShellSession {
             self.rebuild_editor_rich_render_cache();
         }
         if caret_navigation || projection_changed {
-            self.reveal_source_caret();
+            self.reveal_source_caret_with_layout(source_layout);
         }
         let effects = self.app.take_editor_effects();
         for effect in effects {
@@ -736,34 +730,45 @@ impl ShellSession {
     /// bypass this hook, so users can inspect another region until their next
     /// keyboard or editing action.
     pub(in crate::session) fn reveal_source_caret(&mut self) {
-        let Some(((cursor_line, cursor_column), mut viewport)) = self
+        self.reveal_source_caret_with_layout(None);
+    }
+
+    fn reveal_source_caret_with_layout(&mut self, source_layout: Option<&ui::EditorLayout>) {
+        let Some(state) = self
             .app
             .editor_state()
             .filter(|state| state.mode == app::editor::EditorMode::Source)
-            .and_then(|state| {
-                state
-                    .source_display_position(state.cursor.byte_offset)
-                    .map(|position| (position, state.viewport))
-            })
         else {
             return;
         };
-        let area = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
-        let editor_area = match self.shell_layout_for(area) {
-            ui::ShellLayout::Compact(compact) => compact,
-            ui::ShellLayout::Full { main, .. } => main,
+        let mut viewport = state.viewport;
+        let fresh_layout;
+        let (layout, top_line, left_column) = if let Some(layout) = source_layout {
+            // Each step advances the viewport, but the canvas geometry stays fixed.
+            let max_start = layout
+                .document_line_count
+                .saturating_sub(layout.visible_capacity);
+            (
+                layout,
+                viewport.top_line.min(max_start),
+                viewport.left_column,
+            )
+        } else {
+            fresh_layout =
+                ui::editor_layout(self.editor_content_rect(), &self.to_editor_view_model());
+            (
+                &fresh_layout,
+                fresh_layout.visible_start,
+                fresh_layout.horizontal_scroll,
+            )
         };
-        let model = self.to_editor_view_model();
-        let layout = ui::editor_layout(self.editor_content_area(editor_area), &model);
-        let (cursor_line, cursor_column) = model
-            .wrap_layout
-            .as_ref()
-            .map_or((cursor_line, cursor_column), |wrapped| {
-                wrapped.position(model.cursor_offset.unwrap_or(0))
-            });
-        if model.soft_wrap {
-            viewport.left_column = 0;
-        }
+        let wrapped = layout.wrap_layout.as_ref();
+        let Some((cursor_line, cursor_column)) = wrapped
+            .map(|wrap| wrap.position(state.cursor.byte_offset))
+            .or_else(|| state.source_display_position(state.cursor.byte_offset))
+        else {
+            return;
+        };
         let visible_width = usize::from(layout.canvas.width);
         let visible_height = layout.visible_capacity;
         if visible_width == 0 || visible_height == 0 {
@@ -772,7 +777,6 @@ impl ShellSession {
 
         // Use the actual rendered origin: layout may clamp a requested scroll
         // offset when opening a log at EOF, deleting lines or growing the terminal.
-        let top_line = layout.visible_start;
         viewport.top_line = if cursor_line < top_line {
             cursor_line
         } else if cursor_line >= top_line.saturating_add(visible_height) {
@@ -780,7 +784,6 @@ impl ShellSession {
         } else {
             top_line
         };
-        let left_column = layout.horizontal_scroll;
         let next_left = if cursor_column < left_column {
             cursor_column
         } else if cursor_column >= left_column.saturating_add(visible_width) {
@@ -790,7 +793,7 @@ impl ShellSession {
         } else {
             left_column
         };
-        viewport.left_column = if model.soft_wrap { 0 } else { next_left };
+        viewport.left_column = if wrapped.is_some() { 0 } else { next_left };
         self.app
             .dispatch_at(app::AppCommand::SetEditorViewport(viewport), Instant::now());
     }
