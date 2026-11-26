@@ -390,8 +390,7 @@ pub(crate) fn write_html_sections<S: std::borrow::Borrow<Section>, W: std::fmt::
     Ok(())
 }
 
-/// Write sections as Markdown, each as soon as it is handed over and dropped
-/// once written; see [`write_html_sections`].
+/// Write sections as Markdown without assembling an entire section first.
 pub(crate) fn write_markdown_sections<
     S: std::borrow::Borrow<Section>,
     W: std::fmt::Write + ?Sized,
@@ -402,17 +401,47 @@ pub(crate) fn write_markdown_sections<
 ) -> std::fmt::Result {
     let _reset = MarkdownOptionsReset;
     MARKDOWN_OPTIONS.with(|o| o.set(options));
-    let mut first = true;
+    let mut first_section = true;
     for section in sections {
-        let md = render_section_markdown(section.borrow());
-        drop(section);
-        if md.is_empty() {
-            continue;
+        let section = section.borrow();
+        let mut first_block = true;
+        let mut write_block = |out: &mut W, block: &str| {
+            if block.is_empty() {
+                return Ok(());
+            }
+            if !std::mem::take(&mut first_block) {
+                out.write_str("\n\n")?;
+            } else if !std::mem::take(&mut first_section) {
+                out.write_str(MARKDOWN_SECTION_SEPARATOR)?;
+            }
+            out.write_str(block)
+        };
+
+        for elem in section_headers(section).flat_map(|hf| &hf.content) {
+            write_block(out, &render_element_markdown(elem))?;
         }
-        if !std::mem::take(&mut first) {
-            out.write_str(MARKDOWN_SECTION_SEPARATOR)?;
+        if let Some(title) = &section.title {
+            if !title.is_empty() && !section_title_is_redundant(section) {
+                write_block(out, &format!("## {title}"))?;
+            }
         }
-        out.write_str(&md)?;
+        for elem in &section.elements {
+            write_block(out, &render_element_markdown(elem))?;
+        }
+        if let Some(notes) = &section.speaker_notes {
+            let body = render_blocks_markdown(notes);
+            if !body.is_empty() {
+                write_block(out, "> **Notes:**")?;
+                // Even blank lines need a quote marker to stay inside the blockquote.
+                for line in body.lines() {
+                    out.write_str("\n> ")?;
+                    out.write_str(line)?;
+                }
+            }
+        }
+        for elem in section_footers(section).flat_map(|hf| &hf.content) {
+            write_block(out, &render_element_markdown(elem))?;
+        }
     }
     Ok(())
 }
@@ -642,69 +671,18 @@ fn render_list_plain(list: &List, indent: usize) -> String {
 // Markdown rendering
 // ---------------------------------------------------------------------------
 
-fn render_section_markdown(section: &Section) -> String {
-    let mut parts = Vec::new();
-    for hf in section_headers(section) {
-        for elem in &hf.content {
-            let text = render_element_markdown(elem);
-            if !text.is_empty() {
-                parts.push(text);
-            }
-        }
-    }
-    if section_title_is_redundant(section) {
-        // See `section_title_is_redundant`.
-    } else if let Some(ref title) = section.title {
-        if !title.is_empty() {
-            parts.push(format!("## {title}"));
-        }
-    }
-    for elem in &section.elements {
-        let text = render_element_markdown(elem);
-        if !text.is_empty() {
-            parts.push(text);
-        }
-    }
-    if let Some(ref notes) = section.speaker_notes {
-        let body = notes
-            .iter()
-            .map(render_element_markdown)
-            .filter(|t| !t.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        if !body.is_empty() {
-            // Every line must start with `>` to stay inside the
-            // blockquote — a bare newline (e.g. between list items)
-            // would otherwise end it partway through the notes.
-            let quoted = body
-                .lines()
-                .map(|l| format!("> {l}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            parts.push(format!("> **Notes:**\n{quoted}"));
-        }
-    }
-    for hf in section_footers(section) {
-        for elem in &hf.content {
-            let text = render_element_markdown(elem);
-            if !text.is_empty() {
-                parts.push(text);
-            }
-        }
-    }
-    parts.join("\n\n")
-}
-
 /// Render a run of block elements the way a section body renders them:
 /// each non-empty block separated by a blank line. For a format's direct
 /// renderer that must lay blocks out exactly as the IR path does.
 pub(crate) fn render_blocks_markdown(elements: &[Element]) -> String {
-    elements
-        .iter()
-        .map(render_element_markdown)
-        .filter(|t| !t.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n")
+    let mut out = String::new();
+    for block in elements.iter().map(render_element_markdown).filter(|b| !b.is_empty()) {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(&block);
+    }
+    out
 }
 
 fn render_element_markdown(element: &Element) -> String {
@@ -999,14 +977,13 @@ fn render_table_markdown(table: &Table) -> String {
 
     let write_row = |cells: &[Option<&TableCell>], out: &mut String| {
         out.push('|');
-        let slots: Box<dyn Iterator<Item = Option<&TableCell>>> = if laid_out {
-            Box::new(keep.iter().map(|&c| cells[c]))
-        } else {
-            Box::new(cells.iter().take(col_count).copied())
-        };
-        for slot in slots {
+        let columns = if laid_out { keep.len() } else { cells.len() };
+        for column in 0..columns {
             out.push(' ');
-            out.push_str(&slot.map(render_cell_markdown).unwrap_or_default());
+            let index = if laid_out { keep[column] } else { column };
+            if let Some(cell) = cells[index] {
+                write_cell_markdown(cell, out);
+            }
             out.push_str(" |");
         }
         out.push('\n');
@@ -1033,37 +1010,30 @@ fn render_table_markdown(table: &Table) -> String {
     result
 }
 
-fn render_cell_markdown(cell: &TableCell) -> String {
-    let text = cell
-        .content
-        .iter()
-        .map(|e| match e {
+fn write_cell_markdown(cell: &TableCell, out: &mut String) {
+    let start = out.len();
+    for elem in &cell.content {
+        let text = match elem {
             Element::Paragraph(p) => render_inline_markdown(&p.content),
-            // A GFM table cannot hold a table: the nested table's own `|`
-            // would become columns of the outer one. It is rendered as usual
-            // (which keeps the renderer's depth bound) and its rows are then
-            // written as lines of this cell.
-            Element::Table(_) => nested_table_as_cell_lines(&render_element_markdown(e)),
+            // A nested table's pipes would become columns of the outer table.
+            Element::Table(_) => nested_table_as_cell_lines(&render_element_markdown(elem)),
             other => render_element_markdown(other),
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    // A cell's paragraphs and its literal pipes must stay inside one GFM row.
-    let mut out = String::with_capacity(text.len());
-    for line in text.split(['\r', '\n']).map(str::trim).filter(|line| !line.is_empty()) {
-        if !out.is_empty() {
-            out.push_str("<br>");
-        }
-        let mut escaped = false;
-        for ch in line.chars() {
-            if ch == '|' && !escaped {
-                out.push('\\');
+        };
+        // A cell's paragraphs and literal pipes must stay inside one GFM row.
+        for line in text.split(['\r', '\n']).map(str::trim).filter(|line| !line.is_empty()) {
+            if out.len() > start {
+                out.push_str("<br>");
             }
-            out.push(ch);
-            escaped = ch == '\\' && !escaped;
+            let mut escaped = false;
+            for ch in line.chars() {
+                if ch == '|' && !escaped {
+                    out.push('\\');
+                }
+                out.push(ch);
+                escaped = ch == '\\' && !escaped;
+            }
         }
     }
-    out
 }
 
 /// The cells of one rendered GFM row (`| a | b |`), split on the unescaped
@@ -1700,6 +1670,45 @@ mod tests {
     }
 
     #[test]
+    fn test_markdown_writes_sections_one_block_at_a_time() {
+        #[derive(Default)]
+        struct BlockSink(String);
+
+        impl std::fmt::Write for BlockSink {
+            fn write_str(&mut self, text: &str) -> std::fmt::Result {
+                if text.len() > 32 {
+                    return Err(std::fmt::Error);
+                }
+                self.0.push_str(text);
+                Ok(())
+            }
+        }
+
+        let sections = [
+            Section::default(),
+            Section {
+                title: Some("Overview".into()),
+                header: Some(HeaderFooter { content: vec![para("Header")] }),
+                elements: vec![para("First paragraph"), para(""), para("Second paragraph")],
+                speaker_notes: Some(vec![para("Note one"), para("Note two")]),
+                footer: Some(HeaderFooter { content: vec![para("Footer")] }),
+                ..Default::default()
+            },
+            Section::default(),
+            Section {
+                elements: vec![para("Last section")],
+                ..Default::default()
+            },
+        ];
+        let mut sink = BlockSink::default();
+        write_markdown_sections(sections, MarkdownOptions::default(), &mut sink).unwrap();
+        assert_eq!(
+            sink.0,
+            "Header\n\n## Overview\n\nFirst paragraph\n\nSecond paragraph\n\n> **Notes:**\n> Note one\n> \n> Note two\n\nFooter\n\n---\n\nLast section"
+        );
+    }
+
+    #[test]
     fn test_markdown_formatting() {
         let ir = simple_ir(vec![Element::Paragraph(Paragraph {
             content: vec![
@@ -1769,10 +1778,9 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert_eq!(
-            render_cell_markdown(&cell),
-            r"路径 C:\\\|D<br>![图\|样本](pictures/0)<br>末段"
-        );
+        let mut markdown = String::new();
+        write_cell_markdown(&cell, &mut markdown);
+        assert_eq!(markdown, r"路径 C:\\\|D<br>![图\|样本](pictures/0)<br>末段");
     }
 
     fn spanning(text: &str, col_span: u32) -> TableCell {

@@ -9,7 +9,9 @@ published to crates.io as `office_oxide-0.1.17.crate` has SHA-256
 TundraUX builds this copy as the local `tundra-office-reader` Rust package.
 It loads worksheet pictures with paired blip tags, reads drawings in XLSB
 worksheets through the shared drawing reader, and returns validated preview
-IR without repeating the conversion. Markdown table cells preserve paragraph
+IR without repeating the conversion. Markdown export writes each block directly
+to the output, and the legacy Word reader matches character styles in document order.
+Markdown table cells preserve paragraph
 breaks and escape pipes in authored content. The upstream license and attribution
 are in [LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE),
 [NOTICE](NOTICE), and [TRADEMARKS.md](TRADEMARKS.md).

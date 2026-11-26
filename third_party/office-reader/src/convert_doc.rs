@@ -1053,8 +1053,9 @@ fn inline_content_for(
 ) -> Vec<InlineContent> {
     let mut out = Vec::new();
     let mut base = 0usize;
+    let mut chp_runs = chp_runs;
     for seg in text.split('\n') {
-        push_segment(seg, base, hyperlinks, chp_runs, &mut out);
+        push_segment(seg, base, hyperlinks, &mut chp_runs, &mut out);
         base += seg.len() + 1; // +1 for the '\n' the split consumed
         out.push(InlineContent::LineBreak);
     }
@@ -1096,7 +1097,7 @@ fn push_segment(
     seg: &str,
     base: usize,
     hyperlinks: &[HyperlinkSpan],
-    chp_runs: &[(std::ops::Range<usize>, ChpProps)],
+    chp_runs: &mut &[(std::ops::Range<usize>, ChpProps)],
     out: &mut Vec<InlineContent>,
 ) {
     if seg.is_empty() {
@@ -1121,8 +1122,8 @@ fn push_segment(
             breakpoints.push(h.range.end);
         }
     }
-    for (r, _) in chp_runs {
-        if r.start > seg_start && r.start < seg_end {
+    for (r, _) in chp_runs.iter().take_while(|(r, _)| r.start < seg_end) {
+        if r.start > seg_start {
             breakpoints.push(r.start);
         }
         if r.end > seg_start && r.end < seg_end {
@@ -1144,9 +1145,13 @@ fn push_segment(
         let hyperlink = hyperlinks
             .iter()
             .find(|h| h.range.start <= a && b <= h.range.end);
+        // The character-property runs are ordered and disjoint, so later spans can skip these.
+        while chp_runs.first().is_some_and(|(r, _)| r.end <= a) {
+            *chp_runs = &chp_runs[1..];
+        }
         let props = chp_runs
-            .iter()
-            .find(|(r, _)| r.start <= a && b <= r.end)
+            .first()
+            .filter(|(r, _)| r.start <= a && b <= r.end)
             .map(|(_, p)| p);
         let mut span = match props {
             Some(p) => styled_span(slice, p),
@@ -1495,6 +1500,37 @@ mod tests {
                 .iter()
                 .any(|s| s.hyperlink.is_none() && s.text.contains("after text")),
             "surrounding plain text must stay unlinked: {spans:?}"
+        );
+    }
+
+    #[test]
+    fn test_character_runs_across_soft_breaks_keep_formatting_and_nested_links() {
+        let links = [
+            HyperlinkSpan { range: 8..11, url: "inner".into() },
+            HyperlinkSpan { range: 3..14, url: "outer".into() },
+        ];
+        let bold = ChpProps { bold: true, ..Default::default() };
+        let italic = ChpProps { italic: true, ..Default::default() };
+        let runs = [(3..11, bold), (11..14, italic)];
+        let expected = |text, bold, italic, link: Option<&str>| {
+            InlineContent::Text(TextSpan {
+                bold,
+                italic,
+                hyperlink: link.map(str::to_owned),
+                ..TextSpan::plain(text)
+            })
+        };
+        assert_eq!(
+            inline_content_for("前甲\n\n乙丙后", &links, &runs),
+            [
+                expected("前", false, false, None),
+                expected("甲", true, false, Some("outer")),
+                InlineContent::LineBreak,
+                InlineContent::LineBreak,
+                expected("乙", true, false, Some("inner")),
+                expected("丙", false, true, Some("outer")),
+                expected("后", false, false, None),
+            ]
         );
     }
 
