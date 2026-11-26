@@ -1193,15 +1193,16 @@ impl ShellSession {
         if self.pages.editor.script.enabled {
             return self.script_layout().editor;
         }
+        ui::editor_layout(self.editor_content_rect(), &self.to_editor_view_model())
+    }
+
+    pub(super) fn editor_content_rect(&self) -> Rect {
         let area = Rect::new(0, 0, self.terminal_size.0, self.terminal_size.1);
         let editor_area = match self.shell_layout_for(area) {
             ui::ShellLayout::Compact(compact) => compact,
             ui::ShellLayout::Full { main, .. } => main,
         };
-        ui::editor_layout(
-            self.editor_content_area(editor_area),
-            &self.to_editor_view_model(),
-        )
+        self.editor_content_area(editor_area)
     }
 
     pub(in crate::session) fn begin_editor_scrollbar_drag(

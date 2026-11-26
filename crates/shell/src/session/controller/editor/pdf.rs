@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
-use app::editor::PdfPreviewDocument;
+use app::editor::{PdfPageImage, PdfPreviewDocument};
 use i18n::LocalizedText;
 use ui::EditorPdfAction::{self, Next, Open, Previous};
 use ui::EditorPdfPageImage;
@@ -21,7 +21,7 @@ mod tests;
 type PageRender = Result<(u64, EditorPdfPageImage), LocalizedText>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct PdfViewport {
+pub(super) struct PdfViewport {
     cells: [u16; 2],
     cell_size: [u16; 2],
 }
@@ -34,8 +34,10 @@ struct RenderBatch {
 
 #[derive(Debug, Default)]
 struct PdfRenderTask {
+    current: Option<usize>,
+    visible: app::background::Latest<PageRender>,
     batch: Option<RenderBatch>,
-    worker: app::background::Latest<()>,
+    prefetch: app::background::Latest<()>,
 }
 
 // Page snapshots must not take over a live worker or steal its results.
@@ -77,10 +79,10 @@ impl EditorPdfPreview {
         }
     }
 
-    pub(super) fn view_model(&self, cell_size: [u16; 2]) -> ui::EditorPdfViewModel {
+    pub(super) fn view_model(&self, viewport: Option<PdfViewport>) -> ui::EditorPdfViewModel {
         let result = self
             .viewport
-            .filter(|viewport| viewport.cell_size == cell_size)
+            .filter(|current| Some(*current) == viewport)
             .and_then(|_| self.cached(self.page));
         ui::EditorPdfViewModel {
             page: self.page,
@@ -182,14 +184,25 @@ impl EditorPdfPreview {
         if changed {
             self.viewport = viewport;
             self.cache.clear();
+            self.task.current = None;
+            self.task.visible.cancel();
             self.task.batch = None;
-            self.task.worker.cancel();
+            self.task.prefetch.cancel();
             self.plan_targets();
         }
         let Some(viewport) = viewport else {
             return changed;
         };
 
+        if let Some(page) = self.task.current {
+            if let Some(result) = self.task.visible.take() {
+                self.task.current = None;
+                changed |= self.record(page, result);
+            } else if !self.task.visible.busy() {
+                self.task.current = None;
+                changed |= self.record(page, Err(page_render_error(page)));
+            }
+        }
         while let Some(batch) = &mut self.task.batch {
             match batch.completed.try_recv() {
                 Ok(result) => {
@@ -202,10 +215,54 @@ impl EditorPdfPreview {
                 Err(TryRecvError::Empty) => break,
             }
         }
-        self.task.worker.take();
-        if let Some(batch) = &self.task.batch
-            && (self.cached(self.page).is_some() || batch.pages.front() == Some(&self.page))
-        {
+        self.task.prefetch.take();
+
+        let page = self.page;
+        if self.cached(page).is_none() {
+            if self.task.current == Some(page) {
+                return changed;
+            }
+            if self
+                .task
+                .batch
+                .as_ref()
+                .is_some_and(|batch| batch.pages.front() == Some(&page))
+            {
+                return changed;
+            }
+            if self.task.batch.is_some() || self.task.prefetch.busy() {
+                if self
+                    .task
+                    .batch
+                    .as_ref()
+                    .is_some_and(|batch| batch.pages.contains(&page))
+                {
+                    self.task.batch = None;
+                    self.task.prefetch.cancel();
+                }
+                // Do not wait for a neighbor or old viewport to finish rasterizing.
+                let document = self.document.clone();
+                let submitted = group.is_some_and(|group| {
+                    self.task
+                        .visible
+                        .submit_in(group, move |cancel| {
+                            let raster =
+                                document.render_page(page, viewport.cells, viewport.cell_size);
+                            if cancel.load(Ordering::Relaxed) {
+                                return Err(page_render_error(page));
+                            }
+                            prepare_page(page, raster)
+                        })
+                        .is_ok()
+                });
+                self.task.current = submitted.then_some(page);
+                if !submitted {
+                    changed |= self.record(page, Err(page_render_error(page)));
+                }
+                return changed;
+            }
+        }
+        if self.task.batch.is_some() {
             return changed;
         }
 
@@ -213,7 +270,7 @@ impl EditorPdfPreview {
             .targets
             .iter()
             .copied()
-            .filter(|page| self.cached(*page).is_none())
+            .filter(|page| self.cached(*page).is_none() && self.task.current != Some(*page))
             .take(RENDER_BATCH_PAGES)
             .collect::<VecDeque<_>>();
         if pages.is_empty() {
@@ -225,7 +282,7 @@ impl EditorPdfPreview {
         let (sender, completed) = mpsc::channel();
         let submitted = group.is_some_and(|group| {
             self.task
-                .worker
+                .prefetch
                 .submit_in(group, move |cancel| {
                     let mut renders = document.render_pages(
                         requested.iter().copied(),
@@ -240,11 +297,7 @@ impl EditorPdfPreview {
                         if cancel.load(Ordering::Acquire) {
                             break;
                         }
-                        let result = raster.and_then(|raster| {
-                            let image = EditorPdfPageImage::prepare(raster)
-                                .ok_or_else(|| page_render_error(page))?;
-                            Ok((super::tasks::next_editor_task_id(), image))
-                        });
+                        let result = prepare_page(page, raster);
                         if cancel.load(Ordering::Acquire) || sender.send(result).is_err() {
                             break;
                         }
@@ -286,9 +339,14 @@ fn page_render_error(page: usize) -> LocalizedText {
     i18n::msg!("editor-pdf-render-error", page = page + 1).into()
 }
 
+fn prepare_page(page: usize, raster: Result<PdfPageImage, LocalizedText>) -> PageRender {
+    let image = EditorPdfPageImage::prepare(raster?).ok_or_else(|| page_render_error(page))?;
+    Ok((super::tasks::next_editor_task_id(), image))
+}
+
 impl ShellSession {
-    fn editor_pdf_render_viewport(&self) -> Option<PdfViewport> {
-        let canvas = self.editor_current_layout().canvas;
+    pub(super) fn editor_pdf_render_viewport(&self) -> Option<PdfViewport> {
+        let canvas = ui::editor_pdf_canvas(self.editor_content_rect());
         (!canvas.is_empty()).then_some(PdfViewport {
             cells: [canvas.width, canvas.height],
             cell_size: self.terminal_image_cell_size,
@@ -307,6 +365,7 @@ impl ShellSession {
             .as_ref()
             .is_some_and(|preview| {
                 preview.viewport != self.editor_pdf_render_viewport()
+                    || preview.task.current.is_some()
                     || preview.task.batch.is_some()
                     || preview
                         .targets

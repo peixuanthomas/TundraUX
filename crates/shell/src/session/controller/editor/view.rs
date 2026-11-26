@@ -65,7 +65,7 @@ impl ShellSession {
             model.read_only = true;
             model.vim_available = false;
             model.cursor = None;
-            model.pdf = Some(pdf.view_model(self.terminal_image_cell_size));
+            model.pdf = Some(pdf.view_model(self.editor_pdf_render_viewport()));
             return model;
         }
         let language_path = self

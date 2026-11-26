@@ -142,6 +142,17 @@ impl EditorPdfLayout {
     }
 }
 
+pub fn editor_pdf_canvas(area: Rect) -> Rect {
+    let header = u16::from(area.height > 0);
+    let footer = u16::from(area.height > 1);
+    Rect::new(
+        area.x,
+        area.y.saturating_add(header),
+        area.width,
+        area.height - header - footer,
+    )
+}
+
 pub(super) fn layout(area: Rect, pdf: &EditorPdfViewModel) -> EditorLayout {
     use EditorPdfAction::{Next, Open, Previous};
 
@@ -160,12 +171,7 @@ pub(super) fn layout(area: Rect, pdf: &EditorPdfViewModel) -> EditorLayout {
         footer,
     );
     let open = Rect::new(area.right() - open_width, area.y, open_width, header);
-    let canvas = Rect::new(
-        area.x,
-        area.y + header,
-        area.width,
-        area.height - header - footer,
-    );
+    let canvas = editor_pdf_canvas(area);
 
     EditorLayout {
         area,
