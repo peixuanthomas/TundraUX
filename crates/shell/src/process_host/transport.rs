@@ -8,7 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::Notify;
 use workspace_protocol::transport::{encode_message, read_payload};
 use workspace_protocol::{
-    AppToShell, ShellToApp, SupervisorToWorker, WindowFrame, WorkerToSupervisor,
+    AppToShell, CellFrameCache, ShellToApp, SupervisorToWorker, WindowFrame, WorkerToSupervisor,
 };
 
 pub(crate) const MAX_MESSAGES: usize = 256;
@@ -303,11 +303,13 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
             watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
                 let result = async {
                     let mut images = HashSet::new();
+                    let mut cells = CellFrameCache::default();
                     loop {
                         let message = send.next().await?;
-                        let (bytes, next_images) = event_loop::codec(move || {
+                        let (bytes, next_images, next_cells) = event_loop::codec(move || {
                             let mut message = message;
                             let next_images = message.frame_mut().map(|frame| {
+                                cells.prepare(frame);
                                 let mut next = HashSet::new();
                                 for image in &mut frame.images {
                                     if !next.insert(image.image_id)
@@ -319,11 +321,12 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
                                 next
                             });
                             let bytes = encode_message(&message, limit)?;
-                            Ok((bytes, next_images.unwrap_or(images)))
+                            Ok((bytes, next_images.unwrap_or(images), cells))
                         })
                         .await?;
                         writer.write_all(&bytes).await?;
                         images = next_images;
+                        cells = next_cells;
                         send.complete();
                     }
                     #[allow(unreachable_code)]
@@ -340,14 +343,15 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
         let read_task = watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
             let result = async {
                 let mut assets = BTreeMap::<u64, Arc<[u8]>>::new();
+                let mut cells = CellFrameCache::default();
                 let mut sequence = 0;
                 loop {
                     let payload = read_payload(&mut reader, limit).await?;
-                    let (mut message, next_assets) = event_loop::codec(move || {
+                    let (mut message, next_assets, next_cells) = event_loop::codec(move || {
                         let mut message: Receive = serde_json::from_slice(&payload)
                             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
                         if let Some(frame) = message.frame_mut() {
-                            frame.validate()?;
+                            cells.restore(frame)?;
                             let mut next = BTreeMap::new();
                             let mut bytes = 0;
                             for image in &mut frame.images {
@@ -378,10 +382,11 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
                             }
                             assets = next;
                         }
-                        Ok((message, assets))
+                        Ok((message, assets, cells))
                     })
                     .await?;
                     assets = next_assets;
+                    cells = next_cells;
                     if let Some(frame) = message.frame() {
                         if frame.sequence <= sequence {
                             continue;

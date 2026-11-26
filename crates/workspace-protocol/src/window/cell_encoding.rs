@@ -5,9 +5,10 @@ use serde::de::{Error, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serializer};
 use std::fmt;
 use std::io::{Read, Write};
+use std::sync::Arc;
 
-const MAX_CELLS: usize = 256 * 1024;
-const MAX_CELL_BYTES: usize = 16 * 1024 * 1024;
+pub(super) const MAX_CELLS: usize = 256 * 1024;
+pub(super) const MAX_CELL_BYTES: usize = 16 * 1024 * 1024;
 
 pub(super) fn serialize<S: Serializer>(cells: &[Cell], serializer: S) -> Result<S::Ok, S::Error> {
     use serde::ser::Error;
@@ -27,7 +28,7 @@ pub(super) fn serialize<S: Serializer>(cells: &[Cell], serializer: S) -> Result<
 
 pub(super) fn deserialize<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<Vec<Cell>, D::Error> {
+) -> Result<Arc<Vec<Cell>>, D::Error> {
     let payload = String::deserialize(deserializer)?;
     if payload.len() > 2 * MAX_CELL_BYTES {
         return Err(D::Error::custom(
@@ -54,7 +55,7 @@ pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         .deserialize_seq(CellVisitor)
         .map_err(D::Error::custom)?;
     decoder.end().map_err(D::Error::custom)?;
-    Ok(cells)
+    Ok(Arc::new(cells))
 }
 
 struct CellVisitor;
@@ -100,7 +101,7 @@ mod tests {
         assert!(error.to_string().contains("too many window cells"));
     }
 
-    fn deserialize_raw(data: &[u8]) -> Result<Vec<Cell>, serde_json::Error> {
+    fn deserialize_raw(data: &[u8]) -> Result<Arc<Vec<Cell>>, serde_json::Error> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
         encoder.write_all(data).unwrap();
         let compressed = STANDARD.encode(encoder.finish().unwrap());

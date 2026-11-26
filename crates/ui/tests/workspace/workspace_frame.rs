@@ -28,7 +28,7 @@ fn frame_cells_translate_and_clip_at_wide_character_boundaries() {
     assert_eq!(frame.cells[0].foreground, WireColor::Indexed(14));
     assert!(frame.cells[1].skip);
     assert!(frame.validate().is_ok());
-    frame.cells[2].foreground = WireColor::Rgb(100, 240, 240);
+    std::sync::Arc::make_mut(&mut frame.cells)[2].foreground = WireColor::Rgb(100, 240, 240);
     let context = RenderContext::from_theme(
         &TundraTheme::default(),
         Default::default(),

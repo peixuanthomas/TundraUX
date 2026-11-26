@@ -186,7 +186,7 @@ fn a_full_input_queue_keeps_fifo_space_for_pointer_cancel_and_close() {
 #[cfg(unix)]
 #[test]
 #[cfg_attr(not(feature = "native-tests"), ignore = "requires a Unix socket")]
-fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {
+fn newer_frame_resolves_cells_and_images_before_coalescing_older_frames() {
     use platform::shell_control::AsyncLocalListener;
     let path = std::env::temp_dir().join(format!(
         "tundra-frame-{}-{}.sock",
@@ -216,7 +216,8 @@ fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {
             ),
         )
     });
-    let mut first = frame(1);
+    let mut first = WindowFrame::new(LayoutGeneration(1), Size::new(106, 16));
+    first.sequence = 1;
     first.startup_timings = Some(AppStartupTimings::default());
     first.images.push(Image {
         image_id: 91,
@@ -245,7 +246,19 @@ fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {
     first.sequence = 2;
     first.layout = LayoutGeneration(2);
     first.startup_timings = None;
-    host.queue_owned(AppToShell::Frame(first)).unwrap();
+    host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
+    wait_until(|| !host.pending_write());
+    first.sequence = 3;
+    let cells = Arc::make_mut(&mut first.cells);
+    cells[31].symbol = "中".into();
+    cells[32].skip = true;
+    host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
+    wait_until(|| !host.pending_write());
+    first.sequence = 4;
+    first.processed_input_serial = 9;
+    first.confirmed_input_fence = 8;
+    Arc::make_mut(&mut first.cells)[106].symbol = "e\u{301}".into();
+    host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
     wait_until(|| {
         shell
             .incoming
@@ -254,12 +267,15 @@ fn newer_layout_frame_resolves_images_from_a_coalesced_older_layout() {
             .unwrap()
             .messages
             .iter()
-            .any(|message| message.frame().is_some_and(|frame| frame.sequence == 2))
+            .any(|message| message.frame().is_some_and(|frame| frame.sequence == 4))
     });
     let messages = shell.poll().unwrap();
     assert_eq!(messages.len(), 1);
     let latest = messages[0].frame().unwrap();
     assert_eq!(latest.layout, LayoutGeneration(2));
+    assert_eq!(latest.cells, first.cells);
+    assert_eq!(latest.processed_input_serial, 9);
+    assert_eq!(latest.confirmed_input_fence, 8);
     assert_eq!(&*latest.images[0].rgba, &[3, 5, 7, 255]);
     assert!(latest.startup_timings.is_some());
     drop(host);

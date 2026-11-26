@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 use workspace_protocol::transport::Framed;
 use workspace_protocol::{
     AppStartupTimings, AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image,
@@ -131,11 +132,12 @@ fn handshake_preserves_full_run_and_worker_identity() {
 #[test]
 fn frame_round_trips_styled_text_cursor_and_pixels() {
     let mut frame = WindowFrame::new(LayoutGeneration(15), MIN_CONTENT_SIZE);
-    frame.cells[0].symbol = "中".into();
-    frame.cells[0].foreground = Color::Rgb(80, 160, 242);
-    frame.cells[0].background = Color::Indexed(8);
-    frame.cells[1].skip = true;
-    frame.cells[2].symbol = "e\u{301}".into();
+    let cells = Arc::make_mut(&mut frame.cells);
+    cells[0].symbol = "中".into();
+    cells[0].foreground = Color::Rgb(80, 160, 242);
+    cells[0].background = Color::Indexed(8);
+    cells[1].skip = true;
+    cells[2].symbol = "e\u{301}".into();
     frame.cursor = Some(Cursor {
         x: 3,
         y: 0,
@@ -215,12 +217,12 @@ fn startup_timings_round_trip_and_are_omitted_from_normal_frames() {
 #[test]
 fn frame_rejects_terminal_control_symbols_and_invalid_geometry() {
     let mut frame = WindowFrame::new(LayoutGeneration(1), Size::new(2, 1));
-    frame.cells[0].symbol = "\x1b[1A".into();
+    Arc::make_mut(&mut frame.cells)[0].symbol = "\x1b[1A".into();
     assert_eq!(
         frame.validate().unwrap_err().kind(),
         io::ErrorKind::InvalidData
     );
-    frame.cells[0].symbol = "a".into();
+    Arc::make_mut(&mut frame.cells)[0].symbol = "a".into();
     frame.cursor = Some(Cursor {
         x: 2,
         y: 0,
@@ -231,7 +233,7 @@ fn frame_rejects_terminal_control_symbols_and_invalid_geometry() {
         io::ErrorKind::InvalidData
     );
     frame.cursor = None;
-    frame.cells.pop();
+    Arc::make_mut(&mut frame.cells).pop();
     assert_eq!(
         frame.validate().unwrap_err().kind(),
         io::ErrorKind::InvalidData
@@ -241,8 +243,8 @@ fn frame_rejects_terminal_control_symbols_and_invalid_geometry() {
 #[test]
 fn repeated_color_cells_compress_before_transport() {
     let mut frame = WindowFrame::new(LayoutGeneration(1), Size::new(120, 34));
-    for (position, cell) in frame.cells.iter_mut().enumerate() {
-        cell.symbol = char::from(b'a' + (position % 26) as u8).into();
+    for (position, cell) in Arc::make_mut(&mut frame.cells).iter_mut().enumerate() {
+        cell.symbol = char::from(b'a' + (position % 26) as u8).to_string().into();
         cell.foreground = Color::Rgb(130, 184, 211);
         cell.background = Color::Rgb(19, 39, 48);
         cell.modifiers = 1;

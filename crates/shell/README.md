@@ -197,6 +197,8 @@ Guardian listeners and connection readers and writers retain watchdog-owned canc
 
 Shell moves queued messages into background writers without cloning their payloads; rejected enqueue attempts return the original message for an ordered retry.
 
+While scrolling, AppHost can reference unchanged spans of the previous frame, including rows that moved. Shell reconstructs the complete pane before drawing it.
+
 Per-window input queues stop admitting new application input when their bounded capacity is full. Shell reports that condition while keeping window management and other windows available; external CLI input receives a retryable `busy` response. Pointer cancellation, input fences, and close messages retain reserved queue capacity.
 
 `tundra-cli logs query --module ux.workspace --format jsonl` shows one `app-startup` event per new AppHost whose first usable frame the Shell accepts. The application ID, workspace run ID, and window session ID identify the sample. Durations in `message_args` are monotonic microseconds.

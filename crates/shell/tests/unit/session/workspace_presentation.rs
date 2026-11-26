@@ -108,10 +108,11 @@ fn app_frame(workspace: &Workspace, id: SessionId, label: &str) -> WindowFrame {
         workspace.generation,
         Size::new(pane.content.width, pane.content.height),
     );
-    for (cell, symbol) in frame.cells.iter_mut().zip(label.chars()) {
-        cell.symbol = symbol.to_string();
+    let cells = Arc::make_mut(&mut frame.cells);
+    for (cell, symbol) in cells.iter_mut().zip(label.chars()) {
+        cell.symbol = symbol.to_string().into();
     }
-    frame.cells.last_mut().unwrap().symbol = "Z".into();
+    cells.last_mut().unwrap().symbol = "Z".into();
     frame.cursor = Some(workspace_protocol::Cursor {
         x: 0,
         y: 0,
@@ -672,7 +673,10 @@ fn resize_retains_only_the_last_presented_complete_frame_and_freezes_its_control
 
     let mut wrong_size = app_frame(&workspace, id, "WRONG");
     wrong_size.size.width -= 1;
-    wrong_size.cells = vec![workspace_protocol::Cell::default(); wrong_size.size.area()];
+    wrong_size.cells = Arc::new(vec![
+        workspace_protocol::Cell::default();
+        wrong_size.size.area()
+    ]);
     assert!(
         !workspace
             .receive(id, AppToShell::Frame(wrong_size), &mut state)

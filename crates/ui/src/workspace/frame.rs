@@ -61,30 +61,9 @@ pub fn capture_workspace_frame(
             }
         }
     }
-    WindowFrame {
-        sequence: 0,
-        processed_input_serial: 0,
-        confirmed_input_fence: 0,
-        layout,
-        size,
-        cells,
-        cursor: cursor.filter(|cursor| cursor.x < size.width && cursor.y < size.height),
-        images: Vec::new(),
-        headings: Vec::new(),
-        controls: Vec::new(),
-        masks: Vec::new(),
-        native_escape: Vec::new(),
-        back_action: None,
-        ctrl_w_passthrough: false,
-        ctrl_q_passthrough: false,
-        modal: false,
-        startup_timings: None,
-        page: String::new(),
-        animation_running: false,
-        keyboard_available: false,
-        status: String::new(),
-        status_report: None,
-    }
+    let mut frame = WindowFrame::with_cells(layout, size, cells);
+    frame.cursor = cursor.filter(|cursor| cursor.x < size.width && cursor.y < size.height);
+    frame
 }
 
 /// Adds visible control metadata and masks to a frame captured from the same content area.

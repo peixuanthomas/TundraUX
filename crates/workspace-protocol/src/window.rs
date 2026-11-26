@@ -1,5 +1,6 @@
 use super::{Hello, LayoutGeneration, NativePath, WorkerId};
 use base64::{Engine, engine::general_purpose::STANDARD};
+use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io;
@@ -7,6 +8,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 mod cell_encoding;
+mod cell_reuse;
+
+pub use cell_reuse::CellFrameCache;
 
 /// Dimensions in terminal cells.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -248,9 +252,11 @@ pub struct WindowFrame {
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_report: Option<u64>,
-    /// Exactly one cell per viewport position, in row-major order.
+    /// A restored frame contains one cell per viewport position in row-major order.
     #[serde(with = "cell_encoding")]
-    pub cells: Vec<Cell>,
+    pub cells: Arc<Vec<Cell>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cell_reuse: Option<cell_reuse::CellReuse>,
     pub cursor: Option<Cursor>,
     pub images: Vec<Image>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -272,6 +278,11 @@ pub struct WindowFrame {
 
 impl WindowFrame {
     pub fn new(layout: LayoutGeneration, size: Size) -> Self {
+        Self::with_cells(layout, size, vec![Cell::default(); size.area()])
+    }
+
+    /// Builds a frame from cells already captured in row-major order.
+    pub fn with_cells(layout: LayoutGeneration, size: Size, cells: Vec<Cell>) -> Self {
         Self {
             sequence: 0,
             processed_input_serial: 0,
@@ -283,7 +294,8 @@ impl WindowFrame {
             keyboard_available: false,
             status: String::new(),
             status_report: None,
-            cells: vec![Cell::default(); size.area()],
+            cells: Arc::new(cells),
+            cell_reuse: None,
             cursor: None,
             images: Vec::new(),
             headings: Vec::new(),
@@ -299,7 +311,7 @@ impl WindowFrame {
     }
 
     pub fn validate(&self) -> io::Result<()> {
-        if self.cells.len() != self.size.area() {
+        if self.cell_reuse.is_some() || self.cells.len() != self.size.area() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid cell count",
@@ -361,10 +373,10 @@ impl WindowFrame {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Cell {
     #[serde(default = "blank", skip_serializing_if = "is_blank")]
-    pub symbol: String,
+    pub symbol: CompactString,
     #[serde(default, skip_serializing_if = "Color::is_reset")]
     pub foreground: Color,
     #[serde(default, skip_serializing_if = "Color::is_reset")]
@@ -390,7 +402,7 @@ impl Default for Cell {
     }
 }
 
-fn blank() -> String {
+fn blank() -> CompactString {
     " ".into()
 }
 
@@ -402,7 +414,7 @@ fn is_zero(modifiers: &u16) -> bool {
     *modifiers == 0
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Color {
     #[default]
