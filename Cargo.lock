@@ -6520,6 +6520,7 @@ dependencies = [
  "geojson",
  "i18n",
  "image",
+ "pic-scale",
  "ratatui",
  "ratatui-image",
  "serde",
@@ -7494,6 +7495,8 @@ name = "workspace-protocol"
 version = "2.0.1"
 dependencies = [
  "base64",
+ "base64-simd",
+ "bytemuck",
  "compact_str",
  "flate2",
  "serde",

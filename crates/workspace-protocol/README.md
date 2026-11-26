@@ -29,6 +29,8 @@ Each message has a four-byte big-endian length and a JSON body. Frame limits are
 
 After the first complete frame, a window can reuse matching spans from the previous frame at their original or scrolled positions. The writer chooses spans after queued frames have been merged. The reader reconstructs each frame before merging the display queue. A new layout or a large change sends complete cells again.
 
+Image pixels use SIMD base64 conversion where available and decode directly into shared storage. An optional preview ID identifies the same editor picture or PDF page across zoom levels. The image ID still identifies the exact pixels.
+
 Window frames report when an editor canvas or native terminal owns Ctrl+W. A separate `ctrl_q_passthrough` flag keeps Ctrl+Q available to Vim while it owns keyboard input. Both flags default to false.
 
 Window frames also carry styled Markdown headings as text and geometry. The receiving Shell can use native text sizing after checking the pane's bounds.

@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 base64 = "0.22"
+base64-simd = "0.8"
+bytemuck = { version = "1.25", features = ["alloc_uninit", "extern_crate_alloc", "zeroable_maybe_uninit"] }
 compact_str = { version = "0.9", features = ["serde"] }
 flate2 = "1"
 serde = { version = "1", features = ["derive", "rc"] }

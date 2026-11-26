@@ -18,6 +18,7 @@ flate2 = "1"
 i18n = { path = "../i18n" }
 geojson = "1.0"
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+pic-scale = { version = "0.7", default-features = false, features = ["neon", "sse", "avx"] }
 ratatui.workspace = true
 ratatui-image.workspace = true
 tachyonfx.workspace = true

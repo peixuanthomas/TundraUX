@@ -51,17 +51,18 @@ fn pdf_prefetch_publishes_first_page_while_the_next_page_is_still_running() {
     preview.plan_targets();
     let (sender, completed) = mpsc::channel();
     preview.task.batch = Some(RenderBatch {
+        viewport,
         pages: [0, 1].into(),
         completed,
     });
 
     sender.send(Ok((1, image.clone()))).unwrap();
-    assert!(preview.poll(Some(viewport), None));
+    assert!(preview.poll(Some(viewport), None, None));
     assert_eq!(preview.view_model(Some(viewport)).image.unwrap().0, 1);
     assert_eq!(preview.task.batch.as_ref().unwrap().pages, [1]);
 
     sender.send(Ok((2, image.clone()))).unwrap();
-    assert!(!preview.poll(Some(viewport), None));
+    assert!(!preview.poll(Some(viewport), None, None));
     assert_eq!(preview.view_model(Some(viewport)).image.unwrap().0, 1);
     preview.turn(Next);
     let (id, cached) = preview.view_model(Some(viewport)).image.unwrap();
@@ -81,9 +82,53 @@ fn pdf_open_starts_with_the_visible_page_in_the_shared_prefetch_batch() {
     };
     let mut preview = EditorPdfPreview::new(blank_document(20));
 
-    assert!(preview.poll(Some(viewport), Some(&group)));
+    assert!(preview.poll(Some(viewport), None, Some(&group)));
     assert!(preview.task.current.is_none());
     assert_eq!(preview.task.batch.as_ref().unwrap().pages, [0, 1, 2]);
+}
+
+#[test]
+fn zoom_adopts_the_inflight_larger_page_without_rendering_it_twice() {
+    let mut preview = EditorPdfPreview::new(blank_document(1));
+    let viewport = PdfViewport {
+        cells: [30, 18],
+        cell_size: [8, 16],
+        quarter_turns: 0,
+    };
+    let next = PdfViewport {
+        cells: [45, 27],
+        ..viewport
+    };
+    let group = super::super::tasks::default_editor_watchdog()
+        .unwrap()
+        .task_group("pdf-zoom-prefetch");
+    preview.viewport = Some(viewport);
+    preview.plan_targets();
+    let first = preview
+        .document
+        .render_page(0, viewport.cells, viewport.cell_size);
+    preview.record(0, prepare_page(0, first));
+    preview.poll(Some(viewport), Some(next), Some(&group));
+    assert_eq!(preview.task.batch.as_ref().unwrap().viewport, next);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while preview.cached_at(next, 0).is_none() {
+        preview.poll(Some(next), None, Some(&group));
+        assert!(preview.task.current.is_none());
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert_eq!(
+        preview
+            .cached_at(next, 0)
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .1
+            .raster
+            .viewport,
+        next.cells
+    );
+    assert!(preview.cached_at(viewport, 0).is_some());
 }
 
 #[test]
@@ -101,13 +146,14 @@ fn pdf_visible_page_does_not_wait_for_unrelated_prefetch() {
     preview.turn(Next);
     let (_prefetch_sender, completed) = mpsc::channel();
     preview.task.batch = Some(RenderBatch {
+        viewport,
         pages: [3].into(),
         completed,
     });
 
     let deadline = Instant::now() + Duration::from_secs(5);
     let image = loop {
-        preview.poll(Some(viewport), Some(&group));
+        preview.poll(Some(viewport), None, Some(&group));
         if let Some((_, image)) = preview.view_model(Some(viewport)).image {
             break image;
         }

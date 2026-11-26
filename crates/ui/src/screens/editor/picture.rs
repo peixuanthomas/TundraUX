@@ -74,7 +74,7 @@ pub(super) fn render(
             if picker.is_some() {
                 native.push(fragment);
             } else {
-                images.capture_opaque_workspace(canvas, frame.area(), &fragment);
+                images.capture_preview(canvas, frame.area(), &fragment, fragment.image_id);
             }
         }
     }

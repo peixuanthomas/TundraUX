@@ -22,10 +22,12 @@ fn preview(
     model.cursor = None;
     model.pdf = Some(EditorPdfViewModel {
         page,
+        page_id: 42,
         total: document.page_count(),
         focus: EditorPdfAction::Open,
         zoom: Default::default(),
         jump: None,
+        image_zoom: None,
         image: Some((
             1,
             EditorPdfPageImage::prepare(

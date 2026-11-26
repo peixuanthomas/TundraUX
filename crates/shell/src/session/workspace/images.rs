@@ -11,7 +11,7 @@ pub(in crate::session) struct PaneImages {
 
 impl PaneImages {
     pub(in crate::session) fn ready(&self) -> bool {
-        self.encoding.ready()
+        self.encoding.ready() || (self.request.is_some() && !self.encoding.busy())
     }
 
     pub(super) fn render(
@@ -20,13 +20,16 @@ impl PaneImages {
         area: Rect,
         images: &[workspace_protocol::Image],
         picker: &ui::EditorImagePicker,
+        background: ratatui::style::Color,
         group: Option<&ManagedTaskGroup>,
     ) {
         let Some(group) = group else {
             self.cache.render_workspace(frame, area, images, picker);
             return;
         };
-        let mut result = self.encoding.take();
+        let mut result = self.encoding.take().or_else(|| {
+            (self.request.is_some() && !self.encoding.busy()).then(EncodedWorkspaceImage::default)
+        });
         let completed = result.is_some();
         let mut current_visible = false;
         let mut next = None;
@@ -35,6 +38,7 @@ impl PaneImages {
             area,
             images,
             picker,
+            background,
             Some(&mut |request| {
                 if self.request.as_ref() == Some(request) {
                     current_visible = true;
@@ -50,11 +54,14 @@ impl PaneImages {
         }
         if let Some(request) = next {
             let work = request.clone();
-            self.request = self
+            self.request = Some(request);
+            if self
                 .encoding
                 .submit_in(group, move |_| work.encode())
-                .is_ok()
-                .then_some(request);
+                .is_err()
+            {
+                platform::task_events::notify();
+            }
         } else if self.request.take().is_some() {
             self.encoding.cancel();
         }

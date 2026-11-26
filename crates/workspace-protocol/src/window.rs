@@ -1,5 +1,5 @@
 use super::{Hello, LayoutGeneration, NativePath, WorkerId};
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64_simd::{AsOut, STANDARD};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -452,6 +452,9 @@ pub enum CursorShape {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Image {
     pub image_id: u64,
+    /// Identifies the same editor picture or PDF page across changes of raster and crop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_id: Option<u64>,
     pub width: u32,
     pub height: u32,
     #[serde(
@@ -477,17 +480,34 @@ pub struct Heading {
 }
 
 fn serialize_pixels<S: serde::Serializer>(pixels: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.collect_str(&base64::display::Base64Display::new(pixels, &STANDARD))
+    if pixels.is_empty() {
+        return serializer.serialize_str("");
+    }
+    serializer.collect_str(&std::fmt::from_fn(|formatter| {
+        // Complete base64 groups let us stream large images without a second full-size buffer.
+        let mut encoded = [0; 16 * 1024];
+        for chunk in pixels.chunks(encoded.len() / 4 * 3) {
+            formatter.write_str(STANDARD.encode_as_str(chunk, encoded.as_mut_slice().as_out()))?;
+        }
+        Ok(())
+    }))
 }
 
 fn deserialize_pixels<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Arc<[u8]>, D::Error> {
-    let pixels = std::borrow::Cow::<str>::deserialize(deserializer)?;
+    #[derive(Deserialize)]
+    struct Encoded<'a>(#[serde(borrow)] std::borrow::Cow<'a, str>);
+    let Encoded(encoded) = Encoded::deserialize(deserializer)?;
+    let bytes = encoded.as_bytes();
+    let length = STANDARD
+        .decoded_length(bytes)
+        .map_err(serde::de::Error::custom)?;
+    let mut pixels = bytemuck::allocation::zeroed_arc_slice(length);
     STANDARD
-        .decode(pixels.as_bytes())
-        .map(Arc::from)
-        .map_err(serde::de::Error::custom)
+        .decode(bytes, Arc::get_mut(&mut pixels).unwrap().as_out())
+        .map_err(serde::de::Error::custom)?;
+    Ok(pixels)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

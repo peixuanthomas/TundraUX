@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use app::editor::{PdfPageImage, PdfPageSize};
-use image::{ImageBuffer, Rgba, imageops};
+use image::{ImageBuffer, Rgba};
 use ratatui::layout::HorizontalAlignment;
 use ratatui::style::Color;
 
@@ -72,11 +72,13 @@ impl EditorPdfAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditorPdfViewModel {
     pub page: usize,
+    pub page_id: u64,
     pub total: usize,
     pub focus: EditorPdfAction,
     pub zoom: EditorPreviewZoom,
     pub jump: Option<FormDialog>,
     pub image: Option<(u64, EditorPdfPageImage)>,
+    pub image_zoom: Option<EditorPreviewZoom>,
     pub error: Option<String>,
 }
 
@@ -96,8 +98,12 @@ impl EditorPdfPageImage {
         )?;
         let blocks = if u64::from(columns) * u64::from(rows) <= MAX_BLOCK_CELLS as u64 {
             Arc::from(
-                imageops::resize(&image, columns, rows * 2, imageops::FilterType::Triangle)
-                    .into_raw(),
+                crate::editor_media::resize_preview_pixels(
+                    &image,
+                    image.dimensions(),
+                    [columns, rows * 2],
+                )?
+                .into_raw(),
             )
         } else {
             Arc::from([])
@@ -323,12 +329,13 @@ pub(super) fn render(
     }
 
     let canvas = layout.canvas;
+    let image_zoom = pdf.image_zoom.unwrap_or(pdf.zoom);
     if let Some((id, image)) = &pdf.image
-        && image.raster.viewport == pdf.zoom.pdf_viewport(canvas)
+        && image.raster.viewport == image_zoom.pdf_viewport(canvas)
     {
         let raster = &image.raster;
         let size = raster.cells.map(u32::from);
-        let window = pdf.zoom.window(canvas, size);
+        let window = image_zoom.window(canvas, size);
         let placement = window.area;
         let fragment = crate::TerminalImageFragment {
             image_id: *id,
@@ -363,7 +370,7 @@ pub(super) fn render(
             );
         } else {
             images.clear();
-            images.capture_opaque_workspace(canvas, frame.area(), &fragment);
+            images.capture_preview(canvas, frame.area(), &fragment, pdf.page_id);
             image.draw_blocks(
                 frame,
                 Rect::new(

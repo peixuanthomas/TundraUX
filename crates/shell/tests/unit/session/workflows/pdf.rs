@@ -73,7 +73,9 @@ fn wait_for_pdf(
             assert_eq!(pdf.page, page);
             assert_eq!(pdf.total, 2);
             assert!(pdf.error.is_none(), "{:?}", pdf.error);
-            if let Some((id, image)) = pdf.image {
+            if pdf.image_zoom.is_none()
+                && let Some((id, image)) = pdf.image
+            {
                 return (id, image.raster);
             }
         }
@@ -273,6 +275,39 @@ fn pdf_preview_jumps_to_a_valid_page_and_pans_without_rerendering() {
         center.offset[1] + 1
     );
     assert_eq!(pdf.image.unwrap().0, id);
+}
+
+#[test]
+fn zoom_keeps_the_displayed_pdf_until_ready_and_reuses_a_previous_size() {
+    let (mut state, platform, _guard, path) = pdf_fixture(SAMPLE);
+    assert!(state.open_editor_path(path));
+    let (fitted, original) = wait_for_pdf(&mut state, &platform, 0);
+    let page = state.to_editor_view_model().pdf.unwrap().page_id;
+
+    for percent in [150, 200] {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Char('+')), &platform);
+        let pending = state.to_editor_view_model().pdf.unwrap();
+        assert_eq!(pending.zoom.percent(), percent);
+        assert_eq!(pending.image_zoom.unwrap().percent(), 100);
+        assert_eq!(pending.image.unwrap().0, fitted);
+        assert_eq!(pending.page_id, page);
+    }
+    let (enlarged, _) = wait_for_pdf(&mut state, &platform, 0);
+    assert_ne!(enlarged, fitted);
+    for _ in 0..2 {
+        state.apply_input_with_platform(InputEvent::key(InputKey::Char('-')), &platform);
+    }
+    let restored = state.to_editor_view_model().pdf.unwrap();
+    assert!(restored.image_zoom.is_none());
+    let (id, image) = restored.image.unwrap();
+    assert_eq!(id, fitted);
+    assert!(Arc::ptr_eq(&image.raster.rgba, &original.rgba));
+
+    state.apply_input_with_platform(InputEvent::key(InputKey::Char('+')), &platform);
+    state.apply_input_with_platform(InputEvent::key(InputKey::PageDown), &platform);
+    let next = state.to_editor_view_model().pdf.unwrap();
+    assert_ne!(next.page_id, page);
+    assert!(next.image_zoom.is_none());
 }
 
 #[test]

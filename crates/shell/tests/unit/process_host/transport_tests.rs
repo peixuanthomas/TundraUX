@@ -221,6 +221,7 @@ fn newer_frame_resolves_cells_and_images_before_coalescing_older_frames() {
     first.startup_timings = Some(AppStartupTimings::default());
     first.images.push(Image {
         image_id: 91,
+        preview_id: None,
         width: 1,
         height: 1,
         rgba: Arc::from([3, 5, 7, 255]),

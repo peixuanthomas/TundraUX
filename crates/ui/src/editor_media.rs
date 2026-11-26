@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use image::{DynamicImage, Pixel, Rgba, RgbaImage};
+use pic_scale::{ImageStore, ImageStoreMut, ImageStoreScaling, ResamplingFunction, ScalingOptions};
 use ratatui::Frame;
 use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier};
@@ -18,6 +19,28 @@ use ratatui_image::protocol::sixel::Sixel;
 
 pub const EDITOR_IMAGE_MAX_PIXELS: u64 = 20_000_000;
 static NEXT_KITTY_IMAGE_ID: AtomicU32 = AtomicU32::new(1);
+
+pub(crate) fn resize_preview_pixels(
+    rgba: &[u8],
+    (width, height): (u32, u32),
+    [target_width, target_height]: [u32; 2],
+) -> Option<RgbaImage> {
+    let source = ImageStore::<u8, 4>::from_slice(rgba, width as usize, height as usize).ok()?;
+    let mut output = RgbaImage::new(target_width, target_height);
+    let mut target =
+        ImageStoreMut::from_slice(&mut output, target_width as usize, target_height as usize)
+            .ok()?;
+    source
+        .scale(
+            &mut target,
+            ScalingOptions {
+                resampling_function: ResamplingFunction::Bilinear,
+                ..Default::default()
+            },
+        )
+        .ok()?;
+    Some(output)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EditorGraphicsProtocol {
@@ -393,6 +416,7 @@ impl WorkspaceIcon {
             let (width, height) = self.source.dimensions();
             images.push(workspace_protocol::Image {
                 image_id: cached.image_id,
+                preview_id: None,
                 width,
                 height,
                 rgba: cached.rgba.clone(),

@@ -145,9 +145,10 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
     });
     frame.images.push(Image {
         image_id: 1,
-        width: 1,
+        preview_id: Some(9),
+        width: 4097,
         height: 1,
-        rgba: [0, 128, 168, 255].into(),
+        rgba: [0, 128, 168, 255].repeat(4097).into(),
         source: [0, 0, 1, 1],
         padding: [0; 4],
         cell_size: [1, 1],
@@ -177,6 +178,16 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
         foreground: Color::Indexed(3),
     });
     frame.validate().unwrap();
+    let mut legacy = serde_json::to_value(&frame.images[0]).unwrap();
+    legacy.as_object_mut().unwrap().remove("preview_id");
+    let expected = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        &frame.images[0].rgba,
+    );
+    assert_eq!(legacy["rgba"], expected);
+    let decoded: Image = serde_json::from_value(legacy).unwrap();
+    assert_eq!(decoded.preview_id, None);
+    assert_eq!(decoded.rgba, frame.images[0].rgba);
     let message = AppToShell::Frame(frame);
     let bytes = serde_json::to_vec(&message).unwrap();
     assert_eq!(

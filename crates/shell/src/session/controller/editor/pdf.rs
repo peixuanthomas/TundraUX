@@ -30,6 +30,7 @@ pub(super) struct PdfViewport {
 
 #[derive(Debug)]
 struct RenderBatch {
+    viewport: PdfViewport,
     pages: VecDeque<usize>,
     completed: Receiver<PageRender>,
 }
@@ -61,13 +62,15 @@ impl Eq for PdfRenderTask {}
 pub(in crate::session) struct EditorPdfPreview {
     document: PdfPreviewDocument,
     page: usize,
+    page_id: u64,
     focus: EditorPdfAction,
     zoom: EditorPreviewZoom,
     quarter_turns: u8,
     pub(in crate::session) jump: Option<FormDialog>,
     viewport: Option<PdfViewport>,
+    previous_zoom: Option<(PdfViewport, EditorPreviewZoom)>,
     targets: Vec<usize>,
-    cache: VecDeque<(usize, PageRender)>,
+    cache: VecDeque<(PdfViewport, usize, PageRender)>,
     task: PdfRenderTask,
 }
 
@@ -76,11 +79,13 @@ impl EditorPdfPreview {
         Self {
             document,
             page: 0,
+            page_id: super::tasks::next_editor_task_id(),
             focus: Open,
             zoom: EditorPreviewZoom::default(),
             quarter_turns: 0,
             jump: None,
             viewport: None,
+            previous_zoom: None,
             targets: Vec::new(),
             cache: VecDeque::new(),
             task: Default::default(),
@@ -88,17 +93,29 @@ impl EditorPdfPreview {
     }
 
     pub(super) fn view_model(&self, viewport: Option<PdfViewport>) -> ui::EditorPdfViewModel {
-        let result = self
-            .viewport
-            .filter(|current| Some(*current) == viewport)
-            .and_then(|_| self.cached(self.page));
+        let result = viewport.and_then(|view| self.cached_at(view, self.page));
+        let previous = self.previous_zoom.and_then(|(view, zoom)| {
+            let target = viewport?;
+            if result.is_some()
+                || view.quarter_turns != target.quarter_turns
+                || view.cell_size != target.cell_size
+            {
+                return None;
+            }
+            Some((zoom, self.cached_at(view, self.page)?.as_ref().ok()?))
+        });
         ui::EditorPdfViewModel {
             page: self.page,
+            page_id: self.page_id,
             total: self.document.page_count(),
             focus: self.focus,
             zoom: self.zoom,
             jump: self.jump.clone(),
-            image: result.and_then(|result| result.as_ref().ok()).cloned(),
+            image: result
+                .and_then(|result| result.as_ref().ok())
+                .or(previous.map(|(_, image)| image))
+                .cloned(),
+            image_zoom: previous.map(|(zoom, _)| zoom),
             error: result
                 .and_then(|result| result.as_ref().err())
                 .map(LocalizedText::render_current),
@@ -122,6 +139,8 @@ impl EditorPdfPreview {
             return;
         }
         self.page = page;
+        self.page_id = super::tasks::next_editor_task_id();
+        self.previous_zoom = None;
         self.zoom.center();
         if !self
             .focus
@@ -129,7 +148,11 @@ impl EditorPdfPreview {
         {
             self.focus = Open;
         }
-        if let Some(index) = self.cache.iter().position(|(page, _)| *page == self.page) {
+        if let Some(index) = self
+            .cache
+            .iter()
+            .position(|(view, page, _)| Some(*view) == self.viewport && *page == self.page)
+        {
             let cached = self.cache.remove(index).unwrap();
             self.cache.push_back(cached);
         }
@@ -137,9 +160,13 @@ impl EditorPdfPreview {
     }
 
     fn cached(&self, page: usize) -> Option<&PageRender> {
-        self.cache
-            .iter()
-            .find_map(|(index, raster)| (*index == page).then_some(raster))
+        self.cached_at(self.viewport?, page)
+    }
+
+    fn cached_at(&self, viewport: PdfViewport, page: usize) -> Option<&PageRender> {
+        self.cache.iter().find_map(|(view, index, raster)| {
+            (*view == viewport && *index == page).then_some(raster)
+        })
     }
 
     fn plan_targets(&mut self) {
@@ -183,38 +210,54 @@ impl EditorPdfPreview {
         if !self.targets.contains(&page) || self.cached(page).is_some() {
             return false;
         }
-        let mut bytes = render_bytes(&result)
-            + self
-                .cache
-                .iter()
-                .map(|(_, result)| render_bytes(result))
-                .sum::<usize>();
+        let mut bytes = render_bytes(&result) + self.cache_bytes();
         // Keep the current prefetch window intact and evict older visits first.
         while self.cache.len() >= MAX_CACHED_PAGES || bytes > MAX_CACHE_BYTES {
             let index = self
                 .cache
                 .iter()
-                .position(|(page, _)| !self.targets.contains(page))
+                .position(|(view, page, _)| {
+                    Some(*view) != self.viewport || !self.targets.contains(page)
+                })
                 .unwrap();
-            bytes -= render_bytes(&self.cache.remove(index).unwrap().1);
+            bytes -= render_bytes(&self.cache.remove(index).unwrap().2);
         }
-        self.cache.push_back((page, result));
+        self.cache.push_back((self.viewport.unwrap(), page, result));
+        if page == self.page {
+            self.previous_zoom = None;
+        }
         page == self.page
+    }
+
+    fn cache_bytes(&self) -> usize {
+        self.cache
+            .iter()
+            .map(|(_, _, result)| render_bytes(result))
+            .sum()
+    }
+
+    fn has_cache_room(&self, bytes: usize) -> bool {
+        self.cache.len() < MAX_CACHED_PAGES && self.cache_bytes() + bytes <= MAX_CACHE_BYTES
     }
 
     fn poll(
         &mut self,
         viewport: Option<PdfViewport>,
+        next_zoom: Option<PdfViewport>,
         group: Option<&watchdog::ManagedTaskGroup>,
     ) -> bool {
         let mut changed = self.viewport != viewport;
         if changed {
             self.viewport = viewport;
-            self.cache.clear();
+            self.cache.retain(|(_, _, result)| result.is_ok());
             self.task.current = None;
             self.task.visible.cancel();
-            self.task.batch = None;
-            self.task.prefetch.cancel();
+            if !self.task.batch.as_ref().is_some_and(|batch| {
+                Some(batch.viewport) == viewport && batch.pages.front() == Some(&self.page)
+            }) {
+                self.task.batch = None;
+                self.task.prefetch.cancel();
+            }
             self.plan_targets();
         }
         let Some(viewport) = viewport else {
@@ -234,7 +277,16 @@ impl EditorPdfPreview {
             match batch.completed.try_recv() {
                 Ok(result) => {
                     let page = batch.pages.pop_front().unwrap();
-                    changed |= self.record(page, result);
+                    let view = batch.viewport;
+                    if view == viewport {
+                        changed |= self.record(page, result);
+                    } else if Some(view) == next_zoom
+                        && self.page == page
+                        && self.cached_at(view, page).is_none()
+                        && self.has_cache_room(render_bytes(&result))
+                    {
+                        self.cache.push_back((view, page, result));
+                    }
                 }
                 Err(TryRecvError::Disconnected) => {
                     self.task.batch = None;
@@ -249,12 +301,9 @@ impl EditorPdfPreview {
             if self.task.current == Some(page) {
                 return changed;
             }
-            if self
-                .task
-                .batch
-                .as_ref()
-                .is_some_and(|batch| batch.pages.front() == Some(&page))
-            {
+            if self.task.batch.as_ref().is_some_and(|batch| {
+                batch.viewport == viewport && batch.pages.front() == Some(&page)
+            }) {
                 return changed;
             }
             if self.task.batch.is_some() || self.task.prefetch.busy() {
@@ -300,16 +349,36 @@ impl EditorPdfPreview {
             return changed;
         }
 
-        let pages = self
+        let mut pages = self
             .targets
             .iter()
             .copied()
             .filter(|page| self.cached(*page).is_none() && self.task.current != Some(*page))
             .take(RENDER_BATCH_PAGES)
             .collect::<VecDeque<_>>();
-        if pages.is_empty() {
-            return changed;
-        }
+        let render_view = if pages.is_empty() {
+            // Use spare cache space for the next zoom only after visible and nearby pages are ready.
+            let Some(next) = next_zoom else {
+                return changed;
+            };
+            if group.is_none()
+                || self.task.current.is_some()
+                || !self.cached(page).is_some_and(Result::is_ok)
+                || self.cached_at(next, page).is_some()
+                || !self
+                    .document
+                    .rotated_page_size(page, next.cells, next.cell_size, next.quarter_turns)
+                    .is_some_and(|size| {
+                        self.has_cache_room(EditorPdfPageImage::estimated_bytes(size))
+                    })
+            {
+                return changed;
+            }
+            pages.push_back(page);
+            next
+        } else {
+            viewport
+        };
 
         let document = self.document.clone();
         let requested = pages.clone();
@@ -320,9 +389,9 @@ impl EditorPdfPreview {
                 .submit_in(group, move |cancel| {
                     let mut renders = document.render_rotated_pages(
                         requested.iter().copied(),
-                        viewport.cells,
-                        viewport.cell_size,
-                        viewport.quarter_turns,
+                        render_view.cells,
+                        render_view.cell_size,
+                        render_view.quarter_turns,
                     );
                     for page in requested.iter().copied() {
                         if cancel.load(Ordering::Acquire) {
@@ -342,11 +411,17 @@ impl EditorPdfPreview {
                 .is_ok()
         });
         if submitted {
-            self.task.batch = Some(RenderBatch { pages, completed });
+            self.task.batch = Some(RenderBatch {
+                viewport: render_view,
+                pages,
+                completed,
+            });
         } else {
             self.task.batch = None;
-            for page in pages {
-                changed |= self.record(page, Err(page_render_error(page)));
+            if render_view == viewport {
+                for page in pages {
+                    changed |= self.record(page, Err(page_render_error(page)));
+                }
             }
         }
         changed
@@ -386,13 +461,27 @@ impl ShellSession {
     }
 
     pub(super) fn editor_pdf_render_viewport(&self) -> Option<PdfViewport> {
-        let preview = self.pages.editor.editor_pdf.as_ref()?;
+        self.editor_pdf_viewports().0
+    }
+
+    fn editor_pdf_viewports(&self) -> (Option<PdfViewport>, Option<PdfViewport>) {
+        let Some(preview) = self.pages.editor.editor_pdf.as_ref() else {
+            return (None, None);
+        };
         let canvas = self.editor_pdf_canvas();
-        (!canvas.is_empty()).then_some(PdfViewport {
-            cells: preview.zoom.pdf_viewport(canvas),
-            cell_size: self.terminal_image_cell_size,
-            quarter_turns: preview.quarter_turns,
-        })
+        let viewport = |zoom: EditorPreviewZoom| {
+            (!canvas.is_empty()).then_some(PdfViewport {
+                cells: zoom.pdf_viewport(canvas),
+                cell_size: self.terminal_image_cell_size,
+                quarter_turns: preview.quarter_turns,
+            })
+        };
+        let next = preview.zoom.can_zoom_in().then(|| {
+            let mut zoom = preview.zoom;
+            zoom.change(true);
+            zoom
+        });
+        (viewport(preview.zoom), next.and_then(viewport))
     }
 
     pub(in crate::session) fn editor_pdf_has_background_work(&self) -> bool {
@@ -420,11 +509,12 @@ impl ShellSession {
         if self.pages.editor.editor_pdf.is_none() || self.pages.editor.editor_load_state.is_some() {
             return false;
         }
-        let viewport = self.editor_pdf_render_viewport();
+        let (viewport, next_zoom) = self.editor_pdf_viewports();
         let session_ui = &mut self.ui;
         let preview = session_ui.pages.editor.editor_pdf.as_mut().unwrap();
         preview.poll(
             viewport,
+            next_zoom,
             session_ui.editor_task_runtime.shared.task_group.as_ref(),
         )
     }
@@ -531,6 +621,7 @@ impl ShellSession {
     }
 
     fn activate_editor_pdf_action(&mut self, action: EditorPdfAction, platform: &dyn Platform) {
+        let viewport = self.editor_pdf_render_viewport();
         let preview = self.pages.editor.editor_pdf.as_mut().unwrap();
         let total = preview.document.page_count();
         if !action.enabled(preview.page, total, preview.zoom) {
@@ -541,9 +632,18 @@ impl ShellSession {
             Previous | Next => preview.turn(action),
             Rotate => {
                 preview.quarter_turns = (preview.quarter_turns + 1) % 4;
+                preview.page_id = super::tasks::next_editor_task_id();
+                preview.previous_zoom = None;
                 preview.zoom.center();
             }
             ZoomIn | ZoomOut => {
+                if let Some(view) = viewport
+                    && preview
+                        .cached_at(view, preview.page)
+                        .is_some_and(Result::is_ok)
+                {
+                    preview.previous_zoom = Some((view, preview.zoom));
+                }
                 preview.zoom.change(action == ZoomIn);
                 if !preview.focus.enabled(preview.page, total, preview.zoom) {
                     preview.move_focus(false);

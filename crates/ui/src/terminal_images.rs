@@ -7,9 +7,10 @@ use image::{DynamicImage, Pixel, Rgba, RgbaImage, imageops::FilterType};
 use ratatui::Frame;
 use ratatui::buffer::Cell;
 use ratatui::layout::{Rect, Size};
-use ratatui::style::{Color, Modifier};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::Clear;
 use ratatui_image::Image;
-use ratatui_image::protocol::{Protocol, halfblocks::Halfblocks, kitty::Kitty, sixel::Sixel};
+use ratatui_image::protocol::{Protocol, halfblocks::Halfblocks, sixel::Sixel};
 
 use crate::{
     CommandLineColor, CommandLineTerminalSnapshot, EDITOR_IMAGE_MAX_PIXELS, EditorGraphicsProtocol,
@@ -23,6 +24,7 @@ const CACHE_BUDGET: usize = 128 * 1024 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ImageKey {
     id: u64,
+    preview_id: Option<u64>,
     data: usize,
     source: [u32; 4],
     image_size: (u32, u32),
@@ -47,7 +49,7 @@ struct PreparedImage {
     transparent_cells: Vec<(u16, u16)>,
 }
 
-/// Native encoding can run off the terminal thread while the pane displays its cell fallback.
+/// A native placement that can be encoded off the terminal thread.
 #[derive(Clone)]
 pub struct WorkspaceImageRequest {
     key: ImageKey,
@@ -61,6 +63,7 @@ impl PartialEq for WorkspaceImageRequest {
     }
 }
 
+#[derive(Default)]
 pub struct EncodedWorkspaceImage(Option<PreparedImage>);
 type WorkspaceEncoder<'a> = dyn FnMut(&WorkspaceImageRequest) -> Option<EncodedWorkspaceImage> + 'a;
 
@@ -78,6 +81,7 @@ pub struct TerminalImageCache {
     cleanup: Vec<u8>,
     workspace_origin: Option<Rect>,
     workspace_images: Vec<workspace_protocol::Image>,
+    fitted_previews: HashMap<(u64, u32, u32), (u64, Arc<[u8]>)>,
 }
 
 impl TerminalImageCache {
@@ -117,7 +121,7 @@ impl TerminalImageCache {
             let visible = image.area.intersection(viewport);
             let pieces = visible_pieces(image, visible, terminal);
             if !raster_layers && let Some(origin) = self.workspace_origin {
-                self.capture_workspace_image(area, origin, image, &pieces);
+                self.capture_workspace_image(area, origin, image, &pieces, None);
             }
             let mut canvas = None;
             for piece in pieces {
@@ -163,6 +167,7 @@ impl TerminalImageCache {
                     working,
                     &mut used,
                     None,
+                    Color::Reset,
                 );
             }
         }
@@ -177,19 +182,58 @@ impl TerminalImageCache {
 
     pub fn take_workspace_images(&mut self) -> Vec<workspace_protocol::Image> {
         self.workspace_origin = None;
-        std::mem::take(&mut self.workspace_images)
+        let mut images = std::mem::take(&mut self.workspace_images);
+        let mut used = HashSet::new();
+        for image in &mut images {
+            let width = u32::from(image.area.width) * u32::from(image.cell_size[0]);
+            let height = u32::from(image.area.height) * u32::from(image.cell_size[1]);
+            // A fitted preview only needs the pixels the terminal can show. Crops keep the source for panning.
+            if image.preview_id.is_none()
+                || image.source != [0, 0, image.width, image.height]
+                || width > image.width
+                || height > image.height
+                || u64::from(width) * u64::from(height)
+                    > u64::from(image.width) * u64::from(image.height) / 2
+            {
+                continue;
+            }
+            let key = (image.image_id, width, height);
+            let (id, rgba) = match self.fitted_previews.entry(key) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    let Some(pixels) = crate::editor_media::resize_preview_pixels(
+                        &image.rgba,
+                        (image.width, image.height),
+                        [width, height],
+                    ) else {
+                        continue;
+                    };
+                    let id = (1 << 63) | u64::from(crate::editor_media::next_kitty_image_id());
+                    entry.insert((id, pixels.into_raw().into()))
+                }
+            };
+            image.image_id = *id;
+            image.rgba = rgba.clone();
+            image.width = width;
+            image.height = height;
+            image.source = [0, 0, width, height];
+            used.insert(key);
+        }
+        self.fitted_previews.retain(|key, _| used.contains(key));
+        images
     }
 
     pub(crate) fn capturing_workspace(&self) -> bool {
         self.workspace_origin.is_some()
     }
 
-    /// Registers a known opaque image whose terminal-cell fallback was drawn separately.
-    pub fn capture_opaque_workspace(
+    /// Registers an editor preview together with its separately drawn cell fallback.
+    pub(crate) fn capture_preview(
         &mut self,
         area: Rect,
         frame_area: Rect,
         image: &TerminalImageFragment,
+        preview_id: u64,
     ) {
         if let Some(origin) = self.workspace_origin {
             let clipped = area.intersection(frame_area);
@@ -199,7 +243,7 @@ impl TerminalImageCache {
                 clipped.width,
                 clipped.height,
             ));
-            self.capture_workspace_image(area, origin, image, &[visible]);
+            self.capture_workspace_image(area, origin, image, &[visible], Some(preview_id));
         }
     }
 
@@ -209,6 +253,7 @@ impl TerminalImageCache {
         content: Rect,
         image: &TerminalImageFragment,
         pieces: &[Rect],
+        preview_id: Option<u64>,
     ) {
         fn wire_rect(rect: Rect, content: Rect) -> workspace_protocol::Rect {
             workspace_protocol::Rect {
@@ -236,6 +281,7 @@ impl TerminalImageCache {
         }
         self.workspace_images.push(workspace_protocol::Image {
             image_id: image.image_id,
+            preview_id,
             width: image.width,
             height: image.height,
             rgba: image.rgba.clone(),
@@ -256,16 +302,17 @@ impl TerminalImageCache {
         images: &[workspace_protocol::Image],
         picker: &EditorImagePicker,
     ) {
-        self.render_workspace_with(frame, area, images, picker, None);
+        self.render_workspace_with(frame, area, images, picker, Color::Reset, None);
     }
 
-    /// Returning `None` leaves the already painted cells visible until this placement is ready.
+    /// The encoder returns `None` while a placement is pending. Editor previews can keep the preceding image.
     pub fn render_workspace_with(
         &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         images: &[workspace_protocol::Image],
         picker: &EditorImagePicker,
+        background: Color,
         mut encode: Option<&mut WorkspaceEncoder<'_>>,
     ) {
         let viewport = area.intersection(frame.area());
@@ -309,8 +356,9 @@ impl TerminalImageCache {
                 else {
                     continue;
                 };
-                let key = ImageKey::new(&image, crop, piece, frame, Some(picker));
-                self.render_piece(
+                let mut key = ImageKey::new(&image, crop, piece, frame, Some(picker));
+                key.preview_id = asset.preview_id;
+                let pending = self.render_piece(
                     frame,
                     &image,
                     &mut canvas,
@@ -320,7 +368,27 @@ impl TerminalImageCache {
                     working,
                     &mut used,
                     encode.as_deref_mut(),
+                    background,
                 );
+                if let Some(key) = pending
+                    && let Some(preview_id) = key.preview_id
+                {
+                    clear_preview(frame, piece, background);
+                    let previous = self.entries.iter().find_map(|(old, prepared)| {
+                        let (x, y) = old.position?;
+                        let placement = Rect::new(x, y, old.size.width, old.size.height);
+                        (old.preview_id == Some(preview_id)
+                            && old.backend == key.backend
+                            && old.cell_size == key.cell_size
+                            && old.tmux == key.tmux
+                            && placement.intersection(piece) == placement)
+                            .then_some((old, prepared, placement))
+                    });
+                    if let Some((old, prepared, placement)) = previous {
+                        frame.render_widget(Image::new(&prepared.protocol), placement);
+                        used.insert(old.clone());
+                    }
+                }
             }
         }
         self.retain_used(&used);
@@ -339,11 +407,12 @@ impl TerminalImageCache {
         working: usize,
         used: &mut HashSet<ImageKey>,
         encode: Option<&mut WorkspaceEncoder<'_>>,
-    ) {
+        background: Color,
+    ) -> Option<ImageKey> {
         if !self.entries.contains_key(&key) {
             if self.failed.contains(&key) {
                 used.insert(key);
-                return;
+                return None;
             }
             let needed = |cache: &Self| {
                 let source = if cache
@@ -364,7 +433,7 @@ impl TerminalImageCache {
             if needed(self) > CACHE_BUDGET {
                 self.retain_used(used);
                 if needed(self) > CACHE_BUDGET {
-                    return;
+                    return None;
                 }
             }
             let prepared = if let Some(encode) = encode {
@@ -378,19 +447,22 @@ impl TerminalImageCache {
                     Some(EncodedWorkspaceImage(None)) => {
                         self.failed.insert(key.clone());
                         used.insert(key);
-                        return;
+                        return None;
                     }
-                    None => return,
+                    None => return Some(key),
                 }
             } else {
                 let Some(prepared) = prepare_image(image, &key, canvas, stored) else {
-                    return;
+                    return None;
                 };
                 prepared
             };
             self.entries.insert(key.clone(), prepared);
         }
         let prepared = self.entries.get_mut(&key).unwrap();
+        if key.preview_id.is_some() {
+            clear_preview(frame, target, background);
+        }
         let raster = key.backend.is_none();
         used.insert(key);
         let transparent = prepared
@@ -417,6 +489,7 @@ impl TerminalImageCache {
         for (position, cell) in transparent {
             frame.buffer_mut()[position] = cell;
         }
+        None
     }
 
     fn cached_bytes(&self) -> usize {
@@ -466,6 +539,7 @@ impl ImageKey {
     ) -> Self {
         Self {
             id: image.image_id,
+            preview_id: None,
             data: image.rgba.as_ptr() as usize,
             source: image.source,
             image_size: (image.width, image.height),
@@ -488,6 +562,13 @@ impl ImageKey {
             },
         }
     }
+}
+
+fn clear_preview(frame: &mut Frame<'_>, area: Rect, background: Color) {
+    frame.render_widget(Clear, area);
+    frame
+        .buffer_mut()
+        .set_style(area, Style::default().bg(background));
 }
 
 fn offset_rect(rect: Rect, x: u16, y: u16) -> Rect {
@@ -519,7 +600,7 @@ fn preparation_cost(
             0
         } else {
             let source = bounded_pixels(source_width, source_height)?;
-            // The float resize buffer is released before native encoding starts.
+            // Resizing and native encoding use separate temporary buffers.
             let pass = bounded_pixels(source_width, height)?;
             source
                 .checked_mul(4)?
@@ -611,8 +692,11 @@ fn native_raster(
         height,
     )?;
     let mut output = [output_width, output_height];
-    if protocol == EditorGraphicsProtocol::Iterm2 {
-        // iTerm2 sizes the placement in cells, so upscaling pixels here adds no detail.
+    if matches!(
+        protocol,
+        EditorGraphicsProtocol::Iterm2 | EditorGraphicsProtocol::Kitty
+    ) {
+        // These protocols size placements in cells, so upscaling before transfer adds no detail.
         output = [output_width.min(width), output_height.min(height)];
     }
     Some(NativeRaster {
@@ -710,34 +794,35 @@ fn prepare_image(
         .backend
         .and_then(|protocol| native_raster(image, key.crop, key.cell_size, protocol));
     let tmux = key.tmux;
-    let mut kitty = None;
-    if key.backend == Some(EditorGraphicsProtocol::Kitty) {
+    let prepare_kitty = |rgba: &[u8], pixels| {
         let id = crate::editor_media::next_kitty_image_id();
-        kitty = Some((id, tmux));
-        if native.as_ref().is_some_and(|native| {
+        let (protocol, upload) = kitty::encode(rgba, pixels, key.size, id, tmux)?;
+        Some(PreparedImage {
+            protocol,
+            _rgba: image.rgba.clone(),
+            kitty: Some((id, tmux)),
+            kitty_upload: Some(upload),
+            transparent_cells: Vec::new(),
+            bytes,
+        })
+    };
+    if key.backend == Some(EditorGraphicsProtocol::Kitty)
+        && native.as_ref().is_some_and(|native| {
             native.source == [0, 0, image.width, image.height]
                 && native.output == [image.width, image.height]
                 && image.rgba.len() as u64 == u64::from(image.width) * u64::from(image.height) * 4
-        }) && let Some((protocol, upload)) =
-            kitty::compressed(&image.rgba, [image.width, image.height], key.size, id, tmux)
-        {
-            return Some(PreparedImage {
-                protocol,
-                _rgba: image.rgba.clone(),
-                kitty,
-                kitty_upload: Some(upload),
-                transparent_cells: Vec::new(),
-                bytes,
-            });
-        }
+        })
+    {
+        return prepare_kitty(&image.rgba, [image.width, image.height]);
     }
 
     let mut resized = if let Some(native) = native {
-        resize_rgba(
-            DynamicImage::ImageRgba8(crop_image_source(image, native.source)?),
-            native.output[0],
-            native.output[1],
-        )
+        let crop = crop_image_source(image, native.source)?;
+        if [crop.width(), crop.height()] == native.output {
+            crop
+        } else {
+            crate::editor_media::resize_preview_pixels(&crop, crop.dimensions(), native.output)?
+        }
     } else {
         let target_width = u32::from(key.size.width).checked_mul(u32::from(key.cell_size.0))?;
         let target_height = u32::from(key.size.height).checked_mul(u32::from(key.cell_size.1))?;
@@ -780,8 +865,7 @@ fn prepare_image(
     let resized = DynamicImage::ImageRgba8(resized);
     let protocol = match key.backend {
         Some(EditorGraphicsProtocol::Kitty) => {
-            let (id, _) = kitty.unwrap();
-            Protocol::Kitty(Kitty::new(resized, key.size, id, tmux).ok()?)
+            return prepare_kitty(resized.as_bytes(), [resized.width(), resized.height()]);
         }
         Some(EditorGraphicsProtocol::Sixel) => {
             Protocol::Sixel(Sixel::new(resized, key.size, tmux).ok()?)
@@ -794,7 +878,7 @@ fn prepare_image(
     Some(PreparedImage {
         protocol,
         _rgba: image.rgba.clone(),
-        kitty,
+        kitty: None,
         kitty_upload: None,
         transparent_cells,
         bytes,

@@ -101,6 +101,7 @@ impl Workspace {
                         pane.content,
                         &rendered.images,
                         picker,
+                        context.theme.canvas,
                         self.image_workers.as_ref(),
                     );
                     cached_images.insert(pane.id);

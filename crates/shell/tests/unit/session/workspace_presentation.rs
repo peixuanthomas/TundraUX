@@ -766,6 +766,7 @@ fn native_image_encoding_keeps_cells_visible_and_discards_a_superseded_placement
         };
         workspace_protocol::Image {
             image_id: u64::from(x),
+            preview_id: None,
             width: 2,
             height: 2,
             rgba: Arc::from([255_u8; 16]),
@@ -789,6 +790,7 @@ fn native_image_encoding_keeps_cells_visible_and_discards_a_superseded_placement
                     frame.area(),
                     std::slice::from_ref(image),
                     probe.picker().unwrap(),
+                    ratatui::style::Color::Black,
                     Some(&group),
                 );
             })
@@ -829,6 +831,7 @@ fn split_cancel_keeps_the_complete_frame_and_native_image() {
     };
     frame.images.push(workspace_protocol::Image {
         image_id: 1,
+        preview_id: None,
         width: 8,
         height: 2,
         rgba: Arc::from([25, 100, 200, 255].repeat(16)),

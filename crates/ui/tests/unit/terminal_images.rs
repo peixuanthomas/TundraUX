@@ -61,6 +61,7 @@ fn workspace_kitty_compresses_a_large_fitted_page_and_clears_it_after_hiding() {
     let height = u32::from(area.height) * 16;
     let image = workspace_protocol::Image {
         image_id: 42,
+        preview_id: None,
         width,
         height,
         rgba: Arc::from([162, 40, 20, 255].repeat((width * height) as usize)),
@@ -118,6 +119,152 @@ fn workspace_kitty_compresses_a_large_fitted_page_and_clears_it_after_hiding() {
 }
 
 #[test]
+fn fitted_preview_transfers_visible_resolution_and_keeps_the_original_for_zoom() {
+    let mut image = fragment();
+    image.width = 256;
+    image.height = 256;
+    image.source = [0, 0, 256, 256];
+    image.rgba = Arc::from([16, 32, 48, 255].repeat(256 * 256));
+    image.cell_size = [8, 16];
+    image.area = Rect::new(0, 0, 16, 8);
+    let pane = Rect::new(0, 0, 32, 16);
+    let mut cache = TerminalImageCache::default();
+    let mut capture = |image: &TerminalImageFragment| {
+        cache.capture_workspace(pane);
+        cache.capture_preview(pane, pane, image, image.image_id);
+        cache.take_workspace_images().pop().unwrap()
+    };
+    let fitted = capture(&image);
+    assert_eq!((fitted.width, fitted.height), (128, 128));
+    assert_eq!(fitted.source, [0, 0, 128, 128]);
+    assert_eq!(fitted.rgba.len(), image.rgba.len() / 4);
+    let redraw = capture(&image);
+    assert_eq!(redraw.image_id, fitted.image_id);
+    assert!(Arc::ptr_eq(&redraw.rgba, &fitted.rgba));
+    image.area = pane;
+    image.source = [64, 64, 128, 128];
+    let crop = capture(&image);
+    assert_eq!(crop.preview_id, fitted.preview_id);
+    assert_ne!(crop.image_id, fitted.image_id);
+    assert_eq!(crop.source, image.source);
+    assert!(Arc::ptr_eq(&crop.rgba, &image.rgba));
+}
+
+#[test]
+fn pending_editor_preview_keeps_only_the_same_visible_picture_and_falls_back_on_failure() {
+    let area = workspace_protocol::Rect {
+        x: 1,
+        y: 1,
+        width: 2,
+        height: 1,
+    };
+    let mut image = workspace_protocol::Image {
+        image_id: 1,
+        preview_id: Some(10),
+        width: 16,
+        height: 16,
+        rgba: Arc::from([16, 32, 48, 255].repeat(256)),
+        source: [0, 0, 16, 16],
+        padding: [0; 4],
+        cell_size: [8, 16],
+        area,
+        visible: vec![area],
+        z_index: 0,
+    };
+    let picker = picker(EditorGraphicsProtocol::Iterm2, false);
+    let mut screen = Terminal::new(TestBackend::new(8, 4)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    let mut draw = |image: &workspace_protocol::Image,
+                    mut result: Option<EncodedWorkspaceImage>| {
+        let mut requested = None;
+        screen
+            .draw(|frame| {
+                frame.buffer_mut()[(1, 1)]
+                    .set_symbol("▀")
+                    .set_bg(Color::Red);
+                cache.render_workspace_with(
+                    frame,
+                    frame.area(),
+                    std::slice::from_ref(image),
+                    &picker,
+                    Color::Black,
+                    Some(&mut |work| {
+                        requested = Some(work.clone());
+                        result.take()
+                    }),
+                );
+            })
+            .unwrap();
+        (screen.backend().buffer()[(1, 1)].clone(), requested)
+    };
+    let (pending, request) = draw(&image, None);
+    assert_eq!((pending.symbol(), pending.bg), (" ", Color::Black));
+    let (first, _) = draw(&image, Some(request.unwrap().encode()));
+    assert!(first.symbol().contains("\x1b]1337;File="));
+    image.image_id += 1;
+    image.area.width += 1;
+    image.visible[0] = image.area;
+    let (held, _) = draw(&image, None);
+    assert_eq!(held, first);
+    image.preview_id = Some(11);
+    let (other, _) = draw(&image, None);
+    assert_eq!(other.symbol(), " ");
+    let (failed, _) = draw(&image, Some(EncodedWorkspaceImage::default()));
+    assert_eq!((failed.symbol(), failed.bg), ("▀", Color::Red));
+    assert!(draw(&image, None).1.is_none());
+}
+
+#[test]
+fn kitty_zoom_sends_only_the_compressed_crop_and_scales_it_in_the_terminal() {
+    use std::io::Read as _;
+
+    let area = workspace_protocol::Rect {
+        x: 0,
+        y: 0,
+        width: 48,
+        height: 24,
+    };
+    let mut pixels = [210, 30, 30, 255].repeat(256 * 256);
+    for row in pixels.chunks_exact_mut(256 * 4).skip(64).take(128) {
+        for pixel in row[64 * 4..192 * 4].chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[10, 80, 120, 255]);
+        }
+    }
+    let image = workspace_protocol::Image {
+        image_id: 1,
+        preview_id: Some(1),
+        width: 256,
+        height: 256,
+        rgba: pixels.into(),
+        source: [64, 64, 128, 128],
+        padding: [0; 4],
+        cell_size: [8, 16],
+        area,
+        visible: vec![area],
+        z_index: 0,
+    };
+    let mut screen = Terminal::new(TestBackend::new(48, 24)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    screen
+        .draw(|frame| {
+            cache.render_workspace(
+                frame,
+                frame.area(),
+                &[image],
+                &picker(EditorGraphicsProtocol::Kitty, false),
+            );
+        })
+        .unwrap();
+    let (controls, compressed) = kitty_packets(screen.backend().buffer()[(0, 0)].symbol(), false);
+    assert!(controls.contains("s=128,v=128,c=48,r=24,o=z,"));
+    let mut cropped = Vec::new();
+    flate2::read::ZlibDecoder::new(compressed.as_slice())
+        .read_to_end(&mut cropped)
+        .unwrap();
+    assert_eq!(cropped, [10, 80, 120, 255].repeat(128 * 128));
+}
+
+#[test]
 fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
     let area = workspace_protocol::Rect {
         x: 1,
@@ -139,6 +286,7 @@ fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
         .collect::<Vec<_>>();
     let image = workspace_protocol::Image {
         image_id: 42,
+        preview_id: None,
         width,
         height,
         rgba: Arc::from(pixels),
@@ -182,6 +330,7 @@ fn workspace_iterm2_keeps_a_retina_preview_when_the_pane_expands_or_is_clipped()
     rgba.extend([20, 40, 162, 255].repeat((width * height / 2) as usize));
     let mut image = workspace_protocol::Image {
         image_id: 42,
+        preview_id: None,
         width,
         height,
         rgba: Arc::from(rgba),
@@ -827,7 +976,7 @@ fn preparation_rejects_large_temporary_canvases_before_allocating_or_encoding() 
 }
 
 #[test]
-fn preparation_bounds_the_float_resize_pass_as_well_as_final_pixels() {
+fn preparation_bounds_resize_passes_and_accounts_for_terminal_upscaling() {
     let image = TerminalImageFragment {
         width: 8192,
         height: 1,
@@ -840,14 +989,18 @@ fn preparation_bounds_the_float_resize_pass_as_well_as_final_pixels() {
     let picker = picker(EditorGraphicsProtocol::Kitty, false);
     let crop = source_for_area(&image, image.area).unwrap();
     assert!(preparation_cost(&image, Size::new(1, 1), crop, Some(&picker)).is_none());
-    let matching_cell = TerminalGraphicsProbe::from_terminal_capabilities(
-        EditorGraphicsProtocol::Kitty,
-        1,
-        4096,
-        false,
-        false,
-    );
-    assert!(preparation_cost(&image, Size::new(1, 1), crop, matching_cell.picker()).is_none());
+    for (protocol, fits) in [
+        (EditorGraphicsProtocol::Kitty, true),
+        (EditorGraphicsProtocol::Iterm2, true),
+        (EditorGraphicsProtocol::Sixel, false),
+    ] {
+        let matching_cell =
+            TerminalGraphicsProbe::from_terminal_capabilities(protocol, 1, 4096, false, false);
+        assert_eq!(
+            preparation_cost(&image, Size::new(1, 1), crop, matching_cell.picker()).is_some(),
+            fits
+        );
+    }
 }
 
 #[test]
