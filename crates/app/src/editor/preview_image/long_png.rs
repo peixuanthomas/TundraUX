@@ -205,7 +205,8 @@ fn read_first_frame(
                 let strip = &mut strips[strip];
                 let stride = strip.width() as usize * 4;
                 let offset = y as usize * stride;
-                let target = &mut strip.as_mut()[offset..offset + stride];
+                let pixels: &mut [u8] = strip;
+                let target = &mut pixels[offset..offset + stride];
                 if full_row {
                     let start = group * strip_extent as usize * 4;
                     target.copy_from_slice(&data[start..start + stride]);
