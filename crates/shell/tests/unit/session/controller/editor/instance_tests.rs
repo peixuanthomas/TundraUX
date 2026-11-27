@@ -59,6 +59,75 @@ fn large_read_only_document_prepares_latest_geometry_without_resetting_scroll() 
 }
 
 #[test]
+fn office_text_opens_before_its_graphics_finish() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().canonicalize().unwrap().join("preview.xlsx");
+    std::fs::write(
+        &path,
+        include_bytes!("../../../../fixtures/editor/preview.xlsx"),
+    )
+    .unwrap();
+    let mut state = session();
+    state.open_editor();
+    state.set_terminal_image_support(true);
+    state.set_terminal_text_sizing_support(false);
+    state
+        .begin_editor_open_task(path, EditorTaskAccess::ReadOnly, None, false)
+        .unwrap();
+    let platform = &platform::mock::UnsupportedPlatform;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while state.pages.editor.editor_load_state.is_some() {
+        state.poll_editor_background_tasks(platform);
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    let text = Arc::clone(
+        &state
+            .pages
+            .editor
+            .editor_rich_render_cache
+            .as_ref()
+            .unwrap()
+            .blocks,
+    );
+    assert!(
+        text.iter()
+            .any(|block| matches!(block, ui::EditorRenderBlock::Heading { .. }))
+    );
+    assert!(
+        text.iter()
+            .any(|block| matches!(block, ui::EditorRenderBlock::RichTable { .. }))
+    );
+    assert!(state.to_editor_view_model().read_only);
+    assert_eq!(state.to_editor_view_model().markdown_reading, None);
+    state.apply_input_with_platform(
+        InputEvent::Resize {
+            width: 108,
+            height: 20,
+        },
+        platform,
+    );
+    while state.pages.editor.editor_office_graphics.busy() {
+        state.poll_editor_background_tasks(platform);
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    let cache = state
+        .pages
+        .editor
+        .editor_rich_render_cache
+        .as_ref()
+        .unwrap();
+    assert!(!Arc::ptr_eq(&text, &cache.blocks));
+    assert!(
+        cache
+            .blocks
+            .iter()
+            .any(|block| matches!(block, ui::EditorRenderBlock::RichTable { .. }))
+    );
+}
+
+#[test]
 fn managed_save_picker_keeps_its_draft_in_the_editor_and_cancels_a_pending_close() {
     let mut state = session();
     state.open_editor();
@@ -616,6 +685,7 @@ fn a_closed_editors_late_load_cannot_replace_a_new_editor() {
                 fingerprint: fingerprint(),
                 total_bytes: 0,
                 rich_blocks: None,
+                office_graphics: None,
             })),
         })
         .unwrap();

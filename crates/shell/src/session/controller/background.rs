@@ -65,7 +65,7 @@ impl ShellSession {
                     || page.editor_read_session.is_some()
                     || self.app.editor_state_for_page(id).is_none_or(|state| {
                         !state.is_dirty()
-                            || state.is_read_only()
+                            || !state.can_save()
                             || state
                                 .document
                                 .path

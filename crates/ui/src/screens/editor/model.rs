@@ -4,6 +4,7 @@ use super::*;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum EditorFocus {
     MenuBar,
+    MarkdownReadingToggle,
     Toolbar,
     #[default]
     Canvas,
@@ -56,6 +57,7 @@ pub enum EditorMenuAction {
     ScriptWorkspace,
     ScriptSettings,
     ToggleVim,
+    ToggleMarkdownReading,
     VimHelp,
     SaveAs,
     Close,
@@ -400,6 +402,8 @@ pub struct EditorRenderSpan {
     /// Logical range in the in-memory rich document. Its length is measured in
     /// grapheme clusters and normally matches the visible text in this span.
     pub rich_range: Option<RichRange>,
+    /// Prepared inline graphic. `text` remains its readable and copyable fallback.
+    pub media: Option<EditorPreviewGraphic>,
 }
 
 impl EditorRenderSpan {
@@ -481,6 +485,11 @@ pub enum EditorRenderBlock {
         level: u8,
         spans: Vec<EditorRenderSpan>,
     },
+    PreviewHeading {
+        level: u8,
+        spans: Vec<EditorRenderSpan>,
+        graphic: EditorPreviewGraphic,
+    },
     BulletListItem {
         depth: u8,
         checked: Option<bool>,
@@ -498,6 +507,10 @@ pub enum EditorRenderBlock {
     CodeBlock {
         language: Option<String>,
         lines: Vec<String>,
+    },
+    RichCodeBlock {
+        language: Option<String>,
+        lines: Vec<EditorRenderSpan>,
     },
     Table {
         header: Vec<EditorTableCell>,
@@ -525,11 +538,30 @@ pub enum EditorRenderBlock {
         id: u64,
         image: app::editor::PreviewImage,
     },
+    PreviewGraphic {
+        graphic: EditorPreviewGraphic,
+        kind: EditorPreviewGraphicKind,
+        fallback: String,
+        range: Option<RichRange>,
+    },
     Footnote {
         label: String,
         spans: Vec<EditorRenderSpan>,
     },
     Blank,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorPreviewGraphic {
+    pub id: u64,
+    pub image: Arc<app::editor::PreviewImage>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorPreviewGraphicKind {
+    Picture,
+    Math,
+    Mermaid,
 }
 
 impl EditorRenderBlock {
@@ -782,6 +814,8 @@ pub struct EditorViewModel {
     pub read_window: Option<EditorReadWindowViewModel>,
     /// Whether the backing diagnostic document can be reloaded from the editor.
     pub reload_available: bool,
+    /// `None` hides the toggle, `Some(false)` shows Source, and `Some(true)` shows Reading.
+    pub markdown_reading: Option<bool>,
     pub mode: EditorMode,
     pub focus: EditorFocus,
     pub open_menu: Option<EditorMenu>,
@@ -890,6 +924,7 @@ impl EditorViewModel {
             read_only: false,
             read_window: None,
             reload_available: false,
+            markdown_reading: None,
             mode: EditorMode::Rich,
             focus: EditorFocus::Canvas,
             open_menu: None,
@@ -930,6 +965,20 @@ impl EditorViewModel {
             image_cell_size: [8, 16],
             text_sizing_protocol: false,
             status_message: None,
+        }
+    }
+
+    pub(super) fn canvas_read_only(&self) -> bool {
+        self.read_only || self.markdown_reading == Some(true)
+    }
+
+    pub(super) fn toolbar_action_enabled(&self, action: EditorToolbarAction) -> bool {
+        match action {
+            EditorToolbarAction::Save => self.toolbar.is_enabled(action, self.read_only, self.mode),
+            EditorToolbarAction::Find if self.markdown_reading == Some(true) => false,
+            _ => self
+                .toolbar
+                .is_enabled(action, self.canvas_read_only(), self.mode),
         }
     }
 

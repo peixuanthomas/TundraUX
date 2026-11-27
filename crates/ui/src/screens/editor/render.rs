@@ -194,10 +194,22 @@ fn render_menu_bar(
         .with_current(item.mode == model.mode)
         .render_inline_frame(frame, item.area, menu_theme);
     }
-    let start = layout
+    let mut start = layout
         .menus
         .last()
         .map_or(layout.menu_bar.x, |item| item.area.right());
+    if let Some(reading) = model.markdown_reading
+        && !layout.markdown_reading_toggle.is_empty()
+    {
+        let mut button = Button::new(
+            "editor.markdown-reading-toggle",
+            markdown_reading_label(reading),
+        )
+        .with_current(reading);
+        button.set_focused(model.focus == EditorFocus::MarkdownReadingToggle);
+        button.render_inline_frame(frame, layout.markdown_reading_toggle, menu_theme);
+        start = layout.markdown_reading_toggle.right();
+    }
     let mut title = model
         .status_message
         .clone()
@@ -433,7 +445,9 @@ fn render_canvas(
                 || model.selection_offsets.is_some(),
             ..Default::default()
         },
-        if model.read_only {
+        if model.markdown_reading == Some(true) {
+            &["click", "drag", "key", "scroll"]
+        } else if model.read_only {
             &["click", "key", "scroll"]
         } else {
             &["click", "drag", "text", "key", "scroll"]
@@ -534,34 +548,43 @@ fn render_canvas(
         let Some(display_line) = layout.prepared_lines.get(relative_line) else {
             continue;
         };
+        let reading = model.canvas_read_only();
         match display_line.role {
             DisplayLineRole::HeadingTop(level) => {
                 let has_visible_bottom = layout
                     .prepared_lines
                     .get(relative_line.saturating_add(1))
                     .is_some_and(|line| {
-                        matches!(line.role, DisplayLineRole::HeadingBottom(bottom_level) if bottom_level == level)
+                        line.block_index == display_line.block_index
+                            && matches!(line.role, DisplayLineRole::HeadingBottom(bottom_level) if bottom_level == level)
                     });
-                if !has_visible_bottom || line_layout.area.bottom() >= layout.canvas.bottom() {
+                if has_visible_bottom
+                    && line_layout.area.bottom() < layout.canvas.bottom()
+                    && !(reading && model.rich_selection.is_some_and(|range| !range.is_empty()))
+                {
+                    let text = display_line
+                        .runs
+                        .iter()
+                        .map(|run| terminal_safe_text(run.text.resolve(model.source.as_deref())))
+                        .collect::<String>();
+                    frame.render_widget(
+                        BigText::new(&text, level, theme.foreground),
+                        Rect::new(
+                            line_layout.area.x,
+                            line_layout.area.y,
+                            line_layout.area.width,
+                            2,
+                        ),
+                    );
                     continue;
                 }
-                let text = display_line
-                    .runs
-                    .iter()
-                    .map(|run| terminal_safe_text(run.text.resolve(model.source.as_deref())))
-                    .collect::<String>();
-                frame.render_widget(
-                    BigText::new(&text, level, theme.foreground),
-                    Rect::new(
-                        line_layout.area.x,
-                        line_layout.area.y,
-                        line_layout.area.width,
-                        2,
-                    ),
-                );
-                continue;
+                if !reading {
+                    continue;
+                }
             }
-            DisplayLineRole::HeadingBottom(_) | DisplayLineRole::Picture { .. } => continue,
+            DisplayLineRole::HeadingBottom(_) if !reading || relative_line > 0 => continue,
+            DisplayLineRole::HeadingBottom(_) => {}
+            DisplayLineRole::Picture { .. } => continue,
             DisplayLineRole::Normal => {}
         }
         let line = styled_line(
@@ -600,6 +623,7 @@ fn render_canvas(
     }
 
     if model.focus == EditorFocus::Canvas
+        && model.markdown_reading != Some(true)
         && let Some(cursor) = effective_cursor(layout, model)
         && cursor.line >= layout.visible_start
         && cursor.line < layout.visible_start.saturating_add(layout.visible_capacity)
@@ -666,7 +690,9 @@ fn render_status_bar(
     let remaining = right_edge.saturating_sub(start);
     let has_action = |action| layout.status_items.iter().any(|item| item.action == action);
     let mut status = Vec::new();
-    if model.cursor.is_none() || !has_action(EditorMenuAction::GoToLine) {
+    if model.markdown_reading != Some(true)
+        && (model.cursor.is_none() || !has_action(EditorMenuAction::GoToLine))
+    {
         let cursor = if model.soft_wrap {
             model.cursor
         } else {
@@ -718,9 +744,46 @@ fn styled_line(
     let mut output = Vec::new();
     let mut column = line.column_start;
     let mut visible_width = 0usize;
+    if model.mode == EditorMode::Rich && column > scroll {
+        visible_width = (column - scroll).min(width);
+        output.push(Span::raw(" ".repeat(visible_width)));
+    }
     for run in &line.runs {
         let base_style = span_style(&run.style, theme);
         let run_text = run.text.resolve(model.source.as_deref());
+        if let Some(run_width) = run.fixed_width() {
+            let start = column;
+            column = column.saturating_add(run_width);
+            let left = start.max(scroll);
+            let right = column.min(scroll.saturating_add(width));
+            if left >= right {
+                continue;
+            }
+            let selected =
+                preview_run_is_selected(run, layout, model, document_line, start, run_width);
+            let style = selection_style(base_style, selected, theme);
+            let visible = right - left;
+            let fallback = match &run.text {
+                DisplayText::Graphic(_) if !run_text.is_empty() => {
+                    let first_line = run_text.lines().next().unwrap_or_default();
+                    let safe = terminal_safe_text(first_line);
+                    let leading =
+                        crate::components::truncate_to_terminal_width(&safe, left - start);
+                    fit_text(&safe[leading.len()..], visible)
+                }
+                _ => String::new(),
+            };
+            let padding = visible.saturating_sub(terminal_width(&fallback));
+            output.push(Span::styled(
+                format!("{fallback}{}", " ".repeat(padding)),
+                style,
+            ));
+            visible_width = visible_width.saturating_add(visible);
+            if visible_width >= width {
+                break;
+            }
+            continue;
+        }
         let run_span = Span::raw(run_text);
         let mut relative_byte = 0usize;
         let mut relative_grapheme = 0usize;
@@ -741,6 +804,12 @@ fn styled_line(
             let start = column;
             column = column.saturating_add(cell_width);
             if column <= scroll {
+                continue;
+            }
+            if start < scroll && model.markdown_reading == Some(true) {
+                let clipped = (column - scroll).min(width.saturating_sub(visible_width));
+                output.push(Span::raw(" ".repeat(clipped)));
+                visible_width = visible_width.saturating_add(clipped);
                 continue;
             }
             if visible_width.saturating_add(cell_width) > width {
@@ -774,13 +843,7 @@ fn styled_line(
                     |selection| source_mapping_is_selected(grapheme_source, selection),
                 ),
             };
-            let style = if selected {
-                base_style
-                    .patch(theme.tokens().filled_style(theme.accent_color))
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                base_style
-            };
+            let style = selection_style(base_style, selected, theme);
             output.push(Span::styled(safe, style));
             visible_width = visible_width.saturating_add(cell_width);
         }
@@ -789,6 +852,57 @@ fn styled_line(
         }
     }
     Line::from(output)
+}
+
+pub(super) fn preview_run_is_selected(
+    run: &DisplayRun,
+    layout: &EditorLayout,
+    model: &EditorViewModel,
+    line: usize,
+    column: usize,
+    width: usize,
+) -> bool {
+    let line = match &run.text {
+        DisplayText::Graphic(graphic) => line.saturating_sub(usize::from(graphic.row)),
+        _ => line,
+    };
+    let intersects = |selection: EditorSelection| {
+        let (first, last) = selection.normalized();
+        first < last
+            && first < EditorTextPosition::new(line, column.saturating_add(width))
+            && EditorTextPosition::new(line, column) < last
+    };
+    if let Some(selection) = model.rich_selection {
+        let DisplayRich::Range(range) = run.rich else {
+            return false;
+        };
+        if selection.is_empty() {
+            return false;
+        }
+        if let Some(overlap) = selection_overlap_in_one_container(range, selection) {
+            return overlap;
+        }
+        if let (Some(anchor), Some(active)) = (
+            layout.visual_position_for_rich(selection.start),
+            layout.visual_position_for_rich(selection.end),
+        ) {
+            return intersects(EditorSelection::new(anchor, active));
+        }
+        return false;
+    }
+    model.selection.is_some_and(intersects)
+        || model
+            .selection_offsets
+            .is_some_and(|selection| source_run_is_selected(run, selection))
+}
+
+fn selection_style(base: Style, selected: bool, theme: &TundraTheme) -> Style {
+    if selected {
+        base.patch(theme.tokens().filled_style(theme.accent_color))
+            .add_modifier(Modifier::BOLD)
+    } else {
+        base
+    }
 }
 
 fn syntax_style(
@@ -864,8 +978,14 @@ fn rich_mapping_is_selected(
     selection: RichRange,
     visual: EditorTextPosition,
 ) -> bool {
-    if selection.is_empty() || !matches!(mapping, DisplayRich::Range(_)) {
+    let DisplayRich::Range(range) = mapping else {
         return false;
+    };
+    if selection.is_empty() {
+        return false;
+    }
+    if let Some(overlap) = selection_overlap_in_one_container(range, selection) {
+        return overlap;
     }
     let Some(anchor) = layout.visual_position_for_rich(selection.start) else {
         return false;
@@ -879,6 +999,25 @@ fn rich_mapping_is_selected(
         (active, anchor)
     };
     start <= visual && visual < end
+}
+
+fn selection_overlap_in_one_container(range: RichRange, selection: RichRange) -> Option<bool> {
+    let id = range.start.container_id;
+    if ![range.end, selection.start, selection.end]
+        .iter()
+        .all(|point| point.container_id == id)
+    {
+        return None;
+    }
+    let first = selection
+        .start
+        .grapheme_offset
+        .min(selection.end.grapheme_offset);
+    let last = selection
+        .start
+        .grapheme_offset
+        .max(selection.end.grapheme_offset);
+    Some(first < range.end.grapheme_offset && range.start.grapheme_offset < last)
 }
 
 fn source_run_is_selected(run: &DisplayRun, selection: EditorSourceSelection) -> bool {

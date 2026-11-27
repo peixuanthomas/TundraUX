@@ -1,6 +1,322 @@
 use super::document::*;
 use super::*;
 
+mod markdown_preview_graphics {
+    use super::*;
+    use crate::{RenderContext, TerminalImageCache};
+    use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+    use ratatui::{Terminal, backend::TestBackend};
+    use std::io::Cursor;
+
+    fn graphic(id: u64, width: u32, height: u32) -> EditorPreviewGraphic {
+        let mut bytes = Cursor::new(Vec::new());
+        let pixels = RgbaImage::from_pixel(width, height, Rgba([200, 150, 100, 255]));
+        DynamicImage::ImageRgba8(pixels)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        EditorPreviewGraphic {
+            id,
+            image: app::editor::PreviewImage::decode(bytes.get_ref())
+                .unwrap()
+                .into(),
+        }
+    }
+
+    fn reading(blocks: Vec<EditorRenderBlock>) -> EditorViewModel {
+        let mut model = EditorViewModel::new("reading.md", blocks);
+        model.markdown_reading = Some(true);
+        model.image_protocol = EditorImageProtocolStatus::Available;
+        model.image_cell_size = [8, 16];
+        model
+    }
+
+    #[test]
+    fn inline_math_wraps_as_one_item_and_reserves_its_height() {
+        let mut formula =
+            EditorRenderSpan::plain("x+y").with_rich_range(RichRange::from_raw(4, 3, 4));
+        formula.media = Some(graphic(1, 32, 32));
+        let model = reading(vec![EditorRenderBlock::Paragraph(vec![
+            EditorRenderSpan::plain("abc"),
+            formula,
+            EditorRenderSpan::plain("TAIL"),
+        ])]);
+        let full = flatten_rich_document(&model, 6, 8);
+        let measured = ReadOnlyRichLayout::measure(&model, 6, 8);
+        assert_eq!(measured.line_count(), 4);
+        assert_eq!(measured.materialize(&model, 0..4), full);
+        let text = |line: usize| {
+            full[line]
+                .runs
+                .iter()
+                .map(|run| run.text.resolve(None))
+                .collect::<String>()
+        };
+        assert_eq!(text(0), "abc");
+        assert_eq!(text(1), "x+yTA");
+        assert_eq!(text(2), "  ");
+        assert_eq!(text(3), "IL");
+        for row in &full[1..3] {
+            let boundaries = display_line_rich_boundaries(row, None, 0, 6);
+            assert_eq!(
+                boundaries
+                    .iter()
+                    .map(|boundary| boundary.column)
+                    .collect::<Vec<_>>(),
+                [0, 4]
+            );
+        }
+    }
+
+    #[test]
+    fn tall_inline_math_in_table_crops_in_both_directions_inside_split_pane() {
+        let mut formula = EditorRenderSpan::plain("x+y");
+        formula.media = Some(graphic(2, 48, 48));
+        let table_id = NodeId::new(15);
+        let mut blocks = vec![EditorRenderBlock::RichTable {
+            table_id,
+            header: vec![
+                EditorTableCell::text("left"),
+                EditorTableCell::text("right"),
+            ],
+            rows: vec![vec![
+                EditorTableCell {
+                    spans: vec![formula],
+                },
+                EditorTableCell::text("other"),
+            ]],
+            alignments: vec![EditorTableAlignment::Left, EditorTableAlignment::Left],
+        }];
+        blocks.extend(std::iter::repeat_n(EditorRenderBlock::Blank, 20));
+        let mut model = reading(blocks);
+        model.rich_table_column_widths.insert(table_id, vec![8, 8]);
+        model.horizontal_scroll = 4;
+        model.scroll_line = 4;
+        let area = Rect::new(4, 3, 12, 9);
+        let mut terminal = Terminal::new(TestBackend::new(24, 18)).unwrap();
+        let context = RenderContext::from_theme(
+            &TundraTheme::default_dark(),
+            Default::default(),
+            Default::default(),
+        );
+        let mut images = TerminalImageCache::default();
+        images.capture_workspace(area);
+        terminal
+            .draw(|frame| {
+                let layout = render_editor_contextual_with_terminal_images(
+                    frame,
+                    area,
+                    &model,
+                    &context,
+                    &mut images,
+                    None,
+                );
+                assert_eq!(layout.visible_start, 4);
+                assert_eq!(layout.horizontal_scroll, 4);
+                assert!(layout.visible_capacity >= 2);
+            })
+            .unwrap();
+        let images = images.take_workspace_images();
+        let [image] = images.as_slice() else {
+            panic!("expected a single clipped formula")
+        };
+        assert_eq!(image.preview_id, Some(2));
+        assert_eq!(image.area.x, 0);
+        assert_eq!(image.area.width, 4);
+        assert_eq!(image.area.height, 2);
+        assert_eq!(image.source, [16, 16, 32, 32]);
+    }
+
+    #[test]
+    fn selected_formula_falls_back_to_readable_source_and_does_not_cover_selection() {
+        let range = RichRange::from_raw(5, 2, 3);
+        let mut formula = EditorRenderSpan::plain("x+y").with_rich_range(range);
+        formula.media = Some(graphic(3, 32, 16));
+        let mut model = reading(vec![EditorRenderBlock::Paragraph(vec![
+            EditorRenderSpan::plain("a "),
+            formula,
+            EditorRenderSpan::plain(" z"),
+        ])]);
+        model.rich_selection = Some(range);
+        let area = Rect::new(0, 0, 28, 10);
+        let mut terminal = Terminal::new(TestBackend::new(28, 10)).unwrap();
+        let theme = TundraTheme::default_dark();
+        let context = RenderContext::from_theme(&theme, Default::default(), Default::default());
+        let mut images = TerminalImageCache::default();
+        images.capture_workspace(area);
+        let layout = editor_layout(area, &model);
+        terminal
+            .draw(|frame| {
+                render_editor_contextual_with_terminal_images(
+                    frame,
+                    area,
+                    &model,
+                    &context,
+                    &mut images,
+                    None,
+                );
+            })
+            .unwrap();
+        assert!(images.take_workspace_images().is_empty());
+        let buffer = terminal.backend().buffer();
+        let cell = |column| {
+            buffer
+                .cell((layout.canvas.x + column, layout.canvas.y))
+                .unwrap()
+        };
+        assert_eq!(
+            [cell(2).symbol(), cell(3).symbol(), cell(4).symbol()],
+            ["x", "+", "y"]
+        );
+        assert_ne!(cell(1).bg, cell(2).bg);
+        assert_eq!(cell(7).symbol(), "z");
+    }
+
+    #[test]
+    fn text_only_graphics_use_source_but_keep_local_pictures() {
+        let mut formula = EditorRenderSpan::plain("abc");
+        formula.media = Some(graphic(4, 32, 32));
+        let blocks = vec![
+            EditorRenderBlock::Paragraph(vec![formula]),
+            EditorRenderBlock::PreviewGraphic {
+                graphic: graphic(5, 32, 48),
+                kind: EditorPreviewGraphicKind::Mermaid,
+                fallback: "a --> b\nb --> c".into(),
+                range: None,
+            },
+            EditorRenderBlock::PreviewGraphic {
+                graphic: graphic(6, 32, 48),
+                kind: EditorPreviewGraphicKind::Picture,
+                fallback: "local photo".into(),
+                range: None,
+            },
+        ];
+        let mut model = reading(blocks);
+        model.image_protocol = EditorImageProtocolStatus::Unsupported;
+        let lines = flatten_rich_document(&model, 20, 12);
+        assert_eq!(lines.len(), 6);
+        let text = |line: usize| {
+            lines[line]
+                .runs
+                .iter()
+                .map(|run| run.text.resolve(None))
+                .collect::<String>()
+        };
+        assert_eq!(text(0), "abc");
+        assert_eq!(text(1), "a --> b");
+        assert_eq!(text(2), "b --> c");
+        assert!(matches!(&lines[3].runs[0].text, DisplayText::Graphic(graphic) if graphic.picture));
+    }
+
+    #[test]
+    fn heading_prefers_native_text_then_graphic_then_plain_text() {
+        let block = EditorRenderBlock::PreviewHeading {
+            level: 2,
+            spans: vec![
+                EditorRenderSpan::plain("Example").with_rich_range(RichRange::from_raw(7, 0, 7)),
+            ],
+            graphic: graphic(7, 48, 48),
+        };
+        let mut model = reading(vec![block]);
+        model.rich_cursor = Some(RichPosition::in_node(NodeId::new(7), 0));
+        model.text_sizing_protocol = true;
+        let lines = flatten_rich_document(&model, 40, 8);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].role, DisplayLineRole::HeadingTop(2));
+        model.text_sizing_protocol = false;
+        let lines = flatten_rich_document(&model, 40, 8);
+        assert_eq!(lines.len(), 3);
+        assert!(matches!(lines[0].runs[0].text, DisplayText::Graphic(_)));
+        model.image_protocol = EditorImageProtocolStatus::Unsupported;
+        let lines = flatten_rich_document(&model, 40, 8);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].runs.iter().all(|run| run.style.bold));
+        assert_eq!(
+            lines[0]
+                .runs
+                .iter()
+                .map(|run| run.text.resolve(None))
+                .collect::<String>(),
+            "Example"
+        );
+    }
+
+    #[test]
+    fn code_tabs_use_terminal_columns_without_changing_selection_offsets() {
+        let block = EditorRenderBlock::RichCodeBlock {
+            language: Some("sh".into()),
+            lines: vec![
+                EditorRenderSpan::plain("a\tz").with_rich_range(RichRange::from_raw(8, 0, 3)),
+            ],
+        };
+        let model = reading(vec![block]);
+        let lines = flatten_rich_document(&model, 20, 8);
+        assert_eq!(runs_width(&lines[1].runs), 7);
+        let positions = display_line_rich_boundaries(&lines[1], None, 0, 20)
+            .into_iter()
+            .filter(|boundary| boundary.editable)
+            .map(|boundary| (boundary.column, boundary.position.grapheme_offset))
+            .collect::<Vec<_>>();
+        assert_eq!(positions, [(2, 0), (3, 1), (6, 2), (7, 3)]);
+    }
+
+    #[test]
+    fn cropped_markdown_picture_reuses_fitted_pixels_after_returning_from_source() {
+        let graphic = graphic(9, 768, 576);
+        let original = graphic.image.rgba.clone();
+        let mut blocks = vec![
+            EditorRenderBlock::paragraph("before"),
+            EditorRenderBlock::PreviewGraphic {
+                graphic,
+                kind: EditorPreviewGraphicKind::Picture,
+                fallback: "local picture".into(),
+                range: None,
+            },
+        ];
+        blocks.extend(std::iter::repeat_n(EditorRenderBlock::Blank, 50));
+        let mut model = reading(blocks);
+        model.scroll_line = 2;
+        let theme = TundraTheme::default_dark();
+        let context = RenderContext::from_theme(&theme, Default::default(), Default::default());
+        let mut terminal = Terminal::new(TestBackend::new(132, 59)).unwrap();
+        let mut images = TerminalImageCache::default();
+        let mut capture = |model: &EditorViewModel, area| {
+            images.capture_workspace(area);
+            terminal
+                .draw(|frame| {
+                    render_editor_contextual_with_terminal_images(
+                        frame,
+                        area,
+                        model,
+                        &context,
+                        &mut images,
+                        None,
+                    );
+                })
+                .unwrap();
+            images.take_workspace_images()
+        };
+        let compact = Rect::new(4, 3, 64, 9);
+        let first = capture(&model, compact).pop().unwrap();
+        assert_eq!(first.preview_id, Some(9));
+        assert_eq!([first.width, first.height], [152, 112]);
+        assert_eq!(first.source, [0, 16, 152, 96]);
+        assert_eq!(&first.rgba[..4], &[200, 150, 100, 255]);
+        assert!(first.rgba.len() < original.len() / 20);
+
+        let source = EditorViewModel::source("reading.md", "raw Markdown");
+        assert!(capture(&source, compact).is_empty());
+        let reopened = capture(&model, compact).pop().unwrap();
+        assert_eq!(reopened.image_id, first.image_id);
+        assert!(Arc::ptr_eq(&reopened.rgba, &first.rgba));
+
+        let enlarged = capture(&model, Rect::new(4, 3, 120, 52)).pop().unwrap();
+        assert_eq!(enlarged.preview_id, first.preview_id);
+        assert_eq!(enlarged.image_id, 9);
+        assert_eq!([enlarged.width, enlarged.height], [768, 576]);
+        assert!(Arc::ptr_eq(&enlarged.rgba, &original));
+    }
+}
+
 #[cfg(test)]
 mod rich_layout_measurement_tests {
     use super::*;
@@ -54,6 +370,14 @@ mod rich_layout_measurement_tests {
             EditorRenderBlock::CodeBlock {
                 language: Some("rust".to_string()),
                 lines: vec!["fn main() {}".to_string(), "// line 2".to_string()],
+            },
+            EditorRenderBlock::RichCodeBlock {
+                language: Some("text".into()),
+                lines: vec![
+                    EditorRenderSpan::plain("a\tfoo")
+                        .with_rich_range(RichRange::from_raw(66, 0, 5)),
+                    EditorRenderSpan::plain("bar").with_rich_range(RichRange::from_raw(66, 6, 9)),
+                ],
             },
             EditorRenderBlock::Table {
                 header: vec![EditorTableCell::text("A"), EditorTableCell::text("B")],

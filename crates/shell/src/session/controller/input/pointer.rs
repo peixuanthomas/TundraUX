@@ -169,17 +169,25 @@ impl ShellSession {
         {
             return None;
         }
-        if self.active_screen() == ShellScreen::Editor
-            && matches!(
-                self.editor_current_layout().hit_test(point.0, point.1),
+        if self.active_screen() == ShellScreen::Editor {
+            let layout = self.editor_current_layout();
+            match layout.hit_test(point.0, point.1) {
                 Some(
                     ui::EditorHitTarget::VerticalScrollbar
-                        | ui::EditorHitTarget::HorizontalScrollbar
-                        | ui::EditorHitTarget::MenuScroll
-                )
-            )
-        {
-            return None;
+                    | ui::EditorHitTarget::HorizontalScrollbar
+                    | ui::EditorHitTarget::MenuScroll,
+                ) => return None,
+                Some(ui::EditorHitTarget::MenuAction(
+                    ui::EditorMenuAction::ToggleMarkdownReading,
+                )) => {
+                    return Some(ui::components::ButtonRegion {
+                        id: "editor.markdown-reading-toggle".into(),
+                        area: layout.markdown_reading_toggle,
+                        disabled: false,
+                    });
+                }
+                _ => {}
+            }
         }
         if self.resolved_overlay_owner() == Some(ShellComponent::Explorer)
             && matches!(
@@ -272,7 +280,10 @@ impl ShellSession {
                 self.button_regions
                     .iter()
                     .rev()
-                    .find(|button| rect_contains(button.area, point))
+                    .find(|button| {
+                        button.id.as_str() != "editor.markdown-reading-toggle"
+                            && rect_contains(button.area, point)
+                    })
                     .cloned()
             })
             .or_else(|| {

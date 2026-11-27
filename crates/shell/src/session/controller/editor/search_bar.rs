@@ -7,6 +7,13 @@ use ui::EditorSearchControl as Control;
 
 impl ShellSession {
     pub(in crate::session) fn open_edit_search(&mut self, replace: bool) {
+        if self
+            .app
+            .editor_state()
+            .is_some_and(EditorState::is_markdown_reading)
+        {
+            return;
+        }
         let selected = self
             .app
             .editor_state()

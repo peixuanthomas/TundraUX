@@ -26,6 +26,8 @@ The default manifest contains 24 items: 20 text assets, 3 TOML art sets, and 1 c
 - Older themes can still supply their former icon files. The loader combines them in memory by app ID, using explicit Launcher entries when both files define the same app. Older default themes receive missing icons from the bundled theme.
 - All assets contribute to dimension calculations; updating assets may change the minimum terminal size.
 
+The distributed `licenses/` directory contains the notices for the Markdown diagram and formula renderers, including the embedded STIX Two Math font.
+
 Asset roots are resolved in this order:
 
 1. `TUNDRA_ASCII_ASSETS_DIR`;
@@ -38,6 +40,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 
 | File | Interface text |
 | --- | --- |
+| `ui-editor.ftl` | Editor controls, including the Markdown reading and editing actions. |
 | `ui-launcher.ftl` | Launcher search, result and organize controls. Built-in search uses the active language pack’s app names and descriptions. |
 | `ui-home.ftl` | Home shortcut actions and icon editing |
 | `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |

@@ -2,8 +2,9 @@ use app::editor::PreviewImage;
 use ratatui::layout::Size;
 use ratatui::style::Color;
 
-use super::document::DisplayLineRole;
+use super::document::{DisplayLineRole, DisplayText, display_run_width};
 use super::preview_zoom::preview_pixel_crop;
+use super::render::preview_run_is_selected;
 use super::*;
 use crate::{
     CommandLineTerminalSnapshot, EditorImagePicker, RenderContext, TerminalImageCache,
@@ -64,17 +65,26 @@ pub(super) fn render(
     let slices = if let Some(window) = layout.picture_window {
         zoomed_slices(model, layout.canvas_panel, window)
     } else {
-        fitted_slices(layout, model)
+        let mut slices = fitted_slices(layout, model);
+        slices.extend(preview_slices(layout, model));
+        slices
     };
     let mut native = Vec::new();
     for slice in slices {
-        slice.draw(frame, canvas, context, background, zoomed);
+        if slice.rasterize {
+            slice.draw(frame, canvas, context, background, zoomed);
+        }
         if picker.is_some() || images.capturing_workspace() {
-            let fragment = slice.fragment(background, model.image_cell_size);
+            let fit = picker.is_none() && !zoomed && model.markdown_reading == Some(true);
+            let (fragment, preview_id) = slice.fragment(
+                background,
+                model.image_cell_size,
+                fit.then_some(&mut *images),
+            );
             if picker.is_some() {
                 native.push(fragment);
             } else {
-                images.capture_preview(canvas, frame.area(), &fragment, fragment.image_id);
+                images.capture_preview(canvas, frame.area(), &fragment, preview_id);
             }
         }
     }
@@ -104,6 +114,7 @@ struct PictureSlice<'a> {
     area: Rect,
     offset: [u32; 2],
     size: [u32; 2],
+    rasterize: bool,
 }
 
 fn fitted_slices<'a>(layout: &EditorLayout, model: &'a EditorViewModel) -> Vec<PictureSlice<'a>> {
@@ -134,8 +145,74 @@ fn fitted_slices<'a>(layout: &EditorLayout, model: &'a EditorViewModel) -> Vec<P
             ),
             offset: [0, u32::from(row)],
             size: [u32::from(size.width), u32::from(size.height)],
+            rasterize: true,
         });
         line += usize::from(height);
+    }
+    slices
+}
+
+fn preview_slices<'a>(layout: &'a EditorLayout, model: &EditorViewModel) -> Vec<PictureSlice<'a>> {
+    let mut slices = Vec::<PictureSlice<'_>>::new();
+    let mut placements = BTreeMap::<_, usize>::new();
+    for (row, line) in layout.prepared_lines.iter().enumerate() {
+        if !line
+            .runs
+            .iter()
+            .any(|run| matches!(run.text, DisplayText::Graphic(_)))
+        {
+            continue;
+        }
+        let scroll = if line.no_wrap {
+            layout.horizontal_scroll
+        } else {
+            0
+        };
+        let end = scroll.saturating_add(usize::from(layout.canvas.width));
+        let mut column = line.column_start;
+        for run in &line.runs {
+            if column >= end {
+                break;
+            }
+            let width = display_run_width(run);
+            let start = column;
+            column = column.saturating_add(width);
+            let DisplayText::Graphic(graphic) = &run.text else {
+                continue;
+            };
+            let left = start.max(scroll);
+            let right = column.min(end);
+            let document_line = layout.prepared_start.saturating_add(row);
+            if left >= right
+                || preview_run_is_selected(run, layout, model, document_line, start, width)
+            {
+                continue;
+            }
+            let id = graphic.graphic.id;
+            let y = to_u16(row);
+            // Coalesce the visible rows of one placement, including a crop that starts mid-image.
+            let key = (id, start, i32::from(y) - i32::from(graphic.row));
+            if let Some(slice) = placements
+                .get(&key)
+                .and_then(|&index| slices.get_mut(index))
+                && slice.area.bottom() == y
+            {
+                slice.area.height += 1;
+            } else {
+                placements.insert(key, slices.len());
+                slices.push(PictureSlice {
+                    id,
+                    image: &graphic.graphic.image,
+                    area: Rect::new(to_u16(left - scroll), y, to_u16(right - left), 1),
+                    offset: [(left - start) as u32, u32::from(graphic.row)],
+                    size: [
+                        u32::from(graphic.size.width),
+                        u32::from(graphic.size.height),
+                    ],
+                    rasterize: graphic.picture,
+                });
+            }
+        }
     }
     slices
 }
@@ -197,6 +274,7 @@ fn zoomed_slices(
                 ),
                 offset: [left, first - row],
                 size,
+                rasterize: true,
             });
         }
         row += size[1];
@@ -258,30 +336,52 @@ impl PictureSlice<'_> {
         }
     }
 
-    fn fragment(&self, background: [u8; 3], cell_size: [u16; 2]) -> TerminalImageFragment {
+    fn fragment(
+        &self,
+        background: [u8; 3],
+        cell_size: [u16; 2],
+        fit: Option<&mut TerminalImageCache>,
+    ) -> (TerminalImageFragment, u64) {
         let image = self.image;
         let [r, g, b] = background;
         // The transport reuses pixels by ID. A theme change gives a transparent picture new pixels.
-        let image_id = if image.is_opaque() {
+        let preview_id = if image.is_opaque() {
             self.id
         } else {
             (1_u64 << 62) | (self.id << 24) | u64::from(u32::from_be_bytes([0, r, g, b]))
         };
-        TerminalImageFragment {
-            image_id,
-            width: image.width,
-            height: image.height,
-            rgba: image.opaque_rgba(background),
-            source: preview_pixel_crop(
-                self.offset,
-                self.area,
-                self.size,
-                [image.width, image.height],
-            ),
-            padding: [0; 4],
-            cell_size,
-            area: self.area,
-            z_index: 0,
+        let mut image_id = preview_id;
+        let mut rgba = image.opaque_rgba(background);
+        let mut pixels = [image.width, image.height];
+        if let Some(cache) = fit {
+            // Fit the whole placement before deriving its crop so scrolling can reuse the raster.
+            let target = std::array::from_fn(|axis| {
+                self.size[axis]
+                    .saturating_mul(u32::from(cell_size[axis]))
+                    .min(pixels[axis])
+            });
+            if target != pixels
+                && let Some((id, fitted)) =
+                    cache.fitted_preview_pixels(preview_id, &rgba, pixels, target)
+            {
+                image_id = id;
+                rgba = fitted;
+                pixels = target;
+            }
         }
+        (
+            TerminalImageFragment {
+                image_id,
+                width: pixels[0],
+                height: pixels[1],
+                rgba,
+                source: preview_pixel_crop(self.offset, self.area, self.size, pixels),
+                padding: [0; 4],
+                cell_size,
+                area: self.area,
+                z_index: 0,
+            },
+            preview_id,
+        )
     }
 }

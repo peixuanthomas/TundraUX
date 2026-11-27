@@ -251,6 +251,7 @@ impl ShellSession {
             ),
             terminal_image_support: runtime_services.terminal_image_support,
             terminal_image_cell_size: [8, 16],
+            editor_media_colors: ui::ThemeTokens::glacier_night().editor_media_colors(),
             terminal_text_sizing_support: false,
 
             interaction: Default::default(),

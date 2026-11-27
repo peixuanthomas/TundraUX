@@ -51,6 +51,7 @@ impl ReadOnlyRichLayout {
                         header,
                         rows,
                         model.table_widths_for_block(index, block.table_id()),
+                        media_cell_size(model),
                         cancelled,
                     )?;
                     content_width = content_width.max(table.content_width());
@@ -64,10 +65,8 @@ impl ReadOnlyRichLayout {
                         block,
                         width,
                         usize::MAX,
-                        heading_uses_big_text(model, block),
-                        true,
                         None,
-                        picture_bounds,
+                        BlockPresentation::for_block(model, block, picture_bounds),
                     )
                     .unwrap()
                 }
@@ -122,6 +121,24 @@ impl ReadOnlyRichLayout {
                         lines: within,
                     }),
                 ));
+            } else if let EditorRenderBlock::RichCodeBlock {
+                language,
+                lines: code,
+            } = &model.render_blocks()[index]
+            {
+                let anchor = model
+                    .block_sources
+                    .get(index)
+                    .copied()
+                    .map(EditorBlockSourceMap::anchor);
+                lines.extend(rich_code_block_lines(
+                    language.as_deref(),
+                    index,
+                    code,
+                    anchor,
+                    model.source.as_deref(),
+                    within,
+                ));
             } else {
                 lines.extend(
                     materialize_rich_block(model, index, self.width, self.picture_bounds, None)
@@ -154,11 +171,14 @@ impl TableMetrics {
         header: &[EditorTableCell],
         rows: &[Vec<EditorTableCell>],
         requested: Option<&[usize]>,
+        cell_size: Option<[u16; 2]>,
         cancelled: &impl Fn() -> bool,
     ) -> Option<Self> {
-        let widths = table_column_widths_cancellable(header, rows, requested, cancelled)?;
+        let widths =
+            table_column_widths_cancellable(header, rows, requested, cell_size, cancelled)?;
         let has_header = !header.is_empty();
-        let row_height = |row| wrapped_table_row_height(row, &widths, usize::MAX).unwrap();
+        let row_height =
+            |row| wrapped_table_row_height(row, &widths, usize::MAX, cell_size).unwrap();
         let header_end: usize = if has_header {
             1 + row_height(header)
         } else {
@@ -204,16 +224,25 @@ pub(super) fn intersect_lines(visible: &Range<usize>, start: usize, end: usize) 
 
 fn unwrapped_width(block: &EditorRenderBlock, width: usize) -> usize {
     match block {
-        EditorRenderBlock::CodeBlock { language, lines } => {
-            let language = language.as_deref().unwrap_or("code");
-            let top = format!("┌─ {language} ");
-            let label_width = terminal_width(terminal_safe_text(&top).as_ref());
-            lines
-                .iter()
-                .map(|line| mapped_text_width(line).saturating_add(2))
-                .max()
-                .unwrap_or(2)
-                .max(label_width)
+        EditorRenderBlock::CodeBlock { language, lines } => code_width(
+            language.as_deref(),
+            lines.iter().map(|line| mapped_text_width(line)),
+        ),
+        EditorRenderBlock::RichCodeBlock { language, lines } => {
+            let widths = lines.iter().map(|line| {
+                if !line.text.contains('\t') {
+                    return mapped_text_width(&line.text);
+                }
+                code_tab_segments(&line.text).fold(0usize, |column, (text, ends_with_tab)| {
+                    let end = column.saturating_add(mapped_text_width(text));
+                    end.saturating_add(if ends_with_tab {
+                        code_tab_width(end)
+                    } else {
+                        0
+                    })
+                })
+            });
+            code_width(language.as_deref(), widths)
         }
         EditorRenderBlock::HorizontalRule => width,
         EditorRenderBlock::RawHtml(html) => source_display_line_ranges(html)
@@ -231,6 +260,15 @@ fn unwrapped_width(block: &EditorRenderBlock, width: usize) -> usize {
         EditorRenderBlock::Image { markdown } => mapped_text_width(markdown),
         _ => 1,
     }
+}
+
+fn code_width(language: Option<&str>, widths: impl Iterator<Item = usize>) -> usize {
+    let top = code_block_heading(language);
+    widths
+        .max()
+        .unwrap_or(0)
+        .saturating_add(2)
+        .max(mapped_text_width(&top))
 }
 
 fn mapped_text_width(text: &str) -> usize {

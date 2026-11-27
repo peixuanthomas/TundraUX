@@ -357,6 +357,146 @@ fn minimum_editor_layout_keeps_plain_text_controls_canvas_and_status_available()
     assert!(!layout.toolbar_overflow);
     assert_eq!(layout.toolbar_items.len(), 6);
     assert!(layout.modes.is_empty());
+    assert!(layout.markdown_reading_toggle.is_empty());
+}
+
+#[test]
+fn markdown_reading_button_fits_the_minimum_window_in_both_languages() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    let area = Rect::new(1, 2, 106, 16);
+    for (language, read, edit) in [
+        ("en-US", "Read", "Edit source"),
+        ("zh-CN", "阅读", "编辑源码"),
+    ] {
+        let language = i18n::LanguageSnapshot::load(&assets, language, 1)
+            .unwrap()
+            .snapshot;
+        let _language = i18n::enter_snapshot(std::sync::Arc::new(language));
+        let mut terminal = Terminal::new(TestBackend::new(108, 20)).unwrap();
+        let mut previous_area = None;
+        for (reading, focused, label) in
+            [(false, true, read), (true, false, edit), (true, true, edit)]
+        {
+            let mut model = if reading {
+                EditorViewModel::new("README.md", Vec::new())
+            } else {
+                EditorViewModel::source("README.md", "# Markdown")
+            };
+            model.markdown_reading = Some(reading);
+            model.focus = if focused {
+                EditorFocus::MarkdownReadingToggle
+            } else {
+                EditorFocus::Canvas
+            };
+            let mut rendered = None;
+            terminal
+                .draw(|frame| {
+                    let capture = ui::automation::FrameCapture::begin(frame.area(), "editor");
+                    let layout = render_editor(frame, area, &model, &TundraTheme::default_dark());
+                    rendered = Some((layout, capture.finish(frame.buffer_mut())));
+                })
+                .unwrap();
+            let (layout, snapshot) = rendered.unwrap();
+            let button_area = layout.markdown_reading_toggle;
+            assert_eq!(button_area, *previous_area.get_or_insert(button_area));
+            assert!(!button_area.is_empty());
+            assert_eq!(button_area.height, 1);
+            assert_eq!(button_area.x, layout.menus.last().unwrap().area.right());
+            assert!(button_area.right() <= layout.vim_toggle.x);
+            assert!(layout.modes.is_empty());
+            for x in [button_area.x, button_area.right() - 1] {
+                assert_eq!(
+                    layout.hit_test(x, button_area.y),
+                    Some(EditorHitTarget::MenuAction(
+                        EditorMenuAction::ToggleMarkdownReading
+                    ))
+                );
+            }
+            let mut nodes = snapshot
+                .nodes
+                .iter()
+                .filter(|node| node.id.ends_with("editor.markdown-reading-toggle"));
+            let node = nodes.next().unwrap();
+            assert!(nodes.next().is_none());
+            assert_eq!(node.name, label);
+            assert_eq!(node.text.trim(), label);
+            assert_eq!(node.role, "button");
+            assert_eq!(node.focused, focused);
+            assert_eq!(node.selected, reading);
+            assert!(node.actionable);
+            assert_eq!(
+                (node.rect.x, node.rect.y, node.rect.width, node.rect.height),
+                (
+                    button_area.x,
+                    button_area.y,
+                    button_area.width,
+                    button_area.height
+                )
+            );
+            let buffer = terminal.backend().buffer();
+            let underlined = (button_area.x..button_area.right()).any(|x| {
+                buffer[(x, button_area.y)]
+                    .modifier
+                    .contains(Modifier::UNDERLINED)
+            });
+            assert_eq!(underlined, focused);
+        }
+    }
+}
+
+#[test]
+fn markdown_reading_keeps_document_actions_and_disables_source_editing() {
+    use EditorMenuAction::{Copy, Cut, GoToFile, GoToLine, Replace, SaveAs, SelectAll, Toolbar};
+    use EditorToolbarAction::{Find, Save, Undo};
+
+    let mut model = EditorViewModel::new("README.md", Vec::new());
+    model.markdown_reading = Some(true);
+    model.toolbar.can_undo = true;
+    model.toolbar.can_copy = true;
+    model.toolbar.can_cut = true;
+    model
+        .status_actions
+        .extend([(GoToLine, "1:1".into()), (GoToFile, "README.md".into())]);
+    let area = Rect::new(0, 0, 106, 16);
+    for (menu, actions) in [
+        (
+            EditorMenu::File,
+            &[(Toolbar(Save), true), (SaveAs, true)][..],
+        ),
+        (
+            EditorMenu::Edit,
+            &[
+                (Toolbar(Undo), false),
+                (Toolbar(Find), false),
+                (Cut, false),
+                (Copy, true),
+                (SelectAll, true),
+                (Replace, false),
+            ],
+        ),
+        (EditorMenu::View, &[(GoToLine, false), (GoToFile, true)]),
+    ] {
+        model.open_menu = Some(menu);
+        let layout = editor_layout(area, &model);
+        for &(action, enabled) in actions {
+            let item = layout
+                .menu_items
+                .iter()
+                .find(|item| item.action == action)
+                .unwrap();
+            assert_eq!(item.enabled, enabled, "{action:?}");
+        }
+        for (action, enabled) in [(Save, true), (Undo, false), (Find, false)] {
+            let item = layout
+                .toolbar_items
+                .iter()
+                .find(|item| item.action == action)
+                .unwrap();
+            assert_eq!(item.enabled, enabled, "{action:?}");
+        }
+        assert_eq!(layout.status_items.len(), 1);
+        assert_eq!(layout.status_items[0].action, GoToFile);
+    }
 }
 
 #[test]

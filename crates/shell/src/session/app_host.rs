@@ -94,7 +94,7 @@ struct AppHostSession {
     scripts: script_host::ScriptHosts,
     terminal: Terminal<TestBackend>,
     theme: ui::TundraTheme,
-    color_capability: ui::ColorCapability,
+    render_capabilities: ui::RenderCapabilities,
     theme_reloader: UserThemeReloader,
     redraw: RedrawScheduler,
     next_service_sync: Instant,
@@ -231,6 +231,20 @@ impl AppHostSession {
             WindowLaunch::ExplorerPath { select, .. } => select.clone().map(PathBuf::from),
             _ => None,
         };
+        let theme = ui::TundraTheme::default_dark();
+        let render_capabilities = ui::RenderCapabilities {
+            color: if init.ansi_colors {
+                ui::ColorCapability::Ansi
+            } else {
+                ui::ColorCapability::TrueColor
+            },
+            image_protocol: init.image_cell_size.is_some(),
+            ..Default::default()
+        };
+        if let Some([width, height]) = init.image_cell_size {
+            state.terminal_image_cell_size = [width.max(1), height.max(1)];
+        }
+        state.set_editor_media_theme(&theme, render_capabilities);
         let activation_started = Instant::now();
         launch.activate(&mut state, platform.as_ref());
         timings.launch_activate_us = activation_started.elapsed().as_micros() as u64;
@@ -258,12 +272,8 @@ impl AppHostSession {
             scripts: script_host::ScriptHosts::new(watchdog.clone()),
             terminal: Terminal::new(TestBackend::new(terminal_size.0, terminal_size.1))
                 .unwrap_or_else(|error| match error {}),
-            theme: ui::TundraTheme::default_dark(),
-            color_capability: if init.ansi_colors {
-                ui::ColorCapability::Ansi
-            } else {
-                ui::ColorCapability::TrueColor
-            },
+            theme,
+            render_capabilities,
             theme_reloader: UserThemeReloader::new(storage, now),
             redraw,
             watchdog,
@@ -284,7 +294,6 @@ impl AppHostSession {
             frame_sequence: 0,
         };
         if let Some([width, height]) = init.image_cell_size {
-            host.state.terminal_image_cell_size = [width.max(1), height.max(1)];
             host.command_lines.set_cell_size(width, height);
             host.vim.set_cell_size(width, height);
             host.scripts.set_cell_size(width, height);
@@ -614,9 +623,14 @@ impl AppHostSession {
             changed |= self.state.poll_package_launcher();
         }
         changed |= self.state.poll_input_keyboard(now);
-        changed |= self
+        if self
             .theme_reloader
-            .poll_at(now, &mut self.theme, &mut self.state);
+            .poll_at(now, &mut self.theme, &mut self.state)
+        {
+            self.state
+                .set_editor_media_theme(&self.theme, self.render_capabilities);
+            changed = true;
+        }
         let (terminal_changed, event) = self.command_lines.poll(
             &mut self.state,
             self.platform.as_ref(),
@@ -816,10 +830,7 @@ impl AppHostSession {
             &self.theme,
             self.redraw.frame(now, animation_speed_percent(&self.state)),
             self.redraw.transitions(now),
-            ui::RenderCapabilities {
-                color: self.color_capability,
-                ..ui::RenderCapabilities::default()
-            },
+            self.render_capabilities,
         )
     }
 

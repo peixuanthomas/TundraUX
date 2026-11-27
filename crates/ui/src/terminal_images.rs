@@ -20,6 +20,7 @@ use crate::{
 mod kitty;
 
 const CACHE_BUDGET: usize = 128 * 1024 * 1024;
+const FITTED_PREVIEW_BUDGET: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ImageKey {
@@ -73,7 +74,7 @@ impl WorkspaceImageRequest {
     }
 }
 
-/// One page's prepared image fragments. Only the current viewport is retained.
+/// One page's native placements and bounded cache of fitted preview pixels.
 #[derive(Default)]
 pub struct TerminalImageCache {
     entries: HashMap<ImageKey, PreparedImage>,
@@ -82,6 +83,7 @@ pub struct TerminalImageCache {
     workspace_origin: Option<Rect>,
     workspace_images: Vec<workspace_protocol::Image>,
     fitted_previews: HashMap<(u64, u32, u32), (u64, Arc<[u8]>)>,
+    fitted_preview_bytes: usize,
 }
 
 impl TerminalImageCache {
@@ -183,7 +185,6 @@ impl TerminalImageCache {
     pub fn take_workspace_images(&mut self) -> Vec<workspace_protocol::Image> {
         self.workspace_origin = None;
         let mut images = std::mem::take(&mut self.workspace_images);
-        let mut used = HashSet::new();
         for image in &mut images {
             let width = u32::from(image.area.width) * u32::from(image.cell_size[0]);
             let height = u32::from(image.area.height) * u32::from(image.cell_size[1]);
@@ -197,30 +198,52 @@ impl TerminalImageCache {
             {
                 continue;
             }
-            let key = (image.image_id, width, height);
-            let (id, rgba) = match self.fitted_previews.entry(key) {
-                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
-                std::collections::hash_map::Entry::Vacant(entry) => {
-                    let Some(pixels) = crate::editor_media::resize_preview_pixels(
-                        &image.rgba,
-                        (image.width, image.height),
-                        [width, height],
-                    ) else {
-                        continue;
-                    };
-                    let id = (1 << 63) | u64::from(crate::editor_media::next_kitty_image_id());
-                    entry.insert((id, pixels.into_raw().into()))
-                }
+            let Some((id, rgba)) = self.fitted_preview_pixels(
+                image.image_id,
+                &image.rgba,
+                [image.width, image.height],
+                [width, height],
+            ) else {
+                continue;
             };
-            image.image_id = *id;
-            image.rgba = rgba.clone();
+            image.image_id = id;
+            image.rgba = rgba;
             image.width = width;
             image.height = height;
             image.source = [0, 0, width, height];
-            used.insert(key);
         }
-        self.fitted_previews.retain(|key, _| used.contains(key));
         images
+    }
+
+    pub(crate) fn fitted_preview_pixels(
+        &mut self,
+        id: u64,
+        rgba: &[u8],
+        [source_width, source_height]: [u32; 2],
+        [width, height]: [u32; 2],
+    ) -> Option<(u64, Arc<[u8]>)> {
+        let key = (id, width, height);
+        if let Some(fitted) = self.fitted_previews.get(&key) {
+            return Some(fitted.clone());
+        }
+        let bytes = bounded_pixels(u64::from(width), u64::from(height))? as usize * 4;
+        if bytes > FITTED_PREVIEW_BUDGET {
+            return None;
+        }
+        let pixels = crate::editor_media::resize_preview_pixels(
+            rgba,
+            (source_width, source_height),
+            [width, height],
+        )?;
+        if self.fitted_preview_bytes + bytes > FITTED_PREVIEW_BUDGET {
+            self.fitted_previews.clear();
+            self.fitted_preview_bytes = 0;
+        }
+        let id = (1 << 63) | u64::from(crate::editor_media::next_kitty_image_id());
+        let fitted = (id, pixels.into_raw().into());
+        self.fitted_preview_bytes += bytes;
+        self.fitted_previews.insert(key, fitted.clone());
+        Some(fitted)
     }
 
     pub(crate) fn capturing_workspace(&self) -> bool {

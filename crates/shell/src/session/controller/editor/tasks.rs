@@ -1,4 +1,5 @@
 use crate::session::*;
+use app::editor::reading_media::ReadingMediaStyle;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc as StdArc, Mutex as StdMutex, mpsc as std_mpsc};
@@ -35,6 +36,8 @@ pub(in crate::session) struct EditorLoadTaskRequest {
     pub(in crate::session) id: u64,
     pub(in crate::session) path: PathBuf,
     pub(in crate::session) access: EditorTaskAccess,
+    media_style: Option<ReadingMediaStyle>,
+    native_heading: bool,
     log_context: runtime_log::LogContext,
     failure: StdMutex<Option<EditorFailureMetadata>>,
 }
@@ -46,6 +49,7 @@ pub(in crate::session) struct EditorLoadedTaskDocument {
     pub(in crate::session) fingerprint: DocumentFingerprint,
     pub(in crate::session) total_bytes: u64,
     pub(in crate::session) rich_blocks: Option<std::sync::Arc<[ui::EditorRenderBlock]>>,
+    pub(in crate::session) office_graphics: Option<app::rich_document::RichProjection>,
 }
 
 #[derive(Debug)]
@@ -187,7 +191,7 @@ impl ShellEditorTaskRuntime {
         path: PathBuf,
         access: EditorTaskAccess,
     ) -> Result<(), String> {
-        self.submit_load_with_owner(id, path, access, None)
+        self.submit_load_with_owner(id, path, access, None, None, false)
     }
     pub(in crate::session) fn submit_load_with_owner(
         &self,
@@ -195,6 +199,8 @@ impl ShellEditorTaskRuntime {
         path: PathBuf,
         access: EditorTaskAccess,
         owner_id: Option<String>,
+        media_style: Option<ReadingMediaStyle>,
+        native_heading: bool,
     ) -> Result<(), String> {
         let task_group = self
             .shared
@@ -205,6 +211,8 @@ impl ShellEditorTaskRuntime {
             id,
             path,
             access,
+            media_style,
+            native_heading,
             log_context: editor_log_context(&task_group, id, "load", owner_id),
             failure: StdMutex::new(None),
         };
@@ -748,9 +756,26 @@ pub(in crate::session) fn load_editor_document_task(
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }
-    let rich_blocks = state
-        .prepare_rich_projection()
-        .map(|projection| std::sync::Arc::from(editor_rich_render_blocks(&state, &projection)));
+    let mut office_graphics = None;
+    let rich_blocks = state.prepare_rich_projection().map(|projection| {
+        let blocks = if office_format.is_some() {
+            let (text, has_media) = editor_reading_text_blocks(
+                None,
+                state.embedded_preview_images(),
+                &projection,
+                request.media_style,
+                request.native_heading,
+                is_cancelled,
+            );
+            if has_media {
+                office_graphics = Some(projection);
+            }
+            text
+        } else {
+            editor_rich_render_blocks(&state, &projection)
+        };
+        std::sync::Arc::from(blocks)
+    });
     if is_cancelled() {
         return Err("Editor load cancelled".to_string());
     }
@@ -760,6 +785,7 @@ pub(in crate::session) fn load_editor_document_task(
         fingerprint: loaded.fingerprint,
         total_bytes: loaded_bytes,
         rich_blocks,
+        office_graphics,
     })
 }
 

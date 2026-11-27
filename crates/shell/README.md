@@ -109,6 +109,8 @@ The Editor opens File Explorer in a separate window for Open, first save and Sav
 
 Explorer and the Editor picker open Word, Excel, PowerPoint and supported image files in a read-only Editor window. The background loader prepares the text and embedded pictures together. Scrolling uses the in-memory image data. The [editor guide](../../docs/source-editor.md#documents-and-images) lists the supported extensions.
 
+For ordinary Markdown, the standard editor opens the source and offers **Read** in its top bar. Shell prepares the readable text first, then adds graphics in the background. Repeated graphics share the same pixels, and scrolling or returning to the same revision reuses the prepared view. **Edit source** restores the cursor, selection and scroll position. Saving and recovery still use the source draft. Office previews open in the same read-only layout after conversion.
+
 For large read-only documents, an Editor worker measures paragraphs, tables and pictures once for the current viewport. Scrolling reuses those measurements. Resizing the window starts a new measurement and preserves the scroll position.
 
 If a file fails to load in a newly launched Editor window, the window shows the path and the reason so you can try another file. A failed replacement returns you to the previously open document.

@@ -10,8 +10,10 @@ impl ShellSession {
         let editor = &self.pages.editor;
         let action = if editor.editor_search_bar.is_some()
             || editor.editor_load_state.is_some()
-            || editor.editor_focus == ui::EditorFocus::MenuBar
-        {
+            || matches!(
+                editor.editor_focus,
+                ui::EditorFocus::MenuBar | ui::EditorFocus::MarkdownReadingToggle
+            ) {
             BackAction::Cancel
         } else if editor.script.source_view.is_some() {
             BackAction::PreviousPage
@@ -189,7 +191,9 @@ impl ShellSession {
         self.pages.editor.editor_quick_menu_anchor = None;
         if key.key == InputKey::F(6) {
             self.pages.editor.editor_focus = match self.pages.editor.editor_focus {
-                ui::EditorFocus::MenuBar => ui::EditorFocus::Canvas,
+                ui::EditorFocus::MenuBar | ui::EditorFocus::MarkdownReadingToggle => {
+                    ui::EditorFocus::Canvas
+                }
                 ui::EditorFocus::Toolbar => ui::EditorFocus::Canvas,
                 ui::EditorFocus::Canvas => ui::EditorFocus::MenuBar,
                 ui::EditorFocus::StatusBar => ui::EditorFocus::MenuBar,
@@ -202,13 +206,21 @@ impl ShellSession {
         if self.handle_editor_vim_key(&key, platform) {
             return;
         }
-        if let Some(state) = self
-            .app
-            .editor_state()
-            .filter(|state| state.is_scrollable_picture())
-            && (key.modifiers == InputModifiers::default()
-                || (key.modifiers.is_control_only()
-                    && matches!(key.key, InputKey::Home | InputKey::End)))
+        if let Some(state) = self.app.editor_state().filter(|state| {
+            state.is_scrollable_picture()
+                || (state.is_markdown_reading() && state.mode == app::editor::EditorMode::Rich)
+        }) && (key.modifiers == InputModifiers::default()
+            || (key.modifiers.is_control_only()
+                && matches!(key.key, InputKey::Home | InputKey::End)))
+            && matches!(
+                key.key,
+                InputKey::Up
+                    | InputKey::Down
+                    | InputKey::PageUp
+                    | InputKey::PageDown
+                    | InputKey::Home
+                    | InputKey::End
+            )
         {
             let layout = self.editor_current_layout();
             let last = layout
@@ -468,6 +480,13 @@ impl ShellSession {
     }
 
     pub(in crate::session) fn toggle_editor_wrap(&mut self) {
+        if self
+            .app
+            .editor_state()
+            .is_some_and(EditorState::is_markdown_reading)
+        {
+            return;
+        }
         self.pages.editor.editor_soft_wrap = !self.pages.editor.editor_soft_wrap;
         if let Some(mut viewport) = self.app.editor_state().map(|s| s.viewport) {
             viewport.top_line = 0;
@@ -588,6 +607,10 @@ impl ShellSession {
         }
         let coordinates = mouse.coordinates();
         let (hit, document_hit) = self.editor_hit_targets_at(coordinates);
+        let markdown_reading = self
+            .app
+            .editor_state()
+            .is_some_and(EditorState::is_markdown_reading);
         if self.pages.editor.editor_context_menu_anchor.is_some()
             && self.pages.editor.editor_open_menu.is_some()
             && matches!(mouse.kind, ui::MouseEventKind::Down(PointerButton::Left))
@@ -672,8 +695,11 @@ impl ShellSession {
                     return;
                 }
                 if let Some(state) = self.app.editor_state() {
+                    if markdown_reading && state.mode == app::editor::EditorMode::Source {
+                        return;
+                    }
                     let mut viewport = state.viewport;
-                    let max_top = if state.is_scrollable_picture() {
+                    let max_top = if state.is_scrollable_picture() || markdown_reading {
                         let layout = self.editor_current_layout();
                         viewport.top_line = layout.visible_start;
                         layout
@@ -809,6 +835,7 @@ impl ShellSession {
                                     app::editor::EditorPosition::Source(offset)
                                 }
                             },
+                            _ if markdown_reading => return,
                             Some(_) => {
                                 self.pages.editor.editor_message = Some(i18n::LocalizedText::from(
                                     i18n::msg!(
@@ -914,6 +941,9 @@ impl ShellSession {
                     return;
                 }
                 if let Some(ui::EditorHitTarget::Canvas(position)) = hit {
+                    if markdown_reading && self.pages.editor.editor_drag_anchor.is_none() {
+                        return;
+                    }
                     let rich_mode = self
                         .app
                         .editor_state()
@@ -927,6 +957,7 @@ impl ShellSession {
                                 app::editor::EditorPosition::Source(offset)
                             }
                         },
+                        _ if markdown_reading => return,
                         Some(_) => {
                             self.pages.editor.editor_message = Some(i18n::LocalizedText::from(
                                 i18n::msg!("shell-rich-selection-can-only-start-on-editable-text"),
@@ -1117,18 +1148,15 @@ impl ShellSession {
             return;
         }
         use app::editor::{EditorCommand, FormatCommand};
-        if self
-            .app
-            .editor_state()
-            .is_some_and(EditorState::is_read_only)
-            && !matches!(
-                action,
-                ui::EditorToolbarAction::New
-                    | ui::EditorToolbarAction::Open
-                    | ui::EditorToolbarAction::Find
-                    | ui::EditorToolbarAction::More
-            )
-        {
+        if self.app.editor_state().is_some_and(|state| {
+            state.is_read_only() && !(state.can_save() && action == ui::EditorToolbarAction::Save)
+        }) && !matches!(
+            action,
+            ui::EditorToolbarAction::New
+                | ui::EditorToolbarAction::Open
+                | ui::EditorToolbarAction::Find
+                | ui::EditorToolbarAction::More
+        ) {
             self.pages.editor.editor_message = Some(i18n::LocalizedText::from(i18n::msg!(
                 "shell-this-document-is-read-only"
             )));

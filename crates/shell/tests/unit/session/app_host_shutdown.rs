@@ -60,7 +60,7 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
         compositor: ScreenCompositor::default(),
         terminal: Terminal::new(TestBackend::new(120, 40)).unwrap(),
         theme: ui::TundraTheme::default_dark(),
-        color_capability: ui::ColorCapability::TrueColor,
+        render_capabilities: ui::RenderCapabilities::default(),
         theme_reloader: UserThemeReloader::new(storage, now),
         redraw,
         next_service_sync: now,

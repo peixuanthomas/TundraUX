@@ -51,6 +51,10 @@ impl ShellSession {
                 self.toggle_editor_vim();
                 return;
             }
+            Action::ToggleMarkdownReading => {
+                self.toggle_editor_markdown_reading();
+                return;
+            }
             Action::VimHelp => {
                 self.notify_modal(
                     i18n::msg!("ui-editor-vim-help"),
@@ -129,7 +133,7 @@ impl ShellSession {
             && (key.modifiers.alt
                 || matches!(
                     key.key,
-                    InputKey::Enter | InputKey::Char(' ') | InputKey::F(10)
+                    InputKey::Enter | InputKey::Char(' ') | InputKey::Space | InputKey::F(10)
                 ))
         {
             return true;
@@ -166,6 +170,26 @@ impl ShellSession {
             self.pages.editor.editor_focus = ui::EditorFocus::MenuBar;
             self.pages.editor.editor_open_menu = None;
             self.pages.editor.editor_menu_index = 0;
+            return true;
+        }
+        if self.pages.editor.editor_focus == ui::EditorFocus::MarkdownReadingToggle {
+            match key.key {
+                InputKey::Enter | InputKey::Space | InputKey::Char(' ')
+                    if !key.has_non_shift_modifier() =>
+                {
+                    self.activate_editor_menu_action(
+                        ui::EditorMenuAction::ToggleMarkdownReading,
+                        platform,
+                    );
+                    if self.editor_markdown_reading_toggle().is_some() {
+                        self.pages.editor.editor_focus = ui::EditorFocus::MarkdownReadingToggle;
+                    }
+                }
+                InputKey::Escape | InputKey::F(6) => {
+                    self.pages.editor.editor_focus = ui::EditorFocus::Canvas;
+                }
+                _ => return false,
+            }
             return true;
         }
         if self.pages.editor.editor_focus == ui::EditorFocus::StatusBar {
@@ -256,7 +280,13 @@ impl ShellSession {
             InputKey::Escape | InputKey::F(6) => {
                 self.pages.editor.editor_context_menu_anchor = None;
                 self.pages.editor.editor_open_menu = None;
-                self.pages.editor.editor_focus = ui::EditorFocus::Canvas;
+                self.pages.editor.editor_focus = if key.key == InputKey::F(6)
+                    && self.editor_markdown_reading_toggle().is_some()
+                {
+                    ui::EditorFocus::MarkdownReadingToggle
+                } else {
+                    ui::EditorFocus::Canvas
+                };
             }
             _ => return false,
         }
@@ -281,6 +311,9 @@ impl ShellSession {
         let Some(state) = self.app.editor_state() else {
             return;
         };
+        if state.is_markdown_reading() && !matches!(action, Action::GoToFile | Action::About) {
+            return;
+        }
         let (id, label, value, choices, message) = match action {
             Action::GoToLine => (
                 "goto",

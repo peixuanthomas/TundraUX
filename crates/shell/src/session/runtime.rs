@@ -891,7 +891,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         ascii_assets,
         ShellRuntimeServices {
             language: Some(language_runtime.clone()),
-            terminal_image_support: launcher_icons.is_some(),
+            terminal_image_support: terminal_graphics_probe.protocol().is_some(),
             explorer: explorer_task_runtime,
             diagnostics: diagnostics_task_runtime,
             editor: ShellEditorTaskRuntime::new_managed(shell_watchdog.clone()),
@@ -950,6 +950,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         .picker()
         .map_or((8, 16), ui::EditorImagePicker::cell_size);
     state.terminal_image_cell_size = [terminal_cell_size.0, terminal_cell_size.1];
+    state.set_editor_media_theme(&theme, shell_render_capabilities(terminal_graphics_probe));
     command_line_hosts.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
     let mut script_hosts = super::script_host::ScriptHosts::new(shell_watchdog.clone());
     script_hosts.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
@@ -1179,7 +1180,13 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
             {
                 redraw.request_redraw();
             }
-            background_changed |= theme_reloader.poll_at(frame_now, &mut theme, &mut state);
+            if theme_reloader.poll_at(frame_now, &mut theme, &mut state) {
+                state.set_editor_media_theme(
+                    &theme,
+                    shell_render_capabilities(terminal_graphics_probe),
+                );
+                background_changed = true;
+            }
             background_changed |= state.advance_clock_background();
             if background_changed {
                 redraw.request_redraw();
@@ -1930,10 +1937,13 @@ pub(super) fn session_has_background_work(state: &ShellSession) -> bool {
             .iter()
             .any(|(_, page)| page.launcher_refresh_request.is_some())
         || state.editor_pdf_has_background_work()
+        || state.editor_markdown_reading_needs_preparation()
         || state.editor_read_only_layout_has_background_work()
         || state.pages.editor.iter().any(|(id, page)| {
             page.editor_load_state.is_some()
                 || page.editor_save_state.is_some()
+                || page.editor_markdown_reading.pending()
+                || page.editor_office_graphics.busy()
                 || page.editor_preview_request.is_some()
                 || page.editor_inline_replace_request.is_some()
                 || state

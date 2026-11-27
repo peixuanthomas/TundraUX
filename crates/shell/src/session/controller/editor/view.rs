@@ -2,6 +2,37 @@ use super::*;
 use crate::session::*;
 
 impl ShellSession {
+    pub(super) fn editor_image_protocol(&self) -> ui::EditorImageProtocolStatus {
+        if self.terminal_image_support {
+            ui::EditorImageProtocolStatus::Available
+        } else {
+            ui::EditorImageProtocolStatus::Unsupported
+        }
+    }
+
+    pub(in crate::session) fn editor_reading_media_style(
+        &self,
+    ) -> Option<app::editor::reading_media::ReadingMediaStyle> {
+        let (foreground, background) = self.editor_media_colors;
+        self.terminal_image_support
+            .then_some(app::editor::reading_media::ReadingMediaStyle {
+                foreground,
+                background,
+                cell_size: self.terminal_image_cell_size,
+            })
+    }
+
+    pub(in crate::session) fn set_editor_media_theme(
+        &mut self,
+        theme: &ui::TundraTheme,
+        capabilities: ui::RenderCapabilities,
+    ) {
+        self.editor_media_colors =
+            ui::RenderContext::from_theme(theme, Default::default(), capabilities)
+                .theme
+                .editor_media_colors();
+    }
+
     pub fn to_editor_view_model(&self) -> ui::EditorViewModel {
         let _language = i18n::enter_snapshot(self.language.clone());
         if let Some(terminal) = &self.editor_vim_terminal
@@ -83,7 +114,37 @@ impl ShellSession {
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|| state.document.display_name())
             });
+        let reading = state.is_markdown_reading();
+        let reading_cache = if reading {
+            self.editor_markdown_reading_cache()
+        } else {
+            None
+        };
+        let viewport = state
+            .markdown_reading_source_viewport()
+            .unwrap_or(state.viewport);
         let mut model = match state.mode {
+            app::editor::EditorMode::Rich if reading => {
+                let mut model = if let Some(cache) = reading_cache {
+                    let mut model = ui::EditorViewModel::new_shared(
+                        state.document.display_name(),
+                        Arc::clone(&cache.blocks),
+                    );
+                    model.read_only_layout =
+                        Some(self.pages.editor.editor_read_only_layout.view_state());
+                    model
+                } else {
+                    let mut model =
+                        ui::EditorViewModel::new(state.document.display_name(), Vec::new());
+                    model.read_only_layout = Some(ui::EditorReadOnlyLayoutState::Preparing);
+                    model
+                };
+                model.cursor = None;
+                model.rich_selection = state
+                    .rich_selection()
+                    .map(|selection| ui::RichRange::between(selection.anchor, selection.focus));
+                model
+            }
             app::editor::EditorMode::Rich => {
                 let mut model = if let Some(cache) = self
                     .pages
@@ -126,10 +187,7 @@ impl ShellSession {
             }
             app::editor::EditorMode::Source => {
                 let total_line_count = state.source_line_count().unwrap_or(1).max(1);
-                let requested_top_line = state
-                    .viewport
-                    .top_line
-                    .min(total_line_count.saturating_sub(1));
+                let requested_top_line = viewport.top_line.min(total_line_count.saturating_sub(1));
                 // The canvas is always smaller than the terminal. Two-sided
                 // overscan also covers layout clamping when a log starts at
                 // its final line or the terminal grows.
@@ -142,7 +200,7 @@ impl ShellSession {
                 let lines = state
                     .source_viewport_lines(
                         first_line..end_line,
-                        state.viewport.left_column,
+                        viewport.left_column,
                         column_budget,
                     )
                     .into_iter()
@@ -211,7 +269,8 @@ impl ShellSession {
         }
         model.dirty = state.is_dirty();
         let saving = self.pages.editor.editor_save_state.is_some();
-        model.read_only = state.is_read_only() || saving;
+        model.read_only = !state.can_save() || saving;
+        model.markdown_reading = self.editor_markdown_reading_toggle();
         model.read_window = self
             .pages
             .editor
@@ -303,6 +362,11 @@ impl ShellSession {
                 }
             ),
         ));
+        if reading {
+            model
+                .status_actions
+                .retain(|(action, _)| *action == ui::EditorMenuAction::GoToFile);
+        }
         if state.mode == app::editor::EditorMode::Rich
             && let Some(zoom) = self.pages.editor.editor_picture_zoom
         {
@@ -322,7 +386,7 @@ impl ShellSession {
             );
         }
         model.settings = self.editor_settings_view_model();
-        let has_selection = state.has_selection();
+        let has_selection = (!reading || reading_cache.is_some()) && state.has_selection();
         model.quick_menu = self
             .pages
             .editor
@@ -343,10 +407,11 @@ impl ShellSession {
         model.vim_mode = self
             .editor_vim_enabled()
             .then_some(ui::EditorVimMode::Normal);
-        model.scroll_line = state.viewport.top_line;
-        model.horizontal_scroll = state.viewport.left_column;
-        model.toolbar.can_save =
-            !state.is_read_only() && !saving && (state.document.path.is_some() || state.is_dirty());
+        model.scroll_line = viewport.top_line;
+        model.horizontal_scroll = viewport.left_column;
+        model.toolbar.can_save = state.can_save()
+            && !saving
+            && (state.is_dirty() || (!reading && state.document.path.is_some()));
         model.toolbar.can_undo = !state.is_read_only() && !saving && state.can_undo();
         model.toolbar.can_redo = !state.is_read_only() && !saving && state.can_redo();
         model.toolbar.can_cut = !state.is_read_only() && !saving && has_selection;
@@ -360,16 +425,23 @@ impl ShellSession {
             .label(state.document.metadata.utf8_bom)
             .into();
         model.line_ending = editor_line_ending_label(state.document.metadata);
-        model.image_protocol = ui::EditorImageProtocolStatus::Unsupported;
+        model.image_protocol = self.editor_image_protocol();
         model.text_sizing_protocol = self.terminal_text_sizing_support;
-        model.status_message = if !model
+        model.status_message = if reading && reading_cache.is_none() {
+            Some(i18n::tr!("shell-preparing-markdown-reading"))
+        } else if !model
             .picture_zoom
             .is_some_and(ui::EditorPreviewZoom::is_zoomed)
             && matches!(
                 model.read_only_layout,
                 Some(ui::EditorReadOnlyLayoutState::Preparing)
-            ) {
-            Some(i18n::tr!("shell-loading-document"))
+            )
+        {
+            Some(if reading {
+                i18n::tr!("shell-preparing-markdown-reading")
+            } else {
+                i18n::tr!("shell-loading-document")
+            })
         } else {
             self.pages
                 .editor
@@ -391,7 +463,8 @@ impl ShellSession {
                         .map(i18n::LocalizedText::render_current)
                 })
         };
-        if model.status_message.is_none()
+        if !reading
+            && model.status_message.is_none()
             && let Some(search) = &state.search
             && search.revision == state.revision()
         {

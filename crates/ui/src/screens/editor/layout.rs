@@ -239,6 +239,7 @@ pub struct EditorLayout {
     pub pdf: Option<EditorPdfLayout>,
     pub picture_window: Option<EditorPreviewWindow>,
     pub vim_toggle: Rect,
+    pub markdown_reading_toggle: Rect,
     pub menu_scrollbar: Option<Rect>,
     pub search_items: Vec<(EditorSearchControl, Rect)>,
     pub status_items: Vec<EditorMenuItemLayout>,
@@ -348,6 +349,11 @@ impl EditorLayout {
         }
         if self.menu_popup.is_some_and(|area| contains(area, x, y)) {
             return Some(EditorHitTarget::MenuPopup);
+        }
+        if contains(self.markdown_reading_toggle, x, y) {
+            return Some(EditorHitTarget::MenuAction(
+                EditorMenuAction::ToggleMarkdownReading,
+            ));
         }
         if let Some((control, _)) = self
             .search_items
@@ -547,11 +553,17 @@ pub struct EditorReadOnlyLayoutKey {
     width: u16,
     height: u16,
     image_cell_size: [u16; 2],
+    has_native_graphics: bool,
     text_sizing_protocol: bool,
     heading_cursor: Option<RichPosition>,
 }
 
 impl EditorReadOnlyLayoutKey {
+    pub fn with_image_protocol(mut self, status: EditorImageProtocolStatus) -> Self {
+        self.has_native_graphics = status == EditorImageProtocolStatus::Available;
+        self
+    }
+
     pub fn for_area(
         area: Rect,
         search_bar: Option<&EditorSearchBar>,
@@ -577,6 +589,7 @@ impl EditorReadOnlyLayoutKey {
             width: canvas.width,
             height: canvas.height,
             image_cell_size,
+            has_native_graphics: false,
             text_sizing_protocol,
             heading_cursor: rich_cursor.filter(|_| text_sizing_protocol),
         }
@@ -844,13 +857,16 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             picture_window = Some(zoom.window(canvas, size));
             (size[1] as usize, None, size[0] as usize)
         }
-        EditorMode::Rich if model.read_only => {
+        EditorMode::Rich if model.canvas_read_only() => {
             let key = EditorReadOnlyLayoutKey::for_canvas(
                 base_canvas,
                 model.image_cell_size,
                 model.text_sizing_protocol,
-                model.rich_cursor,
-            );
+                model
+                    .rich_cursor
+                    .filter(|_| model.markdown_reading != Some(true)),
+            )
+            .with_image_protocol(model.image_protocol);
             let measured = match &model.read_only_layout {
                 Some(EditorReadOnlyLayoutState::Ready(layout)) if layout.key == key => {
                     Some(Arc::clone(layout))
@@ -991,12 +1007,12 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
             )
         })
         .collect();
-    let table_resize_handles = if model.read_only {
+    let table_resize_handles = if model.canvas_read_only() {
         Vec::new()
     } else {
         table_resize_handles(canvas, horizontal_scroll, &block_areas, model)
     };
-    let table_edge_handles = if model.read_only {
+    let table_edge_handles = if model.canvas_read_only() {
         Vec::new()
     } else {
         table_edge_handles(canvas, horizontal_scroll, &block_areas, model)
@@ -1049,12 +1065,33 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         to_u16(vim_width).min(menu_bar.width),
         menu_bar.height,
     );
+    let available_menu_width = vim_toggle.x.saturating_sub(menu_bar.x);
+    let markdown_toggle_width = if model.markdown_reading.is_some() {
+        let width = to_u16(
+            terminal_width(&markdown_reading_label(false))
+                .max(terminal_width(&markdown_reading_label(true)))
+                .saturating_add(2),
+        );
+        if width <= available_menu_width {
+            width
+        } else {
+            0
+        }
+    } else {
+        0
+    };
     let (menus, modes) = menu_layout(
         Rect {
-            width: vim_toggle.x.saturating_sub(menu_bar.x),
+            width: available_menu_width.saturating_sub(markdown_toggle_width),
             ..menu_bar
         },
         model.script_available,
+    );
+    let markdown_reading_toggle = Rect::new(
+        menus.last().map_or(menu_bar.x, |item| item.area.right()),
+        menu_bar.y,
+        markdown_toggle_width,
+        menu_bar.height,
     );
     let (menu_popup, menu_items) = menu_popup_layout(area, &menus, model);
     let settings = model
@@ -1063,7 +1100,9 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         .and_then(|settings| settings_layout(area, settings));
     let (quick_menu_popup, quick_menu_items) = quick_menu_layout(
         area,
-        (!model.read_only).then_some(model.quick_menu).flatten(),
+        (!model.canvas_read_only())
+            .then_some(model.quick_menu)
+            .flatten(),
     );
     let (toolbar_items, toolbar_overflow) = toolbar_layout(toolbar, Some(model));
     let rich_line_maps = if model.mode == EditorMode::Rich {
@@ -1120,6 +1159,18 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         .status_actions
         .iter()
         .filter_map(|(action, label)| {
+            if model.markdown_reading == Some(true)
+                && matches!(
+                    action,
+                    EditorMenuAction::Language
+                        | EditorMenuAction::LineEnding
+                        | EditorMenuAction::Encoding
+                        | EditorMenuAction::Indentation
+                        | EditorMenuAction::GoToLine
+                )
+            {
+                return None;
+            }
             let width = to_u16(terminal_width(label).saturating_add(2));
             if status_x.saturating_add(width) > status_bar.right() {
                 return None;
@@ -1161,6 +1212,7 @@ pub fn editor_layout(area: Rect, model: &EditorViewModel) -> EditorLayout {
         pdf: None,
         picture_window,
         vim_toggle,
+        markdown_reading_toggle,
         menu_scrollbar: menu_popup
             .filter(|_| {
                 model
@@ -1370,28 +1422,28 @@ pub(super) fn menu_popup_layout(
                 1,
             ),
             enabled: match action {
-                EditorMenuAction::Toolbar(action) => {
-                    model
-                        .toolbar
-                        .is_enabled(action, model.read_only, model.mode)
-                }
+                EditorMenuAction::Toolbar(action) => model.toolbar_action_enabled(action),
                 EditorMenuAction::Mode(_) => true,
                 EditorMenuAction::ScriptSettings => model.script_settings_available,
-                EditorMenuAction::ToggleWrap => model.mode == EditorMode::Source,
-                EditorMenuAction::Replace => !model.read_only,
+                EditorMenuAction::ToggleWrap => {
+                    model.mode == EditorMode::Source && model.markdown_reading != Some(true)
+                }
+                EditorMenuAction::GoToLine => model.markdown_reading != Some(true),
+                EditorMenuAction::Replace => !model.canvas_read_only(),
                 EditorMenuAction::FormatJson => {
-                    !model.read_only && model.mode == EditorMode::Source
+                    !model.canvas_read_only() && model.mode == EditorMode::Source
                 }
                 EditorMenuAction::Config(action) => {
                     matches!(action, EditorConfigAction::Menu | EditorConfigAction::Open)
                         || model.configuration
                 }
-                EditorMenuAction::Cut => model.toolbar.can_cut && !model.read_only,
+                EditorMenuAction::Cut => model.toolbar.can_cut && !model.canvas_read_only(),
                 EditorMenuAction::Copy => model.toolbar.can_copy,
-                EditorMenuAction::Paste => model.toolbar.can_paste && !model.read_only,
-                EditorMenuAction::SaveAs
-                | EditorMenuAction::LineEnding
-                | EditorMenuAction::Encoding => !model.read_only,
+                EditorMenuAction::Paste => model.toolbar.can_paste && !model.canvas_read_only(),
+                EditorMenuAction::SaveAs => !model.read_only,
+                EditorMenuAction::LineEnding | EditorMenuAction::Encoding => {
+                    !model.canvas_read_only()
+                }
                 _ => true,
             },
         })
@@ -1629,11 +1681,7 @@ pub(super) fn toolbar_layout(
         items.push(EditorToolbarItemLayout {
             action,
             area: Rect::new(x, y, width, 1),
-            enabled: model.is_none_or(|model| {
-                model
-                    .toolbar
-                    .is_enabled(action, model.read_only, model.mode)
-            }),
+            enabled: model.is_none_or(|model| model.toolbar_action_enabled(action)),
         });
         x = x.saturating_add(width);
     }
@@ -1745,11 +1793,20 @@ pub(super) fn menu_bar_label(menu: EditorMenu) -> String {
     format!(" {}({key}) ", menu_label(menu))
 }
 
+pub(super) fn markdown_reading_label(reading: bool) -> String {
+    i18n::tr!(if reading {
+        "ui-editor-markdown-edit-source"
+    } else {
+        "ui-editor-markdown-read"
+    })
+}
+
 pub(super) fn menu_action_label(action: EditorMenuAction) -> String {
     let label = match action {
         EditorMenuAction::ScriptWorkspace => i18n::tr!("script-workspace"),
         EditorMenuAction::ScriptSettings => i18n::tr!("script-settings"),
         EditorMenuAction::ToggleVim => i18n::tr!("ui-editor-vim-toggle"),
+        EditorMenuAction::ToggleMarkdownReading => markdown_reading_label(false),
         EditorMenuAction::VimHelp => i18n::tr!("ui-editor-vim-help"),
         EditorMenuAction::SaveAs => i18n::tr!("ui-editor-save-as"),
         EditorMenuAction::Close => i18n::tr!("ui-editor-close"),

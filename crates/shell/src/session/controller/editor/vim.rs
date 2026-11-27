@@ -40,8 +40,9 @@ impl ShellSession {
                 .as_ref()
                 .is_some_and(|load| app::editor::is_read_only_preview_path(&load.path))
             && self.app.editor_state().is_none_or(|editor| {
-                editor.access() != app::editor::EditorAccess::ReadOnly
-                    || editor.document.kind != app::editor::DocumentKind::Markdown
+                !editor.is_markdown_reading()
+                    && (editor.access() != app::editor::EditorAccess::ReadOnly
+                        || editor.document.kind != app::editor::DocumentKind::Markdown)
             })
     }
 

@@ -5418,6 +5418,7 @@ dependencies = [
  "time 2.0.1",
  "tokio",
  "ui",
+ "unicode-segmentation",
  "vim-runtime",
  "vt100",
  "watchdog",

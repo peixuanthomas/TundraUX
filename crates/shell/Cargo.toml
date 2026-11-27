@@ -51,6 +51,7 @@ watchdog = { path = "../watchdog", features = ["tokio"] }
 weathr = { path = "../weathr" }
 system-services = { path = "../system-services", features = ["runtime"] }
 time = { version = "2.0.0", path = "../time" }
+unicode-segmentation = "1.12"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

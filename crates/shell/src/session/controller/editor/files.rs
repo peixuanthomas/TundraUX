@@ -91,6 +91,8 @@ impl ShellSession {
             path.clone(),
             access,
             self.app.auth_session().map(|s| s.user_id.clone()),
+            self.editor_reading_media_style(),
+            self.terminal_text_sizing_support,
         ) {
             self.restore_editor_load_navigation(&operation);
             return Err(error.into());
@@ -165,6 +167,8 @@ impl ShellSession {
             path.clone(),
             EditorTaskAccess::ReadOnly,
             self.app.auth_session().map(|s| s.user_id.clone()),
+            self.editor_reading_media_style(),
+            self.terminal_text_sizing_support,
         ) {
             self.report_editor_error(i18n::LocalizedText::from(i18n::msg!(
                 "shell-could-not-reload-arg1-error",
@@ -227,7 +231,13 @@ impl ShellSession {
             changed |= self
                 .with_page_context(page, |session| {
                     let mut changed = session.poll_editor_preview();
+                    let reading_changed = session.poll_editor_markdown_reading();
+                    let office_changed = session.poll_editor_office_graphics();
                     if session.content_page_id() == page {
+                        if reading_changed || office_changed {
+                            session.refresh_hit_map();
+                            changed = true;
+                        }
                         changed |= session.poll_editor_read_only_layout();
                         changed |= session.poll_editor_pdf_preview();
                     } else {
@@ -570,6 +580,7 @@ impl ShellSession {
                     Instant::now(),
                 );
                 let _ = self.app.take_editor_effects();
+                self.poll_editor_markdown_reading();
                 self.pages.editor.editor_fingerprint = Some(fingerprint);
                 self.pages.common.error_message = None;
                 self.resolve_page_alert(EDITOR_ALERT_KEY);
@@ -651,6 +662,7 @@ impl ShellSession {
             fingerprint,
             total_bytes,
             rich_blocks,
+            office_graphics,
         } = document;
         match load.operation {
             EditorLoadOperation::Open { reload, .. } => {
@@ -778,6 +790,9 @@ impl ShellSession {
             arg1 = path.display().to_string()
         )));
         self.finish_editor_load_navigation(&navigation_operation);
+        if let Some(projection) = office_graphics {
+            self.prepare_editor_office_graphics(projection);
+        }
         if self.pages.editor.selected_id() == Some(self.content_page_id()) {
             self.poll_editor_read_only_layout();
         }
@@ -1070,7 +1085,7 @@ impl ShellSession {
         if self
             .app
             .editor_state()
-            .is_some_and(EditorState::is_read_only)
+            .is_some_and(|state| !state.can_save())
         {
             return false;
         }

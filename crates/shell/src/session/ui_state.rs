@@ -662,6 +662,7 @@ pub struct UiSessionState {
     pub(super) default_icon_display_mode: storage::IconDisplayMode,
     pub(super) terminal_image_support: bool,
     pub(super) terminal_image_cell_size: [u16; 2],
+    pub(super) editor_media_colors: ([u8; 3], [u8; 3]),
     pub(super) terminal_text_sizing_support: bool,
 
     pub(super) interaction: super::controller::InteractionState,

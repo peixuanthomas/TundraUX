@@ -112,20 +112,21 @@ impl ShellSession {
         cfg!(target_os = "linux")
             && !self.config_editor_active()
             && self.app.editor_state().is_some_and(|editor| {
-                self.pages.editor.script.enabled
-                    || app::script::is_shell_script(
-                        editor.document.path.as_deref(),
-                        &editor
-                            .source_rope_snapshot()
-                            .map(|source| {
-                                source
-                                    .chars()
-                                    .take(512)
-                                    .take_while(|character| !matches!(character, '\n' | '\r'))
-                                    .collect::<String>()
-                            })
-                            .unwrap_or_default(),
-                    )
+                !editor.is_markdown_reading()
+                    && (self.pages.editor.script.enabled
+                        || app::script::is_shell_script(
+                            editor.document.path.as_deref(),
+                            &editor
+                                .source_rope_snapshot()
+                                .map(|source| {
+                                    source
+                                        .chars()
+                                        .take(512)
+                                        .take_while(|character| !matches!(character, '\n' | '\r'))
+                                        .collect::<String>()
+                                })
+                                .unwrap_or_default(),
+                        ))
             })
     }
 

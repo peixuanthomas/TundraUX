@@ -4,6 +4,31 @@ use ui::{EditorReadOnlyLayout, EditorReadOnlyLayoutKey, EditorReadOnlyLayoutStat
 
 use crate::session::*;
 
+#[derive(Clone, Copy)]
+pub(super) struct EditorReadOnlyGeometry {
+    pub(super) key: EditorReadOnlyLayoutKey,
+    cell_size: [u16; 2],
+    text_sizing: bool,
+    image_protocol: ui::EditorImageProtocolStatus,
+    rich_cursor: Option<ui::RichPosition>,
+}
+
+impl EditorReadOnlyGeometry {
+    pub(super) fn measure(
+        self,
+        blocks: Arc<[ui::EditorRenderBlock]>,
+        cancelled: impl Fn() -> bool,
+    ) -> Option<EditorReadOnlyLayout> {
+        let mut model = ui::EditorViewModel::new_shared("", blocks);
+        model.read_only = true;
+        model.image_cell_size = self.cell_size;
+        model.image_protocol = self.image_protocol;
+        model.text_sizing_protocol = self.text_sizing;
+        model.rich_cursor = self.rich_cursor;
+        EditorReadOnlyLayout::prepare(self.key, &model, cancelled)
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(in crate::session) struct EditorReadOnlyLayoutJob {
     key: Option<EditorReadOnlyLayoutKey>,
@@ -30,6 +55,16 @@ impl EditorReadOnlyLayoutJob {
         self.state = None;
     }
 
+    pub(super) fn ready_for(&self, key: EditorReadOnlyLayoutKey) -> bool {
+        self.key == Some(key) && matches!(self.state, Some(EditorReadOnlyLayoutState::Ready(_)))
+    }
+
+    pub(super) fn install_prepared(&mut self, layout: EditorReadOnlyLayout) {
+        self.worker.cancel();
+        self.key = Some(layout.key());
+        self.state = Some(EditorReadOnlyLayoutState::Ready(Arc::new(layout)));
+    }
+
     fn finished(&self, key: EditorReadOnlyLayoutKey) -> bool {
         self.key == Some(key)
             && matches!(
@@ -42,6 +77,31 @@ impl EditorReadOnlyLayoutJob {
 }
 
 impl ShellSession {
+    pub(super) fn editor_read_only_geometry(
+        &self,
+        rich_cursor: Option<ui::RichPosition>,
+    ) -> EditorReadOnlyGeometry {
+        let cell_size = self.terminal_image_cell_size;
+        let text_sizing = self.terminal_text_sizing_support;
+        let image_protocol = self.editor_image_protocol();
+        let _language = i18n::enter_snapshot(self.language.clone());
+        let key = EditorReadOnlyLayoutKey::for_area(
+            self.editor_content_rect(),
+            self.pages.editor.editor_search_bar.as_ref(),
+            cell_size,
+            text_sizing,
+            rich_cursor,
+        )
+        .with_image_protocol(image_protocol);
+        EditorReadOnlyGeometry {
+            key,
+            cell_size,
+            text_sizing,
+            image_protocol,
+            rich_cursor,
+        }
+    }
+
     fn editor_read_only_layout_key(&self) -> Option<EditorReadOnlyLayoutKey> {
         if self.content_screen() != ShellScreen::Editor
             || self.pages.editor.editor_load_state.is_some()
@@ -49,31 +109,32 @@ impl ShellSession {
             return None;
         }
         let state = self.app.editor_state()?;
-        let cache = self.pages.editor.editor_rich_render_cache.as_ref()?;
-        if state.access() != app::editor::EditorAccess::ReadOnly
-            || state.mode != app::editor::EditorMode::Rich
+        let reading = state.is_markdown_reading();
+        let needs_measurement = if reading {
+            self.editor_markdown_reading_cache().is_some()
+        } else {
+            let cache = self.pages.editor.editor_rich_render_cache.as_ref()?;
+            state.access() == app::editor::EditorAccess::ReadOnly
+                && cache.revision == state.revision()
+                && cache.is_large(state)
+        };
+        if state.mode != app::editor::EditorMode::Rich
             || self
                 .pages
                 .editor
                 .editor_picture_zoom
                 .is_some_and(ui::EditorPreviewZoom::is_zoomed)
-            || cache.revision != state.revision()
-            || !cache.is_large(state)
+            || !needs_measurement
         {
             return None;
         }
-        let area = self.editor_content_rect();
-        if area.is_empty() {
+        if self.editor_content_rect().is_empty() {
             return None;
         }
-        let _language = i18n::enter_snapshot(self.language.clone());
-        Some(EditorReadOnlyLayoutKey::for_area(
-            area,
-            self.pages.editor.editor_search_bar.as_ref(),
-            self.terminal_image_cell_size,
-            self.terminal_text_sizing_support,
-            state.rich_cursor(),
-        ))
+        Some(
+            self.editor_read_only_geometry(if reading { None } else { state.rich_cursor() })
+                .key,
+        )
     }
 
     pub(in crate::session) fn editor_read_only_layout_has_background_work(&self) -> bool {
@@ -94,7 +155,7 @@ impl ShellSession {
             if let Some(Some(layout)) = job.worker.take()
                 && layout.key() == key
             {
-                job.state = Some(EditorReadOnlyLayoutState::Ready(Arc::new(layout)));
+                job.install_prepared(layout);
             } else if job.worker.busy() {
                 return false;
             } else {

@@ -141,7 +141,13 @@ impl ShellSession {
         self.clamp_settings_scroll();
         self.clamp_system_status_dashboard_scroll();
         self.sync_setup_timezone_window();
-        self.rebuild_editor_rich_render_cache();
+        if self
+            .app
+            .editor_state()
+            .is_some_and(|editor| !editor.is_read_only())
+        {
+            self.rebuild_editor_rich_render_cache();
+        }
         self.refresh_hit_map();
         self.repaired_resource_paths.clear();
         self.fallback_resource_paths.clear();

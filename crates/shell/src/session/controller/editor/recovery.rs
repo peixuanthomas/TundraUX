@@ -120,28 +120,6 @@ impl ShellSession {
                 app::editor_recovery::RecoveryDocumentKind::PlainText
             }
         };
-        let payload = if let Some(document) = state.rich_document() {
-            let selection = state.rich_selection().map(|selection| {
-                app::rich_document::RichRange::new(selection.anchor, selection.focus)
-            });
-            app::editor_recovery::EditorRecoveryPayload::Rich {
-                document: document.clone(),
-                cursor: state.rich_cursor(),
-                selection,
-                markdown_fallback: state.export_text(),
-            }
-        } else {
-            app::editor_recovery::EditorRecoveryPayload::Source {
-                text: state.source_buffer().unwrap_or_default().into_owned(),
-                cursor: state.cursor.byte_offset,
-                selection: state.selection.map(|selection| {
-                    app::editor_recovery::RecoverySourceSelection {
-                        anchor: selection.anchor,
-                        focus: selection.focus,
-                    }
-                }),
-            }
-        };
         let mut record = app::editor_recovery::EditorRecoveryRecordV2 {
             path: state.document.path.clone(),
             document_kind,
@@ -152,7 +130,7 @@ impl ShellSession {
                 .editor_fingerprint
                 .map(|value| value.content_hash),
             updated_at_epoch_ms: 0,
-            payload,
+            payload: state.recovery_payload(),
         };
         record.updated_at_epoch_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -208,7 +186,7 @@ impl ShellSession {
             || self
                 .app
                 .editor_state()
-                .is_some_and(EditorState::is_read_only)
+                .is_some_and(|state| !state.can_save())
             || self
                 .app
                 .editor_state()

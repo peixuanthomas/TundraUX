@@ -960,7 +960,7 @@ impl ShellSession {
                 if self
                     .app
                     .editor_state()
-                    .is_some_and(EditorState::is_read_only)
+                    .is_some_and(|state| !state.can_save())
                 {
                     self.pages.editor.editor_message = Some(i18n::LocalizedText::from(i18n::msg!(
                         "shell-this-document-is-read-only"
@@ -1005,7 +1005,7 @@ impl ShellSession {
                 if self
                     .app
                     .editor_state()
-                    .is_some_and(EditorState::is_read_only)
+                    .is_some_and(|state| !state.can_save())
                 {
                     self.pages.editor.editor_message = Some(i18n::LocalizedText::from(i18n::msg!(
                         "shell-this-document-is-read-only"
@@ -1022,7 +1022,7 @@ impl ShellSession {
                 if self
                     .app
                     .editor_state()
-                    .is_some_and(EditorState::is_read_only)
+                    .is_some_and(|state| !state.can_save())
                 {
                     self.pages.editor.editor_message = Some(i18n::LocalizedText::from(i18n::msg!(
                         "shell-this-document-is-read-only"

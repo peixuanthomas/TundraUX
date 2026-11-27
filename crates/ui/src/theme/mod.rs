@@ -152,6 +152,12 @@ pub struct ThemeTokens {
 }
 
 impl ThemeTokens {
+    pub fn editor_media_colors(&self) -> ([u8; 3], [u8; 3]) {
+        let foreground = color_rgb(self.text).unwrap_or((255, 255, 255));
+        let background = color_rgb(self.editor_canvas).unwrap_or((0, 0, 0));
+        (foreground.into(), background.into())
+    }
+
     /// Text over a solid fill uses whichever of black and white has the higher
     /// sRGB contrast ratio. ANSI colours use the conventional xterm palette;
     /// terminals can override that palette. `Reset` has no known RGB value, so

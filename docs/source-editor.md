@@ -4,6 +4,14 @@ The built-in editor handles multiple documents, syntax highlighting, search and 
 
 To open your first file, use Editor from Launcher and choose **File → Open**, or open a supported file from Explorer. **File → Save** writes the current document. If it has no path, the save picker asks for a directory and filename. Browsing and picker controls are in [File Explorer and saving](user-guide.md#browse-and-edit-files).
 
+## Reading Markdown
+
+Markdown files (`.md`, `.markdown`, `.mdown`, and `.mkd`) open in the source editor. Select **Read** in the top bar to preview your current draft, including unsaved edits. From the document, you can also press F6 twice and then Enter. **Edit source** returns to your selection and scroll position with the same undo history. In Vim, press F8 to return to the standard editor first.
+
+The reader shows formatted text first. You can scroll and select it while local pictures, LaTeX formulas and fenced Mermaid diagrams render in the background. These graphics work with Kitty, Sixel and iTerm2. Write inline math between `$` delimiters and display math between `$$` delimiters or in a fenced `math` block. Headings use the terminal's text scaling when available. On text terminals, pictures use color blocks and formulas and diagrams show their source.
+
+Relative image paths start in the Markdown file's directory. A missing file or a network image shows its description or address. Word and Excel open directly in this read-only layout with their embedded pictures.
+
 ## Documents and images
 
 Double-click a supported document or image in Explorer, select it and press Enter, or choose **File → Open** in Editor. These previews are read-only. Word shows headings, paragraphs and tables, Excel groups values by worksheet, and PowerPoint shows slides in sequence. Macro-enabled files show their content without running VBA.

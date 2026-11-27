@@ -1,8 +1,15 @@
 use super::layout::to_u16;
 use super::*;
 use crate::components::{terminal_width, truncate_to_terminal_width};
+use ratatui::layout::Size;
+use std::ops::Range;
 
+mod code_block;
 mod preview;
+
+use code_block::{
+    code_block_heading, code_block_lines, code_tab_segments, code_tab_width, rich_code_block_lines,
+};
 #[cfg(test)]
 pub(super) use preview::READ_ONLY_MEASURE_CALLS;
 pub(super) use preview::ReadOnlyRichLayout;
@@ -22,6 +29,8 @@ pub(super) enum DisplayText {
     Shared(Arc<str>),
     /// A zero-copy slice of `EditorViewModel::source`.
     SourceRange(EditorSourceRange),
+    Graphic(DisplayGraphic),
+    CodeTab(usize),
 }
 
 impl DisplayText {
@@ -32,8 +41,23 @@ impl DisplayText {
             Self::SourceRange(range) => source
                 .and_then(|source| source.get(range.start..range.end))
                 .unwrap_or_default(),
+            Self::Graphic(graphic) => graphic
+                .fallback
+                .lines()
+                .nth(usize::from(graphic.row))
+                .unwrap_or_default(),
+            Self::CodeTab(_) => "\t",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct DisplayGraphic {
+    pub(super) graphic: EditorPreviewGraphic,
+    pub(super) size: Size,
+    pub(super) row: u16,
+    pub(super) picture: bool,
+    fallback: Arc<str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +75,40 @@ pub(super) enum DisplayRich {
 }
 
 impl DisplayRun {
+    pub(super) fn fixed_width(&self) -> Option<usize> {
+        match &self.text {
+            DisplayText::Graphic(graphic) => Some(usize::from(graphic.size.width)),
+            DisplayText::CodeTab(width) => Some(*width),
+            _ => None,
+        }
+    }
+
+    fn graphic(
+        graphic: &EditorPreviewGraphic,
+        mut style: EditorRenderSpan,
+        size: Size,
+        picture: bool,
+    ) -> Self {
+        let fallback = std::mem::take(&mut style.text).into();
+        style.media = None;
+        Self {
+            text: DisplayText::Graphic(DisplayGraphic {
+                graphic: graphic.clone(),
+                size,
+                row: 0,
+                picture,
+                fallback,
+            }),
+            source: style
+                .source_range
+                .map_or(DisplaySource::Unmapped, DisplaySource::Range),
+            rich: style
+                .rich_range
+                .map_or(DisplayRich::Unmapped, DisplayRich::Range),
+            style,
+        }
+    }
+
     pub(super) fn unmapped(text: impl Into<String>, style: EditorRenderSpan) -> Self {
         Self {
             text: DisplayText::Owned(text.into()),
@@ -149,9 +207,14 @@ fn heading_uses_big_text(model: &EditorViewModel, block: &EditorRenderBlock) -> 
     if !model.text_sizing_protocol {
         return false;
     }
-    let EditorRenderBlock::Heading { spans, .. } = block else {
-        return false;
+    let spans = match block {
+        EditorRenderBlock::Heading { spans, .. }
+        | EditorRenderBlock::PreviewHeading { spans, .. } => spans,
+        _ => return false,
     };
+    if model.canvas_read_only() {
+        return media_cell_size(model).is_none() || !spans.iter().any(|span| span.media.is_some());
+    }
     let Some(cursor) = model.rich_cursor else {
         return true;
     };
@@ -168,6 +231,64 @@ fn heading_uses_big_text(model: &EditorViewModel, block: &EditorRenderBlock) -> 
                 && cursor.grapheme_offset <= range.end.grapheme_offset
         })
     })
+}
+
+#[derive(Clone, Copy)]
+struct BlockPresentation {
+    big_heading: bool,
+    wrap_cells: bool,
+    cell_size: Option<[u16; 2]>,
+    picture_bounds: super::picture::PictureBounds,
+}
+
+impl BlockPresentation {
+    fn for_block(
+        model: &EditorViewModel,
+        block: &EditorRenderBlock,
+        picture_bounds: super::picture::PictureBounds,
+    ) -> Self {
+        let big_heading = heading_uses_big_text(model, block);
+        Self {
+            big_heading,
+            wrap_cells: model.canvas_read_only(),
+            cell_size: (!big_heading).then(|| media_cell_size(model)).flatten(),
+            picture_bounds,
+        }
+    }
+
+    fn block_graphic(
+        self,
+        block: &EditorRenderBlock,
+    ) -> Option<(&EditorPreviewGraphic, Size, bool)> {
+        let (graphic, picture) = match block {
+            EditorRenderBlock::PreviewHeading { graphic, .. } if self.cell_size.is_some() => {
+                (graphic, false)
+            }
+            EditorRenderBlock::PreviewGraphic { graphic, kind, .. } => {
+                let picture = *kind == EditorPreviewGraphicKind::Picture;
+                if !picture && self.cell_size.is_none() {
+                    return None;
+                }
+                (graphic, picture)
+            }
+            _ => return None,
+        };
+        Some((graphic, self.picture_bounds.fit(&graphic.image), picture))
+    }
+}
+
+fn media_cell_size(model: &EditorViewModel) -> Option<[u16; 2]> {
+    (model.image_protocol == EditorImageProtocolStatus::Available).then_some(model.image_cell_size)
+}
+
+fn inline_graphic_size(
+    span: &EditorRenderSpan,
+    width: usize,
+    cell_size: Option<[u16; 2]>,
+) -> Option<Size> {
+    let graphic = span.media.as_ref()?;
+    let cell_size = cell_size?;
+    (width > 0).then(|| super::picture::bounds(width, usize::MAX, cell_size).fit(&graphic.image))
 }
 
 fn heading_wrap_width(width: usize, level: u8) -> usize {
@@ -276,17 +397,15 @@ pub(super) fn rich_document_fits_height(
 
     let width = width.max(1);
     let mut line_count = 0usize;
+    let picture_bounds = super::picture::bounds(width, height, model.image_cell_size);
     for (index, block) in blocks.iter().enumerate() {
         let remaining = height.saturating_sub(line_count);
-        let big_heading = heading_uses_big_text(model, block);
         let Some(block_line_count) = rich_block_line_count_up_to_with_heading(
             block,
             width,
             remaining,
-            big_heading,
-            model.read_only,
             model.table_widths_for_block(index, block.table_id()),
-            super::picture::bounds(width, height, model.image_cell_size),
+            BlockPresentation::for_block(model, block, picture_bounds),
         ) else {
             return false;
         };
@@ -305,10 +424,13 @@ pub(super) fn rich_block_line_count_up_to(
         block,
         width,
         limit,
-        false,
-        false,
         None,
-        super::picture::bounds(width, usize::MAX, [8, 16]),
+        BlockPresentation {
+            big_heading: false,
+            wrap_cells: false,
+            cell_size: None,
+            picture_bounds: super::picture::bounds(width, usize::MAX, [8, 16]),
+        },
     )
 }
 
@@ -316,26 +438,33 @@ fn rich_block_line_count_up_to_with_heading(
     block: &EditorRenderBlock,
     width: usize,
     limit: usize,
-    big_heading: bool,
-    wrap_cells: bool,
     table_widths: Option<&[usize]>,
-    picture_bounds: super::picture::PictureBounds,
+    presentation: BlockPresentation,
 ) -> Option<usize> {
+    if let Some((_, size, _)) = presentation.block_graphic(block) {
+        return fixed_line_count_up_to(usize::from(size.height), limit);
+    }
+    let wrap = |prefix: &str, spans: &[EditorRenderSpan]| {
+        wrapped_line_count_up_to(prefix, spans, width, limit, presentation.cell_size)
+    };
     match block {
-        EditorRenderBlock::Picture { image, .. } => {
-            fixed_line_count_up_to(usize::from(picture_bounds.fit(image).height), limit)
-        }
-        EditorRenderBlock::Paragraph(spans) => wrapped_line_count_up_to("", spans, width, limit),
-        EditorRenderBlock::Heading { level, spans } if big_heading => {
+        EditorRenderBlock::Picture { image, .. } => fixed_line_count_up_to(
+            usize::from(presentation.picture_bounds.fit(image).height),
+            limit,
+        ),
+        EditorRenderBlock::Paragraph(spans) => wrap("", spans),
+        EditorRenderBlock::Heading { level, spans }
+        | EditorRenderBlock::PreviewHeading { level, spans, .. }
+            if presentation.big_heading =>
+        {
             let scaled_width = heading_wrap_width(width, (*level).clamp(1, 6));
             let line_limit = limit / 2;
-            wrapped_line_count_up_to("", spans, scaled_width, line_limit)
+            wrapped_line_count_up_to("", spans, scaled_width, line_limit, None)
                 .and_then(|lines| lines.checked_mul(2))
                 .filter(|lines| *lines <= limit)
         }
-        EditorRenderBlock::Heading { spans, .. } => {
-            wrapped_line_count_up_to("", spans, width, limit)
-        }
+        EditorRenderBlock::Heading { spans, .. }
+        | EditorRenderBlock::PreviewHeading { spans, .. } => wrap("", spans),
         EditorRenderBlock::BulletListItem {
             depth,
             checked,
@@ -347,7 +476,7 @@ fn rich_block_line_count_up_to_with_heading(
                 None => "• ",
             };
             let prefix = format!("{}{}", "  ".repeat(usize::from(*depth)), marker);
-            wrapped_line_count_up_to(&prefix, spans, width, limit)
+            wrap(&prefix, spans)
         }
         EditorRenderBlock::OrderedListItem {
             depth,
@@ -355,17 +484,20 @@ fn rich_block_line_count_up_to_with_heading(
             spans,
         } => {
             let prefix = format!("{}{}. ", "  ".repeat(usize::from(*depth)), number);
-            wrapped_line_count_up_to(&prefix, spans, width, limit)
+            wrap(&prefix, spans)
         }
         EditorRenderBlock::Quote { depth, spans } => {
             let prefix = "│ ".repeat(usize::from((*depth).max(1)));
-            wrapped_line_count_up_to(&prefix, spans, width, limit)
+            wrap(&prefix, spans)
         }
         EditorRenderBlock::Footnote { label, spans } => {
             let prefix = format!("[^{label}] ");
-            wrapped_line_count_up_to(&prefix, spans, width, limit)
+            wrap(&prefix, spans)
         }
         EditorRenderBlock::CodeBlock { lines, .. } => {
+            fixed_line_count_up_to(lines.len().saturating_add(2), limit)
+        }
+        EditorRenderBlock::RichCodeBlock { lines, .. } => {
             fixed_line_count_up_to(lines.len().saturating_add(2), limit)
         }
         EditorRenderBlock::Table { header, rows, .. }
@@ -379,13 +511,21 @@ fn rich_block_line_count_up_to_with_heading(
                     .saturating_add(usize::from(!header.is_empty()) * 2)
             };
             fixed_line_count_up_to(minimum_lines, limit)?;
-            if has_columns && wrap_cells {
-                let widths = table_column_widths(header, rows, table_widths);
+            if has_columns && presentation.wrap_cells {
+                let widths = table_column_widths_cancellable(
+                    header,
+                    rows,
+                    table_widths,
+                    presentation.cell_size,
+                    &|| false,
+                )
+                .unwrap();
                 let mut lines = 2 + usize::from(!header.is_empty());
                 let header = (!header.is_empty()).then_some(header);
                 for row in header.into_iter().chain(rows) {
                     let remaining = limit.checked_sub(lines)?;
-                    let row_height = wrapped_table_row_height(row, &widths, remaining)?;
+                    let row_height =
+                        wrapped_table_row_height(row, &widths, remaining, presentation.cell_size)?;
                     lines = lines.saturating_add(row_height);
                 }
                 return fixed_line_count_up_to(lines, limit);
@@ -393,6 +533,9 @@ fn rich_block_line_count_up_to_with_heading(
             Some(minimum_lines)
         }
         EditorRenderBlock::RawHtml(html) => fixed_line_count_up_to(source_line_count(html), limit),
+        EditorRenderBlock::PreviewGraphic {
+            fallback, range, ..
+        } => wrap("", &[graphic_fallback(fallback.clone(), *range)]),
         EditorRenderBlock::HorizontalRule
         | EditorRenderBlock::Image { .. }
         | EditorRenderBlock::Blank => fixed_line_count_up_to(1, limit),
@@ -407,11 +550,18 @@ fn wrapped_table_row_height(
     row: &[EditorTableCell],
     widths: &[usize],
     limit: usize,
+    cell_size: Option<[u16; 2]>,
 ) -> Option<usize> {
     row.iter()
         .zip(widths)
         .try_fold(1, |height, (cell, &width)| {
-            Some(height.max(wrapped_line_count_up_to("", &cell.spans, width, limit)?))
+            Some(height.max(wrapped_line_count_up_to(
+                "",
+                &cell.spans,
+                width,
+                limit,
+                cell_size,
+            )?))
         })
 }
 
@@ -421,11 +571,12 @@ fn printable_ascii(text: &str) -> bool {
 
 /// Counts the lines produced by [`wrap_runs`] without creating one owned
 /// `DisplayRun` per grapheme. `None` means the count exceeded `limit`.
-pub(super) fn wrapped_line_count_up_to(
+fn wrapped_line_count_up_to(
     prefix: &str,
     spans: &[EditorRenderSpan],
     width: usize,
     limit: usize,
+    cell_size: Option<[u16; 2]>,
 ) -> Option<usize> {
     let prefix_width = terminal_width(terminal_safe_text(prefix).as_ref());
     let mut measure = WrappedLineMeasure {
@@ -434,11 +585,19 @@ pub(super) fn wrapped_line_count_up_to(
         prefix_width,
         line_count: 0,
         current_width: prefix_width,
+        current_height: 1,
         current_has_runs: !prefix.is_empty(),
         continuation_has_runs: prefix_width > 0,
     };
 
     for span in spans {
+        if let Some(size) = inline_graphic_size(span, width.saturating_sub(prefix_width), cell_size)
+        {
+            if !measure.push_item(usize::from(size.width), usize::from(size.height)) {
+                return None;
+            }
+            continue;
+        }
         // `mapped_text_runs` emits one empty run for an empty span. It affects
         // whether a final empty visual line exists even though it has no width.
         if span.text.is_empty() {
@@ -491,6 +650,7 @@ struct WrappedLineMeasure {
     prefix_width: usize,
     line_count: usize,
     current_width: usize,
+    current_height: usize,
     current_has_runs: bool,
     continuation_has_runs: bool,
 }
@@ -503,8 +663,12 @@ impl WrappedLineMeasure {
             self.current_width += length;
         } else {
             let remaining = length - room;
-            self.line_count = self.line_count.saturating_add(remaining.div_ceil(capacity));
+            self.line_count = self
+                .line_count
+                .saturating_add(self.current_height)
+                .saturating_add((remaining - 1) / capacity);
             self.current_width = self.prefix_width + (remaining - 1) % capacity + 1;
+            self.current_height = 1;
         }
         self.current_has_runs = true;
         self.line_count <= self.limit
@@ -517,15 +681,23 @@ impl WrappedLineMeasure {
         let span = Span::raw(segment);
         for grapheme in span.styled_graphemes(Style::default()) {
             let run_width = terminal_width(terminal_safe_text(grapheme.symbol).as_ref());
-            if self.current_width > self.prefix_width
-                && self.current_width.saturating_add(run_width) > self.width
-                && !self.push_line()
-            {
+            if !self.push_item(run_width, 1) {
                 return false;
             }
-            self.current_width = self.current_width.saturating_add(run_width);
-            self.current_has_runs = true;
         }
+        true
+    }
+
+    fn push_item(&mut self, width: usize, height: usize) -> bool {
+        if self.current_width > self.prefix_width
+            && self.current_width.saturating_add(width) > self.width
+            && !self.push_line()
+        {
+            return false;
+        }
+        self.current_width = self.current_width.saturating_add(width);
+        self.current_height = self.current_height.max(height);
+        self.current_has_runs = true;
         true
     }
 
@@ -539,11 +711,12 @@ impl WrappedLineMeasure {
     }
 
     pub(super) fn push_line(&mut self) -> bool {
-        self.line_count = self.line_count.saturating_add(1);
+        self.line_count = self.line_count.saturating_add(self.current_height);
         if self.line_count > self.limit {
             return false;
         }
         self.current_width = self.prefix_width;
+        self.current_height = 1;
         self.current_has_runs = self.continuation_has_runs;
         true
     }
@@ -622,9 +795,7 @@ fn materialize_rich_block(
         model.block_sources.get(index).copied(),
         model.table_widths_for_block(index, block.table_id()),
         model.source.as_deref(),
-        heading_uses_big_text(model, block),
-        model.read_only,
-        picture_bounds,
+        BlockPresentation::for_block(model, block, picture_bounds),
         table_window,
     )
 }
@@ -645,9 +816,12 @@ pub(super) fn block_lines(
         block_source,
         table_widths,
         source,
-        false,
-        false,
-        super::picture::bounds(width, usize::MAX, [8, 16]),
+        BlockPresentation {
+            big_heading: false,
+            wrap_cells: false,
+            cell_size: None,
+            picture_bounds: super::picture::bounds(width, usize::MAX, [8, 16]),
+        },
         None,
     )
 }
@@ -659,15 +833,27 @@ fn block_lines_with_heading(
     block_source: Option<EditorBlockSourceMap>,
     table_widths: Option<&[usize]>,
     source: Option<&str>,
-    big_heading: bool,
-    wrap_cells: bool,
-    picture_bounds: super::picture::PictureBounds,
+    presentation: BlockPresentation,
     table_window: Option<TableWindow<'_>>,
 ) -> Vec<DisplayLine> {
     let anchor = block_source.map(EditorBlockSourceMap::anchor);
+    if let Some((graphic, size, picture)) = presentation.block_graphic(block) {
+        return block_graphic_lines(block, block_index, width, graphic, size, picture);
+    }
+    let wrap = |prefix, spans: &[EditorRenderSpan], max_width, cell_size| {
+        wrap_runs(
+            prefix,
+            spans,
+            max_width,
+            block_index,
+            false,
+            source,
+            cell_size,
+        )
+    };
     match block {
         EditorRenderBlock::Picture { image, .. } => {
-            let size = picture_bounds.fit(image);
+            let size = presentation.picture_bounds.fit(image);
             (0..size.height)
                 .map(|row| DisplayLine {
                     role: DisplayLineRole::Picture { row, size },
@@ -676,9 +862,10 @@ fn block_lines_with_heading(
                 .collect()
         }
         EditorRenderBlock::Paragraph(spans) => {
-            wrap_runs(Vec::new(), spans, width, block_index, false, source)
+            wrap(Vec::new(), spans, width, presentation.cell_size)
         }
-        EditorRenderBlock::Heading { level, spans } => {
+        EditorRenderBlock::Heading { level, spans }
+        | EditorRenderBlock::PreviewHeading { level, spans, .. } => {
             let level = (*level).clamp(1, 6);
             let styled: Vec<_> = spans
                 .iter()
@@ -689,13 +876,13 @@ fn block_lines_with_heading(
                     span
                 })
                 .collect();
-            let wrap_width = if big_heading {
+            let wrap_width = if presentation.big_heading {
                 heading_wrap_width(width, level)
             } else {
                 width
             };
-            let lines = wrap_runs(Vec::new(), &styled, wrap_width, block_index, false, source);
-            if big_heading {
+            let lines = wrap(Vec::new(), &styled, wrap_width, presentation.cell_size);
+            if presentation.big_heading {
                 lines
                     .into_iter()
                     .flat_map(|mut line| {
@@ -720,13 +907,11 @@ fn block_lines_with_heading(
                 None => "• ",
             };
             let prefix = format!("{}{}", "  ".repeat(usize::from(*depth)), marker);
-            wrap_runs(
+            wrap(
                 vec![DisplayRun::virtual_text(prefix, accent_span(), anchor)],
                 spans,
                 width,
-                block_index,
-                false,
-                source,
+                presentation.cell_size,
             )
         }
         EditorRenderBlock::OrderedListItem {
@@ -735,13 +920,11 @@ fn block_lines_with_heading(
             spans,
         } => {
             let prefix = format!("{}{}. ", "  ".repeat(usize::from(*depth)), number);
-            wrap_runs(
+            wrap(
                 vec![DisplayRun::virtual_text(prefix, accent_span(), anchor)],
                 spans,
                 width,
-                block_index,
-                false,
-                source,
+                presentation.cell_size,
             )
         }
         EditorRenderBlock::Quote { depth, spans } => {
@@ -754,60 +937,32 @@ fn block_lines_with_heading(
                     span
                 })
                 .collect();
-            wrap_runs(
+            wrap(
                 vec![DisplayRun::virtual_text(prefix, accent_span(), anchor)],
                 &quote_spans,
                 width,
-                block_index,
-                false,
-                source,
+                presentation.cell_size,
             )
         }
         EditorRenderBlock::CodeBlock { language, lines } => {
-            let language = language.as_deref().unwrap_or("code");
-            let mut output = vec![DisplayLine {
-                runs: vec![DisplayRun::virtual_text(
-                    format!("┌─ {language} "),
-                    accent_span(),
-                    anchor,
-                )],
-                block_index: Some(block_index),
-                no_wrap: true,
-                column_start: 0,
-                role: DisplayLineRole::Normal,
-            }];
             let line_ranges = code_line_source_ranges(lines, block_source, source);
-            output.extend(lines.iter().enumerate().map(|(index, line)| {
-                let line_range = line_ranges.get(index).copied().flatten();
-                let line_anchor = line_range.map(|range| range.start).or(anchor);
-                let mut runs = vec![DisplayRun::virtual_text("│ ", accent_span(), line_anchor)];
-                runs.extend(mapped_text_runs(
-                    line,
-                    EditorRenderSpan::code(""),
-                    line_range,
-                    source,
-                ));
-                DisplayLine {
-                    runs,
-                    block_index: Some(block_index),
-                    no_wrap: true,
-                    column_start: 0,
-                    role: DisplayLineRole::Normal,
-                }
-            }));
             let end_anchor = block_source
                 .and_then(|mapping| mapping.content_range)
                 .map(|range| range.end)
                 .or(anchor);
-            output.push(DisplayLine {
-                runs: vec![DisplayRun::virtual_text("└─", accent_span(), end_anchor)],
-                block_index: Some(block_index),
-                no_wrap: true,
-                column_start: 0,
-                role: DisplayLineRole::Normal,
+            let runs = lines.iter().zip(line_ranges).map(|(line, range)| {
+                mapped_text_runs(line, EditorRenderSpan::code(""), range, source)
             });
-            output
+            code_block_lines(language.as_deref(), block_index, anchor, end_anchor, runs)
         }
+        EditorRenderBlock::RichCodeBlock { language, lines } => rich_code_block_lines(
+            language.as_deref(),
+            block_index,
+            lines,
+            anchor,
+            source,
+            0..lines.len().saturating_add(2),
+        ),
         EditorRenderBlock::Table {
             header,
             rows,
@@ -826,7 +981,8 @@ fn block_lines_with_heading(
             block_index,
             anchor,
             source,
-            wrap_cells,
+            presentation.wrap_cells,
+            presentation.cell_size,
             table_window,
         ),
         EditorRenderBlock::HorizontalRule => vec![DisplayLine {
@@ -895,7 +1051,15 @@ fn block_lines_with_heading(
             column_start: 0,
             role: DisplayLineRole::Normal,
         }],
-        EditorRenderBlock::Footnote { label, spans } => wrap_runs(
+        EditorRenderBlock::PreviewGraphic {
+            fallback, range, ..
+        } => wrap(
+            Vec::new(),
+            &[graphic_fallback(fallback.clone(), *range)],
+            width,
+            None,
+        ),
+        EditorRenderBlock::Footnote { label, spans } => wrap(
             vec![DisplayRun::virtual_text(
                 format!("[^{label}] "),
                 accent_span(),
@@ -903,12 +1067,57 @@ fn block_lines_with_heading(
             )],
             spans,
             width,
-            block_index,
-            false,
-            source,
+            presentation.cell_size,
         ),
         EditorRenderBlock::Blank => vec![empty_display_line_at(Some(block_index), anchor)],
     }
+}
+
+fn graphic_fallback(text: String, range: Option<RichRange>) -> EditorRenderSpan {
+    EditorRenderSpan {
+        rich_range: range,
+        ..EditorRenderSpan::plain(text)
+    }
+}
+
+fn block_graphic_lines(
+    block: &EditorRenderBlock,
+    block_index: usize,
+    width: usize,
+    graphic: &EditorPreviewGraphic,
+    size: Size,
+    picture: bool,
+) -> Vec<DisplayLine> {
+    let (span, left) = match block {
+        EditorRenderBlock::PreviewHeading { spans, .. } => {
+            let mut ranges = spans.iter().filter_map(|span| span.rich_range);
+            let range = ranges
+                .next()
+                .map(|first| RichRange::between(first.start, ranges.last().unwrap_or(first).end));
+            let text = spans
+                .iter()
+                .map(|span| span.text.as_str())
+                .collect::<String>();
+            (
+                EditorRenderSpan {
+                    rich_range: range,
+                    ..EditorRenderSpan::strong(text)
+                },
+                0,
+            )
+        }
+        EditorRenderBlock::PreviewGraphic {
+            fallback, range, ..
+        } => (
+            graphic_fallback(fallback.clone(), *range),
+            width.saturating_sub(usize::from(size.width)) / 2,
+        ),
+        _ => unreachable!(),
+    };
+    let runs = vec![DisplayRun::graphic(graphic, span, size, picture)];
+    let mut lines = Vec::with_capacity(usize::from(size.height));
+    append_wrapped_line(&mut lines, runs, block_index, false, left);
+    lines
 }
 
 fn table_lines(
@@ -920,13 +1129,16 @@ fn table_lines(
     anchor: Option<usize>,
     source: Option<&str>,
     wrap_cells: bool,
+    cell_size: Option<[u16; 2]>,
     window: Option<TableWindow<'_>>,
 ) -> Vec<DisplayLine> {
     let measured_widths;
     let widths = if let Some(window) = &window {
         window.metrics.widths.as_slice()
     } else {
-        measured_widths = table_column_widths(header, rows, requested_widths);
+        measured_widths =
+            table_column_widths_cancellable(header, rows, requested_widths, cell_size, &|| false)
+                .unwrap();
         &measured_widths
     };
     if widths.is_empty() {
@@ -957,7 +1169,16 @@ fn table_lines(
         let mut wrapped_cells = Vec::new();
         if wrap_cells {
             wrapped_cells.extend(row.iter().zip(widths).map(|(cell, &width)| {
-                wrap_runs(Vec::new(), &cell.spans, width, block_index, true, source).into_iter()
+                wrap_runs(
+                    Vec::new(),
+                    &cell.spans,
+                    width,
+                    block_index,
+                    true,
+                    source,
+                    cell_size,
+                )
+                .into_iter()
             }));
         }
         let height = wrapped_cells
@@ -1287,13 +1508,14 @@ pub(super) fn table_column_widths(
     rows: &[Vec<EditorTableCell>],
     requested: Option<&[usize]>,
 ) -> Vec<usize> {
-    table_column_widths_cancellable(header, rows, requested, &|| false).unwrap()
+    table_column_widths_cancellable(header, rows, requested, None, &|| false).unwrap()
 }
 
 fn table_column_widths_cancellable(
     header: &[EditorTableCell],
     rows: &[Vec<EditorTableCell>],
     requested: Option<&[usize]>,
+    cell_size: Option<[u16; 2]>,
     cancelled: &impl Fn() -> bool,
 ) -> Option<Vec<usize>> {
     let mut widths = vec![1usize; header.len()];
@@ -1308,15 +1530,24 @@ fn table_column_widths_cancellable(
             if widths[index] == 24 {
                 continue;
             }
-            let text = match cell.spans.as_slice() {
-                [] => continue,
-                [span] => Cow::Borrowed(span.text.as_str()),
-                _ => Cow::Owned(cell_text(cell)),
-            };
-            let width = if printable_ascii(&text) {
-                text.len()
+            let width = if cell_size.is_some() && cell.spans.iter().any(|span| span.media.is_some())
+            {
+                cell.spans
+                    .iter()
+                    .map(|span| {
+                        inline_graphic_size(span, 24, cell_size).map_or_else(
+                            || measured_text_width(&span.text),
+                            |size| usize::from(size.width),
+                        )
+                    })
+                    .fold(0, usize::saturating_add)
             } else {
-                terminal_width(terminal_safe_text(&text).as_ref())
+                let text = match cell.spans.as_slice() {
+                    [] => continue,
+                    [span] => Cow::Borrowed(span.text.as_str()),
+                    _ => Cow::Owned(cell_text(cell)),
+                };
+                measured_text_width(&text)
             };
             widths[index] = widths[index].max(width.min(24));
         }
@@ -1329,6 +1560,14 @@ fn table_column_widths_cancellable(
         }
     }
     Some(widths)
+}
+
+fn measured_text_width(text: &str) -> usize {
+    if printable_ascii(text) {
+        text.len()
+    } else {
+        terminal_width(terminal_safe_text(text).as_ref())
+    }
 }
 
 pub(super) fn table_resize_handles(
@@ -1453,13 +1692,14 @@ pub(super) fn table_edge_handles(
     handles
 }
 
-pub(super) fn wrap_runs(
+fn wrap_runs(
     prefix: Vec<DisplayRun>,
     spans: &[EditorRenderSpan],
     width: usize,
     block_index: usize,
     no_wrap: bool,
     source: Option<&str>,
+    cell_size: Option<[u16; 2]>,
 ) -> Vec<DisplayLine> {
     let rich_anchor = spans
         .iter()
@@ -1490,9 +1730,16 @@ pub(super) fn wrap_runs(
     let mut current = prefix.clone();
     let mut current_width = prefix_width;
     for span in spans {
-        let span_range = span.source_range;
-        for run in mapped_text_runs(&span.text, span.clone(), span_range, source) {
-            if is_display_newline(run.text.resolve(source)) {
+        let runs = if let Some(graphic) = span.media.as_ref()
+            && let Some(size) =
+                inline_graphic_size(span, width.saturating_sub(prefix_width), cell_size)
+        {
+            vec![DisplayRun::graphic(graphic, span.clone(), size, false)]
+        } else {
+            mapped_text_runs(&span.text, span.clone(), span.source_range, source)
+        };
+        for run in runs {
+            if run.fixed_width().is_none() && is_display_newline(run.text.resolve(source)) {
                 let before = display_run_start(&run);
                 let rich_before = display_run_rich_start(&run);
                 if before.is_some() || rich_before.is_some() {
@@ -1501,13 +1748,13 @@ pub(super) fn wrap_runs(
                             .with_editable_rich_boundary(rich_before),
                     );
                 }
-                lines.push(DisplayLine {
-                    runs: std::mem::take(&mut current),
-                    block_index: Some(block_index),
+                append_wrapped_line(
+                    &mut lines,
+                    std::mem::take(&mut current),
+                    block_index,
                     no_wrap,
-                    column_start: 0,
-                    role: DisplayLineRole::Normal,
-                });
+                    0,
+                );
                 current = continuation_prefix.clone();
                 let after = display_run_end(&run);
                 let rich_after = display_run_rich_end(&run);
@@ -1522,13 +1769,13 @@ pub(super) fn wrap_runs(
             }
             let run_width = display_run_width(&run);
             if current_width > prefix_width && current_width.saturating_add(run_width) > width {
-                lines.push(DisplayLine {
-                    runs: std::mem::take(&mut current),
-                    block_index: Some(block_index),
+                append_wrapped_line(
+                    &mut lines,
+                    std::mem::take(&mut current),
+                    block_index,
                     no_wrap,
-                    column_start: 0,
-                    role: DisplayLineRole::Normal,
-                });
+                    0,
+                );
                 current = continuation_prefix.clone();
                 current_width = prefix_width;
             }
@@ -1537,15 +1784,66 @@ pub(super) fn wrap_runs(
         }
     }
     if !current.is_empty() || lines.is_empty() {
-        lines.push(DisplayLine {
-            runs: current,
-            block_index: Some(block_index),
-            no_wrap,
-            column_start: 0,
-            role: DisplayLineRole::Normal,
-        });
+        append_wrapped_line(&mut lines, current, block_index, no_wrap, 0);
     }
     lines
+}
+
+fn append_wrapped_line(
+    lines: &mut Vec<DisplayLine>,
+    runs: Vec<DisplayRun>,
+    block_index: usize,
+    no_wrap: bool,
+    column_start: usize,
+) {
+    let height = runs
+        .iter()
+        .filter_map(|run| match &run.text {
+            DisplayText::Graphic(graphic) => Some(graphic.size.height),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(1);
+    let line = |runs| DisplayLine {
+        runs,
+        block_index: Some(block_index),
+        no_wrap,
+        column_start,
+        role: DisplayLineRole::Normal,
+    };
+    let first = lines.len();
+    lines.push(line(runs));
+    for row in 1..height {
+        let mut continuation = Vec::new();
+        let mut padding = 0usize;
+        for run in &lines[first].runs {
+            if let DisplayText::Graphic(graphic) = &run.text
+                && row < graphic.size.height
+            {
+                if padding > 0 {
+                    continuation.push(DisplayRun::unmapped(
+                        " ".repeat(padding),
+                        EditorRenderSpan::default(),
+                    ));
+                    padding = 0;
+                }
+                let mut run = run.clone();
+                if let DisplayText::Graphic(graphic) = &mut run.text {
+                    graphic.row = row;
+                }
+                continuation.push(run);
+            } else {
+                padding = padding.saturating_add(display_run_width(run));
+            }
+        }
+        if padding > 0 {
+            continuation.push(DisplayRun::unmapped(
+                " ".repeat(padding),
+                EditorRenderSpan::default(),
+            ));
+        }
+        lines.push(line(continuation));
+    }
 }
 
 pub(super) fn cell_text(cell: &EditorTableCell) -> String {
@@ -1575,7 +1873,8 @@ pub(super) fn runs_width(runs: &[DisplayRun]) -> usize {
 }
 
 pub(super) fn display_run_width(run: &DisplayRun) -> usize {
-    terminal_width(terminal_safe_text(run.text.resolve(None)).as_ref())
+    run.fixed_width()
+        .unwrap_or_else(|| measured_text_width(run.text.resolve(None)))
 }
 
 pub(super) fn rich_horizontal_content_width(lines: &[DisplayLine], source: Option<&str>) -> usize {
@@ -1585,7 +1884,10 @@ pub(super) fn rich_horizontal_content_width(lines: &[DisplayLine], source: Optio
         .map(|line| {
             line.runs
                 .iter()
-                .map(|run| terminal_width(terminal_safe_text(run.text.resolve(source)).as_ref()))
+                .map(|run| {
+                    run.fixed_width()
+                        .unwrap_or_else(|| measured_text_width(run.text.resolve(source)))
+                })
                 .sum()
         })
         .max()
@@ -1637,6 +1939,7 @@ pub(super) fn mapped_text_runs(
 ) -> Vec<DisplayRun> {
     // Each run keeps its own text. Cloning the full span per grapheme is quadratic.
     style.text = String::new();
+    style.media = None;
     let exact = source_range.filter(|range| {
         range.start <= range.end
             && source.and_then(|source| source.get(range.start..range.end)) == Some(text)
@@ -1752,14 +2055,18 @@ pub(super) fn push_mapped_text_run(
         (None, Some(range)) => DisplaySource::Virtual(range.start),
         (None, None) => DisplaySource::Unmapped,
     };
+    let range = context.style.rich_range;
+    let atomic = range.filter(|range| {
+        range.start.container_id == range.end.container_id
+            && range.end.grapheme_offset == range.start.grapheme_offset.saturating_add(1)
+    });
     runs.push(DisplayRun {
         text: DisplayText::Owned(text.to_owned()),
         style: context.style.clone(),
         source,
-        rich: rich_mapping(
-            context.style.rich_range,
-            grapheme_offsets.start,
-            grapheme_offsets.end,
+        rich: atomic.map_or_else(
+            || rich_mapping(range, grapheme_offsets.start, grapheme_offsets.end),
+            DisplayRich::Range,
         ),
     });
 }
@@ -1861,6 +2168,30 @@ pub(super) fn display_line_source_boundaries(
     let mut measure = DisplayColumnMeasure::new(line);
     let horizontal_end = horizontal_start.saturating_add(width);
     for run in &line.runs {
+        if let Some(run_width) = run.fixed_width() {
+            let column = measure.column();
+            let next = measure.push(run_width);
+            let editable = matches!(run.source, DisplaySource::Range(_));
+            if let Some(offset) = display_run_end(run) {
+                fallback_boundary = Some(EditorSourceBoundary {
+                    column: next,
+                    byte_offset: offset,
+                    editable,
+                });
+            }
+            if next >= horizontal_start && column <= horizontal_end {
+                if let Some(offset) = display_run_start(run) {
+                    push_source_boundary(&mut boundaries, column, offset, editable);
+                }
+                if let Some(offset) = display_run_end(run) {
+                    push_source_boundary(&mut boundaries, next, offset, editable);
+                }
+            }
+            if next > horizontal_end {
+                break;
+            }
+            continue;
+        }
         let text = run.text.resolve(source);
         if text.is_empty() {
             let column = measure.column();
@@ -1943,6 +2274,30 @@ pub(super) fn display_line_rich_boundaries(
     let mut measure = DisplayColumnMeasure::new(line);
     let horizontal_end = horizontal_start.saturating_add(width);
     for run in &line.runs {
+        if let Some(run_width) = run.fixed_width() {
+            let column = measure.column();
+            let next = measure.push(run_width);
+            let editable = matches!(run.rich, DisplayRich::Range(_));
+            if let Some(position) = display_run_rich_end(run) {
+                fallback_boundary = Some(EditorRichBoundary {
+                    column: next,
+                    position,
+                    editable,
+                });
+            }
+            if next >= horizontal_start && column <= horizontal_end {
+                if let Some(position) = display_run_rich_start(run) {
+                    push_rich_boundary(&mut boundaries, column, position, editable);
+                }
+                if let Some(position) = display_run_rich_end(run) {
+                    push_rich_boundary(&mut boundaries, next, position, editable);
+                }
+            }
+            if next > horizontal_end {
+                break;
+            }
+            continue;
+        }
         let text = run.text.resolve(source);
         if text.is_empty() {
             let column = measure.column();

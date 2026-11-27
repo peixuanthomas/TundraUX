@@ -1,17 +1,25 @@
 mod files;
 mod input;
+mod markdown_reading;
 mod menus;
+mod office_graphics;
 pub(in crate::session) mod pdf;
 mod picture;
 mod preview_layout;
 mod recovery;
+mod rich_blocks;
 mod search_bar;
 mod settings;
 pub(in crate::session) mod tasks;
 mod view;
 mod vim;
 use crate::session::*;
+pub(in crate::session) use markdown_reading::EditorMarkdownReadingJob;
+pub(in crate::session) use office_graphics::EditorOfficeGraphics;
 pub(in crate::session) use preview_layout::EditorReadOnlyLayoutJob;
+pub(in crate::session) use rich_blocks::{
+    editor_reading_render_blocks, editor_reading_text_blocks, editor_rich_render_blocks,
+};
 pub(in crate::session) const EDITOR_RECOVERY_IDLE: Duration = Duration::from_secs(2);
 pub(in crate::session) const EDITOR_RECOVERY_INTERVAL: Duration = Duration::from_secs(10);
 pub(in crate::session) const EDITOR_CURSOR_TIME_STEP_MS: u32 = 250;
@@ -99,6 +107,8 @@ impl ShellSession {
         self.pages.editor.editor_preview_task.cancel();
         self.pages.editor.editor_pdf = None;
         self.pages.editor.editor_picture_zoom = None;
+        self.pages.editor.editor_markdown_reading.clear();
+        self.pages.editor.editor_office_graphics.cancel();
         self.pages.editor.editor_read_only_layout.clear();
         self.pages.editor.editor_document_generation = self
             .pages
@@ -332,247 +342,6 @@ pub(in crate::session) fn restore_editor_recovery_v2(
     (state, fingerprint, unbound, warning)
 }
 
-pub(in crate::session) fn editor_rich_render_blocks(
-    state: &EditorState,
-    projection: &app::rich_document::RichProjection,
-) -> Vec<ui::EditorRenderBlock> {
-    let mut output = Vec::new();
-    for block in &projection.blocks {
-        append_editor_rich_block(state, block, 0, &mut output);
-    }
-    if output.is_empty() {
-        output.push(ui::EditorRenderBlock::Blank);
-    }
-    output
-}
-
-fn append_editor_rich_block(
-    state: &EditorState,
-    block: &app::rich_document::ProjectedBlock,
-    depth: u8,
-    output: &mut Vec<ui::EditorRenderBlock>,
-) {
-    use app::rich_document::{ProjectedBlockKind, RichListKind};
-    match &block.kind {
-        ProjectedBlockKind::Paragraph { content } => {
-            append_rich_text(
-                state,
-                block.id,
-                content,
-                output,
-                ui::EditorRenderBlock::Paragraph,
-            );
-        }
-        ProjectedBlockKind::Heading { level, content } => {
-            append_rich_text(state, block.id, content, output, |spans| {
-                ui::EditorRenderBlock::Heading {
-                    level: *level,
-                    spans,
-                }
-            });
-        }
-        ProjectedBlockKind::Quote { blocks } => {
-            for nested in blocks {
-                match &nested.kind {
-                    ProjectedBlockKind::Paragraph { content }
-                    | ProjectedBlockKind::Heading { content, .. } => {
-                        append_rich_text(state, nested.id, content, output, |spans| {
-                            ui::EditorRenderBlock::Quote {
-                                depth: depth.saturating_add(1),
-                                spans,
-                            }
-                        });
-                    }
-                    _ => append_editor_rich_block(state, nested, depth.saturating_add(1), output),
-                }
-            }
-        }
-        ProjectedBlockKind::CodeBlock { code, range, .. } => {
-            let mut span = ui::EditorRenderSpan::code(code).with_rich_range(*range);
-            span.color = ui::EditorSpanColor::Muted;
-            output.push(ui::EditorRenderBlock::Paragraph(vec![span]));
-        }
-        ProjectedBlockKind::List {
-            kind, start, items, ..
-        } => {
-            for (index, item) in items.iter().enumerate() {
-                let mut primary = None;
-                let mut nested = Vec::new();
-                for item_block in &item.blocks {
-                    match &item_block.kind {
-                        ProjectedBlockKind::Paragraph { content }
-                        | ProjectedBlockKind::Heading { content, .. }
-                            if primary.is_none() =>
-                        {
-                            primary = Some((item_block.id, content.as_slice()));
-                        }
-                        _ => nested.push(item_block),
-                    }
-                }
-                let (id, content) = primary.unwrap_or((item.id, &[]));
-                append_rich_text(state, id, content, output, |spans| match kind {
-                    RichListKind::Bullet | RichListKind::Task => {
-                        ui::EditorRenderBlock::BulletListItem {
-                            depth,
-                            checked: if *kind == RichListKind::Task {
-                                item.checked.or(Some(false))
-                            } else {
-                                None
-                            },
-                            spans,
-                        }
-                    }
-                    RichListKind::Ordered => ui::EditorRenderBlock::OrderedListItem {
-                        depth,
-                        number: start.saturating_add(index) as u64,
-                        spans,
-                    },
-                });
-                for nested_block in nested {
-                    append_editor_rich_block(state, nested_block, depth.saturating_add(1), output);
-                }
-            }
-        }
-        ProjectedBlockKind::Table {
-            alignments,
-            header,
-            rows,
-        } => {
-            output.push(ui::EditorRenderBlock::RichTable {
-                table_id: block.id,
-                header: header.iter().map(editor_rich_table_cell).collect(),
-                rows: rows
-                    .iter()
-                    .map(|row| row.iter().map(editor_rich_table_cell).collect())
-                    .collect(),
-                alignments: alignments
-                    .iter()
-                    .map(|alignment| match alignment {
-                        app::rich_document::RichTableAlignment::None
-                        | app::rich_document::RichTableAlignment::Left => {
-                            ui::EditorTableAlignment::Left
-                        }
-                        app::rich_document::RichTableAlignment::Center => {
-                            ui::EditorTableAlignment::Center
-                        }
-                        app::rich_document::RichTableAlignment::Right => {
-                            ui::EditorTableAlignment::Right
-                        }
-                    })
-                    .collect(),
-            });
-            for span in header
-                .iter()
-                .chain(rows.iter().flatten())
-                .flat_map(|cell| &cell.content)
-            {
-                if let Some(image) = span
-                    .image
-                    .as_ref()
-                    .and_then(|link| state.office_image(&link.url))
-                {
-                    output.push(ui::EditorRenderBlock::Picture {
-                        id: tasks::next_editor_task_id(),
-                        image: image.clone(),
-                    });
-                }
-            }
-        }
-        ProjectedBlockKind::Rule => {
-            output.push(ui::EditorRenderBlock::HorizontalRule);
-        }
-        ProjectedBlockKind::OpaqueMarkdown { raw, reason } => {
-            output.push(ui::EditorRenderBlock::RawHtml(i18n::tr!(
-                "shell-unsupported-markdown-read-only-reason-nraw",
-                reason = reason.to_string(),
-                raw = raw
-            )));
-        }
-    }
-}
-
-fn append_rich_text(
-    state: &EditorState,
-    id: app::rich_document::NodeId,
-    content: &[app::rich_document::ProjectedInline],
-    output: &mut Vec<ui::EditorRenderBlock>,
-    text_block: impl Fn(Vec<ui::EditorRenderSpan>) -> ui::EditorRenderBlock,
-) {
-    let mut start = 0;
-    for (index, span) in content.iter().enumerate() {
-        let Some(image) = span
-            .image
-            .as_ref()
-            .and_then(|link| state.office_image(&link.url))
-        else {
-            continue;
-        };
-        if start < index {
-            output.push(text_block(editor_rich_spans_in(id, &content[start..index])));
-        }
-        output.push(ui::EditorRenderBlock::Picture {
-            id: tasks::next_editor_task_id(),
-            image: image.clone(),
-        });
-        start = index + 1;
-    }
-    if start == 0 || start < content.len() {
-        output.push(text_block(editor_rich_spans_in(id, &content[start..])));
-    }
-}
-
-pub(in crate::session) fn editor_rich_table_cell(
-    cell: &app::rich_document::ProjectedTableCell,
-) -> ui::EditorTableCell {
-    let mut spans = editor_rich_spans(&cell.content);
-    if spans.is_empty() {
-        spans.push(
-            ui::EditorRenderSpan::plain("").with_rich_range(ui::RichRange::in_node(cell.id, 0, 0)),
-        );
-    }
-    ui::EditorTableCell { spans }
-}
-
-pub(in crate::session) fn editor_rich_spans(
-    spans: &[app::rich_document::ProjectedInline],
-) -> Vec<ui::EditorRenderSpan> {
-    spans
-        .iter()
-        .map(|span| {
-            let mut rendered = ui::EditorRenderSpan::plain(&span.text).with_rich_range(span.range);
-            rendered.bold = span.marks.bold;
-            rendered.italic = span.marks.italic;
-            rendered.strikethrough = span.marks.strikethrough;
-            rendered.inline_code = span.marks.code;
-            if span.link.is_some() {
-                rendered = rendered.with_link();
-            }
-            if span.image.is_some() {
-                rendered.color = ui::EditorSpanColor::Accent;
-                rendered.underlined = true;
-            }
-            rendered
-        })
-        .collect()
-}
-
-pub(in crate::session) fn editor_rich_spans_in(
-    container_id: app::rich_document::NodeId,
-    spans: &[app::rich_document::ProjectedInline],
-) -> Vec<ui::EditorRenderSpan> {
-    let mut rendered = editor_rich_spans(spans);
-    if rendered.is_empty() {
-        rendered.push(
-            ui::EditorRenderSpan::plain("").with_rich_range(ui::RichRange::in_node(
-                container_id,
-                0,
-                0,
-            )),
-        );
-    }
-    rendered
-}
-
 impl ShellSession {
     pub(in crate::session) fn request_editor_close(&mut self, _platform: &dyn Platform) {
         if self.pages.editor.script.source_view.take().is_some() {
@@ -633,6 +402,9 @@ impl ShellSession {
             let Some(state) = self.app.editor_state() else {
                 return;
             };
+            if state.is_read_only() {
+                return;
+            }
             if state.mode != app::editor::EditorMode::Rich
                 || state.document.kind != app::editor::DocumentKind::Markdown
             {
@@ -703,6 +475,7 @@ impl ShellSession {
         let mode_changed = mode_after != mode_before;
         let projection_changed = mode_changed || revision_after != revision_before;
         if revision_after != revision_before {
+            self.pages.editor.editor_markdown_reading.clear();
             self.pages.editor.editor_recovery_dirty_since = Some(now);
         }
         if !is_dirty {
@@ -745,11 +518,9 @@ impl ShellSession {
     }
 
     fn reveal_source_caret_with_layout(&mut self, source_layout: Option<&ui::EditorLayout>) {
-        let Some(state) = self
-            .app
-            .editor_state()
-            .filter(|state| state.mode == app::editor::EditorMode::Source)
-        else {
+        let Some(state) = self.app.editor_state().filter(|state| {
+            state.mode == app::editor::EditorMode::Source && !state.is_markdown_reading()
+        }) else {
             return;
         };
         let mut viewport = state.viewport;
