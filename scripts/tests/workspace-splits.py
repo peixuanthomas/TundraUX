@@ -128,7 +128,7 @@ def main():
             tap(current, "launcher.item.builtin.logs")
             current = until(lambda frame: frame["page"] == "Logs" and len(titles(frame)) == 1)
             source = titles(current)[0]["id"].rsplit(".", 1)[1]
-            send(b"\x1b")
+            send(b"\x17b")
             current = open_launcher(until(lambda frame: frame["page"] == "Home"))
             send(b"\x1b")
             current = until(lambda frame: frame["page"] == "Home")

@@ -177,6 +177,9 @@ def run_case(binary, language, color, motion, sizes, samples):
                     assert rect["y"] + rect["height"] <= rows - 1, "Home entry overlaps window bar"
                 assert_header(current)
                 tap(current, home_entry(current, settings_label))
+                until(lambda frame: frame["page"] == "Settings" and not frame["animation_running"] and
+                      any(item["id"].startswith("page/settings.") and item["actionable"]
+                          for item in frame["nodes"]))
                 send(b"\x1bOP")
                 current = until(lambda frame: frame["page"] == "Settings" and has_modal(frame))
                 assert not any(item["actionable"] for item in current["nodes"]
