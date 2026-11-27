@@ -82,6 +82,91 @@ fn host(watchdog: AppWatchdog, paths: &platform::AppPaths) -> AppHostSession {
 }
 
 #[test]
+fn scrolling_explorer_clears_wide_characters_from_shorter_type_labels() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let paths = platform::AppPaths::from_parts(
+        root.join("config"),
+        root.join("data"),
+        root.join("cache"),
+        root.join("logs"),
+        root.join("temp"),
+    )
+    .unwrap();
+    let (_runtime, process) = WatchdogRuntime::start_isolated(WatchdogConfig::new(
+        root.join("reports"),
+        root.join("fallback"),
+        root.join("watchdog"),
+        "app-host-explorer-scroll-test",
+        "test",
+    ))
+    .unwrap();
+    let watchdog = process
+        .register_app(AppDescriptor::new(
+            AppId::from_static("app-host-explorer-scroll-test"),
+            "AppHost Explorer scroll test",
+            "test",
+            AppCriticality::Optional,
+        ))
+        .unwrap();
+    let files = root.join("files");
+    std::fs::create_dir_all(files.join("a-folder")).unwrap();
+    std::fs::create_dir(files.join("b-folder")).unwrap();
+    for name in ["01.xlsx", "02.pdf"] {
+        std::fs::write(files.join(name), []).unwrap();
+    }
+    for index in 0..40 {
+        std::fs::write(files.join(format!("tail-{index:02}.txt")), []).unwrap();
+    }
+
+    let mut host = host(watchdog, &paths);
+    let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ascii-assets/assets");
+    host.state.language = Arc::new(
+        i18n::LanguageSnapshot::load(assets, "zh-CN", 1)
+            .unwrap()
+            .snapshot,
+    );
+    let _language = i18n::enter_snapshot(host.state.language.clone());
+    host.state.window_owner = WindowOwner::App(window_launch::WindowApplication::Explorer);
+    host.state.reset_navigation(ShellScreen::Home);
+    let storage = host.state.storage_manager.clone().unwrap();
+    host.state.open_explorer_at(
+        host.platform.as_ref(),
+        &storage,
+        files,
+        ExplorerPurpose::Browse,
+    );
+
+    for (offset, expected) in [(3, "PDF 文件"), (2, "XLSX 文件"), (1, "文件夹")] {
+        host.state.update_explorer_state(|explorer| {
+            explorer.viewport_offset = offset;
+            explorer.viewport_follows_focus = false;
+        });
+        host.redraw.request_input_redraw();
+        let frame = host.frame(Instant::now()).unwrap().unwrap();
+        let bounds = Rect::new(0, 0, host.size.width, host.size.height + 2);
+        let ui::ShellLayout::Full { main, .. } = host.state.shell_layout_for(bounds) else {
+            panic!("expected full shell layout");
+        };
+        let layout = ui::explorer_layout(main, &host.state.to_explorer_view_model());
+        let column = layout
+            .columns
+            .iter()
+            .find(|column| column.column == ui::ExplorerSortColumn::Type)
+            .unwrap()
+            .area;
+        let start = usize::from(layout.rows[0].area.y - 1) * usize::from(frame.size.width)
+            + usize::from(column.x);
+        let label: String = frame.cells[start..start + usize::from(column.width)]
+            .iter()
+            .filter(|cell| !cell.skip)
+            .map(|cell| cell.symbol.as_str())
+            .collect();
+        assert_eq!(label.split('|').next().unwrap().trim_end(), expected);
+    }
+}
+
+#[test]
 fn app_host_keeps_the_editor_visible_after_an_image_open_fails() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().canonicalize().unwrap();

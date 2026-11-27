@@ -852,7 +852,8 @@ impl AppHostSession {
         let headings = ui::components::WorkspaceHeadingCapture::begin(content);
         let icons = ui::WorkspaceIconCapture::begin(content);
         let mut animating = false;
-        self.terminal
+        let rendered = self
+            .terminal
             .draw(|frame| {
                 animating = self
                     .compositor
@@ -867,9 +868,11 @@ impl AppHostSession {
         if animating && let Some(interval) = self.compositor.next_redraw_in() {
             self.redraw.request_animation_frame_in(completed, interval);
         }
+        // The backend only receives changed cells and can keep old symbols under wide text.
+        let mut frame = ui::capture_workspace_frame(self.layout, rendered.buffer, content, None);
         let backend = self.terminal.backend();
         let cursor = backend.cursor_position();
-        let cursor =
+        frame.cursor =
             (self.focused && backend.cursor_visible() && content.contains(cursor)).then(|| {
                 Cursor {
                     x: cursor.x,
@@ -877,7 +880,6 @@ impl AppHostSession {
                     shape: self.cursor_shape(),
                 }
             });
-        let mut frame = ui::capture_workspace_frame(self.layout, backend.buffer(), content, cursor);
         let mut images = self.compositor.take_workspace_images();
         frame.modal = !self.state.interactive_overlays().is_empty();
         frame.back_action = self.state.back_action();

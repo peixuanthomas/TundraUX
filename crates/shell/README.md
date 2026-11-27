@@ -207,7 +207,7 @@ Guardian listeners and connection readers and writers retain watchdog-owned canc
 
 Shell moves queued messages into background writers without cloning their payloads; rejected enqueue attempts return the original message for an ordered retry.
 
-While scrolling, AppHost can reference unchanged spans of the previous frame, including rows that moved. Shell reconstructs the complete pane before drawing it.
+AppHost captures the complete rendered pane, including cells that became blank, so wide characters do not leave visible remnants. While scrolling, AppHost can reference unchanged spans of the previous frame, including rows that moved. Shell reconstructs the complete pane before drawing it.
 
 Per-window input queues stop admitting new application input when their bounded capacity is full. Shell reports that condition while keeping window management and other windows available; external CLI input receives a retryable `busy` response. Pointer cancellation, input fences, and close messages retain reserved queue capacity.
 
