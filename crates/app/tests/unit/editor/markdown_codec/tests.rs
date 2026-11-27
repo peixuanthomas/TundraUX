@@ -1,4 +1,7 @@
 use super::*;
+use crate::editor::CursorMove;
+use crate::editor::rich_edit::RichEditor;
+use crate::rich_document::{ProjectedBlock, ProjectedBlockKind};
 
 fn assert_dense_positions(
     map: &MarkdownPositionMap,
@@ -31,6 +34,89 @@ fn unedited_import_exports_byte_for_byte() {
         imported.document.blocks.last().map(|block| &block.kind),
         Some(RichBlockKind::OpaqueMarkdown { .. })
     ));
+}
+
+#[test]
+fn reading_import_recognizes_math_without_reinterpreting_literal_code_or_dollars() {
+    let source = concat!(
+        "Solve $x^2$, but keep `$$literal$$` and \\$plain\\$.\n\n",
+        "$$\n\\frac{a}{b}\n$$\n\n",
+        "~~~rust\n    let literal = \"$$code$$\";\n~~~\n",
+    );
+    let imported = MarkdownCodec::import_for_reading(source, false, RichLineEnding::Lf).unwrap();
+    assert!(imported.positions.entries.is_empty());
+    assert_eq!(
+        MarkdownCodec::export(&imported.document).unwrap().markdown,
+        source
+    );
+    let projection = imported.document.project();
+    let [inline, display, code] = projection.blocks.as_slice() else {
+        panic!("expected three blocks");
+    };
+    let paragraph = |block: &ProjectedBlock| match &block.kind {
+        ProjectedBlockKind::Paragraph { content } => content.clone(),
+        _ => panic!("expected paragraph"),
+    };
+    let content = paragraph(inline);
+    let math = content.iter().find(|span| span.math.is_some()).unwrap();
+    assert_eq!((math.math, math.text.as_str()), (Some(false), "x^2"));
+    assert!(
+        content
+            .iter()
+            .any(|span| span.marks.code && span.text == "$$literal$$")
+    );
+    assert!(
+        content
+            .iter()
+            .any(|span| span.math.is_none() && span.text.contains("$plain$"))
+    );
+    let display = paragraph(display);
+    assert_eq!(
+        (display[0].math, display[0].text.trim()),
+        (Some(true), "\\frac{a}{b}")
+    );
+    assert!(matches!(
+        &code.kind,
+        ProjectedBlockKind::CodeBlock { language: Some(language), code, .. }
+            if language == "rust" && code == "    let literal = \"$$code$$\";\n"
+    ));
+
+    let mut editor = RichEditor::new(imported.document);
+    editor.move_to(math.range.start, false);
+    editor.move_to(math.range.end, true);
+    assert_eq!(editor.selected_text().as_deref(), Some("x^2"));
+    editor.move_to(math.range.start, false);
+    editor.move_cursor(CursorMove::WordRight, false);
+    assert_eq!(
+        editor.cursor.unwrap().grapheme_offset,
+        math.range.end.grapheme_offset + 2
+    );
+
+    let ordinary = MarkdownCodec::import(source).unwrap().document.project();
+    assert!(
+        paragraph(&ordinary.blocks[0])
+            .iter()
+            .all(|span| span.math.is_none())
+    );
+}
+
+#[test]
+fn image_fallback_shows_and_copies_description_or_destination() {
+    let source = "![`Code` **label**](missing.png) ![](https://example.com/picture.png)";
+    let imported = MarkdownCodec::import_for_reading(source, false, RichLineEnding::Lf).unwrap();
+    let projection = imported.document.project();
+    let ProjectedBlockKind::Paragraph { content } = &projection.blocks[0].kind else {
+        panic!("expected paragraph");
+    };
+    let mut editor = RichEditor::new(imported.document);
+    let images = content.iter().filter(|span| span.image.is_some());
+    assert_eq!(images.clone().count(), 2);
+    for (image, expected) in images.zip(["Code label", "https://example.com/picture.png"]) {
+        assert_eq!(image.text, expected);
+        editor.move_to(image.range.start, false);
+        editor.move_to(image.range.end, true);
+        assert_eq!(editor.selected_text().as_deref(), Some(expected));
+    }
 }
 
 #[test]

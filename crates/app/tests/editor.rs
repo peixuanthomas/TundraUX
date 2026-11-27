@@ -5,11 +5,13 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use app::editor::{
     CursorMove, DocumentKind, EditorAccess, EditorCommand, EditorDocument, EditorEffect,
-    EditorMode, EditorPosition, EditorState, FormatCommand, LineEnding, SaveSnapshot, Selection,
-    SourceRange, TableColumnEdge, TableColumnEdit, is_log_document_path,
+    EditorMode, EditorPosition, EditorState, EditorViewport, FormatCommand, LineEnding,
+    SaveSnapshot, Selection, SourceRange, TableColumnEdge, TableColumnEdit, is_log_document_path,
 };
+use app::editor_recovery::EditorRecoveryPayload;
 use app::explorer::{EditorAwareOpenRouteResolver, ExplorerOpenRouteResolver, ExplorerOpenTarget};
 use app::rich_document::{NodeId, ProjectedBlockKind, RichListKind, RichPosition};
+use app::rich_edit::RichEditor;
 use platform::FileAttributes;
 
 #[test]
@@ -215,16 +217,238 @@ fn default_editor_routes_common_text_files() {
 }
 
 #[test]
-fn markdown_file_paths_open_as_plain_text_and_cannot_enter_rich_mode() {
-    let mut editor = EditorState::open("README.md", b"# raw **markdown**").expect("UTF-8 text");
+fn ordinary_markdown_extensions_open_as_source_and_offer_reading() {
+    for path in ["README.md", "notes.MARKDOWN", "notes.MdOwn", "notes.mKd"] {
+        let editor = EditorState::open(path, b"# raw **markdown**").unwrap();
+        assert_eq!(editor.document.kind, DocumentKind::PlainText);
+        assert_eq!(editor.mode, EditorMode::Source);
+        assert_eq!(editor.source(), "# raw **markdown**");
+        assert!(editor.source_rope_snapshot().is_some());
+        assert!(editor.rich_document().is_none());
+        assert!(editor.can_toggle_markdown_reading());
+        assert!(!editor.is_read_only());
+    }
+    for path in ["README", "notes.txt", "notes.md.bak", "notes.docx"] {
+        let mut editor = EditorState::open(path, b"# plain").unwrap();
+        assert!(editor.begin_markdown_reading().is_none());
+    }
+    let mut protected = EditorState::open_read_only("notes.md", b"# protected").unwrap();
+    assert!(protected.begin_markdown_reading().is_none());
+    assert!(!protected.can_save());
+}
 
-    assert_eq!(editor.document.kind, DocumentKind::PlainText);
-    assert_eq!(editor.mode, EditorMode::Source);
-    assert_eq!(editor.source(), "# raw **markdown**");
-    assert!(editor.rich_document().is_none());
+#[test]
+fn reading_uses_the_latest_source_but_restores_the_exact_editing_view() {
+    let mut editor =
+        EditorState::open("draft.md", b"\xef\xbb\xbf## Original\r\n\r\nplain one\n").unwrap();
+    editor.apply(EditorCommand::MoveCursor {
+        movement: CursorMove::DocumentEnd,
+        extend_selection: false,
+    });
+    editor.apply(EditorCommand::InsertText("**草稿**".into()));
+    editor.apply(EditorCommand::InsertText(" discarded".into()));
+    editor.apply(EditorCommand::Undo);
+    for (position, extend_selection) in [(3, false), (11, true)] {
+        editor.apply(EditorCommand::MoveTo {
+            position: EditorPosition::Source(position),
+            extend_selection,
+        });
+    }
+    editor.cursor.preferred_column = Some(8);
+    editor.viewport = EditorViewport {
+        top_line: 2,
+        left_column: 4,
+    };
+    let original = (editor.cursor, editor.selection, editor.viewport);
+    let metadata = editor.document.metadata;
+    let revision = editor.revision();
+    let bytes = editor.to_bytes();
+    let recovery = editor.recovery_payload();
 
-    editor.apply(EditorCommand::SetMode(EditorMode::Rich));
+    let snapshot = editor.begin_markdown_reading().unwrap();
+    assert_eq!(editor.access(), EditorAccess::Editable);
+    assert!(editor.is_markdown_reading() && editor.is_read_only() && editor.can_save());
+    assert_eq!(editor.markdown_reading_source_viewport(), Some(original.2));
+    assert!(!editor.has_selection());
+    assert!(editor.apply(EditorCommand::Copy).is_empty());
+    assert!(!editor.replace_source_range(SourceRange::new(0, 2), "#"));
+    let (preview, projection) = snapshot.parse().unwrap();
+    assert!(matches!(
+        projection.blocks[0].kind,
+        ProjectedBlockKind::Heading { level: 2, .. }
+    ));
+    assert!(editor.install_markdown_reading(preview));
+    assert_eq!(editor.mode, EditorMode::Rich);
+    assert_eq!(editor.markdown_reading_source_viewport(), None);
+
+    editor.apply(EditorCommand::SelectAll);
+    let text = editor.selected_text().unwrap();
+    assert!(text.contains("Original") && text.ends_with("草稿"));
+    assert!(!text.contains("##") && !text.contains("**"));
+    assert_eq!(
+        editor.apply(EditorCommand::Copy),
+        vec![EditorEffect::WriteClipboard { text, cut: false }]
+    );
+    for command in [
+        EditorCommand::InsertText("blocked".into()),
+        EditorCommand::Paste("blocked".into()),
+        EditorCommand::Cut,
+        EditorCommand::RequestPaste,
+        EditorCommand::Backspace,
+        EditorCommand::DeleteSelection,
+        EditorCommand::Undo,
+        EditorCommand::Redo,
+        EditorCommand::SetUtf8Bom(false),
+        EditorCommand::NormalizeLineEndings(LineEnding::Lf),
+        EditorCommand::ApplyFormat(FormatCommand::Bold),
+    ] {
+        assert!(editor.apply(command).is_empty());
+    }
+    editor.viewport = EditorViewport {
+        top_line: 12,
+        left_column: 0,
+    };
+    assert_eq!(editor.source(), "## Original\r\n\r\nplain one\n**草稿**");
+    assert_eq!(editor.recovery_payload(), recovery);
+    assert!(matches!(recovery, EditorRecoveryPayload::Source { .. }));
+    assert_eq!(editor.to_bytes(), bytes);
+    assert_eq!(editor.document.metadata, metadata);
+    assert_eq!(editor.revision(), revision);
+    assert_eq!(editor.history_depth(), (1, 1));
+    assert_eq!(
+        editor.apply(EditorCommand::RequestClose),
+        vec![EditorEffect::ConfirmClose]
+    );
+
+    let cached = editor.end_markdown_reading().unwrap();
+    assert_eq!((editor.cursor, editor.selection, editor.viewport), original);
     assert_eq!(editor.mode, EditorMode::Source);
+    assert!(!editor.is_read_only());
+    assert!(editor.is_dirty() && editor.can_undo() && editor.can_redo());
+    assert!(editor.begin_markdown_reading().is_some());
+    assert!(editor.install_markdown_reading(cached));
+    assert!(!editor.has_selection());
+    assert!(editor.end_markdown_reading().is_some());
+    editor.apply(EditorCommand::Redo);
+    assert!(editor.source().ends_with("**草稿** discarded"));
+    editor.apply(EditorCommand::Undo);
+    assert_eq!(editor.to_bytes(), bytes);
+}
+
+#[test]
+fn reading_saves_original_encoding_and_leaves_if_saved_as_non_markdown() {
+    let encode = |text: &str| {
+        [0xfe, 0xff]
+            .into_iter()
+            .chain(text.encode_utf16().flat_map(u16::to_be_bytes))
+            .collect::<Vec<_>>()
+    };
+    let mut editor = EditorState::open("note.md", &encode("# 标题\r\ntext")).unwrap();
+    editor.apply(EditorCommand::MoveCursor {
+        movement: CursorMove::DocumentEnd,
+        extend_selection: false,
+    });
+    editor.apply(EditorCommand::InsertText(" *草稿*".into()));
+    let (preview, _) = editor.begin_markdown_reading().unwrap().parse().unwrap();
+    assert!(editor.install_markdown_reading(preview));
+
+    let expected = encode("# 标题\r\ntext *草稿*");
+    let effects = editor.apply(EditorCommand::RequestSave);
+    let [EditorEffect::SaveFile { path, snapshot }] = effects.as_slice() else {
+        panic!("expected SaveFile, got {effects:?}");
+    };
+    assert_eq!(path, &PathBuf::from("note.md"));
+    assert_eq!(snapshot.to_bytes().unwrap(), expected);
+    editor.apply(EditorCommand::MarkSaved {
+        path: Some(path.clone()),
+        revision: snapshot.revision,
+    });
+    assert!(editor.is_markdown_reading());
+    assert!(!editor.is_dirty());
+
+    let effects = editor.apply(EditorCommand::RequestSaveAs);
+    let [EditorEffect::SaveFilePicker { snapshot, .. }] = effects.as_slice() else {
+        panic!("expected SaveFilePicker, got {effects:?}");
+    };
+    assert_eq!(snapshot.to_bytes().unwrap(), expected);
+    editor.apply(EditorCommand::MarkSaved {
+        path: Some(PathBuf::from("copy.txt")),
+        revision: snapshot.revision,
+    });
+    assert!(!editor.is_markdown_reading());
+    assert_eq!(editor.mode, EditorMode::Source);
+    assert_eq!(editor.to_bytes(), expected);
+    assert!(!editor.can_toggle_markdown_reading());
+    assert_eq!(
+        editor.apply(EditorCommand::RequestClose),
+        vec![EditorEffect::Close]
+    );
+}
+
+#[test]
+fn cancelled_and_stale_reading_results_cannot_replace_source() {
+    let mut editor = EditorState::open("note.md", b"# first\n").unwrap();
+    editor.viewport.top_line = 1;
+    let cancelled = editor.begin_markdown_reading().unwrap();
+    assert!(editor.end_markdown_reading().is_none());
+    assert!(!editor.is_markdown_reading());
+    assert_eq!(editor.viewport.top_line, 1);
+    let (cancelled, _) = cancelled.parse().unwrap();
+    assert!(!editor.install_markdown_reading(cancelled));
+
+    let stale = editor.begin_markdown_reading().unwrap();
+    assert!(editor.end_markdown_reading().is_none());
+    editor.apply(EditorCommand::InsertText("draft ".into()));
+    let current = editor.begin_markdown_reading().unwrap();
+    let (stale, _) = stale.parse().unwrap();
+    assert!(!editor.install_markdown_reading(stale));
+    let (current, _) = current.parse().unwrap();
+    assert!(editor.install_markdown_reading(current));
+    assert_eq!(editor.source(), "draft # first\n");
+}
+
+#[test]
+fn indexed_reading_navigation_matches_logical_positions_and_copy() {
+    let mut editor = EditorState::open(
+        "reading.md",
+        concat!(
+            "# Start\n\n> - **猫** $x^2$ ![tree](tree.png)\n\n",
+            "| A | B |\n| --- | --- |\n| three | four |\n\n",
+            "```rs\nlet tail = 1;\n```\n",
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    let (preview, _) = editor.begin_markdown_reading().unwrap().parse().unwrap();
+    assert!(editor.install_markdown_reading(preview));
+    let mut reference = RichEditor::new(editor.rich_document().unwrap().clone());
+
+    for movement in [
+        CursorMove::Right,
+        CursorMove::Down,
+        CursorMove::WordRight,
+        CursorMove::LineEnd,
+        CursorMove::DocumentEnd,
+        CursorMove::Left,
+        CursorMove::WordLeft,
+        CursorMove::Up,
+        CursorMove::LineStart,
+        CursorMove::DocumentStart,
+    ] {
+        editor.apply(EditorCommand::MoveCursor {
+            movement,
+            extend_selection: true,
+        });
+        reference.move_cursor(movement, true);
+        assert_eq!(editor.rich_cursor(), reference.cursor);
+        assert_eq!(editor.rich_selection(), reference.selection);
+        assert_eq!(editor.selected_text(), reference.selected_text());
+    }
+    editor.apply(EditorCommand::SelectAll);
+    let selected = editor.selected_text().unwrap();
+    assert!(selected.contains("猫 x^2 tree"));
+    assert!(selected.contains("A\nB\nthree\nfour"));
+    assert!(selected.trim_end().ends_with("let tail = 1;"));
 }
 
 #[test]

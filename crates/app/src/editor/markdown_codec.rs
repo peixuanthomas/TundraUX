@@ -1,8 +1,7 @@
 //! Import/export boundary between Markdown files and the rich editor model.
 //!
-//! Markdown is parsed only when a file is opened or Source mode is explicitly
-//! converted back to Rich mode. Rendering and ordinary Rich edits operate on
-//! [`RichDocument`] directly.
+//! Markdown is parsed when importing Office or Rich content, or when preparing
+//! the read-only view. Rendering and Rich edits operate on [`RichDocument`].
 
 use std::{collections::HashMap, ops::Range};
 
@@ -148,11 +147,36 @@ impl MarkdownCodec {
         preferred_line_ending: RichLineEnding,
         map_positions: bool,
     ) -> Result<MarkdownImport, MarkdownCodecError> {
+        Self::import_with_options(
+            source,
+            utf8_bom,
+            preferred_line_ending,
+            map_positions,
+            &markdown_options(),
+        )
+    }
+
+    pub fn import_for_reading(
+        source: &str,
+        utf8_bom: bool,
+        preferred_line_ending: RichLineEnding,
+    ) -> Result<MarkdownImport, MarkdownCodecError> {
+        let mut options = markdown_options();
+        options.extension.math_dollars = true;
+        Self::import_with_options(source, utf8_bom, preferred_line_ending, false, &options)
+    }
+
+    fn import_with_options(
+        source: &str,
+        utf8_bom: bool,
+        preferred_line_ending: RichLineEnding,
+        map_positions: bool,
+        options: &Options<'_>,
+    ) -> Result<MarkdownImport, MarkdownCodecError> {
         #[cfg(test)]
         parse_counter::increment();
         let arena = Arena::new();
-        let options = markdown_options();
-        let root = parse_document(&arena, source, &options);
+        let root = parse_document(&arena, source, options);
         let mut builder = ImportBuilder {
             document: RichDocument::new(),
             positions: ImportPositions::default(),
@@ -465,6 +489,10 @@ impl ImportBuilder {
                 },
                 link,
             })),
+            NodeValue::Math(math) => output.push(InlineNode::Math {
+                latex: math.literal,
+                display: math.display_math,
+            }),
             NodeValue::SoftBreak => output.push(InlineNode::SoftBreak),
             NodeValue::LineBreak => output.push(InlineNode::HardBreak),
             NodeValue::Strong => {
@@ -498,15 +526,8 @@ impl ImportBuilder {
                 }
             }
             NodeValue::Image(link_node) => {
-                let alt = node
-                    .descendants()
-                    .filter_map(|descendant| match descendant.data().value.clone() {
-                        NodeValue::Text(text) => Some(text.into_owned()),
-                        _ => None,
-                    })
-                    .collect::<String>();
                 output.push(InlineNode::Image {
-                    alt,
+                    alt: node.collect_text(),
                     url: link_node.url,
                     title: (!link_node.title.is_empty()).then_some(link_node.title),
                 });
@@ -681,7 +702,7 @@ fn record_inline_node_from_ast<'a>(
             *logical_offset = logical_offset.saturating_add(1);
             positions.record(RichPosition::new(container_id, *logical_offset), range.end);
         }
-        NodeValue::Image(_) => {
+        NodeValue::Image(_) | NodeValue::Math(_) => {
             let range = source.node_range(node);
             positions.record(
                 RichPosition::new(container_id, *logical_offset),
@@ -1027,6 +1048,22 @@ fn record_inline_content_lexically(
                 positions.record(RichPosition::new(container_id, logical), end);
                 *search_from = end;
             }
+            InlineNode::Math { display, .. } => {
+                let delimiter = math_delimiter(*display);
+                let start = source[*search_from..]
+                    .find(delimiter)
+                    .map_or(*search_from, |relative| *search_from + relative);
+                let body_start = (start + delimiter.len()).min(source.len());
+                let end = source[body_start..]
+                    .find(delimiter)
+                    .map_or(body_start, |relative| {
+                        body_start + relative + delimiter.len()
+                    });
+                positions.record(RichPosition::new(container_id, logical), start);
+                logical += 1;
+                positions.record(RichPosition::new(container_id, logical), end);
+                *search_from = end;
+            }
             InlineNode::SoftBreak | InlineNode::HardBreak => {
                 let (start, end) = source[*search_from..]
                     .char_indices()
@@ -1160,11 +1197,21 @@ fn serialize_inline(content: &InlineContent) -> String {
                 append_title(&mut output, title.as_deref());
                 output.push(')');
             }
+            InlineNode::Math { latex, display } => {
+                let delimiter = math_delimiter(*display);
+                output.push_str(delimiter);
+                output.push_str(latex);
+                output.push_str(delimiter);
+            }
             InlineNode::SoftBreak => output.push('\n'),
             InlineNode::HardBreak => output.push_str("  \n"),
         }
     }
     output
+}
+
+fn math_delimiter(display: bool) -> &'static str {
+    if display { "$$" } else { "$" }
 }
 
 fn serialize_text(text: &RichText) -> String {

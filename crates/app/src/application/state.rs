@@ -7,7 +7,10 @@ use super::notification::{
 };
 use super::pages::{AppPageKind, AppPageModels, PageInstanceId};
 use crate::diagnostics::DiagnosticsSnapshot;
-use crate::editor::{EditorCommand, EditorEffect, EditorState, EditorViewport};
+use crate::editor::{
+    EditorCommand, EditorEffect, EditorState, EditorViewport, MarkdownReadingSnapshot,
+    PreparedMarkdownReading,
+};
 use crate::explorer::{
     ExplorerCommand, ExplorerController, ExplorerEffect, ExplorerFileService, ExplorerState,
 };
@@ -525,6 +528,30 @@ impl AppState {
     }
     pub fn editor_state(&self) -> Option<&EditorState> {
         self.page_models.editor.state.as_ref()
+    }
+
+    pub fn begin_editor_markdown_reading(&mut self) -> Option<MarkdownReadingSnapshot> {
+        self.page_models
+            .editor
+            .state
+            .as_mut()?
+            .begin_markdown_reading()
+    }
+
+    pub fn install_editor_markdown_reading(&mut self, preview: PreparedMarkdownReading) -> bool {
+        self.page_models
+            .editor
+            .state
+            .as_mut()
+            .is_some_and(|editor| editor.install_markdown_reading(preview))
+    }
+
+    pub fn end_editor_markdown_reading(&mut self) -> Option<PreparedMarkdownReading> {
+        self.page_models
+            .editor
+            .state
+            .as_mut()?
+            .end_markdown_reading()
     }
 
     pub fn set_editor_source_change_tracking(&mut self, enabled: bool) {

@@ -495,6 +495,10 @@ pub enum InlineNode {
         url: String,
         title: Option<String>,
     },
+    Math {
+        latex: String,
+        display: bool,
+    },
     SoftBreak,
     HardBreak,
 }
@@ -503,17 +507,22 @@ impl InlineNode {
     pub fn display_text(&self) -> &str {
         match self {
             Self::Text(text) => &text.text,
-            Self::Image { alt, .. } => alt,
+            Self::Image { alt, url, .. } => image_label(alt, url),
+            Self::Math { latex, .. } => latex,
             Self::SoftBreak | Self::HardBreak => "\n",
         }
     }
 
     pub fn grapheme_len(&self) -> usize {
         match self {
-            Self::Image { .. } => 1,
+            Self::Image { .. } | Self::Math { .. } => 1,
             _ => self.display_text().graphemes(true).count(),
         }
     }
+}
+
+pub(super) fn image_label<'a>(alt: &'a str, url: &'a str) -> &'a str {
+    if alt.trim().is_empty() { url } else { alt }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -613,6 +622,8 @@ pub struct ProjectedInline {
     pub marks: InlineMarks,
     pub link: Option<LinkAttributes>,
     pub image: Option<ImageAttributes>,
+    /// Whether the inline equation uses display layout. None means ordinary text or an image.
+    pub math: Option<bool>,
     pub hard_break: bool,
     pub range: RichRange,
 }
@@ -631,8 +642,8 @@ fn project_inline(container_id: NodeId, content: &InlineContent) -> Vec<Projecte
         .map(|node| {
             let start = offset;
             offset += node.grapheme_len();
-            let (marks, link, image, hard_break) = match node {
-                InlineNode::Text(text) => (text.marks, text.link.clone(), None, false),
+            let (marks, link, image, math, hard_break) = match node {
+                InlineNode::Text(text) => (text.marks, text.link.clone(), None, None, false),
                 InlineNode::Image { url, title, .. } => (
                     InlineMarks::default(),
                     None,
@@ -640,16 +651,21 @@ fn project_inline(container_id: NodeId, content: &InlineContent) -> Vec<Projecte
                         url: url.clone(),
                         title: title.clone(),
                     }),
+                    None,
                     false,
                 ),
-                InlineNode::SoftBreak => (InlineMarks::default(), None, None, false),
-                InlineNode::HardBreak => (InlineMarks::default(), None, None, true),
+                InlineNode::Math { display, .. } => {
+                    (InlineMarks::default(), None, None, Some(*display), false)
+                }
+                InlineNode::SoftBreak => (InlineMarks::default(), None, None, None, false),
+                InlineNode::HardBreak => (InlineMarks::default(), None, None, None, true),
             };
             ProjectedInline {
                 text: node.display_text().to_owned(),
                 marks,
                 link,
                 image,
+                math,
                 hard_break,
                 range: RichRange::new(
                     RichPosition::new(container_id, start),

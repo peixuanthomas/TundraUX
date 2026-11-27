@@ -3,12 +3,17 @@
 //! No operation in this module reads or writes Markdown delimiters. Markdown
 //! only re-enters the flow through `markdown_codec` at an explicit boundary.
 
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::editor::rich_document::{
-    InlineContent, InlineMarks, InlineNode, LinkAttributes, NodeId, ProjectedBlockKind,
-    RewriteState, RichBlock, RichBlockKind, RichDocument, RichListItem, RichListKind, RichPosition,
-    RichProjection, RichTableAlignment, RichTableCell, RichText,
+    InlineContent, InlineMarks, InlineNode, LinkAttributes, NodeId, ProjectedBlock,
+    ProjectedBlockKind, ProjectedInline, RewriteState, RichBlock, RichBlockKind, RichDocument,
+    RichListItem, RichListKind, RichPosition, RichProjection, RichTableAlignment, RichTableCell,
+    RichText,
 };
 use crate::editor::{CursorMove, FormatCommand, TableColumnEdge, TableColumnEdit};
 
@@ -34,16 +39,22 @@ pub struct RichEditor {
     pub cursor: Option<RichPosition>,
     pub selection: Option<RichSelection>,
     preferred_column: Option<usize>,
+    pub(super) reading_navigation: Option<Arc<RichReadingNavigation>>,
 }
 
 impl RichEditor {
     pub fn new(document: RichDocument) -> Self {
         let cursor = document.first_editable_position();
+        Self::with_cursor(document, cursor)
+    }
+
+    pub(super) fn with_cursor(document: RichDocument, cursor: Option<RichPosition>) -> Self {
         Self {
             document,
             cursor,
             selection: None,
             preferred_column: None,
+            reading_navigation: None,
         }
     }
 
@@ -78,12 +89,13 @@ impl RichEditor {
             if index > 0 {
                 output.push('\n');
             }
-            output.push_str(&container_grapheme_slice(
-                &self.document,
+            append_container_grapheme_slice(
+                &mut output,
+                self.container_blocks(segment.id),
                 segment.id,
                 segment.start,
                 segment.end,
-            ));
+            );
         }
         Some(output)
     }
@@ -120,7 +132,14 @@ impl RichEditor {
     }
 
     pub fn move_to(&mut self, position: RichPosition, extend_selection: bool) -> bool {
-        let Some(len) = container_len(&self.document, position.container_id) else {
+        let len = match &self.reading_navigation {
+            Some(navigation) => navigation
+                .lookup
+                .get(&position.container_id)
+                .map(|&(index, _)| navigation.containers[index].len),
+            None => container_len(&self.document, position.container_id),
+        };
+        let Some(len) = len else {
             return false;
         };
         let target = RichPosition::new(position.container_id, position.grapheme_offset.min(len));
@@ -144,9 +163,8 @@ impl RichEditor {
         let current = self
             .cursor
             .unwrap_or(RichPosition::new(containers[0].id, 0));
-        let index = containers
-            .iter()
-            .position(|container| container.id == current.container_id)
+        let index = self
+            .ordered_container_index(&containers, current.container_id)
             .unwrap_or(0);
         let current_len = containers[index].len;
         let target = match movement {
@@ -169,14 +187,14 @@ impl RichEditor {
                 }
             }
             CursorMove::WordLeft => {
-                let text = container_text(&self.document, current.container_id);
+                let text = self.container_text(current.container_id);
                 RichPosition::new(
                     current.container_id,
                     previous_word_grapheme(&text, current.grapheme_offset),
                 )
             }
             CursorMove::WordRight => {
-                let text = container_text(&self.document, current.container_id);
+                let text = self.container_text(current.container_id);
                 RichPosition::new(
                     current.container_id,
                     next_word_grapheme(&text, current.grapheme_offset),
@@ -185,14 +203,14 @@ impl RichEditor {
             CursorMove::LineStart => RichPosition::new(
                 current.container_id,
                 logical_line_start(
-                    &container_text(&self.document, current.container_id),
+                    &self.container_text(current.container_id),
                     current.grapheme_offset,
                 ),
             ),
             CursorMove::LineEnd => RichPosition::new(
                 current.container_id,
                 logical_line_end(
-                    &container_text(&self.document, current.container_id),
+                    &self.container_text(current.container_id),
                     current.grapheme_offset,
                 ),
             ),
@@ -203,7 +221,6 @@ impl RichEditor {
             }
             CursorMove::Up => {
                 let desired = self.preferred_column.unwrap_or(current.grapheme_offset);
-                self.preferred_column = Some(desired);
                 if index > 0 {
                     RichPosition::new(
                         containers[index - 1].id,
@@ -215,7 +232,6 @@ impl RichEditor {
             }
             CursorMove::Down => {
                 let desired = self.preferred_column.unwrap_or(current.grapheme_offset);
-                self.preferred_column = Some(desired);
                 if index + 1 < containers.len() {
                     RichPosition::new(
                         containers[index + 1].id,
@@ -526,20 +542,55 @@ impl RichEditor {
         Some(cursor)
     }
 
-    fn ordered_containers(&self) -> Vec<ContainerInfo> {
+    fn ordered_containers(&self) -> Cow<'_, [ContainerInfo]> {
+        if let Some(navigation) = &self.reading_navigation {
+            return Cow::Borrowed(&navigation.containers);
+        }
         let mut containers = Vec::new();
         collect_containers(&self.document.blocks, &mut containers);
-        containers
+        Cow::Owned(containers)
+    }
+
+    fn ordered_container_index(&self, containers: &[ContainerInfo], id: NodeId) -> Option<usize> {
+        match &self.reading_navigation {
+            Some(navigation) => navigation.lookup.get(&id).map(|&(index, _)| index),
+            None => containers.iter().position(|container| container.id == id),
+        }
+    }
+
+    fn container_blocks(&self, id: NodeId) -> &[RichBlock] {
+        match &self.reading_navigation {
+            Some(navigation) => navigation.lookup.get(&id).map_or(&[], |&(_, ancestor)| {
+                std::slice::from_ref(&self.document.blocks[ancestor])
+            }),
+            None => &self.document.blocks,
+        }
+    }
+
+    fn container_text(&self, id: NodeId) -> String {
+        let blocks = self.container_blocks(id);
+        find_inline(blocks, id)
+            .map(|content| {
+                // Navigation counts equations and images as one indivisible position.
+                content
+                    .0
+                    .iter()
+                    .map(|node| match node {
+                        InlineNode::Math { .. } | InlineNode::Image { .. } => "\u{fffc}",
+                        _ => node.display_text(),
+                    })
+                    .collect()
+            })
+            .or_else(|| find_code(blocks, id).map(str::to_owned))
+            .unwrap_or_default()
     }
 
     fn selection_segments(&self, selection: RichSelection) -> Option<Vec<SelectionSegment>> {
         let containers = self.ordered_containers();
-        let anchor_index = containers
-            .iter()
-            .position(|container| container.id == selection.anchor.container_id)?;
-        let focus_index = containers
-            .iter()
-            .position(|container| container.id == selection.focus.container_id)?;
+        let anchor_index =
+            self.ordered_container_index(&containers, selection.anchor.container_id)?;
+        let focus_index =
+            self.ordered_container_index(&containers, selection.focus.container_id)?;
         let (start_position, end_position, start_index, end_index) = if anchor_index < focus_index
             || (anchor_index == focus_index
                 && selection.anchor.grapheme_offset <= selection.focus.grapheme_offset)
@@ -1041,10 +1092,68 @@ impl RichEditor {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ContainerInfo {
     id: NodeId,
     len: usize,
+}
+
+/// Indexes immutable reading content using the grapheme bounds already computed for rendering.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct RichReadingNavigation {
+    containers: Vec<ContainerInfo>,
+    lookup: HashMap<NodeId, (usize, usize)>,
+}
+
+impl RichReadingNavigation {
+    pub(super) fn new(projection: &RichProjection) -> Self {
+        let mut index = Self {
+            containers: Vec::with_capacity(projection.blocks.len()),
+            lookup: HashMap::with_capacity(projection.blocks.len()),
+        };
+        for (ancestor, block) in projection.blocks.iter().enumerate() {
+            index.record_block(block, ancestor);
+        }
+        index
+    }
+
+    fn record_block(&mut self, block: &ProjectedBlock, ancestor: usize) {
+        let inline_len = |content: &[ProjectedInline]| {
+            content
+                .last()
+                .map_or(0, |span| span.range.end.grapheme_offset)
+        };
+        match &block.kind {
+            ProjectedBlockKind::Paragraph { content }
+            | ProjectedBlockKind::Heading { content, .. } => {
+                self.record_container(block.id, inline_len(content), ancestor);
+            }
+            ProjectedBlockKind::CodeBlock { range, .. } => {
+                self.record_container(block.id, range.end.grapheme_offset, ancestor);
+            }
+            ProjectedBlockKind::Quote { blocks } => {
+                for block in blocks {
+                    self.record_block(block, ancestor);
+                }
+            }
+            ProjectedBlockKind::List { items, .. } => {
+                for block in items.iter().flat_map(|item| &item.blocks) {
+                    self.record_block(block, ancestor);
+                }
+            }
+            ProjectedBlockKind::Table { header, rows, .. } => {
+                for cell in header.iter().chain(rows.iter().flatten()) {
+                    self.record_container(cell.id, inline_len(&cell.content), ancestor);
+                }
+            }
+            ProjectedBlockKind::Rule | ProjectedBlockKind::OpaqueMarkdown { .. } => {}
+        }
+    }
+
+    fn record_container(&mut self, id: NodeId, len: usize, ancestor: usize) {
+        self.lookup.insert(id, (self.containers.len(), ancestor));
+        self.containers.push(ContainerInfo { id, len });
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1072,6 +1181,10 @@ enum Atom {
         alt: String,
         url: String,
         title: Option<String>,
+    },
+    Math {
+        latex: String,
+        display: bool,
     },
     SoftBreak,
     HardBreak,
@@ -1303,39 +1416,43 @@ fn container_len(document: &RichDocument, id: NodeId) -> Option<usize> {
         .or_else(|| find_code(&document.blocks, id).map(|code| code.graphemes(true).count()))
 }
 
-fn container_text(document: &RichDocument, id: NodeId) -> String {
-    find_inline(&document.blocks, id)
-        .map(InlineContent::plain_text)
-        .or_else(|| find_code(&document.blocks, id).map(str::to_owned))
-        .unwrap_or_default()
-}
-
-fn container_grapheme_slice(
-    document: &RichDocument,
+fn append_container_grapheme_slice(
+    output: &mut String,
+    blocks: &[RichBlock],
     id: NodeId,
     start: usize,
     end: usize,
-) -> String {
-    if let Some(content) = find_inline(&document.blocks, id) {
-        return inline_atoms(content)
-            .into_iter()
-            .skip(start)
-            .take(end.saturating_sub(start))
-            .map(|atom| match atom {
-                Atom::Text { grapheme, .. } => grapheme,
-                Atom::Image { alt, .. } => alt,
-                Atom::SoftBreak | Atom::HardBreak => "\n".to_owned(),
-            })
-            .collect();
+) {
+    let mut remaining = end.saturating_sub(start);
+    if let Some(content) = find_inline(blocks, id) {
+        let mut skip = start;
+        for node in &content.0 {
+            if remaining == 0 {
+                break;
+            }
+            let text = node.display_text();
+            if matches!(node, InlineNode::Text(_)) {
+                for grapheme in text.graphemes(true) {
+                    if skip > 0 {
+                        skip -= 1;
+                    } else {
+                        output.push_str(grapheme);
+                        remaining -= 1;
+                        if remaining == 0 {
+                            break;
+                        }
+                    }
+                }
+            } else if skip > 0 {
+                skip -= 1;
+            } else {
+                output.push_str(text);
+                remaining -= 1;
+            }
+        }
+    } else if let Some(code) = find_code(blocks, id) {
+        output.extend(code.graphemes(true).skip(start).take(remaining));
     }
-    find_code(&document.blocks, id)
-        .map(|code| {
-            code.graphemes(true)
-                .skip(start)
-                .take(end.saturating_sub(start))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 fn inline_atoms(content: &InlineContent) -> Vec<Atom> {
@@ -1353,6 +1470,10 @@ fn inline_atoms(content: &InlineContent) -> Vec<Atom> {
                 alt: alt.clone(),
                 url: url.clone(),
                 title: title.clone(),
+            }),
+            InlineNode::Math { latex, display } => atoms.push(Atom::Math {
+                latex: latex.clone(),
+                display: *display,
             }),
             InlineNode::SoftBreak => atoms.push(Atom::SoftBreak),
             InlineNode::HardBreak => atoms.push(Atom::HardBreak),
@@ -1382,6 +1503,7 @@ fn atoms_to_inline(atoms: Vec<Atom>) -> InlineContent {
                 })),
             },
             Atom::Image { alt, url, title } => nodes.push(InlineNode::Image { alt, url, title }),
+            Atom::Math { latex, display } => nodes.push(InlineNode::Math { latex, display }),
             Atom::SoftBreak => nodes.push(InlineNode::SoftBreak),
             Atom::HardBreak => nodes.push(InlineNode::HardBreak),
         }

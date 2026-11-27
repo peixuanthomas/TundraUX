@@ -1,13 +1,16 @@
 //! Domain model for Tundra's single-document terminal editor.
 //!
 //! The built-in editor edits the canonical document as plain text. Markdown
-//! files use the text buffer. Office and PDF files have read-only previews.
+//! files use a text buffer with an optional read-only reading view. Office
+//! and PDF files have separate read-only previews.
 
 mod background;
 pub mod c_syntax;
 pub mod json_format;
 pub mod line_changes;
 pub mod markdown_codec;
+mod markdown_reading;
+pub mod reading_media;
 pub mod recovery;
 pub mod rich_document;
 pub mod rich_edit;
@@ -20,6 +23,7 @@ mod pdf_preview;
 mod preview_image;
 mod source_buffer;
 mod source_changes;
+pub use markdown_reading::{MarkdownReadingSnapshot, PreparedMarkdownReading, is_markdown_path};
 pub use office_preview::OfficeFormat;
 pub use pdf_preview::{PdfPageImage, PdfPageSize, PdfPreviewDocument, is_pdf_path};
 pub use preview_image::PreviewImage;
@@ -65,6 +69,7 @@ use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete, UnicodeSegmentati
 use unicode_width::UnicodeWidthStr;
 
 use self::markdown_codec::{MarkdownCodec, MarkdownExport};
+use self::markdown_reading::MarkdownReading;
 use self::rich_document::{
     NodeId, ProjectedBlock, ProjectedBlockKind, ProjectedInline, RichDocument, RichLineEnding,
     RichListKind, RichPosition, RichProjection, RichTableAlignment,
@@ -98,8 +103,8 @@ pub enum DocumentKind {
 
 impl DocumentKind {
     pub fn from_path(_path: &Path) -> Self {
-        // Files opened by the built-in editor are always treated as plain
-        // text, including files whose names use Markdown extensions.
+        // Opened text files use the Source buffer. The explicit Markdown
+        // kind is for structured documents, not ordinary Markdown files.
         Self::PlainText
     }
 
@@ -1213,6 +1218,7 @@ pub struct EditorState {
     search_job: background::Latest<search::Completion>,
     computation_generation: u64,
     buffer: EditorBuffer,
+    markdown_reading: Option<MarkdownReading>,
     undo_stack: Vec<EditTransaction>,
     redo_stack: Vec<EditTransaction>,
     history_limit: usize,

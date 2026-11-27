@@ -163,8 +163,8 @@ fn cross_container_edits_preserve_opaque_nodes_and_reject_opaque_positions() {
         RichPosition::new(second_id, 1),
     ));
     assert!(editor.delete_selection());
-    assert_eq!(container_text(&editor.document, first_id), "alph");
-    assert_eq!(container_text(&editor.document, second_id), "mega");
+    assert_eq!(editor.container_text(first_id), "alph");
+    assert_eq!(editor.container_text(second_id), "mega");
     assert!(matches!(
         &editor.document.blocks[1].kind,
         RichBlockKind::OpaqueMarkdown { raw, .. }

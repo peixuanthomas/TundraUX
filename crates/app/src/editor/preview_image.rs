@@ -13,7 +13,7 @@ use super::{DocumentKind, EditorDocument, EditorState};
 
 mod long_png;
 
-const MAX_ENCODED_BYTES: usize = 32 * 1024 * 1024;
+pub(super) const MAX_ENCODED_BYTES: usize = 32 * 1024 * 1024;
 const MAX_DECODE_SIDE: u32 = 8192;
 const MAX_DECODE_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_PREVIEW_SIDE: u32 = 1536;
@@ -103,16 +103,7 @@ impl PreviewImage {
             || image.color().has_alpha(),
             |pixels| pixels.pixels().any(|pixel| pixel[3] != 255),
         );
-        let bytes_per_pixel = if maybe_transparent { 8 } else { 4 };
-        // This budget includes the native composite and the smaller terminal thumbnail.
-        let side = if budget > SAMPLE_PIXELS * bytes_per_pixel {
-            ((budget - SAMPLE_PIXELS * 4) / bytes_per_pixel)
-                .isqrt()
-                .max(SAMPLE_SIDE as usize)
-        } else {
-            (budget / bytes_per_pixel).isqrt()
-        }
-        .min(MAX_PREVIEW_SIDE as usize) as u32;
+        let side = Self::budgeted_side(budget, maybe_transparent);
         if side == 0 {
             return Err(ImageError::Limits(LimitError::from_kind(
                 LimitErrorKind::InsufficientMemory,
@@ -125,7 +116,24 @@ impl PreviewImage {
         Ok(Self::from_pixels(image, maybe_transparent, false))
     }
 
-    fn from_pixels(image: DynamicImage, maybe_transparent: bool, scroll_vertically: bool) -> Self {
+    pub(super) fn budgeted_side(budget: usize, maybe_transparent: bool) -> u32 {
+        let bytes_per_pixel = if maybe_transparent { 8 } else { 4 };
+        // This budget includes the native composite and the smaller terminal thumbnail.
+        let side = if budget > SAMPLE_PIXELS * bytes_per_pixel {
+            ((budget - SAMPLE_PIXELS * 4) / bytes_per_pixel)
+                .isqrt()
+                .max(SAMPLE_SIDE as usize)
+        } else {
+            (budget / bytes_per_pixel).isqrt()
+        };
+        side.min(MAX_PREVIEW_SIDE as usize) as u32
+    }
+
+    pub(super) fn from_pixels(
+        image: DynamicImage,
+        maybe_transparent: bool,
+        scroll_vertically: bool,
+    ) -> Self {
         let thumbnail = (image.width().max(image.height()) > SAMPLE_SIDE).then(|| {
             let pixels = image.thumbnail(SAMPLE_SIDE, SAMPLE_SIDE).into_rgba8();
             Thumbnail {
@@ -210,7 +218,8 @@ impl PreviewImage {
         )
     }
 
-    pub(super) fn byte_len(&self) -> usize {
+    /// Bytes for the image and its thumbnail, including room for a cached opaque composite.
+    pub fn byte_len(&self) -> usize {
         self.rgba.len()
             + self.thumbnail.as_ref().map_or(0, |image| image.rgba.len())
             + if self.is_opaque() { 0 } else { self.rgba.len() }
@@ -297,7 +306,17 @@ impl EditorState {
     }
 
     pub fn office_image(&self, url: &str) -> Option<&PreviewImage> {
+        PreviewImage::embedded_from_url(self.embedded_preview_images(), url)
+    }
+
+    pub fn embedded_preview_images(&self) -> &[PreviewImage] {
+        &self.preview_images
+    }
+}
+
+impl PreviewImage {
+    pub fn embedded_from_url<'a>(images: &'a [Self], url: &str) -> Option<&'a Self> {
         let index: usize = url.strip_prefix(PREVIEW_IMAGE_PREFIX)?.parse().ok()?;
-        self.preview_images.get(index)
+        images.get(index)
     }
 }

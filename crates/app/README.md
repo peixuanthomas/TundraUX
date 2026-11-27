@@ -47,10 +47,13 @@ Launcher lists the built-in applications available on the current platform, plus
 | `source_buffer`, `source_changes`, `line_changes` | Store source text and history; represent changed line ranges for incremental work and compare against saved text for line markers |
 | `syntax`, `c_syntax`, `search`, `soft_wrap`, `json_format` | Compute highlighting, C lexical tokens, matches, visual row mapping, and JSON formatting |
 | `background`, `recovery` | Run revision-tagged computations and I/O away from the UI loop; persist and claim recoverable drafts separately |
-| `rich_document`, `rich_edit`, `markdown_codec` | Represent, edit, and serialize structured Markdown for rich-document support. Files normally opened in the standard editor use source text. |
+| `rich_document`, `rich_edit`, `markdown_codec`, `markdown_reading` | Parse, edit and serialize structured Markdown and prepare read-only views of source drafts. |
+| `reading_media` | Prepare local images, heading glyphs, LaTeX formulas and Mermaid diagrams for the Markdown reader. |
 | `office_preview`, `preview_image` | Read binary and Open XML Word, Excel and PowerPoint files, including templates and Excel binary workbooks. Decode embedded and standalone pictures into bounded previews and shared thumbnails. |
 
 The editor handles user-visible characters as graphemes, using save snapshots tied to an exact revision and separate recovery records. Bytes written externally by Vim enter the same atomic save workflow through `SaveSnapshot::external_bytes`, without re-encoding or changing line endings.
+
+Ordinary Markdown opens as editable source. A worker prepares a snapshot of the current draft and the positions used to navigate and select rendered text. Saving and recovery still use the source buffer, and switching back restores its cursor, selection, scroll position, and edit history.
 
 Opening a text file counts its line endings once and measures terminal widths directly from the text chunks. When the editor imports rich text, it indexes source lines once for all paragraphs, tables, and code blocks. Office previews use a single rich-text projection for the first frame and its word count.
 

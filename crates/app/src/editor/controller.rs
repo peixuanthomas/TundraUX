@@ -2,7 +2,30 @@ use super::*;
 
 impl EditorController {
     pub fn apply(self, state: &mut EditorState, command: EditorCommand) -> Vec<EditorEffect> {
-        if state.is_read_only() && !command.is_allowed_in_read_only() {
+        let saves_draft = matches!(
+            command,
+            EditorCommand::RequestSave
+                | EditorCommand::RequestSaveAs
+                | EditorCommand::MarkSaved { .. }
+        );
+        if state.is_read_only()
+            && !command.is_allowed_in_read_only()
+            && !(saves_draft && state.can_save())
+        {
+            return Vec::new();
+        }
+        if state.markdown_reading_pending()
+            && matches!(
+                command,
+                EditorCommand::Find { .. }
+                    | EditorCommand::FindNext { .. }
+                    | EditorCommand::MoveVisual { .. }
+                    | EditorCommand::MoveCursor { .. }
+                    | EditorCommand::MoveTo { .. }
+                    | EditorCommand::SelectAll
+                    | EditorCommand::ClearSelection
+            )
+        {
             return Vec::new();
         }
         match command {

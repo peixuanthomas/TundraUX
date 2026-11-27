@@ -19,8 +19,12 @@ comrak = { version = "0.54", default-features = false }
 hayro = "0.9"
 memchr = "2"
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "tiff", "webp"] }
+latex-rust = "=2.1.1"
+mermaid-rs-renderer = { version = "=0.3.1", default-features = false }
+percent-encoding = "2"
 png = "0.18"
 regex = "1"
+resvg = { version = "0.47", default-features = false, features = ["text", "system-fonts"] }
 shell-words = "1.1"
 lsh = { path = "../../third_party/lsh", default-features = false, features = ["glob"] }
 office_oxide = { package = "tundra-office-reader", path = "../../third_party/office-reader", default-features = false }

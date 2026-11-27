@@ -83,6 +83,7 @@ impl EditorState {
             search_job: background::Latest::default(),
             computation_generation: 0,
             buffer,
+            markdown_reading: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             history_limit: DEFAULT_HISTORY_LIMIT,
@@ -101,7 +102,12 @@ impl EditorState {
     }
 
     pub const fn is_read_only(&self) -> bool {
-        self.execution_read_only || matches!(self.access, EditorAccess::ReadOnly)
+        !self.can_save() || self.is_markdown_reading()
+    }
+
+    /// Reading mode protects the view, not the source draft's save access.
+    pub const fn can_save(&self) -> bool {
+        !self.execution_read_only && matches!(self.access, EditorAccess::Editable)
     }
 
     pub fn set_source_change_tracking(&mut self, enabled: bool) {
@@ -190,13 +196,11 @@ impl EditorState {
         )
     }
 
-    /// Source-mode text, or the last boundary Markdown snapshot in Rich mode.
-    /// Rich input never refreshes this string.
+    /// The canonical source, or the last boundary snapshot for Rich edits.
     pub fn source(&self) -> Cow<'_, str> {
-        match &self.buffer {
-            EditorBuffer::Rich(_) => self.document.source(),
-            EditorBuffer::Source(buffer) => buffer.text(),
-        }
+        self.canonical_source_buffer()
+            .map(SourceBuffer::text)
+            .unwrap_or_else(|| self.document.source())
     }
 
     pub fn has_isolated_rich_buffer(&self) -> bool {
@@ -240,6 +244,9 @@ impl EditorState {
     }
 
     pub fn can_apply_block_format_to_selection(&self) -> bool {
+        if self.is_markdown_reading() {
+            return false;
+        }
         match &self.buffer {
             EditorBuffer::Rich(buffer) => buffer.editor.can_apply_block_format_to_selection(),
             EditorBuffer::Source(_) => false,
@@ -456,14 +463,46 @@ impl EditorState {
         Some(projection)
     }
 
-    /// Exports the active buffer at an explicit boundary without mutating the
-    /// model, history, revision, or save checkpoint.
+    /// Exports the canonical draft without mutating the model or checkpoint.
     pub fn export_text(&self) -> String {
-        match &self.buffer {
-            EditorBuffer::Rich(buffer) => MarkdownCodec::export(&buffer.editor.document)
-                .map(|export| export.markdown)
-                .unwrap_or_else(|_| self.document.source().into_owned()),
-            EditorBuffer::Source(buffer) => buffer.to_string(),
+        if let Some(buffer) = self.canonical_source_buffer() {
+            return buffer.to_string();
+        }
+        let document = self
+            .rich_document()
+            .expect("Rich buffer without a source buffer");
+        MarkdownCodec::export(document)
+            .map(|export| export.markdown)
+            .unwrap_or_else(|_| self.document.source().into_owned())
+    }
+
+    pub fn recovery_payload(&self) -> recovery::EditorRecoveryPayload {
+        if let Some(source) = self.canonical_source_buffer() {
+            let (cursor, selection) = self
+                .markdown_reading
+                .as_ref()
+                .map_or((self.cursor, self.selection), |reading| {
+                    (reading.cursor, reading.selection)
+                });
+            return recovery::EditorRecoveryPayload::Source {
+                text: source.to_string(),
+                cursor: cursor.byte_offset,
+                selection: selection.map(|selection| recovery::RecoverySourceSelection {
+                    anchor: selection.anchor,
+                    focus: selection.focus,
+                }),
+            };
+        }
+        recovery::EditorRecoveryPayload::Rich {
+            document: self
+                .rich_document()
+                .expect("Rich buffer without a source buffer")
+                .clone(),
+            cursor: self.rich_cursor(),
+            selection: self
+                .rich_selection()
+                .map(|selection| rich_document::RichRange::new(selection.anchor, selection.focus)),
+            markdown_fallback: self.export_text(),
         }
     }
 
@@ -527,6 +566,9 @@ impl EditorState {
         cursor: usize,
         modified: bool,
     ) {
+        if self.is_markdown_reading() {
+            return;
+        }
         let content_changed = self.source().as_ref() != text;
         if content_changed || self.document.metadata != metadata || self.mode != EditorMode::Source
         {
@@ -574,18 +616,21 @@ impl EditorState {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        match &self.buffer {
-            EditorBuffer::Rich(buffer) => MarkdownCodec::export(&buffer.editor.document)
-                .map(|export| export.to_bytes(self.document.metadata.utf8_bom))
-                .unwrap_or_else(|_| self.document.to_bytes()),
-            EditorBuffer::Source(buffer) => {
-                let text = buffer.text();
-                encoded_bytes(&text, self.document.metadata)
-            }
+        if let Some(buffer) = self.canonical_source_buffer() {
+            return encoded_bytes(&buffer.text(), self.document.metadata);
         }
+        let document = self
+            .rich_document()
+            .expect("Rich buffer without a source buffer");
+        MarkdownCodec::export(document)
+            .map(|export| export.to_bytes(self.document.metadata.utf8_bom))
+            .unwrap_or_else(|_| self.document.to_bytes())
     }
 
     pub fn word_count(&self) -> usize {
+        if let Some(word_count) = self.markdown_reading_word_count() {
+            return word_count;
+        }
         match &self.buffer {
             EditorBuffer::Rich(buffer) => {
                 if let Some((revision, word_count)) = self.rich_word_count_cache.get()
@@ -603,25 +648,27 @@ impl EditorState {
     }
 
     pub fn can_undo(&self) -> bool {
-        self.undo_stack.last().is_some_and(|transaction| {
-            matches!(
-                (&self.buffer, transaction),
-                (EditorBuffer::Rich(_), EditTransaction::Rich { .. })
-                    | (EditorBuffer::Source(_), EditTransaction::Source { .. })
-                    | (_, EditTransaction::Metadata { .. })
-            )
-        })
+        !self.is_markdown_reading()
+            && self.undo_stack.last().is_some_and(|transaction| {
+                matches!(
+                    (&self.buffer, transaction),
+                    (EditorBuffer::Rich(_), EditTransaction::Rich { .. })
+                        | (EditorBuffer::Source(_), EditTransaction::Source { .. })
+                        | (_, EditTransaction::Metadata { .. })
+                )
+            })
     }
 
     pub fn can_redo(&self) -> bool {
-        self.redo_stack.last().is_some_and(|transaction| {
-            matches!(
-                (&self.buffer, transaction),
-                (EditorBuffer::Rich(_), EditTransaction::Rich { .. })
-                    | (EditorBuffer::Source(_), EditTransaction::Source { .. })
-                    | (_, EditTransaction::Metadata { .. })
-            )
-        })
+        !self.is_markdown_reading()
+            && self.redo_stack.last().is_some_and(|transaction| {
+                matches!(
+                    (&self.buffer, transaction),
+                    (EditorBuffer::Rich(_), EditTransaction::Rich { .. })
+                        | (EditorBuffer::Source(_), EditTransaction::Source { .. })
+                        | (_, EditTransaction::Metadata { .. })
+                )
+            })
     }
 
     pub fn history_depth(&self) -> (usize, usize) {
@@ -629,6 +676,9 @@ impl EditorState {
     }
 
     pub fn selected_range(&self) -> Option<SourceRange> {
+        if self.markdown_reading_pending() {
+            return None;
+        }
         match self.buffer {
             EditorBuffer::Source(_) => self
                 .selection
@@ -649,6 +699,9 @@ impl EditorState {
     }
 
     pub fn has_selection(&self) -> bool {
+        if self.markdown_reading_pending() {
+            return false;
+        }
         match &self.buffer {
             EditorBuffer::Rich(buffer) => buffer.editor.has_selection(),
             EditorBuffer::Source(_) => self
@@ -955,21 +1008,24 @@ impl EditorState {
     }
 
     pub(super) fn prepare_save_snapshot(&mut self) -> SaveSnapshot {
-        let snapshot = match &self.buffer {
-            EditorBuffer::Rich(buffer) => SaveSnapshot::rich(
-                self.revision,
-                buffer.editor.document.clone(),
-                self.document.source.as_contiguous(),
-                self.document.metadata.utf8_bom,
-            ),
-            EditorBuffer::Source(buffer) => SaveSnapshot::source(
+        let snapshot = if let Some(buffer) = self.canonical_source_buffer() {
+            SaveSnapshot::source(
                 self.revision,
                 buffer.text.clone(),
                 buffer.word_count,
                 buffer.line_endings,
                 self.document.metadata.utf8_bom,
                 self.document.metadata.encoding,
-            ),
+            )
+        } else {
+            SaveSnapshot::rich(
+                self.revision,
+                self.rich_document()
+                    .expect("Rich buffer without a source buffer")
+                    .clone(),
+                self.document.source.as_contiguous(),
+                self.document.metadata.utf8_bom,
+            )
         };
         self.pending_saves
             .retain(|pending| pending.revision != self.revision);
@@ -1024,6 +1080,12 @@ impl EditorState {
         self.document.source = document_source;
         self.saved_revision = revision;
 
+        if self.is_markdown_reading() {
+            if !self.document.path.as_deref().is_some_and(is_markdown_path) {
+                let _ = self.end_markdown_reading();
+            }
+            return;
+        }
         if self.revision == revision
             && let (EditorBuffer::Rich(buffer), Some(export)) = (&mut self.buffer, &prepared.export)
         {
