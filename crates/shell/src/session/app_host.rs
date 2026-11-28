@@ -422,7 +422,9 @@ impl AppHostSession {
             }
             CommandLineHostEvent::ResetRequested => {
                 self.output
-                    .push_back(AppToShell::ShellAction(HostAction::Reset));
+                    .push_back(AppToShell::ShellAction(HostAction::Reset(
+                        workspace_protocol::ResetTarget::UserData,
+                    )));
             }
             CommandLineHostEvent::None => {}
         }
@@ -670,6 +672,10 @@ impl AppHostSession {
                     ShellCommand::Restart => HostAction::Restart,
                     _ => HostAction::Exit,
                 }));
+        }
+        if let Some(target) = self.state.requested_reset.take() {
+            self.output
+                .push_back(AppToShell::ShellAction(HostAction::Reset(target)));
         }
         for launch in self.state.window_launches.drain(..) {
             self.output

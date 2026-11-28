@@ -137,6 +137,7 @@ pub enum ShellCommand {
     SettingsFormInput(InputEvent),
     SettingsPointer(MouseInput),
     SettingsRestoreDefaultsConfirmed,
+    SettingsResetConfirmed(workspace_protocol::ResetTarget),
     SettingsWeatherLocationConfirmed,
     EditorSaveAndClose,
     EditorDiscardAndClose,

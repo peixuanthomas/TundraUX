@@ -4,7 +4,44 @@ use std::path::{Path, PathBuf};
 
 use platform::AppPaths;
 
-use crate::StorageManager;
+use crate::{LauncherConfig, StorageConfig, StorageError, StorageManager, UserProfile};
+
+impl StorageManager {
+    /// Restores workspace settings and the signed-in user's preferences after all windows close.
+    pub fn reset_settings(&self, username: &str, user_id: &str) -> Result<(), StorageError> {
+        let previous = self.load_config()?;
+        let profile = self
+            .load_profile(username)?
+            .filter(|p| p != &UserProfile::default());
+        let mut state = self.load_state()?;
+        let order = state.values.remove(&format!("home.order.{user_id}"));
+        let view = state.values.remove(&format!("launcher.view.{user_id}"));
+        let defaults = StorageConfig {
+            launcher: LauncherConfig {
+                entries: previous.launcher.entries.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        self.save_config(&defaults)?;
+        if profile.is_some()
+            && let Err(error) = self.update_profile(username, |p| *p = UserProfile::default())
+        {
+            self.save_config(&previous)?;
+            return Err(error);
+        }
+        if (order.is_some() || view.is_some())
+            && let Err(error) = self.save_state(&state)
+        {
+            if let Some(original) = profile {
+                self.update_profile(username, |p| *p = original)?;
+            }
+            self.save_config(&previous)?;
+            return Err(error);
+        }
+        Ok(())
+    }
+}
 
 /// The result of removing all TundraUX-owned saved content and recreating
 /// the default storage documents.

@@ -5,6 +5,7 @@ shell-entry-update-recovery-failed = tundra-shell 更新恢复失败：{ $error 
 shell-entry-watchdog-start-failed = tundra-shell 看门狗启动失败：{ $error }
 shell-entry-restart-failed = tundra-shell 重启失败：{ $error }
 shell-entry-reset-failed = tundra-shell 重置失败：{ $error }
+shell-entry-reset-required = 需要由 tundra-shell 完成重置并重新启动工作区。
 shell-entry-update-helper-failed = tundra-shell 更新助手启动失败：{ $error }
 shell-entry-watchdog-shutdown-failed = tundra-shell 看门狗关闭失败：{ $error }
 shell-entry-sudo-request = TundraUX 的 Linux 模式以 root 身份运行。正在请求 sudo 身份验证……

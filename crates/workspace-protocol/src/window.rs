@@ -128,7 +128,7 @@ pub enum ShellAction {
     LanguageReloaded { code: String },
     ClockChanged,
     Restart,
-    Reset,
+    Reset(crate::ResetTarget),
     Exit,
     PowerOff,
     Reboot,

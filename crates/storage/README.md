@@ -53,7 +53,9 @@ Unsupported schemas are rejected without rewriting their contents. If a current 
 - The default border is Glacier Night `#29434E`, and the accent is `#63D3E5`. Missing preferences use current defaults and explicit colors remain supported.
 - Launcher's `order` stores a unified ID order, `custom` stores names, icons, commands, and exit options, and `terminal` stores argument arrays and working directories.
 
-`reset_saved_content` clears saved data. The caller is responsible for backup, confirmation, and restart workflows.
+`StorageManager::reset_settings` restores the default configuration and the signed-in user's appearance, dashboard, Home order, and Launcher view. It preserves custom Launcher entries, pinned Home shortcuts, other profiles, alarms, recovery drafts, and history.
+
+`reset_saved_content` removes the application configuration, state, cache, logs, and temporary files, then recreates the default storage documents. Shell closes the windows before applying either reset and restarts afterward.
 
 ## Validation
 

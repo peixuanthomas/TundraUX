@@ -81,6 +81,7 @@ For a system change, review the targets and choose the action. AutoAdmin shows a
 - **Weather:** The workspace shows weather after the configured period of inactivity. Settings controls the screen timeout and weather location. Press a key or tap to return to your open windows without signing in again.
 - **Top bar:** Click the title for the power menu and Tasks, or click the status for notifications. **Settings → System → Top bar contents** controls status alignment and the visibility of Help, time, and Back. With **Show Back button** on, the upper-right corner shows **Esc** and its current action. A dimmed **Esc** means the tool has no step to go back. On idle Home, click **Esc Power menu** to open the menu.
 - **Appearance and input:** Change language, theme, icon mode, or motion in Settings. ASCII icons work in terminals without image support. Use the header's keyboard button for supported text fields and embedded terminals.
+- **Settings → Reset** offers **Reset all settings** to restore workspace and personal preferences while keeping alarms, drafts, history, and Launcher entries. **Reset user data** also clears saved TundraUX data, cache, and logs. Both actions ask for confirmation and restart the app. If an open document has unsaved changes, its usual save prompt appears first.
 
 ## Update or troubleshoot
 

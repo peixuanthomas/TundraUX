@@ -67,6 +67,104 @@ fn reset_removes_owned_content_and_recreates_defaults() {
 }
 
 #[test]
+fn resetting_settings_preserves_user_content_and_other_profiles() {
+    let fixture = FixtureRoot::new("settings");
+    let paths = fixture_paths(fixture.path());
+    let manager = StorageManager::open(paths.clone()).unwrap().manager;
+    let mut config = manager.load_config().unwrap();
+    config.language = "zh-CN".into();
+    config.screen_timeout_seconds = 60;
+    config.automation.enabled = true;
+    let entry = crate::LauncherEntryRecord {
+        id: "my-app".into(),
+        path: "/my/app".into(),
+        ..Default::default()
+    };
+    config.launcher.entries = vec![entry.clone()];
+    config.launcher.order = vec![entry.id.clone()];
+    manager.save_config(&config).unwrap();
+    let custom_profile = |p: &mut UserProfile| p.appearance.animation_speed_percent = 150;
+    manager.update_profile("alice", custom_profile).unwrap();
+    let bob = manager.update_profile("bob", custom_profile).unwrap();
+    let mut state = manager.load_state().unwrap();
+    for key in [
+        "home.order.1",
+        "launcher.view.1",
+        "home.shortcuts.1",
+        "launcher.view.2",
+        "saved-record",
+    ] {
+        state.values.insert(key.into(), "keep".into());
+    }
+    manager.save_state(&state).unwrap();
+    let recent = crate::RecentFilesDocument {
+        files: vec!["notes.md".into()],
+        ..Default::default()
+    };
+    manager.save_recent_files(&recent).unwrap();
+    let mut clock = manager.load_clock().unwrap();
+    clock
+        .profiles
+        .entry("alice".into())
+        .or_default()
+        .entries
+        .push(crate::ClockEntryRecord::DailyAlarm {
+            id: 1,
+            hour: 7,
+            minute: 30,
+            second: 0,
+            strong: false,
+            snooze_deadline_epoch_ms: None,
+        });
+    manager.save_clock(&clock).unwrap();
+    let draft = paths.data_path().join("draft");
+    let log = paths.logs_path().join("example.log");
+    fs::write(&draft, "draft").unwrap();
+    fs::create_dir_all(paths.logs_path()).unwrap();
+    fs::write(&log, "log").unwrap();
+
+    manager.reset_settings("alice", "1").unwrap();
+    manager.reset_settings("alice", "1").unwrap();
+
+    let mut defaults = StorageConfig::default();
+    defaults.launcher.entries = vec![entry];
+    assert_eq!(manager.load_config().unwrap(), defaults);
+    assert_eq!(
+        manager.load_profile("alice").unwrap(),
+        Some(UserProfile::default())
+    );
+    assert_eq!(manager.load_profile("bob").unwrap(), Some(bob));
+    state.values.remove("home.order.1");
+    state.values.remove("launcher.view.1");
+    assert_eq!(manager.load_state().unwrap(), state);
+    assert_eq!(manager.load_recent_files().unwrap(), recent);
+    assert_eq!(manager.load_clock().unwrap(), clock);
+    assert_eq!(fs::read_to_string(draft).unwrap(), "draft");
+    assert_eq!(fs::read_to_string(log).unwrap(), "log");
+}
+
+#[test]
+fn settings_reset_reads_saved_preferences_before_changing_anything() {
+    let fixture = FixtureRoot::new("invalid-settings");
+    let manager = StorageManager::open(fixture_paths(fixture.path()))
+        .unwrap()
+        .manager;
+    let config = StorageConfig {
+        screen_timeout_seconds: 60,
+        ..Default::default()
+    };
+    manager.save_config(&config).unwrap();
+    let profile = manager
+        .update_profile("alice", |p| p.appearance.animation_speed_percent = 150)
+        .unwrap();
+    fs::write(&manager.layout().state_path, b"invalid").unwrap();
+    assert!(manager.reset_settings("alice", "1").is_err());
+    assert_eq!(manager.load_config().unwrap(), config);
+    assert_eq!(manager.load_profile("alice").unwrap(), Some(profile));
+    assert_eq!(fs::read(&manager.layout().state_path).unwrap(), b"invalid");
+}
+
+#[test]
 fn validation_rejects_overlapping_candidates_before_deleting() {
     let fixture = FixtureRoot::new("overlap");
     let root = fixture.path();

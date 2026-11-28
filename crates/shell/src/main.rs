@@ -118,16 +118,18 @@ fn main() {
                 4
             }
         },
-        Some(ShellCompletion::Reset) => match reset_storage_and_restart(restart_executable) {
-            Ok(code) => code,
-            Err(error) => {
-                eprintln!(
-                    "{}",
-                    i18n::tr!("shell-entry-reset-failed", error = error.to_string())
-                );
-                4
+        Some(ShellCompletion::Reset(target)) => {
+            match reset_storage_and_restart(restart_executable, target) {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!(
+                        "{}",
+                        i18n::tr!("shell-entry-reset-failed", error = error.to_string())
+                    );
+                    4
+                }
             }
-        },
+        }
         Some(ShellCompletion::UpdatePrepared(manifest)) => {
             match app::update::launch_update_helper(&manifest, std::process::id()) {
                 Ok(()) => 0,
@@ -193,12 +195,22 @@ fn exit_with_error(message: &str, error: impl std::fmt::Display, code: i32) -> !
 
 fn reset_storage_and_restart(
     executable: std::io::Result<std::path::PathBuf>,
+    target: workspace_protocol::ResetTarget,
 ) -> Result<i32, std::io::Error> {
     let platform = platform::native_platform();
     let paths = platform
         .app_paths()
         .map_err(|error| std::io::Error::other(error.to_string()))?;
-    storage::reset_saved_content(&paths)?;
+    match target {
+        workspace_protocol::ResetTarget::Settings { username, user_id } => {
+            storage::StorageManager::from_layout(storage::StorageLayout::from_app_paths(&paths))
+                .reset_settings(&username, &user_id)
+                .map_err(std::io::Error::other)?;
+        }
+        workspace_protocol::ResetTarget::UserData => {
+            storage::reset_saved_content(&paths)?;
+        }
+    }
 
     restart_current_executable(executable)
 }

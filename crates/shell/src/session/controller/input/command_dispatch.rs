@@ -952,6 +952,10 @@ impl ShellSession {
                 self.restore_settings_defaults();
                 ShellAction::Redraw
             }
+            ShellCommand::SettingsResetConfirmed(target) => {
+                self.confirm_settings_reset(target);
+                ShellAction::Redraw
+            }
             ShellCommand::SettingsWeatherLocationConfirmed => {
                 self.save_settings_weather_location();
                 ShellAction::Redraw

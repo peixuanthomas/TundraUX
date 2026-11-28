@@ -178,7 +178,7 @@ pub(super) struct Workspace {
     task_catalogs: BTreeMap<SessionId, Vec<String>>,
     tasks_return: Option<(SessionId, SessionId)>,
     shutdown: bool,
-    reset: bool,
+    pending_reset: Option<workspace_protocol::ResetTarget>,
     frozen: bool,
     placeholder_redraw_at: Option<Instant>,
 }
@@ -234,7 +234,7 @@ impl Workspace {
             task_catalogs: BTreeMap::new(),
             tasks_return: None,
             shutdown: false,
-            reset: false,
+            pending_reset: None,
             frozen: false,
             placeholder_redraw_at: None,
         }
@@ -252,8 +252,12 @@ impl Workspace {
         self.shutdown
     }
 
-    pub(super) fn reset_requested(&self) -> bool {
-        self.reset && !self.active()
+    pub(super) fn take_reset(&mut self) -> Option<workspace_protocol::ResetTarget> {
+        if self.active() {
+            None
+        } else {
+            self.pending_reset.take()
+        }
     }
 
     pub(super) fn take_update(&mut self) -> Option<PathBuf> {

@@ -69,7 +69,7 @@ pub fn run_shell_blocking_managed(
     match run_shell_blocking_managed_with_outcome(output, process)? {
         ShellRunOutcome::Exit => Ok(()),
         ShellRunOutcome::RestartRequested => Err(restart_requires_binary_entrypoint()),
-        ShellRunOutcome::ResetRequested => Err(reset_requires_binary_entrypoint()),
+        ShellRunOutcome::ResetRequested(_) => Err(reset_requires_binary_entrypoint()),
         ShellRunOutcome::UpdatePrepared(_) => Err(update_requires_binary_entrypoint()),
     }
 }
@@ -78,7 +78,7 @@ pub fn run_shell_blocking_managed(
 pub enum ShellRunOutcome {
     Exit,
     RestartRequested,
-    ResetRequested,
+    ResetRequested(workspace_protocol::ResetTarget),
     UpdatePrepared(std::path::PathBuf),
 }
 
@@ -146,7 +146,7 @@ pub fn run_fullscreen_blocking_managed(
     match run_fullscreen_blocking_managed_with_outcome(output, process)? {
         ShellRunOutcome::Exit => Ok(()),
         ShellRunOutcome::RestartRequested => Err(restart_requires_binary_entrypoint()),
-        ShellRunOutcome::ResetRequested => Err(reset_requires_binary_entrypoint()),
+        ShellRunOutcome::ResetRequested(_) => Err(reset_requires_binary_entrypoint()),
         ShellRunOutcome::UpdatePrepared(_) => Err(update_requires_binary_entrypoint()),
     }
 }
@@ -161,7 +161,7 @@ fn restart_requires_binary_entrypoint() -> io::Error {
 fn reset_requires_binary_entrypoint() -> io::Error {
     io::Error::new(
         io::ErrorKind::Interrupted,
-        "Command Line requested a storage reset; the binary entry point must restart Shell",
+        i18n::tr!("shell-entry-reset-required"),
     )
 }
 
@@ -313,8 +313,8 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
         Ok(Ok(FullscreenShellSessionOutcome::RestartRequested)) => {
             Ok(ShellRunOutcome::RestartRequested)
         }
-        Ok(Ok(FullscreenShellSessionOutcome::ResetRequested)) => {
-            Ok(ShellRunOutcome::ResetRequested)
+        Ok(Ok(FullscreenShellSessionOutcome::ResetRequested(target))) => {
+            Ok(ShellRunOutcome::ResetRequested(target))
         }
         Ok(Ok(FullscreenShellSessionOutcome::UpdatePrepared(manifest))) => {
             Ok(ShellRunOutcome::UpdatePrepared(manifest))
@@ -336,7 +336,7 @@ pub fn run_fullscreen_blocking_managed_with_outcome(
 pub(super) enum FullscreenShellSessionOutcome {
     Exit,
     RestartRequested,
-    ResetRequested,
+    ResetRequested(workspace_protocol::ResetTarget),
     UpdatePrepared(std::path::PathBuf),
     Panic(String),
 }
@@ -957,7 +957,6 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
     let mut editor_vim = super::vim_host::EditorVimHost::new(shell_watchdog.clone());
     editor_vim.set_cell_size(terminal_cell_size.0, terminal_cell_size.1);
     let mut vim_cursor_style = crossterm::cursor::SetCursorStyle::DefaultUserShape;
-    let mut reset_requested = false;
     if let Some(cached) = cached_time_sync.as_ref() {
         cached.apply_to_state_at(&mut state, Instant::now());
     }
@@ -998,8 +997,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 } else if workspace_changed {
                     redraw.request_redraw();
                 }
-                if windows.reset_requested() {
-                    reset_requested = true;
+                if let Some(target) = windows.take_reset() {
+                    state.requested_reset = Some(target);
                     break;
                 }
                 if let Some(path) = windows.take_update() {
@@ -1147,7 +1146,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 CommandLineHostEvent::None | CommandLineHostEvent::ExitToCaller => {}
                 CommandLineHostEvent::PanicRequested => trigger_command_line_panic(),
                 CommandLineHostEvent::ResetRequested => {
-                    reset_requested = true;
+                    state.requested_reset = Some(workspace_protocol::ResetTarget::UserData);
                     break;
                 }
             }
@@ -1603,7 +1602,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                                 state.close_page_instance(state.active_page_id());
                             }
                             CommandLineHostEvent::ResetRequested => {
-                                reset_requested = true;
+                                state.requested_reset =
+                                    Some(workspace_protocol::ResetTarget::UserData);
                                 break;
                             }
                         }
@@ -1662,7 +1662,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 }
             }
 
-            if reset_requested {
+            if state.requested_reset.is_some() {
                 break;
             }
             if let Some(windows) = workspace.as_mut() {
@@ -1733,8 +1733,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
 
     let outcome = if let Some(manifest) = state.update_apply_manifest().map(ToOwned::to_owned) {
         FullscreenShellSessionOutcome::UpdatePrepared(manifest)
-    } else if reset_requested {
-        FullscreenShellSessionOutcome::ResetRequested
+    } else if let Some(target) = state.requested_reset.take() {
+        FullscreenShellSessionOutcome::ResetRequested(target)
     } else if state.restart_requested {
         FullscreenShellSessionOutcome::RestartRequested
     } else {

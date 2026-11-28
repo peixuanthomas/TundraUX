@@ -5,6 +5,7 @@ pub(in crate::session) mod devices;
 mod form_dialog;
 mod forms;
 mod number;
+mod reset;
 mod system_time;
 pub(in crate::session) use system_time::SystemTimeSettings;
 pub(in crate::session) mod tasks;
@@ -793,6 +794,9 @@ impl ShellSession {
             ui::SettingsField::ExplorerOpenExtensions => self.open_settings_file_extensions(),
             ui::SettingsField::ResetAnimationSpeed => self.reset_settings_animation_speed(),
             ui::SettingsField::RestoreDefaults => self.request_settings_restore_defaults(),
+            ui::SettingsField::ResetAllSettings | ui::SettingsField::ResetUserData => {
+                self.request_settings_reset(field);
+            }
             ui::SettingsField::UpdateMode => self.switch_update_mode(),
             ui::SettingsField::CheckUpdates => self.begin_update_check(),
             ui::SettingsField::StartUpdate => self.open_update_confirmation(),
@@ -1243,6 +1247,7 @@ impl ShellSession {
             },
             ui::SettingsCategory::Appearance => unreachable!(),
             ui::SettingsCategory::Update
+            | ui::SettingsCategory::Reset
             | ui::SettingsCategory::Sound
             | ui::SettingsCategory::Display
             | ui::SettingsCategory::Wifi
@@ -1357,6 +1362,10 @@ pub(in crate::session) fn settings_fields(
         ui::SettingsCategory::Bluetooth => BLUETOOTH_FIELDS,
         ui::SettingsCategory::Applications => &[ui::SettingsField::ApplicationList],
         ui::SettingsCategory::Update => UPDATE_SETTINGS_FIELDS,
+        ui::SettingsCategory::Reset => &[
+            ui::SettingsField::ResetAllSettings,
+            ui::SettingsField::ResetUserData,
+        ],
     }
 }
 

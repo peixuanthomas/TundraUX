@@ -120,6 +120,7 @@ Inside app windows, pages use headings, backgrounds, and whitespace to separate 
 - Launcher opens with its search field focused. The field uses `TextInput` and shares its region between rendering and hit testing. The entry menu offers Open, New session for managed apps, Move, and Add to Home. User-added entries also expose Delete and editing actions. Right-click the blank area for launcher-wide actions.
 - Settings uses Tab/Shift+Tab across categories, the operating-system entry, and controls. Arrows switch categories when that region is focused and operate content otherwise; ordinary numeric options open the shared input dialog.
 - Command Line appears in the application settings list and uses the shared searchable picker for its shell setting.
+- The Reset category has separate buttons for restoring preferences and clearing all user data. Each button describes its scope and opens a confirmation with Cancel selected.
 - The Release update page adds a large action, download meter, and update notes when an update is available. Source updates use a scrollable Git tree with full-row commit targets and a live output panel that moves below the graph in narrow windows.
 - The shared terminal minimum is 108×20, with all Home entries and the Command Line available at that size. First-time setup keeps completion with default appearance at the bottom of the visible area while its body scrolls. Home shows the system username as read-only text.
 

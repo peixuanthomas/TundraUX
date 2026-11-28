@@ -186,7 +186,10 @@ impl Workspace {
         if let Some(command) = state.window_global_request.take() {
             self.pending_global = Some(command);
         }
-        if self.pending_global.is_some() || self.pending_update.is_some() || self.reset {
+        if self.pending_global.is_some()
+            || self.pending_update.is_some()
+            || self.pending_reset.is_some()
+        {
             if let Some((&id, window)) = self.windows.iter().next() {
                 if window.close == CloseProgress::Idle && !window.force_when_started {
                     self.request_close(id);
@@ -234,6 +237,9 @@ impl Workspace {
         let toggle_tasks = std::mem::take(&mut state.window_tasks_requested);
         let delete = state.window_delete_launcher.take();
         let redraw = !launches.is_empty() || toggle_tasks || delete.is_some();
+        if self.pending_reset.is_some() {
+            return Ok(redraw);
+        }
         if let Some(id) = delete
             && let Some(entry) = self
                 .windows
@@ -731,6 +737,7 @@ impl Workspace {
                 if state.content_screen() != ShellScreen::Launcher
                     && self.selection.focused() == Some(id)
                     && self.pending_global.is_none()
+                    && self.pending_reset.is_none()
                 {
                     match request {
                         WindowRequest::Open {
@@ -788,7 +795,9 @@ impl Workspace {
                 window.close = CloseProgress::Confirmation {
                     size_notice_dismissed: false,
                 };
-                if self.pending_global.is_some() && self.selection.focused() != Some(id) {
+                if (self.pending_global.is_some() || self.pending_reset.is_some())
+                    && self.selection.focused() != Some(id)
+                {
                     self.selection.switch(id);
                 }
                 self.hide_close_wait(id);
@@ -804,7 +813,7 @@ impl Workspace {
                 self.hide_close_wait(id);
                 self.pending_global = None;
                 self.pending_update = None;
-                self.reset = false;
+                self.pending_reset = None;
             }
             AppToShell::Closed => {
                 window.finish_cleanup();
@@ -849,7 +858,18 @@ impl Workspace {
             AppToShell::ShellAction(HostAction::Reboot) => {
                 self.pending_global = Some(ShellCommand::Reboot);
             }
-            AppToShell::ShellAction(HostAction::Reset) => self.reset = true,
+            AppToShell::ShellAction(HostAction::Reset(target)) => {
+                let allowed = match window.launch {
+                    WindowLaunch::Settings => state.can_request_settings_reset(&target),
+                    WindowLaunch::CommandLine { external: None, .. } => {
+                        target == workspace_protocol::ResetTarget::UserData
+                    }
+                    _ => false,
+                };
+                if allowed {
+                    self.pending_reset.get_or_insert(target);
+                }
+            }
             AppToShell::ShellAction(HostAction::UpdatePrepared(path)) => {
                 self.pending_update = Some(path);
                 window.close = CloseProgress::Cleaning(Instant::now());

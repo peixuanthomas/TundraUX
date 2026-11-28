@@ -196,6 +196,71 @@ pub(super) fn shell_state() -> ShellSession {
 }
 
 #[test]
+fn settings_reset_waits_for_windows_and_honors_a_cancelled_close() {
+    use workspace_protocol::ResetTarget;
+
+    let mut state = shell_state();
+    let mut workspace = Workspace::new(None, false);
+    let (settings, editor) = (SessionId(1), SessionId(2));
+    for id in [settings, editor] {
+        workspace.windows.insert(id, window(Size::new(106, 16)));
+        show(&mut workspace, id);
+    }
+    workspace.windows.get_mut(&settings).unwrap().launch = WindowLaunch::Settings;
+    workspace.windows.get_mut(&editor).unwrap().launch = WindowLaunch::Editor;
+    let reset = |target| AppToShell::ShellAction(HostAction::Reset(target));
+    workspace
+        .receive(settings, reset(ResetTarget::UserData), &mut state)
+        .unwrap();
+    assert!(workspace.pending_reset.is_none());
+
+    state.app.dispatch_at(
+        app::AppCommand::SetAuthSession(Some(AuthSession {
+            source: identity::IdentitySource::SystemCurrentProcess,
+            session_id: "session".into(),
+            username: "alice".into(),
+            user_id: "1".into(),
+            role: UserRole::User,
+            started_at_epoch_ms: 1,
+        })),
+        Instant::now(),
+    );
+    let preferences = ResetTarget::Settings {
+        username: "alice".into(),
+        user_id: "1".into(),
+    };
+    let other_account = ResetTarget::Settings {
+        username: "bob".into(),
+        user_id: "2".into(),
+    };
+    workspace
+        .receive(settings, reset(other_account), &mut state)
+        .unwrap();
+    workspace
+        .receive(editor, reset(ResetTarget::UserData), &mut state)
+        .unwrap();
+    assert!(workspace.pending_reset.is_none());
+    workspace
+        .receive(settings, reset(preferences.clone()), &mut state)
+        .unwrap();
+    assert_eq!(workspace.pending_reset, Some(preferences));
+    assert!(workspace.take_reset().is_none());
+    workspace
+        .receive(editor, AppToShell::CloseCancelled, &mut state)
+        .unwrap();
+    assert!(workspace.pending_reset.is_none());
+
+    workspace
+        .receive(settings, reset(ResetTarget::UserData), &mut state)
+        .unwrap();
+    workspace.finish_window_exit(settings, Some(0), false, &mut state);
+    assert!(workspace.take_reset().is_none());
+    workspace.finish_window_exit(editor, Some(0), false, &mut state);
+    assert_eq!(workspace.take_reset(), Some(ResetTarget::UserData));
+    assert!(workspace.take_reset().is_none());
+}
+
+#[test]
 fn direct_ctrl_q_requests_a_normal_close_for_only_the_focused_window() {
     let mut state = shell_state();
     let mut workspace = Workspace::new(None, false);

@@ -49,7 +49,9 @@ pub fn run_worker(
             match result {
                 Ok(crate::ShellRunOutcome::Exit) => ShellCompletion::Exit,
                 Ok(crate::ShellRunOutcome::RestartRequested) => ShellCompletion::Restart,
-                Ok(crate::ShellRunOutcome::ResetRequested) => ShellCompletion::Reset,
+                Ok(crate::ShellRunOutcome::ResetRequested(target)) => {
+                    ShellCompletion::Reset(target)
+                }
                 Ok(crate::ShellRunOutcome::UpdatePrepared(path)) => {
                     ShellCompletion::UpdatePrepared(path)
                 }

@@ -168,10 +168,17 @@ pub enum WorkerToSupervisor {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum ResetTarget {
+    Settings { username: String, user_id: String },
+    UserData,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ShellCompletion {
     Exit,
     Restart,
-    Reset,
+    Reset(ResetTarget),
     UpdatePrepared(#[serde(with = "super::service::native_path")] PathBuf),
 }
 

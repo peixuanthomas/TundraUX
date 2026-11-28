@@ -58,6 +58,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | `management-network-disks.ftl` | Connection states and reasons configuration is unavailable or read-only |
 | `settings.ftl` | Top bar contents and alignment, Command Line shell choices, animation phase fields, validation, reset, save, and cancel actions |
 | `settings.ftl`, `ui-settings.ftl` | Update mode, build selection, Git tree, update notes, and confirmation |
+| `settings.ftl` | Settings reset and full user data reset descriptions and confirmations |
 | `ui-style-preview.ftl`, `ui-test.ftl` | Neutral compact Tea preview, one-character task feedback, and primary and danger sample-action labels |
 | `workspace.ftl` | Three-button window controls, incremental split menus, app/window search and grouping, minimum dimensions, close prompts, and watchdog CLI messages |
 | `update-progress.ftl` | Update stages and confirmation that an unchanged Vim engine is reused without rebuilding |

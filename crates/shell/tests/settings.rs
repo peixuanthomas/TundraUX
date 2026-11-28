@@ -76,6 +76,43 @@ fn settings_arrows_do_not_change_saved_values() {
 }
 
 #[test]
+fn both_reset_buttons_open_separate_confirmations_with_cancel_selected() {
+    let fixture = FixtureRoot::new("settings-reset");
+    let platform = mock_platform(fixture.path());
+    let manager = initialize_profiles(&platform);
+    let mut state = start_as_system_user(&platform, "NormalUser");
+    open_settings_from_home(&mut state, &platform);
+    select_category(&mut state, &platform, SettingsCategory::Reset);
+    let model = state.to_settings_view_model().unwrap();
+    let items = &model.cards[0].items;
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].field, SettingsField::ResetAllSettings);
+    assert_eq!(items[1].field, SettingsField::ResetUserData);
+    let config = manager.load_config().unwrap();
+    for item in items {
+        assert!(item.enabled);
+        assert_eq!(
+            state.to_settings_view_model().unwrap().selected_field,
+            item.field
+        );
+        press(&mut state, &platform, "Enter");
+        let prompt = state.to_notification_view_model().unwrap();
+        assert_eq!(prompt.title, item.label);
+        assert!(
+            prompt
+                .actions
+                .iter()
+                .any(|action| action.cancel && action.selected)
+        );
+        press(&mut state, &platform, "Enter");
+        assert!(state.to_notification_view_model().is_none());
+        assert_eq!(manager.load_config().unwrap(), config);
+        assert!(manager.load_profile("NormalUser").unwrap().is_some());
+        press(&mut state, &platform, "Down");
+    }
+}
+
+#[test]
 fn numeric_settings_wait_for_confirmation_and_escape_discards_changes() {
     let fixture = FixtureRoot::new("settings-numeric-confirmation");
     let platform = mock_platform(fixture.path());

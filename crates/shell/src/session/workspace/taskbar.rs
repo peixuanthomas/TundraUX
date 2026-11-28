@@ -96,7 +96,7 @@ impl Workspace {
         };
         match action {
             "open" => self.selection.restore(id, &self.layout),
-            "new-session" if self.pending_global.is_none() => {
+            "new-session" if self.pending_global.is_none() && self.pending_reset.is_none() => {
                 if let Some(entry) = window.launch.launcher_id() {
                     state.open_taskbar_launcher_session(
                         LauncherCommand::RequestLaunch(entry.to_owned()),

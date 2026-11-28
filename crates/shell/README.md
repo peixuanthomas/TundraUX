@@ -145,6 +145,8 @@ Selection dialogs share a top search field, case-insensitive filtering, stable o
 
 **Settings → Applications → Command Line** selects the system command interpreter for newly opened Command Line sessions. Each session reads the choice at launch and continues to offer Tundra commands such as `/help`.
 
+**Settings → Reset** offers two actions. **Reset all settings** restores the workspace and current user's preferences while preserving saved content. **Reset user data** clears all TundraUX data and settings, just like `tundra-cli reset`. After confirmation, Shell requests a normal close for each window. Cancelling a window's close cancels the reset. Once the windows and workers have closed, the guardian applies the chosen reset and restarts TundraUX.
+
 Drag over Command Line, script output, or a Launcher terminal to select text. Ctrl+C copies the selection, Ctrl+V pastes, and Ctrl+\ sends the foreground process the original Ctrl+C input. Right-click or Shift+F10 opens the same actions in a menu. Hold Shift to select text or open the menu in a child application with mouse reporting enabled. Vim retains its native shortcuts and registers.
 
 Esc and the header Back button cancel one dialog, menu, drag or edit, then go back one step within the focused tool. With **Show Back button** on, the upper-right Esc control stays visible and dims when the focused tool has no step to go back. Vim and embedded terminals handle their own Esc. Press Esc on idle Home or click the top-left title to open the power menu.

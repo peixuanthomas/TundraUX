@@ -397,6 +397,27 @@ pub(in crate::session) fn settings_cards(
         .enabled(enabled)
     };
     match state.category {
+        ui::SettingsCategory::Reset => vec![Card::new(
+            i18n::tr!("settings-reset"),
+            vec![
+                Item::new(
+                    Field::ResetAllSettings,
+                    i18n::tr!("settings-reset-all"),
+                    i18n::tr!("settings-reset"),
+                    i18n::tr!("settings-reset-all-description"),
+                    Kind::Action,
+                )
+                .enabled(global_enabled),
+                Item::new(
+                    Field::ResetUserData,
+                    i18n::tr!("settings-reset-data"),
+                    i18n::tr!("settings-reset"),
+                    i18n::tr!("settings-reset-data-description"),
+                    Kind::Action,
+                )
+                .enabled(global_enabled),
+            ],
+        )],
         ui::SettingsCategory::Appearance => vec![
             Card::new(
                 i18n::tr!("settings-theme"),
