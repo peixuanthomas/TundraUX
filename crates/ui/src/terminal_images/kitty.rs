@@ -21,7 +21,7 @@ pub(super) fn encode(
     size: Size,
     id: u32,
     tmux: bool,
-) -> Option<(Protocol, String)> {
+) -> Option<(Kitty, String)> {
     let mut payload = Cow::Borrowed(rgba);
     let mut compression = "";
     if rgba.len() >= 64 * 1024 {
@@ -34,10 +34,10 @@ pub(super) fn encode(
         }
     }
 
-    let protocol = Protocol::Kitty(Kitty::new(DynamicImage::new_rgba8(1, 1), size, id, tmux).ok()?);
+    let kitty = Kitty::new(DynamicImage::new_rgba8(1, 1), size, id, tmux).ok()?;
     // Keep ratatui-image's placement rendering but discard its one-shot dummy upload.
     let scratch = Rect::new(0, 0, 1, 1);
-    Image::new(&protocol)
+    Image::new(&Protocol::Kitty(kitty.clone()))
         .allow_clipping(true)
         .render(scratch, &mut Buffer::empty(scratch));
 
@@ -62,5 +62,5 @@ pub(super) fn encode(
         base64_simd::STANDARD.encode_append(chunk, &mut upload);
         let _ = write!(upload, "{escape}\\{end}");
     }
-    Some((protocol, upload))
+    Some((kitty, upload))
 }

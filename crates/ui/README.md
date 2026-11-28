@@ -162,11 +162,11 @@ Default acceleration/constant-speed/deceleration phases are page `[40, 80, 40]`,
 
 ## Child terminals and images
 
-`TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. `TerminalImageCache` clips and caches Kitty, Sixel, and iTerm2 images by viewport. An app host captures the visible image placements alongside its rasterized cells. Shell rebuilds native graphics in the pane and retires native resources when the pane moves, closes, or becomes obscured.
+`TerminalImageFragment` describes RGBA data, source cropping, content-area coordinates, pixel margins, and layers. An app host captures the visible image placements alongside its rasterized cells. Shell renders them in the pane and releases native resources when the pane closes or becomes obscured.
 
-For large pictures fitted to the pane, the editor sends a raster at the terminal's measured resolution and reuses it on redraw. Markdown previews reuse that fitted raster even when the viewport crops a picture or the editor briefly returns to Source. Zoom and larger windows can still use the original pixels. Shell crops unpadded native images and uses CPU vector instructions for resizing when available. Kitty and iTerm2 can enlarge the crop in the terminal. Kitty also compresses large crops when this reduces the transfer size.
+The editor fits each rich-text graphic to the terminal once for its display size. Office pictures, Markdown images, formulas, diagrams and rasterized headings share this path. Scrolling and selection change which rows are visible. Kitty reuses the uploaded image, while iTerm2 and Sixel reuse encoded rows. Recently used graphics stay in a bounded cache for scrolling back. Zoom and larger windows can use the original pixels.
 
-While a worker encodes an editor preview, the pane keeps the previous native picture when it belongs to the same preview and fits the visible region. Newly exposed areas show the canvas until the native image arrives. A failed encoding, a text-only terminal or an overlay can still use the prepared color blocks.
+Newly visible rich-text graphics show their cell fallback while a worker prepares native output. For PDF pages and zoomed pictures, the pane can retain the previous native view of the same preview while the worker prepares the new crop.
 
 Home and Launcher tiles resolve the same themed ASCII artwork and image by built-in application ID. Image layout uses the terminal's measured cell size. iTerm2 packets specify the target in terminal cells so images fill the assigned area when a font measurement differs from the terminal's actual cell size. WezTerm on Windows displays each image after the cursor used to place it is hidden. App hosts send icon pixels and pane-local placement to Shell, with half-block cells for frames where an overlay covers the pane. Transparent pixels blend with the tile's current background before both representations are generated.
 

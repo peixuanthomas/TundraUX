@@ -417,6 +417,7 @@ impl WorkspaceIcon {
             images.push(workspace_protocol::Image {
                 image_id: cached.image_id,
                 preview_id: None,
+                rows: None,
                 width,
                 height,
                 rgba: cached.rgba.clone(),

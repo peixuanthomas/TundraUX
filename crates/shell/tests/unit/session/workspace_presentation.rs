@@ -165,6 +165,44 @@ fn only_hover_within_the_current_front_pane_skips_shell_redraw() {
 }
 
 #[test]
+fn image_scrolling_is_limited_to_an_uncovered_full_width_pane() {
+    let (mut workspace, id) = workspace(240, 40);
+    let scroll = workspace_protocol::ImageScroll {
+        top: 2,
+        height: 10,
+        first_line: 30,
+    };
+    let mut frame = app_frame(&workspace, id, "editor");
+    frame.image_scroll = Some(scroll);
+    workspace.windows.get_mut(&id).unwrap().frame = Some(Arc::new(frame));
+    let screen_top = workspace.layout.panes[0].content.y + scroll.top;
+    assert_eq!(
+        workspace.image_scroll(),
+        Some((
+            id,
+            workspace_protocol::ImageScroll {
+                top: screen_top,
+                ..scroll
+            }
+        ))
+    );
+
+    workspace.split_window = Some(id);
+    assert_eq!(workspace.image_scroll(), None);
+    workspace.split_window = None;
+    let other = SessionId(2);
+    workspace.windows.insert(other, window(Size::new(106, 16)));
+    assert!(workspace.selection.split(id, WorkspaceSplitMode::LeftRight));
+    workspace.selection.open(other);
+    workspace.selection.focus(id);
+    relayout(&mut workspace, 240, 40);
+    let mut frame = app_frame(&workspace, id, "editor");
+    frame.image_scroll = Some(scroll);
+    workspace.windows.get_mut(&id).unwrap().frame = Some(Arc::new(frame));
+    assert_eq!(workspace.image_scroll(), None);
+}
+
+#[test]
 fn workspace_back_follows_the_focused_pane_and_pending_split_menu() {
     let (mut workspace, first) = workspace(240, 40);
     let second = SessionId(2);
@@ -767,6 +805,7 @@ fn native_image_encoding_keeps_cells_visible_and_discards_a_superseded_placement
         workspace_protocol::Image {
             image_id: u64::from(x),
             preview_id: None,
+            rows: None,
             width: 2,
             height: 2,
             rgba: Arc::from([255_u8; 16]),
@@ -832,6 +871,7 @@ fn split_cancel_keeps_the_complete_frame_and_native_image() {
     frame.images.push(workspace_protocol::Image {
         image_id: 1,
         preview_id: None,
+        rows: None,
         width: 8,
         height: 2,
         rgba: Arc::from([25, 100, 200, 255].repeat(16)),

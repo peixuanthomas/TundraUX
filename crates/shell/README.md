@@ -111,7 +111,7 @@ Explorer and the Editor picker open Word, Excel, PowerPoint and supported image 
 
 For ordinary Markdown, the standard editor opens the source and offers **Read** in its top bar. Shell prepares the readable text first, then adds graphics in the background. Repeated graphics share the same pixels, and scrolling or returning to the same revision reuses the prepared view. **Edit source** restores the cursor, selection and scroll position. Saving and recovery still use the source draft. Office previews open in the same read-only layout after conversion.
 
-For large read-only documents, an Editor worker measures paragraphs, tables and pictures once for the current viewport. Scrolling reuses those measurements. Resizing the window starts a new measurement and preserves the scroll position.
+For large read-only documents and Office documents with multiple embedded pictures, an Editor worker measures paragraphs, tables and pictures once for the current viewport. Scrolling reuses those measurements. Resizing the window starts a new measurement and preserves the scroll position.
 
 If a file fails to load in a newly launched Editor window, the window shows the path and the reason so you can try another file. A failed replacement returns you to the previously open document.
 
@@ -207,7 +207,7 @@ Guardian listeners and connection readers and writers retain watchdog-owned canc
 
 Shell moves queued messages into background writers without cloning their payloads; rejected enqueue attempts return the original message for an ordered retry.
 
-AppHost captures the complete rendered pane, including cells that became blank, so wide characters do not leave visible remnants. While scrolling, AppHost can reference unchanged spans of the previous frame, including rows that moved. Shell reconstructs the complete pane before drawing it.
+AppHost captures the complete rendered pane, including cells that became blank, so wide characters do not leave visible remnants. It can reference unchanged cell spans and recently sent rich-text images as the document scrolls. Shell reconstructs the pane before drawing it. In a full-width editor pane it moves existing terminal rows together, then writes the newly exposed rows and any other changes. Side-by-side editors also reuse encoded graphics.
 
 Per-window input queues stop admitting new application input when their bounded capacity is full. Shell reports that condition while keeping window management and other windows available; external CLI input receives a retryable `busy` response. Pointer cancellation, input fences, and close messages retain reserved queue capacity.
 

@@ -28,6 +28,22 @@ fn snapshots_exclude_image_protocol_skip_cells() {
 }
 
 #[test]
+fn image_packets_only_protect_the_cells_they_occupy() {
+    let area = Rect::new(0, 0, 4, 1);
+    let mut buffer = Buffer::empty(area);
+    buffer[(0, 0)]
+        .set_symbol(&format!("\x1b]1337;File={}\x07", "A".repeat(8192)))
+        .set_diff_option(CellDiffOption::ForcedWidth(1.try_into().unwrap()));
+    buffer[(1, 0)].diff_option = CellDiffOption::Skip;
+    buffer[(2, 0)].set_symbol("字");
+    let protected = protected_skip_positions(&buffer);
+    assert_eq!(
+        protected,
+        HashSet::from([Position::new(0, 0), Position::new(1, 0)])
+    );
+}
+
+#[test]
 fn clock_dialog_motion_surface_preserves_input_and_button_hit_targets() {
     let mut state = ShellSession::new_for_home_mode(
         ShellLaunchConfig::default(),

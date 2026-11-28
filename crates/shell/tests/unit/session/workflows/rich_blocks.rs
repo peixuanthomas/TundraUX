@@ -259,6 +259,8 @@ fn repeated_pictures_and_equations_share_assets_at_distinct_positions() {
     };
     for (first, second) in [(first_picture, second_picture), (first_math, second_math)] {
         assert_eq!(first.image_id, second.image_id);
+        assert!(first.rows.is_some());
+        assert_eq!(first.rows, second.rows);
         assert!(Arc::ptr_eq(&first.rgba, &second.rgba));
         assert_ne!(first.area, second.area);
     }

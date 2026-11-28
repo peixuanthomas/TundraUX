@@ -221,7 +221,8 @@ fn newer_frame_resolves_cells_and_images_before_coalescing_older_frames() {
     first.startup_timings = Some(AppStartupTimings::default());
     first.images.push(Image {
         image_id: 91,
-        preview_id: None,
+        preview_id: Some(91),
+        rows: Some(workspace_protocol::ImageRows { first: 0, total: 1 }),
         width: 1,
         height: 1,
         rgba: Arc::from([3, 5, 7, 255]),
@@ -244,18 +245,33 @@ fn newer_frame_resolves_cells_and_images_before_coalescing_older_frames() {
     });
     host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
     wait_until(|| !host.pending_write());
+    let mut received_pixels = None;
+    wait_until(|| {
+        received_pixels = shell
+            .incoming
+            .state
+            .lock()
+            .unwrap()
+            .messages
+            .back()
+            .and_then(Message::frame)
+            .map(|frame| frame.images[0].rgba.clone());
+        received_pixels.is_some()
+    });
     first.sequence = 2;
     first.layout = LayoutGeneration(2);
     first.startup_timings = None;
     host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
     wait_until(|| !host.pending_write());
     first.sequence = 3;
+    let pictures = std::mem::take(&mut first.images);
     let cells = Arc::make_mut(&mut first.cells);
     cells[31].symbol = "中".into();
     cells[32].skip = true;
     host.queue_owned(AppToShell::Frame(first.clone())).unwrap();
     wait_until(|| !host.pending_write());
     first.sequence = 4;
+    first.images = pictures;
     first.processed_input_serial = 9;
     first.confirmed_input_fence = 8;
     Arc::make_mut(&mut first.cells)[106].symbol = "e\u{301}".into();
@@ -278,6 +294,10 @@ fn newer_frame_resolves_cells_and_images_before_coalescing_older_frames() {
     assert_eq!(latest.processed_input_serial, 9);
     assert_eq!(latest.confirmed_input_fence, 8);
     assert_eq!(&*latest.images[0].rgba, &[3, 5, 7, 255]);
+    assert!(Arc::ptr_eq(
+        &latest.images[0].rgba,
+        &received_pixels.unwrap()
+    ));
     assert!(latest.startup_timings.is_some());
     drop(host);
     drop(shell);

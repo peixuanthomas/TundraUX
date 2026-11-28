@@ -5,7 +5,7 @@ mod markdown_preview_graphics {
     use super::*;
     use crate::{RenderContext, TerminalImageCache};
     use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
     use std::io::Cursor;
 
     fn graphic(id: u64, width: u32, height: u32) -> EditorPreviewGraphic {
@@ -19,6 +19,82 @@ mod markdown_preview_graphics {
             image: app::editor::PreviewImage::decode(bytes.get_ref())
                 .unwrap()
                 .into(),
+        }
+    }
+
+    #[test]
+    fn scrolling_an_embedded_picture_reuses_its_fitted_pixels_and_native_rows() {
+        let graphic = graphic(17, 768, 576);
+        let mut blocks = vec![EditorRenderBlock::Blank; 8];
+        blocks.push(EditorRenderBlock::Picture {
+            id: graphic.id,
+            image: (*graphic.image).clone(),
+        });
+        blocks.extend(vec![EditorRenderBlock::Blank; 32]);
+        let mut model = EditorViewModel::new("slides.pptx", blocks);
+        model.read_only = true;
+        model.cursor = None;
+        model.image_cell_size = [8, 16];
+        let context = RenderContext::from_theme(
+            &TundraTheme::default_dark(),
+            Default::default(),
+            Default::default(),
+        );
+        let mut app = Terminal::new(TestBackend::new(64, 14)).unwrap();
+        let mut shell = Terminal::new(TestBackend::new(64, 14)).unwrap();
+        let mut capture = TerminalImageCache::default();
+        for protocol in [
+            crate::EditorGraphicsProtocol::Kitty,
+            crate::EditorGraphicsProtocol::Iterm2,
+            crate::EditorGraphicsProtocol::Sixel,
+        ] {
+            let probe = crate::TerminalGraphicsProbe::from_terminal_capabilities(
+                protocol, 8, 16, false, false,
+            );
+            let mut cache = TerminalImageCache::default();
+            let mut encodes = 0;
+            let mut fitted = None;
+            for scroll in [0, 8, 10, 32, 11, 0] {
+                model.scroll_line = scroll;
+                app.draw(|f| {
+                    let area = f.area();
+                    capture.capture_workspace(area);
+                    render_editor_contextual_with_terminal_images(
+                        f,
+                        area,
+                        &model,
+                        &context,
+                        &mut capture,
+                        None,
+                    );
+                })
+                .unwrap();
+                let placements = capture.take_workspace_images();
+                assert_eq!(placements.is_empty(), scroll == 32);
+                for picture in &placements {
+                    assert!(picture.height < graphic.image.height);
+                    assert!(Arc::ptr_eq(
+                        fitted.get_or_insert_with(|| picture.rgba.clone()),
+                        &picture.rgba
+                    ));
+                }
+                shell
+                    .draw(|f| {
+                        cache.render_workspace_with(
+                            f,
+                            f.area(),
+                            &placements,
+                            probe.picker().unwrap(),
+                            Color::Black,
+                            Some(&mut |request| {
+                                encodes += 1;
+                                Some(request.encode())
+                            }),
+                        );
+                    })
+                    .unwrap();
+            }
+            assert_eq!(encodes, 1, "{protocol:?}");
         }
     }
 
@@ -124,6 +200,10 @@ mod markdown_preview_graphics {
         assert_eq!(image.area.width, 4);
         assert_eq!(image.area.height, 2);
         assert_eq!(image.source, [16, 16, 32, 32]);
+        assert_eq!(
+            image.rows,
+            Some(workspace_protocol::ImageRows { first: 1, total: 3 })
+        );
     }
 
     #[test]

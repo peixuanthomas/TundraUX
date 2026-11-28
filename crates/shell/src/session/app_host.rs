@@ -881,9 +881,11 @@ impl AppHostSession {
                 }
             });
         let mut images = self.compositor.take_workspace_images();
+        let image_scroll = self.compositor.take_image_scroll(content);
         frame.modal = !self.state.interactive_overlays().is_empty();
         frame.back_action = self.state.back_action();
         if !frame.modal && !self.state.input_keyboard_open() && !self.compositor.toast_visible() {
+            frame.image_scroll = image_scroll;
             frame.headings = headings.finish();
             images.extend(icons.finish());
         }

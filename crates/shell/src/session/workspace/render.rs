@@ -94,7 +94,7 @@ impl Workspace {
                 );
                 if let Some(picker) = picker
                     && !rendered.modal
-                    && !rendered.images.is_empty()
+                    && (!rendered.images.is_empty() || image_caches.contains_key(&pane.id))
                 {
                     image_caches.entry(pane.id).or_default().render(
                         frame,

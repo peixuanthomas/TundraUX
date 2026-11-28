@@ -168,6 +168,18 @@ impl ScreenCompositor {
             .collect()
     }
 
+    pub(super) fn take_image_scroll(
+        &mut self,
+        content: Rect,
+    ) -> Option<workspace_protocol::ImageScroll> {
+        let mut scroll = self
+            .terminal_images
+            .values_mut()
+            .find_map(ui::TerminalImageCache::take_image_scroll)?;
+        scroll.top = scroll.top.checked_sub(content.y)?;
+        (scroll.top.checked_add(scroll.height)? <= content.height).then_some(scroll)
+    }
+
     pub(super) fn render_screen_saver(
         &mut self,
         frame: &mut Frame<'_>,

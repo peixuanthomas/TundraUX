@@ -6,10 +6,7 @@ use super::document::{DisplayLineRole, DisplayText, display_run_width};
 use super::preview_zoom::preview_pixel_crop;
 use super::render::preview_run_is_selected;
 use super::*;
-use crate::{
-    CommandLineTerminalSnapshot, EditorImagePicker, RenderContext, TerminalImageCache,
-    TerminalImageFragment,
-};
+use crate::{EditorImagePicker, RenderContext, TerminalImageCache, TerminalImageFragment};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PictureBounds {
@@ -69,42 +66,45 @@ pub(super) fn render(
         slices.extend(preview_slices(layout, model));
         slices
     };
-    let mut native = Vec::new();
+    if !zoomed && !slices.is_empty() {
+        images.scroll = Some(workspace_protocol::ImageScroll {
+            top: canvas.y,
+            height: canvas.height,
+            first_line: layout.visible_start,
+        });
+    }
+    if picker.is_some() {
+        images.capture_workspace(canvas);
+    }
     for slice in slices {
         if slice.rasterize {
             slice.draw(frame, canvas, context, background, zoomed);
         }
-        if picker.is_some() || images.capturing_workspace() {
-            let fit = picker.is_none() && !zoomed && model.markdown_reading == Some(true);
+        if images.capturing_workspace() {
             let (fragment, preview_id) = slice.fragment(
                 background,
                 model.image_cell_size,
-                fit.then_some(&mut *images),
+                (!zoomed).then_some(&mut *images),
             );
-            if picker.is_some() {
-                native.push(fragment);
-            } else {
-                images.capture_preview(canvas, frame.area(), &fragment, preview_id);
-            }
+            let rows = (!zoomed).then(|| workspace_protocol::ImageRows {
+                first: slice.offset[1] as u16,
+                total: slice.size[1] as u16,
+            });
+            images.capture_preview(canvas, frame.area(), &fragment, preview_id, rows);
         }
     }
-    if native.is_empty() {
-        images.clear();
-    } else {
-        images.render(
+    if let Some(picker) = picker {
+        let native = images.take_workspace_images();
+        images.render_workspace_with(
             frame,
             canvas,
-            &CommandLineTerminalSnapshot {
-                columns: canvas.width,
-                rows: canvas.height,
-                cells: Vec::new(),
-                images: native,
-                cursor_style: Default::default(),
-                scrollback_rows: 0,
-                scrollback_offset: 0,
-            },
+            &native,
             picker,
+            context.theme.editor_canvas,
+            None,
         );
+    } else {
+        images.clear();
     }
 }
 

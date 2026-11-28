@@ -259,6 +259,8 @@ pub struct WindowFrame {
     cell_reuse: Option<cell_reuse::CellReuse>,
     pub cursor: Option<Cursor>,
     pub images: Vec<Image>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_scroll: Option<ImageScroll>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub headings: Vec<Heading>,
     pub controls: Vec<ControlNode>,
@@ -298,6 +300,7 @@ impl WindowFrame {
             cell_reuse: None,
             cursor: None,
             images: Vec::new(),
+            image_scroll: None,
             headings: Vec::new(),
             controls: Vec::new(),
             masks: Vec::new(),
@@ -356,12 +359,32 @@ impl WindowFrame {
                 "invalid heading",
             ));
         }
+        if self.image_scroll.is_some_and(|scroll| {
+            scroll.height == 0
+                || scroll
+                    .top
+                    .checked_add(scroll.height)
+                    .is_none_or(|end| end > self.size.height)
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "image scroll outside window",
+            ));
+        }
         for image in &self.images {
             let pixels = u64::from(image.width) * u64::from(image.height);
             if pixels == 0
                 || pixels > (MAX_IMAGE_BYTES / 4) as u64
                 || (!image.rgba.is_empty()
                     && pixels.checked_mul(4) != Some(image.rgba.len() as u64))
+                || image.rows.is_some_and(|rows| {
+                    image.preview_id.is_none()
+                        || rows.total == 0
+                        || rows
+                            .first
+                            .checked_add(image.area.height)
+                            .is_none_or(|end| end > rows.total)
+                })
             {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -455,6 +478,9 @@ pub struct Image {
     /// Identifies the same editor picture or PDF page across changes of raster and crop.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_id: Option<u64>,
+    /// Cell rows of a fitted rich-text graphic before viewport clipping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<ImageRows>,
     pub width: u32,
     pub height: u32,
     #[serde(
@@ -469,6 +495,20 @@ pub struct Image {
     pub area: Rect,
     pub visible: Vec<Rect>,
     pub z_index: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageRows {
+    pub first: u16,
+    pub total: u16,
+}
+
+/// Pane-local canvas rows and the document row displayed at the top.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageScroll {
+    pub top: u16,
+    pub height: u16,
+    pub first_line: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

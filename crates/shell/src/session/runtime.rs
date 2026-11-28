@@ -970,6 +970,11 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
         reduced_motion_enabled(&state),
     );
     let mut compositor = ScreenCompositor::default();
+    let mut previous_image_frame: Option<(
+        workspace_protocol::SessionId,
+        workspace_protocol::ImageScroll,
+        ratatui::buffer::Buffer,
+    )> = None;
     compositor.set_terminal_image_picker(terminal_graphics_probe.picker().cloned());
     let mut screen_saver_display = None;
     let mut next_weather_frame = runtime_origin;
@@ -1075,6 +1080,7 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         editor_vim.observe_window_focus(&state, false);
                         script_hosts.observe_window_focus(&state, false);
                         compositor.set_terminal_image_picker(None);
+                        previous_image_frame = None;
                         write_terminal_image_cleanup(
                             &mut compositor,
                             guard.terminal_mut().backend_mut(),
@@ -1260,7 +1266,32 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                 let mut weather_error = None;
                 let output_started_at = Instant::now();
                 let mut update = guard.begin_frame()?;
-                update.terminal_mut().draw(|frame| {
+                let image_scroll = workspace
+                    .as_ref()
+                    .filter(|_| {
+                        !state.screen_saver_active()
+                            && !state.input_keyboard_open()
+                            && state.interactive_overlays().is_empty()
+                            && !compositor.toast_visible()
+                    })
+                    .and_then(Workspace::image_scroll);
+                if let (Some((id, scroll)), Some((old_id, old, buffer))) =
+                    (image_scroll, previous_image_frame.as_mut())
+                    && id == *old_id
+                    && old.top == scroll.top
+                    && old.height == scroll.height
+                    && let Ok(count) = u16::try_from(scroll.first_line.abs_diff(old.first_line))
+                    && count > 0
+                    && count < scroll.height
+                {
+                    update.scroll_rows(
+                        buffer,
+                        scroll.top..scroll.top + scroll.height,
+                        scroll.first_line > old.first_line,
+                        count,
+                    )?;
+                }
+                let rendered = update.terminal_mut().draw(|frame| {
                     let bounds = frame.area();
                     // The terminal can resize after polling but before drawing.
                     if resize_runtime_session(
@@ -1310,6 +1341,8 @@ pub(super) fn run_fullscreen_shell_session<W: Write>(
                         );
                     }
                 })?;
+                previous_image_frame =
+                    image_scroll.map(|(id, scroll)| (id, scroll, rendered.buffer.clone()));
                 if let Some(error) = weather_error {
                     return Err(error);
                 }

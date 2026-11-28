@@ -92,6 +92,50 @@ impl<'a, W: Write> SynchronizedFrame<'a, W> {
         self.terminal
     }
 
+    /// Moves retained terminal rows and gives Ratatui the same starting cells for its next diff.
+    pub fn scroll_rows(
+        &mut self,
+        previous: &mut ratatui::buffer::Buffer,
+        region: std::ops::Range<u16>,
+        up: bool,
+        count: u16,
+    ) -> io::Result<()> {
+        use ratatui::backend::Backend;
+        let area = previous.area;
+        self.terminal.autoresize()?;
+        if !self.terminal.backend().writer().buffering
+            || area.x != 0
+            || area.y != 0
+            || self.terminal.current_buffer_mut().area != area
+            || count == 0
+            || region.end > area.height
+            || count >= region.end.saturating_sub(region.start)
+        {
+            return Ok(());
+        }
+        let width = usize::from(area.width);
+        let cells = &mut previous.content
+            [usize::from(region.start) * width..usize::from(region.end) * width];
+        let moved = usize::from(count) * width;
+        if up {
+            self.terminal
+                .backend_mut()
+                .scroll_region_up(region, count)?;
+            cells.rotate_left(moved);
+            let kept = cells.len() - moved;
+            cells[kept..].fill_with(Default::default);
+        } else {
+            self.terminal
+                .backend_mut()
+                .scroll_region_down(region, count)?;
+            cells.rotate_right(moved);
+            cells[..moved].fill_with(Default::default);
+        }
+        std::mem::swap(self.terminal.current_buffer_mut(), previous);
+        self.terminal.swap_buffers();
+        Ok(())
+    }
+
     /// Publish text, images, and cursor state together. Terminals without the
     /// synchronization extension still receive the commands in one batch.
     pub fn present(self) -> io::Result<()> {

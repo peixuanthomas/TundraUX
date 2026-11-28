@@ -25,11 +25,11 @@ Private IPC messages and framing for the workspace guardian, Shell, app hosts, a
 
 ## Encoding and backpressure
 
-Each message has a four-byte big-endian length and a JSON body. Frame limits are 1 MiB for guardian worker traffic, 128 MiB for windows, and 8 MiB for shared services. Window cells carry displayable text and style in a gzip-compressed, base64-encoded JSON array, with limits of 256 Ki cells and 16 MiB of decompressed data. Image placements identify their visible regions and refer to the base64-encoded RGBA data from the same frame or the previous frame. The image limit is 80 MB of unique pixel data per window frame. Cursors, controls, and masks use structured data. `Framed` expects an authenticated nonblocking stream from the platform layer and bounds queued bytes and work per poll. Queue backpressure is reported as `WouldBlock`.
+Each message has a four-byte big-endian length and a JSON body. Frame limits are 1 MiB for guardian worker traffic, 128 MiB for windows, and 8 MiB for shared services. Window cells carry displayable text and style in a gzip-compressed, base64-encoded JSON array, with limits of 256 Ki cells and 16 MiB of decompressed data. Image placements identify visible regions and can reference pixels already sent. The image limit is 80 MB of unique pixel data per window frame. Cursors, controls, and masks use structured data. `Framed` expects an authenticated nonblocking stream from the platform layer and bounds queued bytes and work per poll. Queue backpressure is reported as `WouldBlock`.
 
 After the first complete frame, a window can reuse matching spans from the previous frame at their original or scrolled positions. The writer chooses spans after queued frames have been merged. The reader reconstructs each frame before merging the display queue. A new layout or a large change sends complete cells again.
 
-Image pixels use SIMD base64 conversion where available and decode directly into shared storage. An optional preview ID identifies the same editor picture or PDF page across zoom levels. The image ID still identifies the exact pixels.
+Image pixels use SIMD base64 conversion where available and decode directly into shared storage. An image ID identifies the exact pixels, and a preview ID identifies the same editor picture or PDF page across zoom levels. All images can reuse pixels from the same or previous frame. Fitted rich-text images also carry their first visible row and full row count. Both peers retain the 128 most recently used fitted images within a 32 MiB budget so an image can return after intervening frames. A window can report the canvas bounds and first document line for terminal scrolling.
 
 Window frames report when an editor canvas or native terminal owns Ctrl+W. A separate `ctrl_q_passthrough` flag keeps Ctrl+Q available to Vim while it owns keyboard input. Both flags default to false.
 
@@ -37,7 +37,7 @@ Window frames also carry styled Markdown headings as text and geometry. The rece
 
 ## Window initialization and input receipts
 
-The current private protocol version is **7**. The public watchdog CLI protocol remains at version **1**. App hosts send each localizable warning, error, or critical report as a control message, including while hidden. Frames identify the report displayed in their status. Shell can dismiss specific report IDs in the originating window.
+The current private protocol version is **8**. The public watchdog CLI protocol remains at version **1**. App hosts send each localizable warning, error, or critical report as a control message, including while hidden. Frames identify the report displayed in their status. Shell can dismiss specific report IDs in the originating window.
 
 Window frames carry monotonic sequences and processed input serials for tracing. A separate `confirmed_input_fence` completes only after the relevant operation receipt and acceptance of a frame for the current viewport. Background I/O resolves image references in wire order before retaining the newest frame and preserves first-frame startup timing data.
 

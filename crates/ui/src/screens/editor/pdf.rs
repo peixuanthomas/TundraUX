@@ -370,7 +370,7 @@ pub(super) fn render(
             );
         } else {
             images.clear();
-            images.capture_preview(canvas, frame.area(), &fragment, pdf.page_id);
+            images.capture_preview(canvas, frame.area(), &fragment, pdf.page_id, None);
             image.draw_blocks(
                 frame,
                 Rect::new(

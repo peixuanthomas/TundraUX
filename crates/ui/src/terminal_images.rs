@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Clear;
 use ratatui_image::Image;
 use ratatui_image::protocol::{Protocol, halfblocks::Halfblocks, sixel::Sixel};
+use ratatui_image::sliced::{SlicedImage, SlicedProtocol};
 
 use crate::{
     CommandLineColor, CommandLineTerminalSnapshot, EDITOR_IMAGE_MAX_PIXELS, EditorGraphicsProtocol,
@@ -21,6 +22,7 @@ mod kitty;
 
 const CACHE_BUDGET: usize = 128 * 1024 * 1024;
 const FITTED_PREVIEW_BUDGET: usize = 16 * 1024 * 1024;
+const ENTRY_OVERHEAD: usize = size_of::<ImageKey>() + size_of::<PreparedImage>() + 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ImageKey {
@@ -34,20 +36,51 @@ struct ImageKey {
     source_cell_size: [u16; 2],
     crop: [u32; 4],
     size: Size,
-    position: Option<(u16, u16)>,
+    placement: Placement,
     backend: Option<EditorGraphicsProtocol>,
     cell_size: (u16, u16),
     tmux: bool,
     backgrounds: Vec<[Color; 2]>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Placement {
+    Cells,
+    At(u16, u16),
+    Scrolling,
+}
+
 struct PreparedImage {
-    protocol: Protocol,
+    protocol: PreparedProtocol,
     _rgba: Arc<[u8]>,
     kitty: Option<(u32, bool)>,
     kitty_upload: Option<String>,
     bytes: usize,
+    last_used: u64,
     transparent_cells: Vec<(u16, u16)>,
+}
+
+enum PreparedProtocol {
+    Fixed(Protocol),
+    KittyRows(SlicedProtocol),
+    Rows(Vec<Protocol>),
+}
+
+impl PreparedProtocol {
+    fn render(&self, frame: &mut Frame<'_>, target: Rect, first_row: u16) {
+        match self {
+            Self::Fixed(protocol) => frame.render_widget(Image::new(protocol), target),
+            Self::KittyRows(rows) => frame.render_widget(
+                SlicedImage::new(rows, (0, -(first_row as i16)).into()),
+                target,
+            ),
+            Self::Rows(rows) => {
+                for (y, row) in (target.y..target.bottom()).zip(&rows[usize::from(first_row)..]) {
+                    frame.render_widget(Image::new(row), Rect::new(target.x, y, target.width, 1));
+                }
+            }
+        }
+    }
 }
 
 /// A native placement that can be encoded off the terminal thread.
@@ -79,11 +112,19 @@ impl WorkspaceImageRequest {
 pub struct TerminalImageCache {
     entries: HashMap<ImageKey, PreparedImage>,
     failed: HashSet<ImageKey>,
+    frame_number: u64,
     cleanup: Vec<u8>,
     workspace_origin: Option<Rect>,
     workspace_images: Vec<workspace_protocol::Image>,
-    fitted_previews: HashMap<(u64, u32, u32), (u64, Arc<[u8]>)>,
+    pub(crate) scroll: Option<workspace_protocol::ImageScroll>,
+    fitted_previews: HashMap<(u64, u32, u32), FittedPreview>,
     fitted_preview_bytes: usize,
+}
+
+struct FittedPreview {
+    id: u64,
+    pixels: Arc<[u8]>,
+    last_used: u64,
 }
 
 impl TerminalImageCache {
@@ -123,7 +164,7 @@ impl TerminalImageCache {
             let visible = image.area.intersection(viewport);
             let pieces = visible_pieces(image, visible, terminal);
             if !raster_layers && let Some(origin) = self.workspace_origin {
-                self.capture_workspace_image(area, origin, image, &pieces, None);
+                self.capture_workspace_image(area, origin, image, &pieces, None, None);
             }
             let mut canvas = None;
             for piece in pieces {
@@ -152,7 +193,7 @@ impl TerminalImageCache {
                     0
                 };
                 if self.cached_bytes().saturating_add(key_bytes) > CACHE_BUDGET {
-                    self.retain_used(&used);
+                    self.retain_used(&used, false);
                     if self.cached_bytes().saturating_add(key_bytes) > CACHE_BUDGET {
                         continue;
                     }
@@ -164,6 +205,7 @@ impl TerminalImageCache {
                     image,
                     &mut canvas,
                     target,
+                    0,
                     key,
                     stored,
                     working,
@@ -173,11 +215,12 @@ impl TerminalImageCache {
                 );
             }
         }
-        self.retain_used(&used);
+        self.retain_used(&used, false);
     }
 
     /// Collects native image placements in pane-local coordinates while retaining raster fallback.
     pub fn capture_workspace(&mut self, area: Rect) {
+        self.frame_number += 1;
         self.workspace_origin = Some(area);
         self.workspace_images.clear();
     }
@@ -189,7 +232,8 @@ impl TerminalImageCache {
             let width = u32::from(image.area.width) * u32::from(image.cell_size[0]);
             let height = u32::from(image.area.height) * u32::from(image.cell_size[1]);
             // A fitted preview only needs the pixels the terminal can show. Crops keep the source for panning.
-            if image.preview_id.is_none()
+            if image.rows.is_some()
+                || image.preview_id.is_none()
                 || image.source != [0, 0, image.width, image.height]
                 || width > image.width
                 || height > image.height
@@ -215,6 +259,10 @@ impl TerminalImageCache {
         images
     }
 
+    pub fn take_image_scroll(&mut self) -> Option<workspace_protocol::ImageScroll> {
+        self.scroll.take()
+    }
+
     pub(crate) fn fitted_preview_pixels(
         &mut self,
         id: u64,
@@ -223,8 +271,9 @@ impl TerminalImageCache {
         [width, height]: [u32; 2],
     ) -> Option<(u64, Arc<[u8]>)> {
         let key = (id, width, height);
-        if let Some(fitted) = self.fitted_previews.get(&key) {
-            return Some(fitted.clone());
+        if let Some(fitted) = self.fitted_previews.get_mut(&key) {
+            fitted.last_used = self.frame_number;
+            return Some((fitted.id, fitted.pixels.clone()));
         }
         let bytes = bounded_pixels(u64::from(width), u64::from(height))? as usize * 4;
         if bytes > FITTED_PREVIEW_BUDGET {
@@ -235,15 +284,28 @@ impl TerminalImageCache {
             (source_width, source_height),
             [width, height],
         )?;
-        if self.fitted_preview_bytes + bytes > FITTED_PREVIEW_BUDGET {
-            self.fitted_previews.clear();
-            self.fitted_preview_bytes = 0;
+        while self.fitted_preview_bytes + bytes > FITTED_PREVIEW_BUDGET
+            || self.fitted_previews.len() >= 512
+        {
+            let oldest = *self
+                .fitted_previews
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)?
+                .0;
+            self.fitted_preview_bytes -= self.fitted_previews.remove(&oldest)?.pixels.len();
         }
         let id = (1 << 63) | u64::from(crate::editor_media::next_kitty_image_id());
-        let fitted = (id, pixels.into_raw().into());
+        let pixels: Arc<[u8]> = pixels.into_raw().into();
         self.fitted_preview_bytes += bytes;
-        self.fitted_previews.insert(key, fitted.clone());
-        Some(fitted)
+        self.fitted_previews.insert(
+            key,
+            FittedPreview {
+                id,
+                pixels: pixels.clone(),
+                last_used: self.frame_number,
+            },
+        );
+        Some((id, pixels))
     }
 
     pub(crate) fn capturing_workspace(&self) -> bool {
@@ -257,6 +319,7 @@ impl TerminalImageCache {
         frame_area: Rect,
         image: &TerminalImageFragment,
         preview_id: u64,
+        rows: Option<workspace_protocol::ImageRows>,
     ) {
         if let Some(origin) = self.workspace_origin {
             let clipped = area.intersection(frame_area);
@@ -266,7 +329,7 @@ impl TerminalImageCache {
                 clipped.width,
                 clipped.height,
             ));
-            self.capture_workspace_image(area, origin, image, &[visible], Some(preview_id));
+            self.capture_workspace_image(area, origin, image, &[visible], Some(preview_id), rows);
         }
     }
 
@@ -277,6 +340,7 @@ impl TerminalImageCache {
         image: &TerminalImageFragment,
         pieces: &[Rect],
         preview_id: Option<u64>,
+        rows: Option<workspace_protocol::ImageRows>,
     ) {
         fn wire_rect(rect: Rect, content: Rect) -> workspace_protocol::Rect {
             workspace_protocol::Rect {
@@ -305,6 +369,7 @@ impl TerminalImageCache {
         self.workspace_images.push(workspace_protocol::Image {
             image_id: image.image_id,
             preview_id,
+            rows,
             width: image.width,
             height: image.height,
             rgba: image.rgba.clone(),
@@ -338,10 +403,15 @@ impl TerminalImageCache {
         background: Color,
         mut encode: Option<&mut WorkspaceEncoder<'_>>,
     ) {
+        if picker.protocol().is_none() {
+            self.clear();
+            return;
+        }
+        self.frame_number += 1;
         let viewport = area.intersection(frame.area());
         let mut used = HashSet::new();
         for asset in images {
-            let image = TerminalImageFragment {
+            let mut image = TerminalImageFragment {
                 image_id: asset.image_id,
                 width: asset.width,
                 height: asset.height,
@@ -357,35 +427,65 @@ impl TerminalImageCache {
                 ),
                 z_index: asset.z_index,
             };
+            let placement = image.area;
+            let rows = asset.rows.filter(|rows| {
+                asset.preview_id.is_some()
+                    && image.padding == [0; 4]
+                    && (image.cell_size[0], image.cell_size[1]) == picker.cell_size()
+                    && rows
+                        .first
+                        .checked_add(placement.height)
+                        .is_some_and(|end| end <= rows.total)
+                    && (picker.protocol() != Some(EditorGraphicsProtocol::Kitty)
+                        || rows.total <= 297)
+            });
+            if let Some(rows) = rows {
+                image.area.height = rows.total;
+                image.source[1] = 0;
+                image.source[3] = image.height;
+            }
             let mut canvas = None;
             for visible in &asset.visible {
                 let local = Rect::new(visible.x, visible.y, visible.width, visible.height);
-                let piece = offset_rect(local.intersection(image.area), area.x, area.y)
+                let piece = offset_rect(local.intersection(placement), area.x, area.y)
                     .intersection(viewport);
                 if piece.is_empty() {
                     continue;
                 }
-                let local = Rect::new(
+                let mut local = Rect::new(
                     piece.x - area.x,
                     piece.y - area.y,
                     piece.width,
                     piece.height,
                 );
+                let first_row = rows.map_or(0, |rows| {
+                    let first = rows.first + (local.y - placement.y);
+                    local.y = placement.y;
+                    local.height = rows.total;
+                    first
+                });
                 let Some(crop) = source_for_area(&image, local) else {
                     continue;
                 };
                 let Some((stored, working)) =
-                    preparation_cost(&image, piece.as_size(), crop, Some(picker))
+                    preparation_cost(&image, local.as_size(), crop, Some(picker))
                 else {
                     continue;
                 };
                 let mut key = ImageKey::new(&image, crop, piece, frame, Some(picker));
                 key.preview_id = asset.preview_id;
+                if rows.is_some() {
+                    key.placement = Placement::Scrolling;
+                    key.size = local.as_size();
+                    // The wire ID identifies the pixels even after they leave and re-enter a frame.
+                    key.data = 0;
+                }
                 let pending = self.render_piece(
                     frame,
                     &image,
                     &mut canvas,
                     piece,
+                    first_row,
                     key,
                     stored,
                     working,
@@ -393,12 +493,15 @@ impl TerminalImageCache {
                     encode.as_deref_mut(),
                     background,
                 );
-                if let Some(key) = pending
+                if rows.is_none()
+                    && let Some(key) = pending
                     && let Some(preview_id) = key.preview_id
                 {
                     clear_preview(frame, piece, background);
                     let previous = self.entries.iter().find_map(|(old, prepared)| {
-                        let (x, y) = old.position?;
+                        let Placement::At(x, y) = old.placement else {
+                            return None;
+                        };
                         let placement = Rect::new(x, y, old.size.width, old.size.height);
                         (old.preview_id == Some(preview_id)
                             && old.backend == key.backend
@@ -408,13 +511,14 @@ impl TerminalImageCache {
                             .then_some((old, prepared, placement))
                     });
                     if let Some((old, prepared, placement)) = previous {
-                        frame.render_widget(Image::new(&prepared.protocol), placement);
+                        prepared.protocol.render(frame, placement, 0);
                         used.insert(old.clone());
                     }
                 }
             }
         }
-        self.retain_used(&used);
+        self.retain_used(&used, true);
+        while self.entries.len() > 128 && self.evict_oldest_unused(&used) {}
         self.failed.retain(|key| used.contains(key));
     }
 
@@ -425,6 +529,7 @@ impl TerminalImageCache {
         image: &TerminalImageFragment,
         canvas: &mut Option<Option<RgbaImage>>,
         target: Rect,
+        first_row: u16,
         key: ImageKey,
         stored: usize,
         working: usize,
@@ -453,9 +558,8 @@ impl TerminalImageCache {
                     .saturating_add(stored)
                     .saturating_add(working)
             };
-            if needed(self) > CACHE_BUDGET {
-                self.retain_used(used);
-                if needed(self) > CACHE_BUDGET {
+            while needed(self) > CACHE_BUDGET {
+                if !self.evict_oldest_unused(used) {
                     return None;
                 }
             }
@@ -483,6 +587,7 @@ impl TerminalImageCache {
             self.entries.insert(key.clone(), prepared);
         }
         let prepared = self.entries.get_mut(&key).unwrap();
+        prepared.last_used = self.frame_number;
         if key.preview_id.is_some() {
             clear_preview(frame, target, background);
         }
@@ -503,7 +608,7 @@ impl TerminalImageCache {
                 }
             }
         }
-        frame.render_widget(Image::new(&prepared.protocol), target);
+        prepared.protocol.render(frame, target, first_row);
         if let Some(mut upload) = prepared.kitty_upload.take() {
             let cell = &mut frame.buffer_mut()[(target.x, target.y)];
             upload.push_str(cell.symbol());
@@ -528,9 +633,24 @@ impl TerminalImageCache {
         })
     }
 
-    fn retain_used(&mut self, used: &HashSet<ImageKey>) {
+    fn evict_oldest_unused(&mut self, used: &HashSet<ImageKey>) -> bool {
+        let Some(key) = self
+            .entries
+            .iter()
+            .filter(|(key, _)| !used.contains(*key))
+            .min_by_key(|(_, entry)| entry.last_used)
+            .map(|(key, _)| key.clone())
+        else {
+            return false;
+        };
+        let evicted = self.entries.remove(&key).unwrap();
+        append_cleanup(&mut self.cleanup, evicted.kitty);
+        true
+    }
+
+    fn retain_used(&mut self, used: &HashSet<ImageKey>, keep_scrolling: bool) {
         self.entries.retain(|key, image| {
-            if used.contains(key) {
+            if used.contains(key) || keep_scrolling && key.placement == Placement::Scrolling {
                 true
             } else {
                 append_cleanup(&mut self.cleanup, image.kitty);
@@ -571,7 +691,7 @@ impl ImageKey {
             source_cell_size: image.cell_size,
             crop,
             size: target.as_size(),
-            position: picker.map(|_| (target.x, target.y)),
+            placement: picker.map_or(Placement::Cells, |_| Placement::At(target.x, target.y)),
             backend: picker.and_then(EditorImagePicker::protocol),
             cell_size: picker.map_or((1, 2), EditorImagePicker::cell_size),
             tmux: picker.is_some_and(EditorImagePicker::is_tmux),
@@ -636,9 +756,10 @@ fn preparation_cost(
     };
     let cells = u64::from(size.width) * u64::from(size.height);
     let keys = cells.checked_mul((std::mem::size_of::<[Color; 2]>() * 3 + 8) as u64)?;
-    let stored = pixels.checked_mul(32)?.checked_add(keys)?.checked_add(
-        (std::mem::size_of::<ImageKey>() + std::mem::size_of::<PreparedImage>() + 64) as u64,
-    )?;
+    let stored = pixels
+        .checked_mul(32)?
+        .checked_add(keys)?
+        .checked_add(ENTRY_OVERHEAD as u64)?;
     Some((stored.try_into().ok()?, working.try_into().ok()?))
 }
 
@@ -820,13 +941,24 @@ fn prepare_image(
     let prepare_kitty = |rgba: &[u8], pixels| {
         let id = crate::editor_media::next_kitty_image_id();
         let (protocol, upload) = kitty::encode(rgba, pixels, key.size, id, tmux)?;
+        // Once encoded, charge the retained upload and terminal pixels instead of the worst case.
+        let bytes = if key.placement == Placement::Scrolling {
+            ENTRY_OVERHEAD + rgba.len() + upload.capacity()
+        } else {
+            bytes
+        };
         Some(PreparedImage {
-            protocol,
+            protocol: if key.placement == Placement::Scrolling {
+                PreparedProtocol::KittyRows(SlicedProtocol::Kitty(protocol))
+            } else {
+                PreparedProtocol::Fixed(Protocol::Kitty(protocol))
+            },
             _rgba: image.rgba.clone(),
             kitty: Some((id, tmux)),
             kitty_upload: Some(upload),
             transparent_cells: Vec::new(),
             bytes,
+            last_used: 0,
         })
     };
     if key.backend == Some(EditorGraphicsProtocol::Kitty)
@@ -886,17 +1018,39 @@ fn prepare_image(
             .collect();
     }
     let resized = DynamicImage::ImageRgba8(resized);
-    let protocol = match key.backend {
-        Some(EditorGraphicsProtocol::Kitty) => {
-            return prepare_kitty(resized.as_bytes(), [resized.width(), resized.height()]);
+    if key.backend == Some(EditorGraphicsProtocol::Kitty) {
+        return prepare_kitty(resized.as_bytes(), [resized.width(), resized.height()]);
+    }
+    let encode = |image, size| {
+        Some(match key.backend {
+            Some(EditorGraphicsProtocol::Sixel) => {
+                Protocol::Sixel(Sixel::new(image, size, tmux).ok()?)
+            }
+            Some(EditorGraphicsProtocol::Iterm2) => {
+                Protocol::ITerm2(crate::editor_media::prepare_iterm2(image, size, tmux).ok()?)
+            }
+            None => Protocol::Halfblocks(Halfblocks::new(image, size).ok()?),
+            Some(EditorGraphicsProtocol::Kitty) => unreachable!(),
+        })
+    };
+    let (protocol, bytes) = if key.placement == Placement::Scrolling {
+        let mut rows = Vec::with_capacity(usize::from(key.size.height));
+        let mut stored = ENTRY_OVERHEAD + rows.capacity() * size_of::<Protocol>();
+        for row in 0..u32::from(key.size.height) {
+            let (top, height) =
+                scale_crop_axis(row, 1, u32::from(key.size.height), 0, resized.height())?;
+            let strip = resized.crop_imm(0, top, resized.width(), height);
+            let row = encode(strip, Size::new(key.size.width, 1))?;
+            stored += match &row {
+                Protocol::ITerm2(iterm) => iterm.data.capacity(),
+                Protocol::Sixel(sixel) => sixel.data.capacity(),
+                _ => unreachable!(),
+            };
+            rows.push(row);
         }
-        Some(EditorGraphicsProtocol::Sixel) => {
-            Protocol::Sixel(Sixel::new(resized, key.size, tmux).ok()?)
-        }
-        Some(EditorGraphicsProtocol::Iterm2) => {
-            Protocol::ITerm2(crate::editor_media::prepare_iterm2(resized, key.size, tmux).ok()?)
-        }
-        None => Protocol::Halfblocks(Halfblocks::new(resized, key.size).ok()?),
+        (PreparedProtocol::Rows(rows), stored)
+    } else {
+        (PreparedProtocol::Fixed(encode(resized, key.size)?), bytes)
     };
     Some(PreparedImage {
         protocol,
@@ -905,6 +1059,7 @@ fn prepare_image(
         kitty_upload: None,
         transparent_cells,
         bytes,
+        last_used: 0,
     })
 }
 

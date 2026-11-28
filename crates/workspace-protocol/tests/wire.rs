@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use workspace_protocol::transport::Framed;
 use workspace_protocol::{
-    AppStartupTimings, AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image,
-    LayoutGeneration, MIN_CONTENT_SIZE, ProcessGeneration, Rect, RunId, ServiceError, ServiceReply,
-    SessionId, Size, WindowFrame, WorkerId, WorkerRole, WorkerToSupervisor,
+    AppStartupTimings, AppToShell, Color, Cursor, CursorShape, Heading, Hello, Image, ImageRows,
+    ImageScroll, LayoutGeneration, MIN_CONTENT_SIZE, ProcessGeneration, Rect, RunId, ServiceError,
+    ServiceReply, SessionId, Size, WindowFrame, WorkerId, WorkerRole, WorkerToSupervisor,
 };
 
 #[test]
@@ -146,6 +146,7 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
     frame.images.push(Image {
         image_id: 1,
         preview_id: Some(9),
+        rows: Some(ImageRows { first: 0, total: 1 }),
         width: 4097,
         height: 1,
         rgba: [0, 128, 168, 255].repeat(4097).into(),
@@ -177,9 +178,15 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
         level: 1,
         foreground: Color::Indexed(3),
     });
+    frame.image_scroll = Some(ImageScroll {
+        top: 1,
+        height: 3,
+        first_line: 99,
+    });
     frame.validate().unwrap();
     let mut legacy = serde_json::to_value(&frame.images[0]).unwrap();
     legacy.as_object_mut().unwrap().remove("preview_id");
+    legacy.as_object_mut().unwrap().remove("rows");
     let expected = base64::Engine::encode(
         &base64::engine::general_purpose::STANDARD,
         &frame.images[0].rgba,
@@ -187,6 +194,7 @@ fn frame_round_trips_styled_text_cursor_and_pixels() {
     assert_eq!(legacy["rgba"], expected);
     let decoded: Image = serde_json::from_value(legacy).unwrap();
     assert_eq!(decoded.preview_id, None);
+    assert_eq!(decoded.rows, None);
     assert_eq!(decoded.rgba, frame.images[0].rgba);
     let message = AppToShell::Frame(frame);
     let bytes = serde_json::to_vec(&message).unwrap();

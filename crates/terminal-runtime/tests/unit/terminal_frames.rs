@@ -41,6 +41,49 @@ fn test_terminal() -> HostTerminal<RecordingWriter> {
 
 #[cfg(unix)]
 #[test]
+fn scrolling_moves_existing_image_cells_in_both_directions() {
+    use crate::emulator::Emulator;
+    use ratatui::buffer::CellDiffOption;
+    use std::sync::{Arc, Mutex};
+
+    let mut terminal = test_terminal();
+    let mut emulator = Emulator::new(4, 12, 0, Arc::new(Mutex::new(Box::new(io::sink()))));
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwHwQBEPgD/U6VwW8AAAAASUVORK5CYII=";
+    let packet = format!("\x1b]1337;File=inline=1;width=2;height=1;doNotMoveCursor=1:{png}\x07");
+    let mut previous = None;
+    for row in [2, 1, 2] {
+        let mut update = SynchronizedFrame::begin(&mut terminal).unwrap();
+        let first = previous.is_none();
+        if let Some(previous) = &mut previous {
+            update.scroll_rows(previous, 1..3, row == 1, 1).unwrap();
+        }
+        let rendered = update
+            .terminal_mut()
+            .draw(|frame| {
+                let buffer = frame.buffer_mut();
+                buffer[(0, 0)].set_symbol("H");
+                buffer[(0, 3)].set_symbol("F");
+                buffer[(2, row)]
+                    .set_symbol(&packet)
+                    .set_diff_option(CellDiffOption::ForcedWidth(1.try_into().unwrap()));
+                buffer[(3, row)].set_diff_option(CellDiffOption::Skip);
+            })
+            .unwrap();
+        previous = Some(rendered.buffer.clone());
+        update.present().unwrap();
+        let bytes = terminal.backend().writer().output.writes.last().unwrap();
+        assert_eq!(bytes.windows(5).any(|part| part == b"File="), first);
+        emulator.process(bytes);
+        let snapshot = emulator.ui_snapshot();
+        assert_eq!(snapshot.images.len(), 1);
+        assert_eq!(snapshot.images[0].area, Rect::new(2, row, 2, 1));
+        assert_eq!(snapshot.cell(0, 0).unwrap().symbol, "H");
+        assert_eq!(snapshot.cell(0, 3).unwrap().symbol, "F");
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn screen_clear_cells_image_cleanup_and_cursor_reach_the_host_in_one_write() {
     let mut terminal = test_terminal();
     let mut update = SynchronizedFrame::begin(&mut terminal).unwrap();

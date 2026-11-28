@@ -457,7 +457,9 @@ pub(super) struct EditorRichRenderCache {
 
 impl EditorRichRenderCache {
     pub(super) fn is_large(&self, state: &app::editor::EditorState) -> bool {
-        self.blocks.len() > 512 || state.document.source().len() > 64 * 1024
+        state.embedded_preview_images().len() > 1
+            || self.blocks.len() > 512
+            || state.document.source().len() > 64 * 1024
     }
 }
 

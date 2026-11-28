@@ -62,6 +62,7 @@ fn workspace_kitty_compresses_a_large_fitted_page_and_clears_it_after_hiding() {
     let image = workspace_protocol::Image {
         image_id: 42,
         preview_id: None,
+        rows: None,
         width,
         height,
         rgba: Arc::from([162, 40, 20, 255].repeat((width * height) as usize)),
@@ -131,7 +132,7 @@ fn fitted_preview_transfers_visible_resolution_and_keeps_the_original_for_zoom()
     let mut cache = TerminalImageCache::default();
     let mut capture = |image: &TerminalImageFragment| {
         cache.capture_workspace(pane);
-        cache.capture_preview(pane, pane, image, image.image_id);
+        cache.capture_preview(pane, pane, image, image.image_id, None);
         cache.take_workspace_images().pop().unwrap()
     };
     let fitted = capture(&image);
@@ -161,6 +162,7 @@ fn pending_editor_preview_keeps_only_the_same_visible_picture_and_falls_back_on_
     let mut image = workspace_protocol::Image {
         image_id: 1,
         preview_id: Some(10),
+        rows: None,
         width: 16,
         height: 16,
         rgba: Arc::from([16, 32, 48, 255].repeat(256)),
@@ -233,6 +235,7 @@ fn kitty_zoom_sends_only_the_compressed_crop_and_scales_it_in_the_terminal() {
     let image = workspace_protocol::Image {
         image_id: 1,
         preview_id: Some(1),
+        rows: None,
         width: 256,
         height: 256,
         rgba: pixels.into(),
@@ -287,6 +290,7 @@ fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
     let image = workspace_protocol::Image {
         image_id: 42,
         preview_id: None,
+        rows: None,
         width,
         height,
         rgba: Arc::from(pixels),
@@ -313,6 +317,76 @@ fn workspace_kitty_keeps_raw_uploads_when_compression_saves_little() {
 }
 
 #[test]
+fn rich_text_rows_keep_the_source_pixels_when_clipped_on_multiple_sides() {
+    let area = workspace_protocol::Rect {
+        x: 2,
+        y: 1,
+        width: 2,
+        height: 2,
+    };
+    let mut image = workspace_protocol::Image {
+        image_id: 17,
+        preview_id: Some(17),
+        rows: Some(workspace_protocol::ImageRows { first: 1, total: 4 }),
+        width: 6,
+        height: 8,
+        rgba: (0_u8..8)
+            .flat_map(|y| (0_u8..6).flat_map(move |x| [x, y, 0, 255]))
+            .collect(),
+        source: [2, 2, 4, 4],
+        padding: [0; 4],
+        cell_size: [2, 2],
+        area,
+        visible: vec![area],
+        z_index: 0,
+    };
+    let probe = TerminalGraphicsProbe::from_terminal_capabilities(
+        EditorGraphicsProtocol::Iterm2,
+        2,
+        2,
+        false,
+        false,
+    );
+    let mut terminal = Terminal::new(TestBackend::new(8, 5)).unwrap();
+    let mut cache = TerminalImageCache::default();
+    let mut encodes = 0;
+    for (first, y) in [(1, 1), (2, 2), (0, 1)] {
+        image.rows.as_mut().unwrap().first = first;
+        image.source[1] = u32::from(first) * 2;
+        image.area.y = y;
+        image.visible[0] = image.area;
+        terminal
+            .draw(|frame| {
+                cache.render_workspace_with(
+                    frame,
+                    frame.area(),
+                    std::slice::from_ref(&image),
+                    probe.picker().unwrap(),
+                    Color::Black,
+                    Some(&mut |request| {
+                        encodes += 1;
+                        Some(request.encode())
+                    }),
+                );
+            })
+            .unwrap();
+        for row in 0..2 {
+            let symbol = terminal.backend().buffer()[(area.x, y + row)].symbol();
+            let (_, payload) = symbol.split_once(':').unwrap();
+            let bytes = base64_simd::STANDARD
+                .decode_to_vec(payload.strip_suffix('\x07').unwrap())
+                .unwrap();
+            let pixels = image::load_from_memory(&bytes).unwrap().into_rgba8();
+            assert_eq!(pixels.dimensions(), (4, 2));
+            let top = (first + row) as u8 * 2;
+            assert_eq!(pixels[(0, 0)].0, [2, top, 0, 255]);
+            assert_eq!(pixels[(3, 1)].0, [5, top + 1, 0, 255]);
+        }
+    }
+    assert_eq!(encodes, 1);
+}
+
+#[test]
 fn workspace_iterm2_keeps_a_retina_preview_when_the_pane_expands_or_is_clipped() {
     let [width, height] = [1187, 1536];
     let full = workspace_protocol::Rect {
@@ -331,6 +405,7 @@ fn workspace_iterm2_keeps_a_retina_preview_when_the_pane_expands_or_is_clipped()
     let mut image = workspace_protocol::Image {
         image_id: 42,
         preview_id: None,
+        rows: None,
         width,
         height,
         rgba: Arc::from(rgba),
@@ -822,12 +897,10 @@ fn native_transparent_holes_preserve_text_without_protocol_skip_cells() {
             raster_background(&buffer[(1, 0)]),
             [Color::Rgb(255, 0, 0); 2]
         );
-        assert!(
-            cache
-                .entries
-                .values()
-                .all(|entry| matches!(entry.protocol, Protocol::Halfblocks(_)))
-        );
+        assert!(cache.entries.values().all(|entry| matches!(
+            entry.protocol,
+            PreparedProtocol::Fixed(Protocol::Halfblocks(_))
+        )));
         assert!(buffer.content().iter().all(|cell| {
             !cell.symbol().contains('\x1b')
                 && cell.diff_option != ratatui::buffer::CellDiffOption::Skip

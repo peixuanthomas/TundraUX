@@ -16,6 +16,38 @@ pub(crate) const MAX_CONTROL_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const RESERVED_MESSAGES: usize = 8;
 pub(crate) const RESERVED_BYTES: usize = 64 * 1024;
 
+#[derive(Default)]
+struct RecentPreviewImages {
+    entries: VecDeque<(u64, Arc<[u8]>)>,
+    bytes: usize,
+}
+
+impl RecentPreviewImages {
+    fn get(&self, id: u64) -> Option<&Arc<[u8]>> {
+        self.entries
+            .iter()
+            .find(|(key, _)| *key == id)
+            .map(|(_, rgba)| rgba)
+    }
+
+    fn remember(&mut self, id: u64, rgba: &Arc<[u8]>) {
+        const BYTE_LIMIT: usize = 32 * 1024 * 1024;
+        if let Some(index) = self.entries.iter().position(|(key, _)| *key == id) {
+            let existing = self.entries.remove(index).unwrap();
+            self.entries.push_back(existing);
+            return;
+        }
+        if rgba.is_empty() || rgba.len() > BYTE_LIMIT {
+            return;
+        }
+        while self.bytes + rgba.len() > BYTE_LIMIT || self.entries.len() >= 128 {
+            self.bytes -= self.entries.pop_front().unwrap().1.len();
+        }
+        self.bytes += rgba.len();
+        self.entries.push_back((id, rgba.clone()));
+    }
+}
+
 pub trait Message: Serialize + DeserializeOwned + Clone + Send + 'static {
     fn frame(&self) -> Option<&WindowFrame> {
         None
@@ -303,30 +335,36 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
             watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
                 let result = async {
                     let mut images = HashSet::new();
+                    let mut recent = RecentPreviewImages::default();
                     let mut cells = CellFrameCache::default();
                     loop {
                         let message = send.next().await?;
-                        let (bytes, next_images, next_cells) = event_loop::codec(move || {
+                        let bytes;
+                        (bytes, images, recent, cells) = event_loop::codec(move || {
                             let mut message = message;
                             let next_images = message.frame_mut().map(|frame| {
                                 cells.prepare(frame);
                                 let mut next = HashSet::new();
                                 for image in &mut frame.images {
-                                    if !next.insert(image.image_id)
+                                    let first = next.insert(image.image_id);
+                                    let known = !first
                                         || images.contains(&image.image_id)
-                                    {
+                                        || (image.rows.is_some()
+                                            && recent.get(image.image_id).is_some());
+                                    if first && image.rows.is_some() {
+                                        recent.remember(image.image_id, &image.rgba);
+                                    }
+                                    if known {
                                         image.rgba = Arc::default();
                                     }
                                 }
                                 next
                             });
                             let bytes = encode_message(&message, limit)?;
-                            Ok((bytes, next_images.unwrap_or(images), cells))
+                            Ok((bytes, next_images.unwrap_or(images), recent, cells))
                         })
                         .await?;
                         writer.write_all(&bytes).await?;
-                        images = next_images;
-                        cells = next_cells;
                         send.complete();
                     }
                     #[allow(unreachable_code)]
@@ -343,11 +381,13 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
         let read_task = watchdog::OwnedTask::spawn_on(event_loop::runtime().handle(), async move {
             let result = async {
                 let mut assets = BTreeMap::<u64, Arc<[u8]>>::new();
+                let mut recent = RecentPreviewImages::default();
                 let mut cells = CellFrameCache::default();
                 let mut sequence = 0;
                 loop {
                     let payload = read_payload(&mut reader, limit).await?;
-                    let (mut message, next_assets, next_cells) = event_loop::codec(move || {
+                    let mut message;
+                    (message, assets, recent, cells) = event_loop::codec(move || {
                         let mut message: Receive = serde_json::from_slice(&payload)
                             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
                         if let Some(frame) = message.frame_mut() {
@@ -359,6 +399,7 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
                                     image.rgba = next
                                         .get(&image.image_id)
                                         .or_else(|| assets.get(&image.image_id))
+                                        .or_else(|| recent.get(image.image_id))
                                         .cloned()
                                         .ok_or_else(|| {
                                             io::Error::new(
@@ -378,15 +419,16 @@ impl<Send: Message, Receive: Message> Connection<Send, Receive> {
                                         return Err(io::ErrorKind::InvalidData.into());
                                     }
                                     next.insert(image.image_id, image.rgba.clone());
+                                    if image.rows.is_some() {
+                                        recent.remember(image.image_id, &image.rgba);
+                                    }
                                 }
                             }
                             assets = next;
                         }
-                        Ok((message, assets, cells))
+                        Ok((message, assets, recent, cells))
                     })
                     .await?;
-                    assets = next_assets;
-                    cells = next_cells;
                     if let Some(frame) = message.frame() {
                         if frame.sequence <= sequence {
                             continue;

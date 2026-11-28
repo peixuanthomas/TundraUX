@@ -1,7 +1,7 @@
 use super::*;
 use crate::session::overlays::{ShellOverlayCategory, ShellOverlayDescriptor};
 use ratatui::{
-    buffer::{Buffer, Cell, CellDiffOption},
+    buffer::{Buffer, Cell, CellDiffOption, CellWidth},
     layout::{Position, Rect},
 };
 use std::sync::{Arc, Mutex};
@@ -1056,10 +1056,10 @@ fn cell_overlaps_protected(position: Position, cell: &Cell, protected: &HashSet<
     if protected.is_empty() {
         return false;
     }
-    let width = ratatui::text::Span::raw(cell.symbol()).width().max(1);
+    let width = cell.cell_width().max(1);
     (0..width).any(|offset| {
         protected.contains(&Position::new(
-            position.x.saturating_add(offset as u16),
+            position.x.saturating_add(offset),
             position.y,
         ))
     })
@@ -1070,7 +1070,11 @@ fn protected_skip_positions(buffer: &Buffer) -> HashSet<Position> {
         .content
         .iter()
         .enumerate()
-        .filter(|(_, cell)| cell.diff_option == CellDiffOption::Skip)
+        .filter(|(_, cell)| {
+            cell.diff_option == CellDiffOption::Skip
+                || matches!(cell.diff_option, CellDiffOption::ForcedWidth(_))
+                    && cell.symbol().starts_with('\x1b')
+        })
         .map(|(index, _)| Position::from(buffer.pos_of(index)))
         .collect();
     // Text-only frames need no glyph-width scan or per-cell protection checks.
@@ -1079,14 +1083,9 @@ fn protected_skip_positions(buffer: &Buffer) -> HashSet<Position> {
     }
     for position in buffer.area.positions() {
         if cell_overlaps_protected(position, &buffer[position], &protected) {
-            let width = ratatui::text::Span::raw(buffer[position].symbol())
-                .width()
-                .max(1);
+            let width = buffer[position].cell_width().max(1);
             for offset in 0..width {
-                protected.insert(Position::new(
-                    position.x.saturating_add(offset as u16),
-                    position.y,
-                ));
+                protected.insert(Position::new(position.x.saturating_add(offset), position.y));
             }
         }
     }

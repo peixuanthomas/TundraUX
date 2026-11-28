@@ -21,6 +21,8 @@ Shell decides when to take over or hand back the terminal; this crate applies an
 
 On ANSI terminals the guard buffers a whole frame, including resize clears, image commands and cursor updates, before writing it to the host. On Windows, the command that releases a frame also hides the cursor when the app has no cursor to display. This keeps ConPTY from delaying the hide until after the frame appears. The guardian can release the display after an interrupted write.
 
+When a full-width rich-text canvas scrolls, a synchronized frame can move its existing terminal rows and apply the same move to Ratatui's previous frame. The next draw sends the newly exposed or changed cells, including image rows, and keeps the surrounding header and footer in place.
+
 Startup detection can read the terminal's base colors, default foreground/background, and true-color capability. Queries support fragmented replies and common terminators; rendering only reads cached results. WSL in Windows Terminal prefers win32-input-mode; other terminals use Kitty or xterm key reporting according to their capabilities.
 
 ## Child terminals
