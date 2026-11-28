@@ -94,7 +94,7 @@ fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
     for embedded in [false, true] {
         let output = run_repl(
             "repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives",
-            "  echo DEFAULT_COMMAND_RAN\n/echo MUST_NOT_RUN\n/config invalid\nnew\n/repl\n/\n/help\nexit\n",
+            "  echo DEFAULT_COMMAND_RAN\n/echo MUST_NOT_RUN\n/config invalid\nconfig invalid\n/reset\n\n/repl\n/\n/help\nexit\n",
             embedded,
         );
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -110,7 +110,11 @@ fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
             stderr.matches("This looks like a system command").count(),
             1
         );
-        assert!(stderr.contains("Prefix it with '/': /new"), "{stderr}");
+        assert!(
+            stderr.contains("Prefix it with '/': /config invalid"),
+            "{stderr}"
+        );
+        assert!(stdout.contains("Reset cancelled."), "{stdout}");
         assert!(!stderr.contains("Usage: tundra-cli"), "{stderr}");
         assert!(
             stderr.contains("repl cannot be started from inside repl"),
@@ -120,12 +124,30 @@ fn repl_defaults_to_system_commands_and_hints_do_not_execute_alternatives() {
             stderr.contains("'/' must be followed by a UX command"),
             "{stderr}"
         );
-        assert!(!stdout.contains("Type RESET"), "{stdout}");
+        assert_eq!(stdout.matches("Type RESET").count(), 1, "{stdout}");
         assert!(stdout.contains("doctor"), "{stdout}");
         assert!(stdout.contains("scheduled-tasks"), "{stdout}");
         assert!(!stdout.contains("默认执行系统命令"), "{stdout}");
         assert!(!stderr.contains("这可能是"), "{stderr}");
     }
+}
+
+#[test]
+fn embedded_reset_requests_the_workspace_reset_after_confirmation() {
+    run_child_if_requested();
+    let output = run_repl(
+        "embedded_reset_requests_the_workspace_reset_after_confirmation",
+        "/new\n/reset\nRESET\n",
+        true,
+    );
+    assert_eq!(output.status.code(), Some(cli::EMBEDDED_RESET_EXIT_CODE));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout)
+            .matches("Type RESET")
+            .count(),
+        1
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
 }
 
 #[test]

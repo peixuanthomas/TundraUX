@@ -42,6 +42,7 @@ The English and Chinese packs mirror each other. Look in [`assets/locales/en-US/
 | --- | --- |
 | `ui-editor.ftl` | Editor controls, including the Markdown reading and editing actions. |
 | `ui-launcher.ftl` | Launcher search, result and organize controls. Built-in search uses the active language pack’s app names and descriptions. |
+| `regression-startup.ftl` | CLI command list, data reset help and confirmation |
 | `ui-home.ftl` | Home shortcut actions and icon editing |
 | `common/notifications.ftl` | Notification history, clear and open-log actions, and previous desktop exit messages |
 | `help.ftl` | Ctrl/Cmd selection, Shift ranges, Shift+Enter, Tab focus navigation, and shortcuts for PDF and image previews |

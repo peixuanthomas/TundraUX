@@ -364,7 +364,7 @@ where
                 eprintln!("ERROR: repl cannot be started from inside repl");
                 1
             }
-            Ok(CliCommand::New) => {
+            Ok(CliCommand::Reset) => {
                 if confirm_reset(&mut editor) {
                     if embedded {
                         println!("{}", i18n::tr!("startup-brand-reset-requested"));
@@ -372,7 +372,7 @@ where
                     }
                     execute_cli(&arguments)
                 } else {
-                    println!("Reset cancelled.");
+                    println!("{}", i18n::tr!("startup-brand-reset-cancelled"));
                     1
                 }
             }

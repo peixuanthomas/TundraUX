@@ -42,7 +42,7 @@ Shell/CLI help and version queries do not start watchdog, read configuration, or
 | `debug test-watchdog-error/critical/panic` | Deliberately generate test failures |
 | `cls` | Clear terminal history and visible contents |
 | `help [command …]` | View command help |
-| `new` | Reset Tundra user configuration and state |
+| `reset` | Reset Tundra user configuration and state |
 
 Use `tundra-cli <command> --help` or `tundra-cli help <command>` for the arguments accepted by command groups with topic help. For debug previews, see [Shell debug previews](../../shell/docs/previews.md).
 
@@ -129,6 +129,6 @@ Standard output contains one JSON result. `list` returns `runs`, which is empty 
 
 ## Data reset
 
-`tundra-cli new` deletes saved configuration and state immediately. Close the running workspace and use `tundra-cli debug paths` to identify and back up the directories before running it.
+`tundra-cli reset` deletes saved configuration and state immediately. Close the running workspace and use `tundra-cli debug paths` to identify and back up the directories before running it.
 
-In a REPL or the built-in Command Line, `/new` asks you to enter exactly `RESET` before proceeding. In Command Line, the CLI uses exit code 75 to ask Shell to finish tasks, restore the terminal, reset storage, and restart. The `repl --embedded` entry point is intended for Shell.
+In a REPL or the built-in Command Line, `/reset` asks you to enter exactly `RESET` before proceeding. In Command Line, the CLI uses exit code 75 to ask Shell to finish tasks, restore the terminal, reset storage, and restart. The `repl --embedded` entry point is intended for Shell.

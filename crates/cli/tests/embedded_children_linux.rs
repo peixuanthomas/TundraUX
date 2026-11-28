@@ -305,7 +305,7 @@ fn forced_close_reaches_daemonized_children_and_leaves_another_terminal_running(
 
 #[test]
 fn exit_and_reset_reap_daemons_before_preserving_the_requested_exit_code() {
-    for (command, code) in [("exit\r", 0), ("/new\r", 75)] {
+    for (command, code) in [("exit\r", 0), ("/reset\r", 75)] {
         let mut session = Session::new();
         let daemon = session.daemon(false);
         session.pty().write(command.as_bytes()).unwrap();

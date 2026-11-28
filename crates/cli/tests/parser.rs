@@ -23,7 +23,7 @@ fn simple_commands_dispatch_from_a_table() {
         (&["doctor"], CliCommand::Doctor),
         (&["debug", "paths"], CliCommand::Paths),
         (&["debug", "explain"], CliCommand::Explain),
-        (&["new"], CliCommand::New),
+        (&["reset"], CliCommand::Reset),
         (&["debug"], CliCommand::DebugHelp),
         (&["debug", "help"], CliCommand::DebugHelp),
         (&["debug", "--help"], CliCommand::DebugHelp),
@@ -101,7 +101,7 @@ fn root_help_lists_every_public_command_and_doctor_is_outside_debug() {
         "watchdog",
         "debug",
         "cls",
-        "new",
+        "reset",
         "repl",
         "help",
     ] {
@@ -172,13 +172,14 @@ fn debug_commands_reject_old_entries_unknown_names_and_extra_arguments() {
         "weathr",
         "screen-keyboard",
         "sudo",
+        "new",
     ] {
         assert_eq!(
             parse_args([name]),
             Err(CliError::UnknownCommand(name.to_string()))
         );
     }
-    for name in ["weathr", "unknown", "new", "doctor"] {
+    for name in ["weathr", "unknown", "reset", "doctor"] {
         assert_eq!(
             parse_args(["debug", name]),
             Err(CliError::UnknownDebugCommand(name.to_string()))
@@ -1062,10 +1063,10 @@ fn config_set_password_is_rejected_and_leaves_profile_unchanged() {
 }
 
 #[test]
-fn new_command_clears_saved_content_and_recreates_default_storage() {
+fn reset_command_clears_saved_content_and_recreates_default_storage() {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let tree = TempTree::new("new-reset");
+    let tree = TempTree::new("reset");
     let platform = mock_windows_platform(tree.path());
     let app_paths = platform.app_paths().expect("mock paths should resolve");
     let layout = StorageLayout::from_app_paths(&app_paths);
@@ -1077,11 +1078,11 @@ fn new_command_clears_saved_content_and_recreates_default_storage() {
     fs::write(layout.logs_path.join("application.log"), "log").expect("log fixture");
     fs::write(layout.temp_path.join("temp.txt"), "temp").expect("temp fixture");
 
-    let exit_code = run_with_platform(["new"], &platform, &mut stdout, &mut stderr);
+    let exit_code = run_with_platform(["reset"], &platform, &mut stdout, &mut stderr);
 
     assert_eq!(exit_code, 0);
     assert!(stderr.is_empty());
-    let stdout = String::from_utf8(stdout).expect("new output should be utf8");
+    let stdout = String::from_utf8(stdout).expect("reset output should be utf8");
     assert!(stdout.contains("TundraUX storage reset"));
     assert!(stdout.contains("Recreated storage files:"));
     assert!(layout.config_path.is_file());
@@ -1359,7 +1360,7 @@ fn help_is_contextual_and_never_runs_the_command() {
         "launcher pin",
         "launcher unpin",
         "repl",
-        "new",
+        "reset",
         "cls",
         "doctor",
         "debug test-watchdog-panic",

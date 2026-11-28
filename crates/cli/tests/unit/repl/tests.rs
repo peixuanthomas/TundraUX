@@ -324,7 +324,7 @@ fn ux_hints_recognize_invalid_subcommands_without_guessing_unknown_names() {
         "config invalid",
         "debug invalid",
         "debug screen-keyboard",
-        "new",
+        "reset",
     ] {
         assert!(is_likely_ux_command(line), "{line}");
     }

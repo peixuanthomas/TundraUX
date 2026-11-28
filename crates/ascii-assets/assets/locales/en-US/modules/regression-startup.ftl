@@ -41,7 +41,7 @@ startup-cli-help = TundraUX CLI
     { "  " }watchdog [list|kill]          List or force kill managed processes
     { "  " }debug <command>               Debug tools; see debug --help
     { "  " }cls                           Clear the terminal
-    { "  " }new                           Reset saved TundraUX data
+    { "  " }reset                         Reset saved TundraUX data
     { "  " }repl                          Interactive command line
     { "  " }help [command ...]            Command help
     { "  " }-h, --help                    Help
@@ -109,8 +109,9 @@ startup-brand-launcher-restart = Restart TundraUX to refresh an already running 
 startup-brand-explain = TundraUX startup and boundary model
 startup-brand-asset-help = TundraUX asset test command
 startup-brand-reset-requested = TundraUX reset requested; returning control to Launcher.
-startup-brand-reset-help = Erase saved TundraUX configuration and state, then create defaults. Requires typing RESET.
+startup-brand-reset-help = Erase saved TundraUX configuration and state, then create defaults. The external command runs immediately. In the interactive command line, type RESET to confirm.
     First use debug paths and back up the displayed config/state directories. To reset one setting, use config reset <field>.
+startup-brand-reset-cancelled = Reset cancelled.
 startup-brand-reset-prompt = Type RESET to erase TundraUX data, or press Enter to cancel:{ " " }
 startup-brand-smoke = TundraUX shell - Phase 0 smoke
 startup-brand-shell = TundraUX Shell

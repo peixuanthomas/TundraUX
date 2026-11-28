@@ -14,6 +14,8 @@
 | UX commands in the built-in Command Line | `/doctor`, `/config get` |
 | System commands in the built-in Command Line | `ls -la` or `dir` |
 
+`tundra-cli reset` clears saved TundraUX settings and data. In the built-in Command Line and interactive REPL, `/reset` asks you to type `RESET` first.
+
 Normal REPL input is passed to the system command interpreter. Tundra commands use the `/` prefix. The built-in Command Line shows how to get help (`/help`) and leave (`exit`) in the workspace language. The session retains its working directory and exported environment variables without changing the Tundra main process or system environment configuration.
 
 The built-in Command Line reads the shell selected in Settings when a session opens. A standalone `tundra-cli repl` uses the platform default.

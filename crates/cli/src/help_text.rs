@@ -153,7 +153,7 @@ pub(crate) fn parse_help_topic(args: &[String]) -> Result<crate::CliCommand, cra
         | "launcher list"
         | "launcher pin"
         | "launcher unpin"
-        | "new"
+        | "reset"
         | "cls"
         | "repl"
         | "doctor"
@@ -201,7 +201,7 @@ pub(crate) fn write_topic_help(output: &mut impl Write, topic: &str) -> std::io:
         return writeln!(output, "{}", i18n::tr!(message));
     }
     writeln!(output, "Usage: tundra-cli {topic}")?;
-    if topic == "new" {
+    if topic == "reset" {
         return writeln!(output, "{}", i18n::tr!("startup-brand-reset-help"));
     }
     let detail = match topic {
