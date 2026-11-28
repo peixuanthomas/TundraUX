@@ -6,6 +6,25 @@
 
 版本名称保留 Git 标签原有写法，日期采用标签所指提交的日期（UTC+8），不代表 GitHub Release 的实际发布时间。`archive/` 等归档标签不作为发布版本。旧版本条目描述当时的行为；当前介绍和相关文档见 [项目说明](README.zh-CN.md) 和 [文档索引](README.md)。
 
+## v2.1.0 — 2026-11-28
+
+标签：[`v2.1.0`](https://github.com/peixuanthomas/TundraUX/tree/v2.1.0)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v2.0.1...v2.1.0)。
+
+### 新增与调整
+
+- **编辑器：**新增 PDF 和图片的只读预览。PDF 支持翻页、跳页、旋转和缩放，图片支持缩放和平移。Office 预览覆盖更多新旧 Word、Excel 和 PowerPoint 格式，并显示表格和嵌入图片。
+- **Markdown 阅读：**可预览尚未保存的草稿，正文先显示，本地图片、LaTeX 公式和 Mermaid 图随后在后台渲染。返回源码时恢复光标、选区和滚动位置。
+- **文件管理：**Explorer 可以搜索子目录并保留结果所在路径，还可以创建和解压 ZIP、7z、RAR、TAR 和 TAR.GZ。改进了目录历史、焦点顺序和文件操作菜单。
+- **应用启动：**Launcher 打开时可直接按当前界面语言搜索。可将已安装的软件包添加到 Launcher，并从已验证的启动命令中选择。Home 和 Launcher 的整理模式会显示拖动提示。
+- **工作区：**点击标题打开电源菜单和任务入口，点击状态打开通知面板，其中也可以查看上次异常退出报告。可配置顶栏按钮和时钟，并用 `Ctrl+Q` 关闭当前窗口。各窗口共享文本剪贴板，Command Line 可选择系统 Shell。
+- **重置：**设置中可以恢复默认设置，也可以清除 TundraUX 数据和设置。CLI 的数据重置命令改为 `tundra-cli reset`。
+
+### 修复
+
+- 加快大文档布局、长 PNG 滚动、PDF 翻页和终端图像刷新。修复预览加载失败时窗口关闭、缩放时 PDF 页面消失以及 Word 表格内容错位的问题。
+- 修复分屏刷新时旧内容残留、宽字符未清除、光标闪现和 Windows WezTerm 中图片裁切的问题。修复 Launcher 返回来源页面及顶栏返回按钮设置未生效的问题。
+- 修复 Linux DNF5 软件包名称的传递和 Git 工作树中的构建版本识别。
+
 ## v2.0.1 — 2026-11-19
 
 标签：[`v2.0.1`](https://github.com/peixuanthomas/TundraUX/tree/v2.0.1)。[查看提交差异](https://github.com/peixuanthomas/TundraUX/compare/v2.0.0...v2.0.1)。
