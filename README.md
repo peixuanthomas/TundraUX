@@ -1,6 +1,6 @@
 # TundraUX
 
-**A terminal workspace for managing your device.**
+Please note that this project is still in an early stage of development, and its features are not yet fully complete.
 
 English | [简体中文](docs/README.zh-CN.md)
 
