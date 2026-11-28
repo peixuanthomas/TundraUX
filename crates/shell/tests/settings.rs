@@ -28,6 +28,8 @@ fn settings_action_repeat_is_ignored_and_shift_tab_goes_to_previous_control() {
     initialize_profiles(&platform);
     let mut state = start_as_system_user(&platform, "AdminUser");
     open_settings_from_home(&mut state, &platform);
+    press(&mut state, &platform, "F8");
+    assert_eq!(state.active_screen(), ShellScreen::Settings);
     for phase in [InputPhase::Repeat, InputPhase::Release] {
         for key in [InputKey::Enter, InputKey::Char(' ')] {
             state.apply_input_with_platform(
@@ -40,7 +42,7 @@ fn settings_action_repeat_is_ignored_and_shift_tab_goes_to_previous_control() {
     press(&mut state, &platform, "Shift+Tab");
     assert_eq!(
         state.to_settings_view_model().unwrap().focus,
-        ui::SettingsFocus::OperatingSystem
+        ui::SettingsFocus::Categories
     );
     assert_eq!(
         state.to_settings_view_model().unwrap().selected_category,
@@ -181,7 +183,6 @@ fn tab_traverses_controls_and_category_arrows_do_not_change_values() {
         assert_eq!(model.focus, ui::SettingsFocus::Content);
         assert_eq!(manager.load_config().unwrap(), before);
     }
-    press(&mut state, &platform, "Shift+Tab");
     press(&mut state, &platform, "Shift+Tab");
     assert_eq!(
         state.to_settings_view_model().unwrap().focus,

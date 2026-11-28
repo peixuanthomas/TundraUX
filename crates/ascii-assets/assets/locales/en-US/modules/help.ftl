@@ -51,7 +51,6 @@ ui-help-logs-back = Back
 ui-help-settings-title = Settings
 ui-help-settings-open = Open or change value
 ui-help-settings-adjust = Up/Down switches categories or settings; Left/Right moves between the application list and settings
-ui-help-settings-section = Move through categories, the Operating System entry, and current page controls
 ui-help-settings-number = In a number dialog: adjust, type, then confirm
 ui-help-settings-update-refresh = In Update: check for updates again
 ui-help-settings-update-tree = In the Git tree: select a commit, then open confirmation

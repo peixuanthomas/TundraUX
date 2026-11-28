@@ -73,13 +73,6 @@ pub(in crate::session) const UPDATE_SETTINGS_FIELDS: &[ui::SettingsField] = &[
 ];
 
 impl ShellSession {
-    pub(in crate::session) fn open_operating_system_settings(&mut self) {
-        if !cfg!(target_os = "linux") {
-            self.notify_status(i18n::msg!("system-settings-unavailable"));
-            return;
-        }
-        self.open_management(platform::management::ManagementKind::SystemSettings);
-    }
     pub(in crate::session) fn open_settings(&mut self) {
         if self.is_strict_guest() {
             self.notify_status(i18n::msg!("settings-guest-read-only"));
@@ -262,28 +255,18 @@ impl ShellSession {
             return;
         }
         let focus = self.pages.settings.settings_state.as_ref().unwrap().focus;
-        if focus != ui::SettingsFocus::Content
+        if focus == ui::SettingsFocus::Categories
             && !matches!(key.key, InputKey::Escape | InputKey::F(_))
         {
-            match (focus, &key.key) {
-                (ui::SettingsFocus::Categories, InputKey::Up | InputKey::Left) => {
-                    self.select_settings_category_delta(-1)
-                }
-                (ui::SettingsFocus::Categories, InputKey::Down) => {
-                    self.select_settings_category_delta(1)
-                }
-                (ui::SettingsFocus::Categories, InputKey::Home) => {
-                    self.select_settings_category(ui::SettingsCategory::ALL[0])
-                }
-                (ui::SettingsFocus::Categories, InputKey::End) => {
+            match key.key {
+                InputKey::Up | InputKey::Left => self.select_settings_category_delta(-1),
+                InputKey::Down => self.select_settings_category_delta(1),
+                InputKey::Home => self.select_settings_category(ui::SettingsCategory::ALL[0]),
+                InputKey::End => {
                     self.select_settings_category(*ui::SettingsCategory::ALL.last().unwrap())
                 }
-                (
-                    ui::SettingsFocus::Categories,
-                    InputKey::Enter | InputKey::Char(' ') | InputKey::Right,
-                ) => self.select_settings_field_at(0),
-                (ui::SettingsFocus::OperatingSystem, InputKey::Enter | InputKey::Char(' ')) => {
-                    self.open_operating_system_settings()
+                InputKey::Enter | InputKey::Char(' ') | InputKey::Right => {
+                    self.select_settings_field_at(0)
                 }
                 _ => {}
             }
@@ -334,9 +317,6 @@ impl ShellSession {
                         }) =>
             {
                 self.refresh_system_time_settings();
-            }
-            InputKey::F(8) if key.phase == InputPhase::Press => {
-                self.open_operating_system_settings()
             }
             InputKey::Escape => self.close_settings(),
             InputKey::Up => self.select_settings_field_delta(-1),
@@ -480,7 +460,6 @@ impl ShellSession {
             Some(ui::SettingsHitTarget::Application(application)) => {
                 self.select_settings_application(application)
             }
-            Some(ui::SettingsHitTarget::OperatingSystem) => self.open_operating_system_settings(),
             Some(ui::SettingsHitTarget::OverlayApply) => {
                 self.handle_settings_key(&KeyInput::new(InputKey::Enter), platform)
             }
@@ -546,21 +525,19 @@ impl ShellSession {
         };
         let index = match state.focus {
             ui::SettingsFocus::Categories => 0,
-            ui::SettingsFocus::OperatingSystem => 1,
             ui::SettingsFocus::Content => {
                 fields
                     .iter()
                     .position(|field| *field == state.selected_field)
                     .unwrap_or(0)
-                    + 2
+                    + 1
             }
         };
-        let count = fields.len() + 2;
+        let count = fields.len() + 1;
         let next = (index + if backwards { count - 1 } else { 1 }) % count;
         match next {
             0 => state.focus = ui::SettingsFocus::Categories,
-            1 => state.focus = ui::SettingsFocus::OperatingSystem,
-            _ => self.select_settings_field_at(next - 2),
+            _ => self.select_settings_field_at(next - 1),
         }
     }
 

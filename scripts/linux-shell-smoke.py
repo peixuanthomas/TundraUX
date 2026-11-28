@@ -884,7 +884,8 @@ def check_animation_settings(master, output, child, cli, env):
         os.write(master, b"\r")
         expect_phases(expected)
 
-    open_home_entry(master, output, child, cli, env, "Settings", "Settings")
+    frame = open_home_entry(master, output, child, cli, env, "Settings", "Settings")
+    assert not any(item["id"] == "page/settings.operating-system" for item in frame["nodes"])
     wait_frame("Settings did not expose its animation controls", lambda frame: node(frame, speed) is not None)
     select_field(speed)
     os.write(master, b"\r")
@@ -935,47 +936,6 @@ def check_animation_settings(master, output, child, cli, env):
     os.write(master, b"\x17b")
     wait_frame("Animation settings did not return to Home", lambda frame: frame["page"] == "Home")
     print("PASS: keyboard numeric input and nine animation phases save, cancel, validate, and reset together")
-
-
-def check_system_settings_environment(master, output, child, cli, env):
-    process = Path("/proc/1/comm").read_text().strip()
-    if process == "systemd":
-        return
-
-    def wait_page(page, *markers):
-        deadline = time.monotonic() + 5.0
-        while time.monotonic() < deadline:
-            frame = control_snapshot(master, output, child, cli, env)
-            visible = "".join("".join(frame["lines"]).split())
-            if frame["page"] == page and all("".join(marker.split()) in visible for marker in markers):
-                return frame
-            read_available(master, output, 0.05)
-        raise SystemExit(f"OS settings did not reach {page} with {markers}: {frame}\n" + output_diagnostic(output))
-
-    frame = open_home_entry(master, output, child, cli, env, "Settings", "Settings")
-    ready_control_position(master, output, child, cli, env, frame, "page/settings.operating-system")
-    os.write(master, b"\x1b[19~")
-    wait_page("Management", "Unavailable in this environment")
-    os.write(master, b"\x1bOS")
-    frame = wait_page(
-        "Management", "Requires systemd and the system D-Bus.",
-        f"System services require systemd; this system was started by {process}.",
-    )
-    if any(item["id"] == "authorization" or item["id"].startswith("authorization/")
-           or item["actionable"] and "authorize" in item["id"].lower()
-           for item in frame["nodes"]):
-        raise SystemExit(f"OS environment limitation incorrectly offered authorization: {frame}")
-    os.write(master, b"\x1bOS")
-    frame = wait_for_snapshot(master, output, child, cli, env, "F4 did not return from OS details",
-                              lambda frame: frame["page"] == "Management"
-                              and not any(item["id"].startswith("modal/") for item in frame["nodes"]))
-    x, y = ready_control_position(master, output, child, cli, env, frame, "chrome/shell.back")
-    os.write(master, f"\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m".encode())
-    frame = wait_page("Settings")
-    ready_control_position(master, output, child, cli, env, frame, "page/settings.operating-system")
-    os.write(master, b"\x17b")
-    wait_page("Home")
-    print("PASS: unsupported OS settings shows an environment limit and F4 explains systemd requirements without authorization")
 
 
 def check_editor_resize(master, slave, output, child, isolated, cli, env):
@@ -1382,7 +1342,6 @@ def main() -> int:
 
         check_animation_settings(master, output, child, cli, env)
         check_editor_resize(master, slave, output, child, isolated, cli, env)
-        check_system_settings_environment(master, output, child, cli, env)
         check_status_details(master, output, child, cli, env)
 
         # Exercise the companion CLI launched by the real Shell, not just a

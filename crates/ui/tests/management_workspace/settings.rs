@@ -167,46 +167,30 @@ fn application_list_stays_left_of_settings_and_uses_the_same_hit_areas() {
 }
 
 #[test]
-fn operating_system_group_has_a_separate_hittable_entry_and_respects_overlays() {
+fn settings_navigation_contains_only_the_category_buttons_at_all_sizes() {
     for (width, height) in [(40, 12), (50, 16), (108, 20), (140, 40)] {
-        let mut model = sample_model();
-        let area = Rect::new(0, 0, width, height);
-        let layout = settings_layout(area, &model);
-        let button = layout.operating_system;
-        assert!(!button.is_empty());
-        assert_eq!(button.intersection(area), button);
-        assert!(
-            layout
-                .category_cards
-                .iter()
-                .all(|category| !category.area.intersects(button))
-        );
-        assert_eq!(
-            settings_hit_test(&layout, (button.x, button.y)),
-            Some(SettingsHitTarget::OperatingSystem)
-        );
+        let model = sample_model();
+        let buttons = ui::components::ButtonFrame::new(None, None, &TundraTheme::default_dark());
+        let theme = TundraTheme {
+            buttons: Some(buttons.clone()),
+            ..TundraTheme::default_dark()
+        };
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| {
-                render_settings(
-                    frame,
-                    frame.area(),
-                    &chrome(),
-                    &model,
-                    &TundraTheme::default_dark(),
+                let layout = render_settings(frame, frame.area(), &chrome(), &model, &theme);
+                assert_eq!(
+                    layout.workspace.navigation.len(),
+                    SettingsCategory::ALL.len()
                 );
             })
             .unwrap();
-        assert!(terminal_output(&terminal).contains("F8"));
-        model.color_editor = Some(SettingsColorEditorViewModel {
-            editing: Default::default(),
-            title: "Color".into(),
-            value: "#123456".into(),
-            error: None,
-        });
-        assert_ne!(
-            settings_hit_test(&settings_layout(area, &model), (button.x, button.y)),
-            Some(SettingsHitTarget::OperatingSystem)
+        assert!(!terminal_output(&terminal).contains("F8"));
+        assert!(
+            !buttons
+                .regions()
+                .iter()
+                .any(|r| r.id.as_str() == "settings.operating-system")
         );
     }
 }
@@ -255,7 +239,6 @@ fn unavailable_settings_retain_gray_buttons_and_register_disabled_hit_regions() 
                 .into_iter()
                 .filter(|region| {
                     region.id.as_str().starts_with("settings.")
-                        && region.id.as_str() != "settings.operating-system"
                         && !region.id.as_str().starts_with("settings.category.")
                 })
                 .collect();
@@ -1385,7 +1368,6 @@ fn settings_groups_use_titles_and_spacing_without_page_or_group_frames() {
                 .iter()
                 .all(|category| category.area.height == 1)
         );
-        assert_eq!(layout.operating_system.height, 1);
         assert_eq!(layout.content_height, 6);
         assert_eq!(layout.fields[0].area.y, layout.detail.y + 1);
         assert_eq!(layout.fields[2].area.y, layout.detail.y + 5);

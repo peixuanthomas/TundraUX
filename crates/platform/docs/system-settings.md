@@ -1,6 +1,6 @@
 # Operating-system settings
 
-Operating System Settings [F8] manages the hostname; Region & Time manages the system timezone, automatic time synchronization, and servers. The Linux clock follows system time and timezone directly.
+The Linux system settings backend manages the hostname. Region & Time manages the system timezone, automatic time synchronization, and servers. The Linux clock follows system time and timezone directly.
 
 ## Queries and dependencies
 

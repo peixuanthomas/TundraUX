@@ -91,7 +91,6 @@ impl SettingsCategory {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SettingsFocus {
     Categories,
-    OperatingSystem,
     #[default]
     Content,
 }
@@ -429,7 +428,6 @@ pub struct SettingsPickerOptionLayout {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsHitTarget {
     Application(SettingsApplication),
-    OperatingSystem,
     OverlayApply,
     OverlayCancel,
     AdjustField(SettingsField, i8),
@@ -452,7 +450,6 @@ pub struct SettingsLayout {
     pub applications: Option<SettingsApplicationsLayout>,
     pub workspace: SidebarWorkspaceLayout,
     pub category: Rect,
-    pub operating_system: Rect,
     pub main: Rect,
     pub detail: Rect,
     pub scrollbar: Option<Rect>,
@@ -492,37 +489,8 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
         .position(|category| *category == model.selected_category)
         .unwrap_or(0);
     let inner = inset(area, u16::from(area.width >= 96) * 2, 0);
-    let system_height = inner.height.min(1);
-    let navigation_height = inner
-        .height
-        .saturating_sub(system_height + u16::from(inner.height > 1));
-    let mut workspace = SidebarWorkspaceLayout::scrollable(
-        Rect::new(inner.x, inner.y, inner.width, navigation_height),
-        &labels,
-        active,
-    );
-    let (category_area, operating_system) = if workspace.vertical {
-        workspace.content.height = inner.height;
-        (
-            workspace.navigation_area,
-            Rect::new(
-                inner.x,
-                inner.bottom().saturating_sub(system_height),
-                workspace.navigation_area.width,
-                system_height,
-            ),
-        )
-    } else {
-        let mut navigation_labels = labels.to_vec();
-        navigation_labels.push(i18n::tr!("system-settings-group-button"));
-        workspace = SidebarWorkspaceLayout::new(inner, &navigation_labels);
-        let top = workspace.content.y;
-        let operating_system = workspace.navigation[labels.len()];
-        (
-            Rect::new(inner.x, inner.y, inner.width, top.saturating_sub(inner.y)),
-            operating_system,
-        )
-    };
+    let mut workspace = SidebarWorkspaceLayout::scrollable(inner, &labels, active);
+    let category_area = workspace.navigation_area;
     let raw_detail_area = workspace.content;
     let mut detail_area = Rect::new(
         raw_detail_area.x,
@@ -565,7 +533,6 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
     let category_capacity = workspace
         .navigation
         .iter()
-        .take(labels.len())
         .filter(|area| !area.is_empty())
         .count();
     let category_scrollbar = (workspace.vertical && category_capacity < labels.len()).then(|| {
@@ -730,7 +697,6 @@ pub fn settings_layout(area: Rect, model: &SettingsViewModel) -> SettingsLayout 
             .map(|editor| SettingsNumberLayout::new(area, editor)),
         workspace,
         category: category_area,
-        operating_system,
         main: area,
         detail: detail_area,
         scrollbar,
@@ -867,9 +833,6 @@ pub fn settings_hit_test(layout: &SettingsLayout, point: (u16, u16)) -> Option<S
     {
         return None;
     }
-    if contains(layout.operating_system, point) {
-        return Some(SettingsHitTarget::OperatingSystem);
-    }
     if let Some(applications) = &layout.applications
         && let Some((application, _)) = applications
             .options
@@ -913,21 +876,9 @@ pub fn render_settings_content(
     model: &SettingsViewModel,
     context: &RenderContext,
 ) {
-    let theme = &context.compatibility_theme();
     Surface::new()
         .background(context.theme.canvas)
         .render_frame(frame, layout.main, context);
-    if layout.workspace.vertical {
-        Surface::new().raised(true).render_frame(
-            frame,
-            layout
-                .workspace
-                .navigation_area
-                .union(layout.operating_system),
-            context,
-        );
-    }
-
     let buttons = SettingsCategory::ALL
         .into_iter()
         .map(|category| {
@@ -948,15 +899,6 @@ pub fn render_settings_content(
     layout
         .workspace
         .render_navigation(frame, &buttons, active, context);
-    let mut system_label = i18n::tr!("system-settings-group-button");
-    if terminal_width(&system_label) + 2 > layout.operating_system.width as usize {
-        system_label = i18n::tr!("system-settings-group-button-short");
-    }
-    let mut button = Button::new("settings.operating-system", system_label)
-        .with_centered_label(true)
-        .with_bracketed_label(false);
-    button.set_focused(model.focus == SettingsFocus::OperatingSystem);
-    button.render_inline_frame(frame, layout.operating_system, theme);
     if let Some(track) = layout.category_scrollbar {
         Scrollbar::new(
             SettingsCategory::ALL.len(),

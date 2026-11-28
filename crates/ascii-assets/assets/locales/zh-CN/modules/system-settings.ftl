@@ -1,8 +1,5 @@
 system-settings-title = 操作系统设置
 system-settings-tundra-group = Tundra 设置
-system-settings-group-button = 操作系统设置 [F8]
-system-settings-group-button-short = 操作系统 F8
-system-settings-unavailable = 操作系统设置仅支持 Linux
 system-settings-help = 修改 Linux 主机名、时区和自动校时设置。
 system-settings-hostname = 主机名
 system-settings-timezone = 系统时区

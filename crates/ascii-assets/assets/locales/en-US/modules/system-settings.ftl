@@ -1,8 +1,5 @@
 system-settings-title = Operating system settings
 system-settings-tundra-group = Tundra settings
-system-settings-group-button = OS settings [F8]
-system-settings-group-button-short = OS settings F8
-system-settings-unavailable = Operating system settings are supported on Linux only
 system-settings-help = Change the Linux hostname, timezone and time synchronization settings.
 system-settings-hostname = Host name
 system-settings-timezone = System timezone

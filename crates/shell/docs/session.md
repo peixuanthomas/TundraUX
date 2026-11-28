@@ -143,7 +143,7 @@ Home directly exposes supported system tasks, using compact entries in small win
 
 Management lists use Ctrl/Cmd+click for individual selection, Shift+click for a range, and Shift+Enter to toggle the current row. Tab/Shift+Tab moves between workspace regions; arrows operate the focused region. Packages retains F7/F8/F6 for Installed/Updates/Search. Management search supports cursor movement, select-all replacement, and paste.
 
-Settings uses Tab/Shift+Tab across categories, the operating-system entry, and content controls. Arrows switch categories only while the category region is focused; Left/Right moves between the application list and its settings. Advanced animation settings show nine phase durations in one three-column form. Reset changes the draft, Save validates and writes all values, and Cancel or Esc discards it and restores focus.
+Tab and Shift+Tab move directly between Settings categories and content controls. Arrows switch categories only while the category region is focused; Left/Right moves between the application list and its settings. Advanced animation settings show nine phase durations in one three-column form. Reset changes the draft, Save validates and writes all values, and Cancel or Esc discards it and restores focus.
 
 Launcher focuses search when it opens. It matches localized app names and descriptions, paths, commands, and types. Exact names take priority. Enter opens the selected app and Down focuses results. Esc clears a query before returning to the opener. Filtering pauses reordering, and an empty result cannot activate a hidden item. In organize mode a `#` marks each draggable tile on Home and in Launcher. The insertion line previews the new position.
 
