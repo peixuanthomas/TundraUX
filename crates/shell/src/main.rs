@@ -219,13 +219,12 @@ fn restart_current_executable(
     executable: std::io::Result<std::path::PathBuf>,
 ) -> Result<i32, std::io::Error> {
     let executable = executable?;
-    let command = std::process::Command::new(&executable);
+    let mut command = std::process::Command::new(&executable);
+    app::update::clear_update_environment(&mut command);
 
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        let mut command = command;
-
         // Replacing the process keeps the foreground process group that the
         // invoking shell is waiting on. Spawning and then returning lets the
         // invoking shell reclaim the terminal before the replacement enables

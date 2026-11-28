@@ -39,6 +39,9 @@ pub(super) struct WorkerArgs<'a> {
 
 impl WorkerArgs<'_> {
     pub(super) fn apply_to(&self, command: &mut Command) {
+        if self.worker.role != WorkerRole::Shell {
+            app::update::clear_update_environment(command);
+        }
         let role = match self.worker.role {
             WorkerRole::Shell => "shell".into(),
             WorkerRole::Services => "services".into(),
@@ -537,3 +540,7 @@ fn wait(start: Instant, generation: u64) -> io::Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/process_host/update_environment.rs"]
+mod update_environment_tests;

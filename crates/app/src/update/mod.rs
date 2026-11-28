@@ -1420,6 +1420,13 @@ fn scan_update_recovery(
     Ok(false)
 }
 
+pub fn clear_update_environment(command: &mut std::process::Command) {
+    command
+        .env_remove(UPDATE_READY_FILE_ENV)
+        .env_remove(UPDATE_TARGET_SHA_ENV)
+        .env_remove(UPDATE_ROLLBACK_ENV);
+}
+
 pub fn mark_update_ready_from_env() -> Result<(), UpdateError> {
     let Some(path) = std::env::var_os(UPDATE_READY_FILE_ENV).map(PathBuf::from) else {
         return Ok(());
@@ -1872,10 +1879,8 @@ fn launch_helper_mode(
     process
         .arg(command)
         .arg(manifest_path)
-        .arg(helper_parent_pid.to_string())
-        .env_remove(UPDATE_READY_FILE_ENV)
-        .env_remove(UPDATE_TARGET_SHA_ENV)
-        .env_remove(UPDATE_ROLLBACK_ENV);
+        .arg(helper_parent_pid.to_string());
+    clear_update_environment(&mut process);
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::process::CommandExt;

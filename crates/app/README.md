@@ -73,6 +73,8 @@ Script state stores the interpreter, arguments, breakpoints, run ID, and pause I
 
 Updates prepare Shell, CLI, and the complete `vim/` together, validate assets, licenses, and upstream metadata, and roll them all back on failure or startup timeout. Linux Release updates unpack the verified archive directly into the installation transaction and flush the complete payload before recording it as ready. Vim installation packages are checked for SHA-256, directory contents, and the pinned version; Windows also checks the iconv DLL, license, and source code.
 
+The restarted desktop receives the update result and acknowledges startup. New app windows and later desktop restarts start with a fresh environment.
+
 Source updates can build a commit from any branch in the public remote history. Git reads the history and draws its branches and merges without checking out files. After confirmation, the updater downloads and builds the selected commit. It reuses a complete installed Vim when its upstream metadata matches the selected source's pin. Cargo and Vim output goes to an `update-*.log` file that remains after build failure or cancellation.
 
 Runtime logs merge failure reports that the user is authorized to access at the highest severity, `Critical`, sort them by time, and respect report access restrictions. A read-only Editor window can use the original selection and filters to refresh a log snapshot.

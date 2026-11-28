@@ -273,7 +273,6 @@ impl Guardian<'_> {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
-            command.env_remove(app::update::UPDATE_READY_FILE_ENV);
         }
         let spawn_started = Instant::now();
         let pid = self.supervisor.spawn_worker(worker, &mut command)?;
