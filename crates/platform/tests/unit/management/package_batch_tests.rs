@@ -40,10 +40,16 @@ fn selected_packages_share_one_native_transaction_and_invalid_targets_abort_it()
                     continue;
                 }
                 let spec = result.unwrap();
-                assert!(
-                    spec.args
-                        .ends_with(&["--".into(), "alpha".into(), "omega".into()])
-                );
+                let before_targets = if backend == PackageBackend::Dnf5 {
+                    action
+                } else {
+                    "--"
+                };
+                assert!(spec.args.ends_with(&[
+                    before_targets.into(),
+                    "alpha".into(),
+                    "omega".into()
+                ]));
                 if backend == PackageBackend::Pacman && action != "remove" {
                     assert!(spec.args.iter().any(|arg| arg == "-Syu"));
                 }

@@ -46,7 +46,7 @@ Current management types cover services, processes, packages, networks, disks, u
 
 - Queries use the current process's permissions; operations requiring additional permissions first go through AA and system authorization.
 - Batch operations check all targets first. Services use one systemctl invocation, processes are bound to their original identity, and changes from the same cron source are saved together.
-- APT, DNF, and pacman support batch package operations; pacman installation and upgrades include a full system upgrade.
+- APT, DNF, and pacman support batch package operations. DNF5 takes validated package names directly for transactions and repository queries. Pacman installation and upgrades include a full system upgrade.
 - Homebrew is in `management/homebrew/` and distinguishes Formula and Cask targets. WinGet uses exact package IDs and versions.
 - Launcher command discovery reads the selected package’s installed files. Linux checks executable paths and desktop entries listed by dpkg, RPM or Pacman. Homebrew checks Formula bin/sbin directories and Cask app/binary artifacts. Windows checks WinGet portable registrations that match the package and source. An empty result lets the user enter a command.
 - If a backend rejects an operation or cannot confirm the result, read the actual state first to avoid repeating writes through a different backend.

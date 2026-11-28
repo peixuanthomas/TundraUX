@@ -614,7 +614,7 @@ fn rpm_records(
         args.push("--upgrades".into());
     }
     if let Some(target) = target {
-        args.extend(["--".into(), target.into()]);
+        backend.push_target(&mut args, target);
     }
     let text = run_read_command(backend.program(), &args, cancelled)?;
     let mut records = parsing::rpm_records(&text)?;
@@ -625,18 +625,14 @@ fn rpm_records(
             .map(|old| old.version.clone());
     }
     if let Some(target) = target {
-        let text = run_read_command(
-            backend.program(),
-            &[
-                "-C".into(),
-                "--quiet".into(),
-                "repoquery".into(),
-                "--info".into(),
-                "--".into(),
-                target.into(),
-            ],
-            cancelled,
-        )?;
+        let mut args = vec![
+            "-C".into(),
+            "--quiet".into(),
+            "repoquery".into(),
+            "--info".into(),
+        ];
+        backend.push_target(&mut args, target);
+        let text = run_read_command(backend.program(), &args, cancelled)?;
         for record in &mut records {
             record.description = text.clone();
         }
@@ -1117,6 +1113,19 @@ mod tests {
                 &AtomicBool::new(false),
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a populated DNF5 repository cache"]
+    fn live_dnf5_targeted_repository_details() {
+        let cancelled = AtomicBool::new(false);
+        let records =
+            rpm_records(PackageBackend::Dnf5, "search", Some("dnf5"), &cancelled).unwrap();
+        assert!(
+            records
+                .iter()
+                .any(|record| record.name == "dnf5" && !record.description.is_empty())
         );
     }
 

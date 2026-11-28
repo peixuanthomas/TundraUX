@@ -42,6 +42,14 @@ impl PackageBackend {
             Self::Pacman => "/usr/bin/pacman",
         }
     }
+
+    fn push_target(self, args: &mut Vec<String>, target: &str) {
+        // DNF5 rejects a standalone `--` before a package name.
+        if self != Self::Dnf5 {
+            args.push("--".into());
+        }
+        args.push(target.into());
+    }
 }
 
 pub(super) fn launch_paths(
@@ -376,7 +384,7 @@ fn build_command(
             } else {
                 args.push(command.action.clone());
             }
-            args.extend(["--".into(), target.into()]);
+            backend.push_target(&mut args, target);
         }
         _ => {
             return Err(ManagementError::InvalidInput(
@@ -677,7 +685,12 @@ mod tests {
                         | "--purge"
                         | "autoremove"
                 )));
-                assert_eq!(&spec.args[spec.args.len() - 2..], &["--", "bash"]);
+                let before_target = if backend == PackageBackend::Dnf5 {
+                    action
+                } else {
+                    "--"
+                };
+                assert_eq!(&spec.args[spec.args.len() - 2..], [before_target, "bash"]);
             }
         }
     }
