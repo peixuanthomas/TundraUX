@@ -184,6 +184,52 @@ fn extracts_binaries_and_complete_vim_runtime_without_replacing_assets() {
 }
 
 #[test]
+fn verified_release_is_staged_once_and_only_published_after_both_probes_pass() {
+    use std::os::unix::fs::MetadataExt;
+
+    let install = tempfile::tempdir().unwrap();
+    let install = install.path();
+    fs::write(install.join(SHELL_FILE), b"old shell").unwrap();
+    fs::write(install.join(CLI_FILE), b"old cli").unwrap();
+    fs::write(
+        install.join("tundra-installation.json"),
+        include_bytes!("../../../../packaging/linux/tundra-installation.json"),
+    )
+    .unwrap();
+    let probe =
+        format!("#!/bin/sh\necho protocol={UPDATE_PROTOCOL_VERSION}\necho commit=fixture\n");
+    let cancel = UpdateCancellation::default();
+    let mut files = portable_payload();
+    for invalid in [0, 1] {
+        files[0].2 = probe.as_bytes();
+        files[1].2 = probe.as_bytes();
+        files[invalid].2 = b"#!/bin/sh\nexit 1\n";
+        assert!(stage_verified_archive(&archive(&files)[..], install, "fixture", &cancel).is_err());
+        assert_eq!(
+            install.join(".tundra-update").read_dir().unwrap().count(),
+            0
+        );
+    }
+    files[1].2 = probe.as_bytes();
+    let staged = stage_verified_archive(&archive(&files)[..], install, "fixture", &cancel).unwrap();
+    let manifest = load_manifest(&staged.manifest_path).unwrap();
+    assert_eq!(manifest.state, TransactionState::Prepared);
+    let new = manifest.transaction_dir.join("new");
+    assert_eq!(
+        fs::read(new.join("vim/runtime/syntax/rust.vim")).unwrap(),
+        b"syntax keyword"
+    );
+    assert_eq!(
+        fs::metadata(new.join(CLI_FILE)).unwrap().ino(),
+        fs::metadata(manifest.transaction_dir.join(HELPER_FILE))
+            .unwrap()
+            .ino()
+    );
+    assert_eq!(fs::read(install.join(SHELL_FILE)).unwrap(), b"old shell");
+    assert!(!install.join("vim").exists());
+}
+
+#[test]
 fn rejects_incomplete_duplicated_linked_or_mixed_root_release_payloads() {
     let regular = tar::EntryType::Regular;
     let valid = portable_payload();

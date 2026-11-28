@@ -154,6 +154,7 @@ dependencies = [
  "resvg",
  "ropey",
  "runtime-log",
+ "rustix 1.1.4",
  "semver",
  "serde",
  "serde_json",

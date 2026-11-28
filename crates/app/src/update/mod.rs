@@ -575,6 +575,42 @@ pub fn prepare_update_cancellable(
     prepare_portable_update(platform, check, progress, cancel)
 }
 
+pub fn prepare_update_for_restart(
+    platform: &dyn Platform,
+    check: &UpdateCheckResult,
+    install_dir: &Path,
+    progress: &mut dyn FnMut(UpdateProgress),
+    cancel: &UpdateCancellation,
+) -> Result<StagedUpdate, UpdateError> {
+    #[cfg(target_os = "linux")]
+    if check.release.is_some() {
+        cancel.check()?;
+        require_current_portable_installation()?;
+        return release::stage(platform, check, install_dir, progress, cancel);
+    }
+
+    let prepared = prepare_update_cancellable(platform, check, progress, cancel)?;
+    notify(
+        progress,
+        UpdatePhase::PreparingReplacement,
+        "Preparing rollback files and restart helper",
+    );
+    let staged = stage_update_for_apply_cancellable(&prepared, install_dir, cancel);
+    let cleanup = cleanup_update_work(&prepared.work_dir);
+    match (staged, cleanup) {
+        (Ok(staged), Ok(())) if !cancel.is_cancelled() => Ok(staged),
+        (Ok(staged), cleanup) => {
+            let error = cleanup.err().unwrap_or_else(UpdateError::cancelled);
+            match discard_staged_update(&staged.manifest_path) {
+                Ok(()) => Err(error),
+                Err(discard) => Err(error.with_cleanup_failure(discard)),
+            }
+        }
+        (Err(error), Ok(())) => Err(error),
+        (Err(error), Err(cleanup)) => Err(error.with_cleanup_failure(cleanup)),
+    }
+}
+
 // Called only after installation provenance is checked at the public boundary.
 fn prepare_portable_update(
     platform: &dyn Platform,
@@ -1167,106 +1203,105 @@ pub fn stage_update_for_apply_cancellable(
     install_dir: &Path,
     cancel: &UpdateCancellation,
 ) -> Result<StagedUpdate, UpdateError> {
-    cancel.check()?;
-    #[cfg(target_os = "linux")]
-    platform::linux::installation::require_portable_directory(install_dir)
-        .map_err(|error| UpdateError::new(error.to_string()))?;
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (prepared, install_dir);
-        return Err(UpdateError::new(
+        cancel.check()?;
+        Err(UpdateError::new(
             "automatic updates are supported only on Windows and Linux",
-        ));
+        ))
     }
 
     #[cfg(any(windows, target_os = "linux"))]
-    {
-        validate_update_probe(&prepared.cli_exe, &prepared.target_sha, cancel)?;
-        let prepared_vim = vim::prepared_directory(prepared)?;
-        vim::validate_bundle(&prepared_vim)?;
-        let install_dir = fs::canonicalize(install_dir).map_err(|error| {
-            UpdateError::new(format!("could not resolve installation directory: {error}"))
-        })?;
-        let installed_shell = install_dir.join(SHELL_FILE);
-        let installed_cli = install_dir.join(CLI_FILE);
-        let installed_vim = install_dir.join("vim");
-        platform::validate_no_follow_path(&installed_vim, false).map_err(|error| {
-            UpdateError::new(format!("unsafe installed Vim directory: {error}"))
-        })?;
-        if installed_vim.exists() && !installed_vim.is_dir() {
-            return Err(UpdateError::new("installed Vim path is not a directory"));
-        }
-        for (label, path) in [
-            ("installed Shell", &installed_shell),
-            ("installed CLI", &installed_cli),
-        ] {
-            if !path.is_file() {
-                return Err(UpdateError::new(format!(
-                    "{label} is missing: {}",
-                    path.display()
-                )));
-            }
-        }
-
-        let id = format!(
-            "{}-{}-{}",
-            prepared.target_sha.chars().take(12).collect::<String>(),
-            std::process::id(),
-            unix_millis()
-        );
-        let update_root = install_dir.join(".tundra-update");
-        platform::validate_no_follow_path(&update_root, false).map_err(|error| {
-            UpdateError::new(format!("unsafe installation update directory: {error}"))
-        })?;
-        fs::create_dir_all(&update_root)?;
-        platform::validate_no_follow_path(&update_root, true).map_err(|error| {
-            UpdateError::new(format!("unsafe installation update directory: {error}"))
-        })?;
+    stage_transaction(install_dir, &prepared.target_sha, cancel, |new_dir| {
         for executable in [&prepared.shell_exe, &prepared.cli_exe] {
             platform::validate_no_follow_path(executable, true).map_err(|error| {
                 UpdateError::new(format!("unsafe compiled program path: {error}"))
             })?;
         }
-        let transaction_dir = update_root.join(id);
-        cancel.check()?;
-        fs::create_dir(&transaction_dir)?;
-        let mut owned = WorkDirectory::new(transaction_dir.clone());
-        let result = (|| {
-            let new_dir = transaction_dir.join("new");
-            let backup_dir = transaction_dir.join("backup");
-            fs::create_dir_all(&new_dir)?;
-            fs::create_dir_all(&backup_dir)?;
-            copy_file(&prepared.shell_exe, &new_dir.join(SHELL_FILE), cancel)?;
-            copy_file(&prepared.cli_exe, &new_dir.join(CLI_FILE), cancel)?;
-            vim::copy_directory(&prepared_vim, &new_dir.join("vim"), cancel)?;
-            vim::validate_bundle(&new_dir.join("vim"))?;
-            // Run the validated new helper: an installed older CLI may still expect assets.
-            copy_file(
-                &prepared.cli_exe,
-                &transaction_dir.join(HELPER_FILE),
-                cancel,
-            )?;
+        let prepared_vim = vim::prepared_directory(prepared)?;
+        vim::validate_bundle(&prepared_vim)?;
+        copy_file(&prepared.shell_exe, &new_dir.join(SHELL_FILE), cancel)?;
+        copy_file(&prepared.cli_exe, &new_dir.join(CLI_FILE), cancel)?;
+        vim::copy_directory(&prepared_vim, &new_dir.join("vim"), cancel)
+    })
+}
 
-            let manifest_path = transaction_dir.join("transaction.json");
-            let manifest = TransactionManifest {
-                protocol: UPDATE_PROTOCOL_VERSION,
-                target_sha: prepared.target_sha.clone(),
-                install_dir,
-                transaction_dir,
-                state: TransactionState::Prepared,
-                cli_replaced: false,
-                shell_replaced: false,
-                vim: Some(VimTransaction {
-                    had_previous: installed_vim.is_dir(),
-                    replaced: false,
-                }),
-            };
-            write_manifest(&manifest_path, &manifest)?;
-            cancel.check()?;
-            Ok(StagedUpdate { manifest_path })
-        })();
-        finish_staged_update(&mut owned, result)
+#[cfg(any(windows, target_os = "linux"))]
+fn stage_transaction(
+    install_dir: &Path,
+    target_sha: &str,
+    cancel: &UpdateCancellation,
+    stage_files: impl FnOnce(&Path) -> Result<(), UpdateError>,
+) -> Result<StagedUpdate, UpdateError> {
+    cancel.check()?;
+    #[cfg(target_os = "linux")]
+    platform::linux::installation::require_portable_directory(install_dir)
+        .map_err(|error| UpdateError::new(error.to_string()))?;
+    let install_dir = fs::canonicalize(install_dir).map_err(|error| {
+        UpdateError::new(format!("could not resolve installation directory: {error}"))
+    })?;
+    let installed_shell = install_dir.join(SHELL_FILE);
+    let installed_cli = install_dir.join(CLI_FILE);
+    let installed_vim = install_dir.join("vim");
+    platform::validate_no_follow_path(&installed_vim, false)
+        .map_err(|error| UpdateError::new(format!("unsafe installed Vim directory: {error}")))?;
+    if installed_vim.exists() && !installed_vim.is_dir() {
+        return Err(UpdateError::new("installed Vim path is not a directory"));
     }
+    for (label, path) in [
+        ("installed Shell", &installed_shell),
+        ("installed CLI", &installed_cli),
+    ] {
+        if !path.is_file() {
+            return Err(UpdateError::new(format!(
+                "{label} is missing: {}",
+                path.display()
+            )));
+        }
+    }
+
+    let update_root = install_dir.join(".tundra-update");
+    platform::validate_no_follow_path(&update_root, false).map_err(|error| {
+        UpdateError::new(format!("unsafe installation update directory: {error}"))
+    })?;
+    cancel.check()?;
+    let transaction_dir = platform::create_temp_dir(&update_root, "transaction")?;
+    let mut owned = WorkDirectory::new(transaction_dir.clone());
+    let result = (|| {
+        let new_dir = transaction_dir.join("new");
+        let backup_dir = transaction_dir.join("backup");
+        fs::create_dir_all(&new_dir)?;
+        fs::create_dir_all(&backup_dir)?;
+        stage_files(&new_dir)?;
+        vim::validate_bundle(&new_dir.join("vim"))?;
+        let cli = new_dir.join(CLI_FILE);
+        validate_update_probe(&cli, target_sha, cancel)?;
+        // Linux can run the same inode after replacement. Windows needs a separate image.
+        #[cfg(target_os = "linux")]
+        fs::hard_link(&cli, transaction_dir.join(HELPER_FILE))?;
+        #[cfg(windows)]
+        copy_file(&cli, &transaction_dir.join(HELPER_FILE), cancel)?;
+
+        let manifest_path = transaction_dir.join("transaction.json");
+        let manifest = TransactionManifest {
+            protocol: UPDATE_PROTOCOL_VERSION,
+            target_sha: target_sha.to_owned(),
+            install_dir,
+            transaction_dir,
+            state: TransactionState::Prepared,
+            cli_replaced: false,
+            shell_replaced: false,
+            vim: Some(VimTransaction {
+                had_previous: installed_vim.is_dir(),
+                replaced: false,
+            }),
+        };
+        write_manifest(&manifest_path, &manifest)?;
+        cancel.check()?;
+        Ok(StagedUpdate { manifest_path })
+    })();
+    finish_staged_update(&mut owned, result)
 }
 
 #[cfg(any(windows, target_os = "linux"))]
@@ -1941,7 +1976,7 @@ fn write_manifest(path: &Path, manifest: &TransactionManifest) -> Result<(), Upd
         .map_err(|error| UpdateError::new(format!("could not save update transaction: {error}")))
 }
 
-#[cfg(any(test, windows, target_os = "linux"))]
+#[cfg(test)]
 fn unix_millis() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

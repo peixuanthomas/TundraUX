@@ -306,45 +306,14 @@ impl ShellSettingsTaskRuntime {
                     let mut report = |progress: app::update::UpdateProgress| {
                         let _ = events.send(SettingsUpdateTaskEvent::Progress(progress));
                     };
-                    let prepared = app::update::prepare_update_cancellable(
+                    app::update::prepare_update_for_restart(
                         platform.as_ref(),
                         &check,
+                        &install_dir,
                         &mut report,
                         &cancel,
-                    )?;
-                    let work_dir = prepared.work_dir.clone();
-                    report(app::update::UpdateProgress {
-                        detail: app::update::UpdateProgressDetail::Status,
-                        phase: app::update::UpdatePhase::PreparingReplacement,
-                        message: "Preparing rollback files and restart helper".to_string(),
-                    });
-                    let staged = app::update::stage_update_for_apply_cancellable(
-                        &prepared,
-                        &install_dir,
-                        &cancel,
-                    );
-                    let cleanup = app::update::cleanup_update_work(&work_dir);
-                    match staged {
-                        Ok(staged) => {
-                            if cleanup.is_err() || cancel.is_cancelled() {
-                                let discard =
-                                    app::update::discard_staged_update(&staged.manifest_path);
-                                match (cleanup, discard) {
-                                    (Err(error), Err(discard)) => {
-                                        return Err(error.with_cleanup_failure(discard));
-                                    }
-                                    (Err(error), _) | (_, Err(error)) => return Err(error),
-                                    _ => {}
-                                }
-                                return Err(app::update::UpdateError::cancelled());
-                            }
-                            Ok(staged.manifest_path)
-                        }
-                        Err(error) => Err(match cleanup {
-                            Ok(()) => error,
-                            Err(cleanup) => error.with_cleanup_failure(cleanup),
-                        }),
-                    }
+                    )
+                    .map(|staged| staged.manifest_path)
                 }));
                 match result {
                     Ok(result) => {

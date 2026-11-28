@@ -1,7 +1,7 @@
 //! Linux release downloads use the same staging, readiness and rollback as source builds.
 use super::*;
 use sha2::{Digest, Sha256};
-use std::io::Write;
+use std::io::{Seek, Write};
 use std::os::unix::fs::PermissionsExt;
 
 #[derive(Deserialize)]
@@ -165,16 +165,60 @@ pub(super) fn prepare(
     let work = platform::create_temp_dir(&paths.cache_path().join("updates"), "release")
         .map_err(|e| UpdateError::new(e.to_string()))?;
     let mut owned = WorkDirectory::new(work.clone());
-    let result = prepare_in(check, &work, progress, cancel);
+    let result = (|| {
+        let archive = download_verified(check, &work, progress, cancel)?;
+        extract_executables(archive, &work, cancel)?;
+        let prepared = PreparedUpdate {
+            work_dir: work.clone(),
+            target_sha: check.head_sha.clone(),
+            shell_exe: work.join(SHELL_FILE),
+            cli_exe: work.join(CLI_FILE),
+        };
+        for path in [&prepared.shell_exe, &prepared.cli_exe] {
+            validate_update_probe(path, &check.head_sha, cancel)?;
+        }
+        Ok(prepared)
+    })();
     owned.finish(result)
 }
 
-fn prepare_in(
+pub(super) fn stage(
+    platform: &dyn Platform,
     check: &UpdateCheckResult,
-    work: &Path,
+    install_dir: &Path,
     progress: &mut dyn FnMut(UpdateProgress),
     cancel: &UpdateCancellation,
-) -> Result<PreparedUpdate, UpdateError> {
+) -> Result<StagedUpdate, UpdateError> {
+    let paths = platform
+        .app_paths()
+        .map_err(|e| UpdateError::new(e.to_string()))?;
+    let cache = paths.cache_path();
+    fs::create_dir_all(cache)?;
+    let archive = download_verified(check, cache, progress, cancel)?;
+    stage_verified_archive(archive, install_dir, &check.head_sha, cancel)
+}
+
+fn stage_verified_archive(
+    archive: impl Read,
+    install_dir: &Path,
+    target_sha: &str,
+    cancel: &UpdateCancellation,
+) -> Result<StagedUpdate, UpdateError> {
+    stage_transaction(install_dir, target_sha, cancel, |new_dir| {
+        extract_executables(archive, new_dir, cancel)?;
+        validate_update_probe(&new_dir.join(SHELL_FILE), target_sha, cancel)?;
+        // Persist the complete payload before the recovery journal can advertise it.
+        rustix::fs::syncfs(File::open(new_dir)?).map_err(io::Error::from)?;
+        Ok(())
+    })
+}
+
+fn download_verified(
+    check: &UpdateCheckResult,
+    cache: &Path,
+    progress: &mut dyn FnMut(UpdateProgress),
+    cancel: &UpdateCancellation,
+) -> Result<File, UpdateError> {
     cancel.check()?;
     let release = check
         .release
@@ -195,31 +239,15 @@ fn prepare_in(
     );
     let response = checked(client.get(&release.archive_url).send()?)?;
     let total = response.content_length();
-    let archive = work.join("release.tar.gz");
-    download_archive(
-        response,
-        File::create(&archive)?,
-        total,
-        &expected,
-        progress,
-        cancel,
-    )?;
+    let mut archive = tempfile::tempfile_in(cache)?;
+    download_archive(response, &mut archive, total, &expected, progress, cancel)?;
     notify(
         progress,
         UpdatePhase::Staging,
         "Verifying release executables and Vim runtime",
     );
-    extract_executables(File::open(archive)?, work, cancel)?;
-    let prepared = PreparedUpdate {
-        work_dir: work.to_owned(),
-        target_sha: check.head_sha.clone(),
-        shell_exe: work.join(SHELL_FILE),
-        cli_exe: work.join(CLI_FILE),
-    };
-    for path in [&prepared.shell_exe, &prepared.cli_exe] {
-        validate_update_probe(path, &check.head_sha, cancel)?;
-    }
-    Ok(prepared)
+    archive.rewind()?;
+    Ok(archive)
 }
 
 fn checksum_for(text: &str, name: &str) -> Result<String, UpdateError> {
@@ -370,7 +398,6 @@ fn extract_executables(
             .create_new(true)
             .open(&output)?;
         copy_stream(&mut entry, &mut file, cancel)?;
-        file.sync_all()?;
         let mode = if executable || relative == Path::new("vim/vim") {
             0o755
         } else {

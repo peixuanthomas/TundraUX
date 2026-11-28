@@ -11,7 +11,7 @@ On Linux, **Settings → Update → Update mode** is saved as `linux_update_mode
 - **Release:** reads the latest stable GitHub Release, downloads the Linux x86_64 portable archive, verifies SHA-256, and extracts Shell, CLI, and the complete Vim. Rust and Python are not required.
 - **Beta:** shows the latest `master` build and a Git tree with commits and merge lines from every published branch. Select any visible commit, including an older one or one on an unmerged branch. Confirm to download that exact commit and build it with local Rust.
 
-Switching modes clears old check results and checks again. The current mode is retained during a download or build. All downloaded and built files go into the user's cache directory; the update process does not install toolchains or invoke sudo.
+Switching modes clears old check results and checks again. The current mode is retained during a download or build. Downloads and source builds use the user's cache directory. Linux Release updates extract the verified archive once, directly into a private transaction directory on the installation filesystem. The updater checks the programs and Vim and flushes the payload before saving the recovery record.
 
 Windows uses the same source update page, with the remote default branch as the initial selection. macOS currently has no application self-update entry.
 
